@@ -87,8 +87,23 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		}()
 	}
 
-	fmt.Fprint(out, "\x1b[?1049h\x1b[?25l")
-	defer fmt.Fprint(out, "\x1b[?25h\x1b[?1049l")
+	// Alt-screen entry/exit goes through the renderer, not raw writes: it
+	// must also flip the renderer's fullscreen + absolute-cursor flags, or
+	// its inline-mode cursor/scroll optimizations desync the screen (frames
+	// drift one row off). EnterAltScreen queues the escape; the first draw
+	// flushes it together with the initial frame.
+	renderOut := &bytes.Buffer{}
+	renderer := uv.NewTerminalRenderer(renderOut, os.Environ())
+	renderer.EnterAltScreen()
+	_, _ = renderer.WriteString("\x1b[?25l") // hide cursor (terminals may reset it on alt-screen entry)
+	defer func() {
+		_, _ = renderer.WriteString("\x1b[?25h")
+		renderer.ExitAltScreen()
+		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
+			_, _ = out.Write(renderOut.Bytes())
+			renderOut.Reset()
+		}
+	}()
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -134,8 +149,6 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		return nil
 	}
 
-	renderOut := &bytes.Buffer{}
-	renderer := uv.NewTerminalRenderer(renderOut, os.Environ())
 	var screen uv.ScreenBuffer
 	var screenWidth, screenHeight int
 	lastFrame, drew := "", false

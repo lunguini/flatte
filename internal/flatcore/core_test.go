@@ -472,6 +472,63 @@ func TestRunWrapsFramesInSynchronizedOutput(t *testing.T) {
 	}
 }
 
+func TestRunEntersAltScreenThroughRenderer(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+
+	state := testState{}
+	done := make(chan error, 1)
+	var out bytes.Buffer
+
+	go func() {
+		done <- Run(context.Background(), App[testState]{
+			State: &state,
+			Handle: func(s *testState, ev Event, fx Effects[testState]) {
+				if key, ok := ev.(KeyEvent); ok && key.Key == KeyCharacter && key.Rune == 'q' {
+					fx.Quit()
+				}
+			},
+			View: func(s *testState, ctx RenderContext) string { return "altscreen" },
+		}, WithInput(reader), WithOutput(&out))
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	if _, err := writer.Write([]byte("q")); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Run")
+	}
+
+	// Alt-screen entry must be queued through the renderer — that call is
+	// what also flips its fullscreen/absolute-cursor flags, and skipping it
+	// desyncs the screen by one row on real terminals. Renderer-queued entry
+	// is observable as the 1049h escape living INSIDE the first synchronized
+	// block instead of preceding it.
+	output := out.String()
+	sync := strings.Index(output, "\x1b[?2026h")
+	entry := strings.Index(output, "\x1b[?1049h")
+	if sync != 0 {
+		t.Fatalf("output must start with the first synchronized block, got %q", output)
+	}
+	if entry == -1 || entry < sync {
+		t.Fatalf("alt-screen entry not queued through the renderer: entry=%d sync=%d in %q", entry, sync, output)
+	}
+	if !strings.HasSuffix(output, "\x1b[?1049l") {
+		t.Fatalf("output must end with renderer-queued alt-screen exit, got %q", output)
+	}
+}
+
 func TestRunSkipsSyncMarkersForUnchangedFrames(t *testing.T) {
 	reader, writer, err := os.Pipe()
 	if err != nil {
