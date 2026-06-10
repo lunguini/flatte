@@ -134,15 +134,38 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		return nil
 	}
 
-	renderer := NewDiffRenderer()
+	renderOut := &bytes.Buffer{}
+	renderer := uv.NewTerminalRenderer(renderOut, os.Environ())
+	var screen uv.ScreenBuffer
+	var screenWidth, screenHeight int
+	lastFrame, drew := "", false
+
 	draw := func() {
 		renderCtx := RenderContextFor(out)
-		var buf bytes.Buffer
-		renderer.Draw(&buf, app.View(app.State, renderCtx), renderCtx)
-		if buf.Len() == 0 {
+		frame := app.View(app.State, renderCtx)
+		if drew && frame == lastFrame && screenWidth == renderCtx.Width {
 			return // identical frame: write nothing, not even markers
 		}
-		fmt.Fprintf(out, "\x1b[?2026h%s\x1b[?2026l", buf.Bytes())
+		styled := uv.NewStyledString(frame)
+		_, terminalHeight := terminalSize(out)
+		height := max(styled.Height(), terminalHeight)
+		if screenWidth != renderCtx.Width || screenHeight != height {
+			screen = uv.NewScreenBuffer(renderCtx.Width, height)
+			renderer.Resize(renderCtx.Width, height)
+			screenWidth, screenHeight = renderCtx.Width, height
+		}
+		screen.Clear()
+		styled.Draw(screen, screen.Bounds())
+		renderer.Render(screen.RenderBuffer)
+		if err := renderer.Flush(); err != nil {
+			return
+		}
+		lastFrame, drew = frame, true
+		if renderOut.Len() == 0 {
+			return // uv's diff found no terminal-state change to write
+		}
+		fmt.Fprintf(out, "\x1b[?2026h%s\x1b[?2026l", renderOut.Bytes())
+		renderOut.Reset()
 	}
 
 	draw()

@@ -121,90 +121,11 @@ func TestApplyUpdateTracesBeforeApply(t *testing.T) {
 	}
 }
 
-func TestDrawNormalizesLineEndingsForRawTerminalMode(t *testing.T) {
-	var out bytes.Buffer
-
-	Draw(&out, "top\nmiddle\nbottom")
-
-	got := out.String()
-	if strings.Contains(got, "top\nmiddle") {
-		t.Fatalf("draw output contains bare line feeds: %q", got)
-	}
-	if !strings.Contains(got, "top\r\nmiddle\r\nbottom") {
-		t.Fatalf("draw output missing CRLF-normalized frame: %q", got)
-	}
-}
-
-func TestDiffRendererWritesFullFrameOnFirstDraw(t *testing.T) {
-	var out bytes.Buffer
-	renderer := NewDiffRenderer()
-
-	renderer.Draw(&out, "top\nbottom", RenderContext{Width: 24})
-
-	got := out.String()
-	if !strings.HasPrefix(got, "\x1b[H\x1b[2J") {
-		t.Fatalf("first draw = %q, want full redraw prefix", got)
-	}
-	if !strings.Contains(got, "top\r\nbottom") {
-		t.Fatalf("first draw = %q, want CRLF-normalized frame", got)
-	}
-}
-
-func TestDiffRendererSkipsIdenticalFrame(t *testing.T) {
-	var out bytes.Buffer
-	renderer := NewDiffRenderer()
-
-	renderer.Draw(&out, "same\nframe", RenderContext{Width: 24})
-	out.Reset()
-	renderer.Draw(&out, "same\nframe", RenderContext{Width: 24})
-
-	if out.Len() != 0 {
-		t.Fatalf("identical frame wrote %q, want no output", out.String())
-	}
-}
-
-func TestDiffRendererRewritesOnlyChangedRows(t *testing.T) {
-	var out bytes.Buffer
-	renderer := NewDiffRenderer()
-
-	renderer.Draw(&out, "title\nloading -\nfooter", RenderContext{Width: 24})
-	out.Reset()
-	renderer.Draw(&out, "title\nloading \\\nfooter", RenderContext{Width: 24})
-
-	got := out.String()
-	if got != "\x1b[2;1H\x1b[2Kloading \\" {
-		t.Fatalf("changed row output = %q, want only row 2 rewrite", got)
-	}
-}
-
-func TestDiffRendererClearsRowsRemovedFromShorterFrame(t *testing.T) {
-	var out bytes.Buffer
-	renderer := NewDiffRenderer()
-
-	renderer.Draw(&out, "top\nmiddle\nbottom", RenderContext{Width: 24})
-	out.Reset()
-	renderer.Draw(&out, "top", RenderContext{Width: 24})
-
-	got := out.String()
-	want := "\x1b[2;1H\x1b[2K\x1b[3;1H\x1b[2K"
-	if got != want {
-		t.Fatalf("shorter frame output = %q, want removed rows cleared", got)
-	}
-}
-
-func TestDiffRendererFullRedrawsWhenWidthChanges(t *testing.T) {
-	var out bytes.Buffer
-	renderer := NewDiffRenderer()
-
-	renderer.Draw(&out, "same\nframe", RenderContext{Width: 24})
-	out.Reset()
-	renderer.Draw(&out, "same\nframe", RenderContext{Width: 30})
-
-	got := out.String()
-	if !strings.HasPrefix(got, "\x1b[H\x1b[2J") {
-		t.Fatalf("width change output = %q, want full redraw", got)
-	}
-}
+// Frame diffing is owned by ultraviolet's TerminalRenderer since the Phase 3
+// cutover; the Run-level guarantees it must uphold (one synchronized write
+// per changed frame, zero bytes for identical frames) are asserted by the
+// TestRunWrapsFramesInSynchronizedOutput / TestRunSkipsSyncMarkersFor-
+// UnchangedFrames / TestRunCoalescesQueuedUpdatesIntoOneDraw tests below.
 
 // Byte-level input decoding is owned by ultraviolet's TerminalReader since
 // the Phase 3 cutover; the mapping onto the closed event set is specified by
@@ -331,8 +252,10 @@ func TestRunSkipsTerminalWritesForUnchangedFrames(t *testing.T) {
 		t.Fatal("timed out waiting for Run")
 	}
 
-	if got := strings.Count(out.String(), "\x1b[H\x1b[2J"); got != 1 {
-		t.Fatalf("full redraw count = %d, want only initial redraw; output %q", got, out.String())
+	// Each draw is one synchronized-output block; the 'j' keystroke produced
+	// an identical frame, which must not write anything at all.
+	if got := strings.Count(out.String(), "\x1b[?2026h"); got != 1 {
+		t.Fatalf("draw count = %d, want only the initial draw; output %q", got, out.String())
 	}
 }
 
@@ -481,17 +404,18 @@ func TestRunCoalescesQueuedUpdatesIntoOneDraw(t *testing.T) {
 		t.Fatal("timed out waiting for Run")
 	}
 
+	if state.count != 3 {
+		t.Fatalf("count = %d, want all three queued updates applied", state.count)
+	}
+	// The renderer writes cell-level deltas, so intermediate frame literals
+	// can't be asserted on; the coalescing guarantee is the draw count: the
+	// initial count:0 paint plus exactly ONE redraw for the whole batch.
 	output := out.String()
-	for _, intermediate := range []string{"count:1", "count:2"} {
-		if strings.Contains(output, intermediate) {
-			t.Fatalf("output contains intermediate frame %q; updates were not coalesced:\n%q", intermediate, output)
-		}
+	if got := strings.Count(output, "\x1b[?2026h"); got != 2 {
+		t.Fatalf("draw count = %d, want initial + one coalesced redraw:\n%q", got, output)
 	}
 	if !strings.Contains(output, "count:0") {
 		t.Fatalf("output missing initial pre-loop frame count:0:\n%q", output)
-	}
-	if !strings.Contains(output, "count:3") {
-		t.Fatalf("output missing final frame count:3:\n%q", output)
 	}
 }
 
