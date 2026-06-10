@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 const (
@@ -38,27 +38,39 @@ func Subtle(text string) string {
 		Render(text)
 }
 
+// Overlay draws layer centered over base as a cell-buffer composite: both
+// frames are parsed into cells, the layer rectangle covers the base
+// (including padding short layer rows), and the result is serialized back
+// to a styled string.
 func Overlay(base string, layer string) string {
-	baseRows := splitRows(base)
-	layerRows := splitRows(layer)
-	if len(baseRows) == 0 || len(layerRows) == 0 {
+	baseStyled := uv.NewStyledString(base)
+	layerStyled := uv.NewStyledString(layer)
+	baseBounds := baseStyled.Bounds()
+	layerBounds := layerStyled.Bounds()
+	if baseBounds.Empty() || layerBounds.Empty() {
 		return base
 	}
 
-	baseWidth := widestRow(baseRows)
-	layerWidth := widestRow(layerRows)
-	left := max(0, (baseWidth-layerWidth)/2)
-	top := max(0, (len(baseRows)-len(layerRows))/2)
+	width := max(baseBounds.Dx(), layerBounds.Dx())
+	height := max(baseBounds.Dy(), layerBounds.Dy())
+	canvas := uv.NewScreenBuffer(width, height)
+	baseStyled.Draw(canvas, canvas.Bounds())
 
-	for rowIndex, layerRow := range layerRows {
-		target := top + rowIndex
-		for target >= len(baseRows) {
-			baseRows = append(baseRows, strings.Repeat(" ", baseWidth))
-		}
-		baseRows[target] = overlayRow(baseRows[target], padVisible(layerRow, layerWidth), left, layerWidth)
+	left := max(0, (width-layerBounds.Dx())/2)
+	top := max(0, (height-layerBounds.Dy())/2)
+	layerArea := uv.Rect(left, top, layerBounds.Dx(), layerBounds.Dy())
+	canvas.FillArea(&uv.EmptyCell, layerArea) // the layer rectangle covers the base
+	layerStyled.Draw(canvas, layerArea)
+
+	return trimTrailingSpace(canvas.Render())
+}
+
+func trimTrailingSpace(frame string) string {
+	rows := strings.Split(frame, "\n")
+	for i, row := range rows {
+		rows[i] = strings.TrimRight(row, " ")
 	}
-
-	return strings.Join(baseRows, "\n")
+	return strings.Join(rows, "\n")
 }
 
 func FrameWidth(maxWidth int, lines []string) int {
@@ -80,44 +92,6 @@ func FrameWidth(maxWidth int, lines []string) int {
 		return maxWidth
 	}
 	return width
-}
-
-func splitRows(value string) []string {
-	value = strings.ReplaceAll(value, "\r\n", "\n")
-	return strings.Split(value, "\n")
-}
-
-func widestRow(rows []string) int {
-	width := 0
-	for _, row := range rows {
-		if rowWidth := ansi.StringWidth(row); rowWidth > width {
-			width = rowWidth
-		}
-	}
-	return width
-}
-
-func overlayRow(base string, layer string, left int, width int) string {
-	baseWidth := ansi.StringWidth(base)
-	if baseWidth < left {
-		base += strings.Repeat(" ", left-baseWidth)
-		baseWidth = left
-	}
-
-	right := left + width
-	prefix := ansi.Cut(base, 0, left)
-	suffix := ""
-	if right < baseWidth {
-		suffix = ansi.Cut(base, right, baseWidth)
-	}
-	return prefix + layer + suffix
-}
-
-func padVisible(value string, width int) string {
-	if short := width - ansi.StringWidth(value); short > 0 {
-		return value + strings.Repeat(" ", short)
-	}
-	return value
 }
 
 func ContentWidth(totalWidth int) int {

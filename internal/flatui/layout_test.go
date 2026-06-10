@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/lunguini/flat/internal/flatuitest"
 )
 
@@ -92,6 +94,31 @@ func TestOverlayCoversTheLayerRectangle(t *testing.T) {
 	}, "\n")
 	if got != want {
 		t.Fatalf("Overlay() =\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestOverlayPreservesStyledBackground(t *testing.T) {
+	row := "\x1b[44m" + strings.Repeat("x", 20) + "\x1b[m"
+	base := strings.Join([]string{row, row, row}, "\n")
+
+	overlaid := Overlay(base, "[ok]")
+
+	middle := strings.Split(overlaid, "\n")[1]
+	plain := ansi.Strip(middle)
+	if !strings.Contains(plain, "[ok]") {
+		t.Fatalf("overlay content missing from middle row: %q", plain)
+	}
+	if !strings.HasPrefix(plain, "xxxx") {
+		t.Fatalf("base content left of overlay lost: %q", plain)
+	}
+
+	buf := uv.NewScreenBuffer(20, 3)
+	uv.NewStyledString(overlaid).Draw(buf, buf.Bounds())
+	if cell := buf.CellAt(0, 1); cell == nil || cell.Style.Bg == nil {
+		t.Fatalf("background lost left of the overlay: %+v", cell)
+	}
+	if cell := buf.CellAt(19, 1); cell == nil || cell.Style.Bg == nil {
+		t.Fatalf("background lost right of the overlay: %+v", cell)
 	}
 }
 
