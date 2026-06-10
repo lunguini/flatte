@@ -61,9 +61,10 @@ deterministic (no wall-clock, no randomness in `View`).
   goroutines, no hidden focus policy; apps store them in their own state.
 - `internal/flatuitest` — golden-test helpers.
 - `cmd/flat-*` — dogfood sample apps; each has tests + goldens.
-- `cmd/bubble-modal`, `cmd/bubble-v2-modal` — Bubble Tea v1/v2 comparison
-  apps. They are the benchmark; keep them compiling, don't "improve" them
-  beyond parity with their Flatte counterparts.
+- `cmd/bubble-modal`, `cmd/bubble-v2-modal`, `cmd/bubble-v2-search` —
+  Bubble Tea v1/v2 comparison apps. They are the benchmark; keep them
+  compiling, don't "improve" them beyond parity with their Flatte
+  counterparts.
 
 ## Principles (the short version — full rationale in the design doc)
 
