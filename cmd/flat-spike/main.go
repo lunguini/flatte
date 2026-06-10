@@ -28,7 +28,11 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	switch ev.Key {
+	key, ok := ev.(flatcore.KeyEvent)
+	if !ok {
+		return
+	}
+	switch key.Key {
 	case flatcore.KeyDown:
 		moveDown(s)
 	case flatcore.KeyUp:
@@ -38,7 +42,7 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 			s.selectedModel = s.models[s.cursor]
 		}
 	case flatcore.KeyCharacter:
-		switch ev.Rune {
+		switch key.Rune {
 		case 'j', 'J':
 			moveDown(s)
 		case 'k', 'K':

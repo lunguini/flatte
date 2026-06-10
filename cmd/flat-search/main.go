@@ -32,20 +32,24 @@ type State struct {
 }
 
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+	key, ok := ev.(flatcore.KeyEvent)
+	if !ok {
+		return
+	}
 	if !s.focused {
-		if ev.Key == flatcore.KeyCharacter && (ev.Rune == 'q' || ev.Rune == 'Q') {
+		if key.Key == flatcore.KeyCharacter && (key.Rune == 'q' || key.Rune == 'Q') {
 			fx.Quit()
 		}
-		if ev.Key == flatcore.KeyEnter {
+		if key.Key == flatcore.KeyEnter {
 			s.focused = true
 			s.query.SetCursor(len(s.query.Value))
 		}
 		return
 	}
 
-	switch ev.Key {
+	switch key.Key {
 	case flatcore.KeyCharacter:
-		s.query.Insert(ev.Rune)
+		s.query.Insert(key.Rune)
 		startSearch(s, fx)
 	case flatcore.KeyBackspace:
 		s.query.Backspace()

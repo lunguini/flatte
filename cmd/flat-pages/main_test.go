@@ -12,11 +12,11 @@ import (
 func TestVimKeysMoveCursorOnHome(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'j'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'j'}, flatcore.Effects[State]{})
 	if state.homeCursor != 1 {
 		t.Fatalf("homeCursor = %d, want 1 after j", state.homeCursor)
 	}
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'k'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'k'}, flatcore.Effects[State]{})
 	if state.homeCursor != 0 {
 		t.Fatalf("homeCursor = %d, want 0 after k", state.homeCursor)
 	}
@@ -25,8 +25,8 @@ func TestVimKeysMoveCursorOnHome(t *testing.T) {
 func TestHomeSelectionAndEnterNavigateToDetails(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
 
 	if state.screen != screenDetails {
 		t.Fatalf("screen = %v, want details", state.screen)
@@ -39,9 +39,9 @@ func TestHomeSelectionAndEnterNavigateToDetails(t *testing.T) {
 func TestHomeCanNavigateToSettings(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
 
 	if state.screen != screenSettings {
 		t.Fatalf("screen = %v, want settings", state.screen)
@@ -52,7 +52,7 @@ func TestEscapeReturnsFromDetailsToHome(t *testing.T) {
 	state := NewState()
 	state.screen = screenDetails
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyEscape}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEscape}, flatcore.Effects[State]{})
 
 	if state.screen != screenHome {
 		t.Fatalf("screen = %v, want home", state.screen)
@@ -63,10 +63,10 @@ func TestSettingsOwnsTextInputState(t *testing.T) {
 	state := NewState()
 	state.screen = screenSettings
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'A'}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'd'}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyLeft}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'a'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'A'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'd'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyLeft}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'a'}, flatcore.Effects[State]{})
 
 	if state.settingsName.Value != "Aad" {
 		t.Fatalf("settings name = %q, want Aad", state.settingsName.Value)
@@ -79,13 +79,13 @@ func TestQQuitsOnlyFromHome(t *testing.T) {
 	var quit bool
 	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
 	if quit {
 		t.Fatal("q should not quit from details")
 	}
 
 	state.screen = screenHome
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q should quit from home")
 	}

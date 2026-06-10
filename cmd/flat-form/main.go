@@ -32,13 +32,17 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+	key, ok := ev.(flatcore.KeyEvent)
+	if !ok {
+		return
+	}
 	if !s.editing {
-		handleBlurred(s, ev, fx)
+		handleBlurred(s, key, fx)
 		return
 	}
 
 	field := &s.fields[s.focused]
-	switch ev.Key {
+	switch key.Key {
 	case flatcore.KeyTab:
 		s.focused = (s.focused + 1) % len(s.fields)
 	case flatcore.KeyEscape:
@@ -54,16 +58,16 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	case flatcore.KeyDelete:
 		field.Input.Delete()
 	case flatcore.KeyCharacter:
-		field.Input.Insert(ev.Rune)
+		field.Input.Insert(key.Rune)
 	}
 }
 
-func handleBlurred(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	switch ev.Key {
+func handleBlurred(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
+	switch key.Key {
 	case flatcore.KeyEnter:
 		s.editing = true
 	case flatcore.KeyCharacter:
-		if ev.Rune == 'q' || ev.Rune == 'Q' {
+		if key.Rune == 'q' || key.Rune == 'Q' {
 			fx.Quit()
 		}
 	}

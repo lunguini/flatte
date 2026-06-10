@@ -20,39 +20,48 @@ func TestRunDeliversResizeEvent(t *testing.T) {
 	defer writer.Close()
 
 	state := testState{}
+	tracer := &recordingTracer{}
 	done := make(chan error, 1)
-	sawResize := make(chan struct{}, 1)
+	sawResize := make(chan struct{}, 2)
 	var out bytes.Buffer
 
 	go func() {
 		done <- Run(context.Background(), App[testState]{
 			State: &state,
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {
-				s.events = append(s.events, ev.Key)
-				if ev.Key == KeyResize {
+				switch ev := ev.(type) {
+				case ResizeEvent:
 					select {
 					case sawResize <- struct{}{}:
 					default:
 					}
-				}
-				if ev.Key == KeyCharacter && ev.Rune == 'q' {
-					fx.Quit()
+				case KeyEvent:
+					if ev.Key == KeyCharacter && ev.Rune == 'q' {
+						fx.Quit()
+					}
 				}
 			},
-			View: func(s *testState, ctx RenderContext) string { return "x" },
+			View:   func(s *testState, ctx RenderContext) string { return "x" },
+			Tracer: tracer,
 		}, WithInput(reader), WithOutput(&out))
 	}()
 
-	time.Sleep(50 * time.Millisecond)
+	// The loop delivers an initial ResizeEvent before the first draw; by the
+	// time it arrives the SIGWINCH source is already registered.
+	select {
+	case <-sawResize:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for initial resize event")
+	}
 	if err := syscall.Kill(syscall.Getpid(), syscall.SIGWINCH); err != nil {
 		t.Fatal(err)
 	}
-	// Wait until the resize event has been handled before sending 'q', so
+	// Wait until the SIGWINCH resize has been handled before sending 'q', so
 	// the events-vs-resize select ordering cannot flake.
 	select {
 	case <-sawResize:
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for resize event")
+		t.Fatal("timed out waiting for SIGWINCH resize event")
 	}
 	if _, err := writer.Write([]byte("q")); err != nil {
 		t.Fatal(err)
@@ -67,7 +76,19 @@ func TestRunDeliversResizeEvent(t *testing.T) {
 		t.Fatal("timed out waiting for Run")
 	}
 
-	if len(state.events) < 2 || state.events[0] != KeyResize {
-		t.Fatalf("events = %#v, want KeyResize first", state.events)
+	var resizes []ResizeEvent
+	for _, ev := range tracer.events {
+		if resize, ok := ev.(ResizeEvent); ok {
+			resizes = append(resizes, resize)
+		}
+	}
+	if len(resizes) < 2 {
+		t.Fatalf("traced resize events = %#v, want initial + SIGWINCH", resizes)
+	}
+	for _, resize := range resizes {
+		// Output is a bytes.Buffer, not a terminal: sizes are the fallback.
+		if resize.Width != 72 || resize.Height != 24 {
+			t.Fatalf("resize event = %#v, want fallback 72x24", resize)
+		}
 	}
 }

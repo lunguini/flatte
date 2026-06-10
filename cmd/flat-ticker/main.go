@@ -28,10 +28,11 @@ func applyTick(s *State, _ time.Time) {
 }
 
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	if ev.Key != flatcore.KeyCharacter {
+	key, ok := ev.(flatcore.KeyEvent)
+	if !ok || key.Key != flatcore.KeyCharacter {
 		return
 	}
-	switch ev.Rune {
+	switch key.Rune {
 	case ' ', 'p', 'P':
 		s.paused = !s.paused
 	case 'r', 'R':

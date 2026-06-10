@@ -27,12 +27,12 @@ func TestTickUpdateIncrementsOnlyWhenRunning(t *testing.T) {
 func TestHandleTogglesPauseAndResets(t *testing.T) {
 	state := State{ticks: 5}
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'p'}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'p'}, flatcore.Effects[State]{})
 	if !state.paused {
 		t.Fatal("expected paused state after p")
 	}
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'r'}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'r'}, flatcore.Effects[State]{})
 	if state.ticks != 0 {
 		t.Fatalf("ticks = %d, want reset to 0", state.ticks)
 	}

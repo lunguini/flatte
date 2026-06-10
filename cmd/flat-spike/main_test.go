@@ -16,11 +16,11 @@ import (
 func TestVimKeysMoveCursor(t *testing.T) {
 	state := State{models: []string{"a", "b", "c"}}
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'j'}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'j'}, flatcore.Effects[State]{})
 	if state.cursor != 1 {
 		t.Fatalf("cursor = %d, want 1 after j", state.cursor)
 	}
-	Handle(&state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'k'}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'k'}, flatcore.Effects[State]{})
 	if state.cursor != 0 {
 		t.Fatalf("cursor = %d, want 0 after k", state.cursor)
 	}
@@ -29,16 +29,16 @@ func TestVimKeysMoveCursor(t *testing.T) {
 func TestHandleMovesCursorWithinBounds(t *testing.T) {
 	state := State{models: []string{"haiku", "sonnet", "opus"}}
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
-	Handle(&state, flatcore.Event{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
-	Handle(&state, flatcore.Event{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
 	if state.cursor != 2 {
 		t.Fatalf("cursor = %d, want 2", state.cursor)
 	}
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyUp}, flatcore.Effects[State]{})
-	Handle(&state, flatcore.Event{Key: flatcore.KeyUp}, flatcore.Effects[State]{})
-	Handle(&state, flatcore.Event{Key: flatcore.KeyUp}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyUp}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyUp}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyUp}, flatcore.Effects[State]{})
 	if state.cursor != 0 {
 		t.Fatalf("cursor = %d, want 0", state.cursor)
 	}
@@ -47,7 +47,7 @@ func TestHandleMovesCursorWithinBounds(t *testing.T) {
 func TestHandleEnterSelectsCursorModel(t *testing.T) {
 	state := State{models: []string{"haiku", "sonnet", "opus"}, cursor: 1}
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
 
 	if state.selectedModel != "sonnet" {
 		t.Fatalf("selectedModel = %q, want %q", state.selectedModel, "sonnet")
@@ -59,7 +59,7 @@ func TestQQuits(t *testing.T) {
 	var quit bool
 	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
 		t.Fatal("q should request quit")

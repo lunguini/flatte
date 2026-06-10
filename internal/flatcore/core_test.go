@@ -17,12 +17,25 @@ type testState struct {
 }
 
 type recordingTracer struct {
-	events  []Key
+	events  []Event
 	updates []string
 }
 
 func (t *recordingTracer) Event(ev Event) {
-	t.events = append(t.events, ev.Key)
+	t.events = append(t.events, ev)
+}
+
+// keyEvents filters the KeyEvents out of a traced event stream, so tests can
+// assert on key input without depending on the initial ResizeEvent the loop
+// delivers at startup.
+func keyEvents(events []Event) []KeyEvent {
+	var keys []KeyEvent
+	for _, ev := range events {
+		if key, ok := ev.(KeyEvent); ok {
+			keys = append(keys, key)
+		}
+	}
+	return keys
 }
 
 func (t *recordingTracer) Update(name string) {
@@ -200,20 +213,20 @@ func TestParseInputEvents(t *testing.T) {
 		in   string
 		want Event
 	}{
-		{name: "j is a character", in: "j", want: Event{Key: KeyCharacter, Rune: 'j'}},
-		{name: "k is a character", in: "k", want: Event{Key: KeyCharacter, Rune: 'k'}},
-		{name: "K is a character", in: "K", want: Event{Key: KeyCharacter, Rune: 'K'}},
-		{name: "enter", in: "\n", want: Event{Key: KeyEnter}},
-		{name: "q character", in: "q", want: Event{Key: KeyCharacter, Rune: 'q'}},
-		{name: "character", in: "x", want: Event{Key: KeyCharacter, Rune: 'x'}},
-		{name: "backspace", in: "\x7f", want: Event{Key: KeyBackspace}},
-		{name: "tab", in: "\t", want: Event{Key: KeyTab}},
-		{name: "escape", in: "\x1b", want: Event{Key: KeyEscape}},
-		{name: "arrow up", in: "\x1b[A", want: Event{Key: KeyUp}},
-		{name: "arrow down", in: "\x1b[B", want: Event{Key: KeyDown}},
-		{name: "arrow left", in: "\x1b[D", want: Event{Key: KeyLeft}},
-		{name: "arrow right", in: "\x1b[C", want: Event{Key: KeyRight}},
-		{name: "delete", in: "\x1b[3~", want: Event{Key: KeyDelete}},
+		{name: "j is a character", in: "j", want: KeyEvent{Key: KeyCharacter, Rune: 'j'}},
+		{name: "k is a character", in: "k", want: KeyEvent{Key: KeyCharacter, Rune: 'k'}},
+		{name: "K is a character", in: "K", want: KeyEvent{Key: KeyCharacter, Rune: 'K'}},
+		{name: "enter", in: "\n", want: KeyEvent{Key: KeyEnter}},
+		{name: "q character", in: "q", want: KeyEvent{Key: KeyCharacter, Rune: 'q'}},
+		{name: "character", in: "x", want: KeyEvent{Key: KeyCharacter, Rune: 'x'}},
+		{name: "backspace", in: "\x7f", want: KeyEvent{Key: KeyBackspace}},
+		{name: "tab", in: "\t", want: KeyEvent{Key: KeyTab}},
+		{name: "escape", in: "\x1b", want: KeyEvent{Key: KeyEscape}},
+		{name: "arrow up", in: "\x1b[A", want: KeyEvent{Key: KeyUp}},
+		{name: "arrow down", in: "\x1b[B", want: KeyEvent{Key: KeyDown}},
+		{name: "arrow left", in: "\x1b[D", want: KeyEvent{Key: KeyLeft}},
+		{name: "arrow right", in: "\x1b[C", want: KeyEvent{Key: KeyRight}},
+		{name: "delete", in: "\x1b[3~", want: KeyEvent{Key: KeyDelete}},
 	}
 
 	for _, tt := range tests {
@@ -241,10 +254,10 @@ func TestEscapeDoesNotWaitForOrConsumeNextCharacter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if first != (Event{Key: KeyEscape}) {
+	if first != Event(KeyEvent{Key: KeyEscape}) {
 		t.Fatalf("first event = %#v, want escape", first)
 	}
-	if second != (Event{Key: KeyCharacter, Rune: 'q'}) {
+	if second != Event(KeyEvent{Key: KeyCharacter, Rune: 'q'}) {
 		t.Fatalf("second event = %#v, want q character", second)
 	}
 }
@@ -277,8 +290,12 @@ func TestRunProcessesInputAndAsyncUpdates(t *testing.T) {
 				)
 			},
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {
-				s.events = append(s.events, ev.Key)
-				if ev.Key == KeyCharacter && ev.Rune == 'q' {
+				key, ok := ev.(KeyEvent)
+				if !ok {
+					return
+				}
+				s.events = append(s.events, key.Key)
+				if key.Key == KeyCharacter && key.Rune == 'q' {
 					fx.Quit()
 				}
 			},
@@ -312,8 +329,16 @@ func TestRunProcessesInputAndAsyncUpdates(t *testing.T) {
 	if got := strings.Join(tracer.updates, ","); got != "counter.load" {
 		t.Fatalf("updates = %q, want counter.load", got)
 	}
-	if len(tracer.events) != 2 || tracer.events[0] != KeyCharacter || tracer.events[1] != KeyCharacter {
-		t.Fatalf("traced events = %#v, want two character events", tracer.events)
+	// The loop traces the initial ResizeEvent before any key input.
+	if len(tracer.events) == 0 {
+		t.Fatal("tracer recorded no events")
+	}
+	if first, ok := tracer.events[0].(ResizeEvent); !ok || first.Width != 72 || first.Height != 24 {
+		t.Fatalf("first traced event = %#v, want initial ResizeEvent 72x24", tracer.events[0])
+	}
+	keys := keyEvents(tracer.events)
+	if len(keys) != 2 || keys[0].Key != KeyCharacter || keys[1].Key != KeyCharacter {
+		t.Fatalf("traced key events = %#v, want two character events", keys)
 	}
 }
 
@@ -333,7 +358,7 @@ func TestRunSkipsTerminalWritesForUnchangedFrames(t *testing.T) {
 		done <- Run(context.Background(), App[testState]{
 			State: &state,
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {
-				if ev.Key == KeyCharacter && ev.Rune == 'q' {
+				if key, ok := ev.(KeyEvent); ok && key.Key == KeyCharacter && key.Rune == 'q' {
 					fx.Quit()
 				}
 			},
@@ -428,8 +453,12 @@ func TestRunDeliversCtrlCToAppWithoutDefaultQuit(t *testing.T) {
 		done <- Run(context.Background(), App[testState]{
 			State: &state,
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {
-				s.events = append(s.events, ev.Key)
-				if ev.Key == KeyCtrlC {
+				key, ok := ev.(KeyEvent)
+				if !ok {
+					return
+				}
+				s.events = append(s.events, key.Key)
+				if key.Key == KeyCtrlC {
 					fx.Quit()
 				}
 			},
@@ -479,7 +508,7 @@ func TestRunCoalescesQueuedUpdatesIntoOneDraw(t *testing.T) {
 				}
 			},
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {
-				if ev.Key == KeyCharacter && ev.Rune == 'q' {
+				if key, ok := ev.(KeyEvent); ok && key.Key == KeyCharacter && key.Rune == 'q' {
 					fx.Quit()
 				}
 			},
@@ -533,7 +562,11 @@ func TestRunWrapsFramesInSynchronizedOutput(t *testing.T) {
 		done <- Run(context.Background(), App[testState]{
 			State: &state,
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {
-				if ev.Key == KeyCharacter && ev.Rune == 'q' {
+				key, ok := ev.(KeyEvent)
+				if !ok {
+					return
+				}
+				if key.Key == KeyCharacter && key.Rune == 'q' {
 					fx.Quit()
 				}
 				s.count++
@@ -582,7 +615,7 @@ func TestRunSkipsSyncMarkersForUnchangedFrames(t *testing.T) {
 		done <- Run(context.Background(), App[testState]{
 			State: &state,
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {
-				if ev.Key == KeyCharacter && ev.Rune == 'q' {
+				if key, ok := ev.(KeyEvent); ok && key.Key == KeyCharacter && key.Rune == 'q' {
 					fx.Quit()
 				}
 			},

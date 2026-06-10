@@ -108,6 +108,16 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		app.Tracer = NoopTracer{}
 	}
 
+	width, height := terminalSize(out)
+	initialSize := Event(ResizeEvent{Width: width, Height: height})
+	app.Tracer.Event(initialSize)
+	if app.Handle != nil {
+		app.Handle(app.State, initialSize, effects)
+	}
+	if quitRequested {
+		return nil
+	}
+
 	renderer := NewDiffRenderer()
 	draw := func() {
 		renderCtx := RenderContextFor(out)
@@ -131,7 +141,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			if input.err != nil {
 				return input.err
 			}
-			if input.event.Key == KeyCtrlC && cfg.defaultQuit {
+			if key, isKey := input.event.(KeyEvent); isKey && key.Key == KeyCtrlC && cfg.defaultQuit {
 				return nil
 			}
 			app.Tracer.Event(input.event)
@@ -145,7 +155,8 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 				return nil
 			}
 		case <-resize:
-			resizeEvent := Event{Key: KeyResize}
+			width, height := terminalSize(out)
+			resizeEvent := Event(ResizeEvent{Width: width, Height: height})
 			app.Tracer.Event(resizeEvent)
 			if app.Handle != nil {
 				app.Handle(app.State, resizeEvent, effects)

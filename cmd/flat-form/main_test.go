@@ -12,9 +12,9 @@ import (
 func TestHandleEditsFocusedFieldWithoutHiddenWidgetOwnership(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'A'}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'd'}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'a'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'A'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'd'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'a'}, flatcore.Effects[State]{})
 
 	if state.fields[0].Input.Value != "Ada" {
 		t.Fatalf("name field = %q, want Ada", state.fields[0].Input.Value)
@@ -27,8 +27,8 @@ func TestHandleEditsFocusedFieldWithoutHiddenWidgetOwnership(t *testing.T) {
 func TestTabMovesFocusBetweenFields(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyTab}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'o'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyTab}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'o'}, flatcore.Effects[State]{})
 
 	if state.focused != 1 {
 		t.Fatalf("focused = %d, want filter field", state.focused)
@@ -43,9 +43,9 @@ func TestCursorMovementBackspaceAndDeleteAreFieldLocal(t *testing.T) {
 	state.fields[0].Input.Value = "abcd"
 	state.fields[0].Input.Cursor = 2
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyLeft}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyBackspace}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyDelete}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyLeft}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyBackspace}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyDelete}, flatcore.Effects[State]{})
 
 	if state.fields[0].Input.Value != "cd" {
 		t.Fatalf("name field = %q, want cd", state.fields[0].Input.Value)
@@ -60,7 +60,7 @@ func TestEscapeBlursAndQQuitsOnlyWhenBlurred(t *testing.T) {
 	var quit bool
 	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
 	if quit {
 		t.Fatal("q should edit focused field, not quit")
 	}
@@ -68,8 +68,8 @@ func TestEscapeBlursAndQQuitsOnlyWhenBlurred(t *testing.T) {
 		t.Fatalf("name field = %q, want q", state.fields[0].Input.Value)
 	}
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyEscape}, fx)
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEscape}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q should quit after blur")
 	}
@@ -80,7 +80,7 @@ func TestEnterSubmitsWhenFocused(t *testing.T) {
 	state.fields[0].Input.Value = "Ada"
 	state.fields[1].Input.Value = "op"
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
 
 	if state.submitted != "name=Ada filter=op" {
 		t.Fatalf("submitted = %q, want form summary", state.submitted)

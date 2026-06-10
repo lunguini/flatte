@@ -6,29 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-type Key int
-
-const (
-	KeyUnknown Key = iota
-	KeyUp
-	KeyDown
-	KeyEnter
-	KeyCtrlC
-	KeyBackspace
-	KeyCharacter
-	KeyTab
-	KeyEscape
-	KeyLeft
-	KeyRight
-	KeyDelete
-	KeyResize
-)
-
-type Event struct {
-	Key  Key
-	Rune rune
-}
-
 func ReadEvent(reader io.Reader) (Event, error) {
 	return readEvent(bufio.NewReader(reader))
 }
@@ -36,73 +13,73 @@ func ReadEvent(reader io.Reader) (Event, error) {
 func readEvent(reader *bufio.Reader) (Event, error) {
 	b, err := reader.ReadByte()
 	if err != nil {
-		return Event{}, err
+		return KeyEvent{}, err
 	}
 
 	switch b {
 	case 3:
-		return Event{Key: KeyCtrlC}, nil
+		return KeyEvent{Key: KeyCtrlC}, nil
 	case '\r', '\n':
-		return Event{Key: KeyEnter}, nil
+		return KeyEvent{Key: KeyEnter}, nil
 	case '\t':
-		return Event{Key: KeyTab}, nil
+		return KeyEvent{Key: KeyTab}, nil
 	case 127, 8:
-		return Event{Key: KeyBackspace}, nil
+		return KeyEvent{Key: KeyBackspace}, nil
 	case 27:
 		return readEscape(reader)
 	default:
 		if b < utf8.RuneSelf {
-			return Event{Key: KeyCharacter, Rune: rune(b)}, nil
+			return KeyEvent{Key: KeyCharacter, Rune: rune(b)}, nil
 		}
 		if err := reader.UnreadByte(); err != nil {
-			return Event{}, err
+			return KeyEvent{}, err
 		}
 		r, _, err := reader.ReadRune()
 		if err != nil {
-			return Event{}, err
+			return KeyEvent{}, err
 		}
-		return Event{Key: KeyCharacter, Rune: r}, nil
+		return KeyEvent{Key: KeyCharacter, Rune: r}, nil
 	}
 }
 
 func readEscape(reader *bufio.Reader) (Event, error) {
 	if reader.Buffered() == 0 {
-		return Event{Key: KeyEscape}, nil
+		return KeyEvent{Key: KeyEscape}, nil
 	}
 	next, err := reader.Peek(1)
 	if err != nil {
-		return Event{Key: KeyEscape}, nil
+		return KeyEvent{Key: KeyEscape}, nil
 	}
 	if next[0] != '[' {
-		return Event{Key: KeyEscape}, nil
+		return KeyEvent{Key: KeyEscape}, nil
 	}
 	if _, err := reader.ReadByte(); err != nil {
-		return Event{}, err
+		return KeyEvent{}, err
 	}
 
 	code, err := reader.ReadByte()
 	if err != nil {
-		return Event{}, err
+		return KeyEvent{}, err
 	}
 	switch code {
 	case 'A':
-		return Event{Key: KeyUp}, nil
+		return KeyEvent{Key: KeyUp}, nil
 	case 'B':
-		return Event{Key: KeyDown}, nil
+		return KeyEvent{Key: KeyDown}, nil
 	case 'C':
-		return Event{Key: KeyRight}, nil
+		return KeyEvent{Key: KeyRight}, nil
 	case 'D':
-		return Event{Key: KeyLeft}, nil
+		return KeyEvent{Key: KeyLeft}, nil
 	case '3':
 		tilde, err := reader.ReadByte()
 		if err != nil {
-			return Event{}, err
+			return KeyEvent{}, err
 		}
 		if tilde == '~' {
-			return Event{Key: KeyDelete}, nil
+			return KeyEvent{Key: KeyDelete}, nil
 		}
-		return Event{Key: KeyUnknown}, nil
+		return KeyEvent{Key: KeyUnknown}, nil
 	default:
-		return Event{Key: KeyUnknown}, nil
+		return KeyEvent{Key: KeyUnknown}, nil
 	}
 }

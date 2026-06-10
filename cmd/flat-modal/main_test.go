@@ -13,7 +13,7 @@ import (
 func TestEnterOpensModalAndStartsWaiting(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
 
 	if !state.modalOpen {
 		t.Fatal("expected modal to open")
@@ -25,16 +25,16 @@ func TestEnterOpensModalAndStartsWaiting(t *testing.T) {
 
 func TestModalCapturesInputAndConfirmCompletesWaiting(t *testing.T) {
 	state := NewState()
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'A'}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'd'}, flatcore.Effects[State]{})
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'a'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'A'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'd'}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'a'}, flatcore.Effects[State]{})
 
 	if state.modalInput.Value != "Ada" {
 		t.Fatalf("modal input = %q, want Ada", state.modalInput.Value)
 	}
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
 
 	if state.modalOpen {
 		t.Fatal("expected modal to close after confirm")
@@ -51,8 +51,8 @@ func TestModalCapturesQInsteadOfQuitting(t *testing.T) {
 	state := NewState()
 	var quit bool
 	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, fx)
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
 
 	if quit {
 		t.Fatal("q should not quit while modal is open")
@@ -64,9 +64,9 @@ func TestModalCapturesQInsteadOfQuitting(t *testing.T) {
 
 func TestEscapeCancelsModal(t *testing.T) {
 	state := NewState()
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyEscape}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEscape}, flatcore.Effects[State]{})
 
 	if state.modalOpen {
 		t.Fatal("expected modal to close after escape")
@@ -81,7 +81,7 @@ func TestEscapeCancelsModal(t *testing.T) {
 
 func TestBackgroundTickContinuesWhileModalIsOpen(t *testing.T) {
 	state := NewState()
-	Handle(state, flatcore.Event{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})
 
 	applyTick(state, time.Time{})
 	applyTick(state, time.Time{})
@@ -102,7 +102,7 @@ func TestQQuitsOnlyWhenModalIsClosed(t *testing.T) {
 	var quit bool
 	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
 		t.Fatal("q should quit when modal is closed")

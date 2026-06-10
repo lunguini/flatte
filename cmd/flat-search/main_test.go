@@ -16,7 +16,7 @@ func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
 	updates := make(chan flatcore.StateUpdate[State], 1)
 	state := State{focused: true}
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'o'}, flatcore.Effects[State]{
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'o'}, flatcore.Effects[State]{
 		Context: context.Background(),
 		Updates: updates,
 	})
@@ -44,8 +44,8 @@ func TestTypingJAndKEditsQuery(t *testing.T) {
 	fx := flatcore.NewEffects(t.Context(), updates, nil)
 	state := &State{focused: true}
 
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'j'}, fx)
-	Handle(state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'k'}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'j'}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'k'}, fx)
 
 	if state.query.Value != "jk" {
 		t.Fatalf("query = %q, want %q", state.query.Value, "jk")
@@ -57,7 +57,7 @@ func TestFocusedSearchCanTypeQ(t *testing.T) {
 	updates := make(chan flatcore.StateUpdate[State], 1)
 	state := State{focused: true}
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, flatcore.Effects[State]{
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, flatcore.Effects[State]{
 		Context: context.Background(),
 		Updates: updates,
 	})
@@ -72,7 +72,7 @@ func TestUnfocusedSearchUsesQToQuit(t *testing.T) {
 	var quit bool
 	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
 		t.Fatal("expected q to request quit when search input is unfocused")
@@ -86,7 +86,7 @@ func TestBackspaceStartsSearchForEditedQuery(t *testing.T) {
 	state.query.Value = "op"
 	state.query.Cursor = 2
 
-	Handle(&state, flatcore.Event{Key: flatcore.KeyBackspace}, flatcore.Effects[State]{
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyBackspace}, flatcore.Effects[State]{
 		Context: context.Background(),
 		Updates: updates,
 	})

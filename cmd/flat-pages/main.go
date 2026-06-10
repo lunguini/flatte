@@ -32,18 +32,22 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+	key, ok := ev.(flatcore.KeyEvent)
+	if !ok {
+		return
+	}
 	switch s.screen {
 	case screenHome:
-		handleHome(s, ev, fx)
+		handleHome(s, key, fx)
 	case screenDetails:
-		handleDetails(s, ev)
+		handleDetails(s, key)
 	case screenSettings:
-		handleSettings(s, ev)
+		handleSettings(s, key)
 	}
 }
 
-func handleHome(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	switch ev.Key {
+func handleHome(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
+	switch key.Key {
 	case flatcore.KeyDown:
 		homeCursorDown(s)
 	case flatcore.KeyUp:
@@ -64,7 +68,7 @@ func handleHome(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 			s.settingsName.SetCursor(len(s.settingsName.Value))
 		}
 	case flatcore.KeyCharacter:
-		switch ev.Rune {
+		switch key.Rune {
 		case 'j', 'J':
 			homeCursorDown(s)
 		case 'k', 'K':
@@ -87,8 +91,8 @@ func homeCursorUp(s *State) {
 	}
 }
 
-func handleDetails(s *State, ev flatcore.Event) {
-	switch ev.Key {
+func handleDetails(s *State, key flatcore.KeyEvent) {
+	switch key.Key {
 	case flatcore.KeyDown:
 		detailsCursorDown(s)
 	case flatcore.KeyUp:
@@ -96,7 +100,7 @@ func handleDetails(s *State, ev flatcore.Event) {
 	case flatcore.KeyEscape:
 		s.screen = screenHome
 	case flatcore.KeyCharacter:
-		switch ev.Rune {
+		switch key.Rune {
 		case 'j', 'J':
 			detailsCursorDown(s)
 		case 'k', 'K':
@@ -117,10 +121,10 @@ func detailsCursorUp(s *State) {
 	}
 }
 
-func handleSettings(s *State, ev flatcore.Event) {
-	switch ev.Key {
+func handleSettings(s *State, key flatcore.KeyEvent) {
+	switch key.Key {
 	case flatcore.KeyCharacter:
-		s.settingsName.Insert(ev.Rune)
+		s.settingsName.Insert(key.Rune)
 	case flatcore.KeyBackspace:
 		s.settingsName.Backspace()
 	case flatcore.KeyDelete:

@@ -39,27 +39,31 @@ func applyTick(s *State, _ time.Time) {
 }
 
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+	key, ok := ev.(flatcore.KeyEvent)
+	if !ok {
+		return
+	}
 	if s.modalOpen {
-		handleModal(s, ev)
+		handleModal(s, key)
 		return
 	}
 
-	switch ev.Key {
+	switch key.Key {
 	case flatcore.KeyEnter:
 		s.waiting = true
 		s.modalOpen = true
 		s.modalInput = flatui.TextField{}
 	case flatcore.KeyCharacter:
-		if ev.Rune == 'q' || ev.Rune == 'Q' {
+		if key.Rune == 'q' || key.Rune == 'Q' {
 			fx.Quit()
 		}
 	}
 }
 
-func handleModal(s *State, ev flatcore.Event) {
-	switch ev.Key {
+func handleModal(s *State, key flatcore.KeyEvent) {
+	switch key.Key {
 	case flatcore.KeyCharacter:
-		s.modalInput.Insert(ev.Rune)
+		s.modalInput.Insert(key.Rune)
 	case flatcore.KeyBackspace:
 		s.modalInput.Backspace()
 	case flatcore.KeyDelete:
