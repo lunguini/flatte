@@ -1,7 +1,6 @@
 package flatcore
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -207,60 +206,10 @@ func TestDiffRendererFullRedrawsWhenWidthChanges(t *testing.T) {
 	}
 }
 
-func TestParseInputEvents(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want Event
-	}{
-		{name: "j is a character", in: "j", want: KeyEvent{Key: KeyCharacter, Rune: 'j'}},
-		{name: "k is a character", in: "k", want: KeyEvent{Key: KeyCharacter, Rune: 'k'}},
-		{name: "K is a character", in: "K", want: KeyEvent{Key: KeyCharacter, Rune: 'K'}},
-		{name: "enter", in: "\n", want: KeyEvent{Key: KeyEnter}},
-		{name: "q character", in: "q", want: KeyEvent{Key: KeyCharacter, Rune: 'q'}},
-		{name: "character", in: "x", want: KeyEvent{Key: KeyCharacter, Rune: 'x'}},
-		{name: "backspace", in: "\x7f", want: KeyEvent{Key: KeyBackspace}},
-		{name: "tab", in: "\t", want: KeyEvent{Key: KeyTab}},
-		{name: "escape", in: "\x1b", want: KeyEvent{Key: KeyEscape}},
-		{name: "arrow up", in: "\x1b[A", want: KeyEvent{Key: KeyUp}},
-		{name: "arrow down", in: "\x1b[B", want: KeyEvent{Key: KeyDown}},
-		{name: "arrow left", in: "\x1b[D", want: KeyEvent{Key: KeyLeft}},
-		{name: "arrow right", in: "\x1b[C", want: KeyEvent{Key: KeyRight}},
-		{name: "delete", in: "\x1b[3~", want: KeyEvent{Key: KeyDelete}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReadEvent(strings.NewReader(tt.in))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got != tt.want {
-				t.Fatalf("ReadEvent() = %#v, want %#v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestEscapeDoesNotWaitForOrConsumeNextCharacter(t *testing.T) {
-	reader := bufio.NewReader(strings.NewReader("\x1bq"))
-
-	first, err := readEvent(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := readEvent(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if first != Event(KeyEvent{Key: KeyEscape}) {
-		t.Fatalf("first event = %#v, want escape", first)
-	}
-	if second != Event(KeyEvent{Key: KeyCharacter, Rune: 'q'}) {
-		t.Fatalf("second event = %#v, want q character", second)
-	}
-}
+// Byte-level input decoding is owned by ultraviolet's TerminalReader since
+// the Phase 3 cutover; the mapping onto the closed event set is specified by
+// the table in translate_test.go, and end-to-end byte decoding is exercised
+// by every Run-based test that writes input through a pipe.
 
 func TestRunProcessesInputAndAsyncUpdates(t *testing.T) {
 	reader, writer, err := os.Pipe()

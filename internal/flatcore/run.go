@@ -1,13 +1,14 @@
 package flatcore
 
 import (
-	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"golang.org/x/term"
 )
 
@@ -92,7 +93,22 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	events := readInput(runCtx, bufio.NewReader(in))
+	eventSource := io.Reader(in)
+	cancelInput := func() {}
+	if cancelable, err := uv.NewCancelReader(in); err == nil {
+		eventSource = cancelable
+		cancelInput = func() { _ = cancelable.Cancel() }
+	}
+	events, inputDone := readInput(runCtx, eventSource)
+	defer func() {
+		// Stop the input pipeline before Run returns: cancel the stream,
+		// unblock any in-progress read, and wait until no reader goroutine
+		// can touch the input source anymore (a Close racing a blocked
+		// read is a data race).
+		cancel()
+		cancelInput()
+		<-inputDone
+	}()
 	resize, stopResize := notifyResize()
 	defer stopResize()
 	updates := make(chan StateUpdate[S], 64)
@@ -195,22 +211,63 @@ type inputResult struct {
 	err   error
 }
 
-func readInput(ctx context.Context, reader *bufio.Reader) <-chan inputResult {
+// readInput streams substrate events from the reader and translates them
+// onto the closed event set. The results channel closes when the stream
+// ends (input close maps to a clean end, terminal read errors are delivered
+// as the final result). The done channel closes only once no goroutine can
+// touch the reader anymore — Run waits on it before returning.
+func readInput(ctx context.Context, in io.Reader) (<-chan inputResult, <-chan struct{}) {
 	results := make(chan inputResult)
+	done := make(chan struct{})
+	rawEvents := make(chan uv.Event)
+	reader := uv.NewTerminalReader(in, os.Getenv("TERM"))
+	streamErr := make(chan error, 1)
 	go func() {
+		streamErr <- reader.StreamEvents(ctx, rawEvents)
+	}()
+	go func() {
+		defer close(done)
 		defer close(results)
 		for {
-			event, err := readEvent(reader)
-			result := inputResult{event: event, err: err}
 			select {
-			case results <- result:
-			case <-ctx.Done():
+			case raw := <-rawEvents:
+				event, ok := translateEvent(raw)
+				if !ok {
+					continue
+				}
+				select {
+				case results <- inputResult{event: event}:
+				case <-ctx.Done():
+					drainStream(rawEvents, streamErr)
+					return
+				}
+			case err := <-streamErr:
+				if err != nil && !errors.Is(err, context.Canceled) {
+					select {
+					case results <- inputResult{err: err}:
+					case <-ctx.Done():
+					}
+				}
 				return
-			}
-			if err != nil {
+			case <-ctx.Done():
+				drainStream(rawEvents, streamErr)
 				return
 			}
 		}
 	}()
-	return results
+	return results, done
+}
+
+// drainStream discards remaining substrate events until StreamEvents
+// returns. On cancellation StreamEvents flushes pending events into its
+// channel before exiting, so someone must keep receiving or it never
+// finishes — and its internal goroutine keeps the input reader pinned.
+func drainStream(rawEvents <-chan uv.Event, streamErr <-chan error) {
+	for {
+		select {
+		case <-rawEvents:
+		case <-streamErr:
+			return
+		}
+	}
 }
