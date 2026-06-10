@@ -5,7 +5,8 @@ full-frame functional TUI foundation for Go: single mutable state struct,
 `View` as a pure function of state, direct mutation instead of TEA message
 dispatch, async funneled through named `StateUpdate`s onto a single-writer
 loop. It is the deliberate inverse of Bubble Tea while reusing Charm's MIT
-substrate (lipgloss today; `x/input` and the cell-buffer renderer planned).
+substrate (lipgloss for styling; ultraviolet for input parsing and
+cell-buffer rendering, wrapped entirely behind `internal/`).
 
 ## Document map (read in this order for context)
 
@@ -54,8 +55,10 @@ deterministic (no wall-clock, no randomness in `View`).
 
 ## Architecture
 
-- `internal/flatcore` — the runtime: `App[S]`, `Run`, event parsing,
-  `StateUpdate[S]`/`Async`, `Tracer`, diff renderer. No app policy here.
+- `internal/flatcore` — the runtime: `App[S]`, `Run`, the closed event set
+  + substrate event translation, `StateUpdate[S]`/`Async`, `Tracer`,
+  cell-buffer rendering via ultraviolet. No app policy here, and no
+  ultraviolet types in any exported signature.
 - `internal/flatui` — opt-in widget state structs and layout helpers
   (`TextField`, `Card`, `Title`, `Subtle`, `Overlay`). Widgets own no
   goroutines, no hidden focus policy; apps store them in their own state.
