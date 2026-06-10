@@ -80,7 +80,8 @@ func (r *DiffRenderer) Reset() {
 func RenderContextFor(out io.Writer) RenderContext {
 	width := fallbackRenderWidth
 	if file, ok := out.(fdWriter); ok && term.IsTerminal(int(file.Fd())) {
-		if _, terminalWidth, err := term.GetSize(int(file.Fd())); err == nil && terminalWidth > 0 {
+		// term.GetSize returns (width, height, err) — width first.
+		if terminalWidth, _, err := term.GetSize(int(file.Fd())); err == nil && terminalWidth > 0 {
 			width = terminalWidth
 		}
 	}
