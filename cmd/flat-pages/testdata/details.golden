@@ -1,0 +1,9 @@
+┌──────────────────────────────────────────┐
+│   Details                                │
+│  screen-specific state without a router  │
+│                                          │
+│    item: Opus                            │
+│    index: 2                              │
+│                                          │
+│  j/k change item | esc back              │
+└──────────────────────────────────────────┘

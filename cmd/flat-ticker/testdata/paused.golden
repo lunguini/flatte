@@ -1,0 +1,9 @@
+┌────────────────────────────────────┐
+│   Flat Ticker                      │
+│  streaming update sample           │
+│                                    │
+│    ticks: 3                        │
+│    state: paused                   │
+│                                    │
+│  space/p pause | r reset | q quit  │
+└────────────────────────────────────┘

@@ -1,0 +1,25 @@
+┌─────────────────────────────────────────────┐
+│   Flat Modal                                │
+│    background ticks: 4 | loader: waiting \  │
+│  modal focus with background updates        │
+│    background workspace:                    │
+│                                             │
+│                                             │
+│                                             │
+│      ┌──────────────────────────────┐       │
+│      │   Confirm Work               │       │
+│      │  modal captures input        │       │
+│      │                              │       │
+│      │    name: A▌da                │       │
+│      │                              │       │
+│      │  enter confirm | esc cancel  │       │
+│      └──────────────────────────────┘       │
+│                                             │
+│    modal result: none                       │
+│    recent events:                           │
+│      - async tick applied                   │
+│      - modal owns keyboard focus            │
+│                                             │
+│  enter open modal | q quit                  │
+│  main view is waiting for modal input       │
+└─────────────────────────────────────────────┘

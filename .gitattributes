@@ -1,0 +1,2 @@
+.docs/** filter=git-crypt diff=git-crypt
+.specs/** filter=git-crypt diff=git-crypt
