@@ -152,11 +152,12 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	var screen uv.ScreenBuffer
 	var screenWidth, screenHeight int
 	lastFrame, drew := "", false
+	forceRepaint := false
 
 	draw := func() {
 		renderCtx := RenderContextFor(out)
 		frame := app.View(app.State, renderCtx)
-		if drew && frame == lastFrame && screenWidth == renderCtx.Width {
+		if drew && !forceRepaint && frame == lastFrame && screenWidth == renderCtx.Width {
 			return // identical frame: write nothing, not even markers
 		}
 		styled := uv.NewStyledString(frame)
@@ -166,6 +167,13 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			screen = uv.NewScreenBuffer(renderCtx.Width, height)
 			renderer.Resize(renderCtx.Width, height)
 			screenWidth, screenHeight = renderCtx.Width, height
+		}
+		if forceRepaint {
+			// Terminals can scroll or clobber alt-screen content during a
+			// resize, voiding the renderer's belief about what is on screen:
+			// repaint everything from home.
+			renderer.Erase()
+			forceRepaint = false
 		}
 		screen.Clear()
 		styled.Draw(screen, screen.Bounds())
@@ -207,6 +215,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 				return nil
 			}
 		case <-resize:
+			forceRepaint = true
 			width, height := terminalSize(out)
 			resizeEvent := Event(ResizeEvent{Width: width, Height: height})
 			app.Tracer.Event(resizeEvent)
