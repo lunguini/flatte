@@ -110,7 +110,7 @@ func search(ctx context.Context, query string) ([]string, error) {
 	return results, nil
 }
 
-func View(s *State, ctx flatcore.RenderContext) string {
+func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	status := "idle"
 	if s.searching {
 		status = "searching..."
@@ -135,7 +135,7 @@ func View(s *State, ctx flatcore.RenderContext) string {
 		}
 	}
 	rows = append(rows, "", flatui.Subtle("enter blur/focus | q quits when blurred"))
-	return flatui.Card(rows, ctx.Width)
+	return flatcore.Frame{Content: flatui.Card(rows, ctx.Width)}
 }
 
 func renderQuery(s *State) string {

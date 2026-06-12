@@ -42,7 +42,7 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) string {
+func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	status := "running"
 	if s.paused {
 		status = "paused"
@@ -57,7 +57,7 @@ func View(s *State, ctx flatcore.RenderContext) string {
 		"",
 		flatui.Subtle("space/p pause | r reset | q quit"),
 	}
-	return flatui.Card(lines, ctx.Width)
+	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func tickInterval() time.Duration {

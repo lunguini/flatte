@@ -41,7 +41,7 @@ func TestHandleTogglesPauseAndResets(t *testing.T) {
 func TestViewRendersTickerState(t *testing.T) {
 	state := State{ticks: 3, paused: true}
 
-	frame := View(&state, flatcore.RenderContext{Width: 72})
+	frame := View(&state, flatcore.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Ticker", "ticks: 3", "state: paused"} {
 		if !strings.Contains(frame, want) {
@@ -53,7 +53,7 @@ func TestViewRendersTickerState(t *testing.T) {
 func TestViewMatchesPausedSnapshot(t *testing.T) {
 	state := State{ticks: 3, paused: true}
 
-	flatuitest.AssertGolden(t, "testdata/paused.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/paused.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestTickIntervalEnvironmentOverride(t *testing.T) {

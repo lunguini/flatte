@@ -138,7 +138,11 @@ func handleSettings(s *State, key flatcore.KeyEvent) {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) string {
+func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+	return flatcore.Frame{Content: viewContent(s, ctx)}
+}
+
+func viewContent(s *State, ctx flatcore.RenderContext) string {
 	switch s.screen {
 	case screenHome:
 		return viewHome(s, ctx)

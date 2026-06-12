@@ -9,6 +9,7 @@ import (
 	"os"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 )
 
@@ -16,7 +17,7 @@ type App[S any] struct {
 	State  *S
 	Init   func(*S, Effects[S])
 	Handle func(*S, Event, Effects[S])
-	View   func(*S, RenderContext) string
+	View   func(*S, RenderContext) Frame
 	Tracer Tracer
 }
 
@@ -96,7 +97,13 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	renderer := uv.NewTerminalRenderer(renderOut, os.Environ())
 	renderer.EnterAltScreen()
 	_, _ = renderer.WriteString("\x1b[?25l") // hide cursor (terminals may reset it on alt-screen entry)
+	var lastFrame Frame
+	drew := false
+	cursorShown := false
 	defer func() {
+		if lastFrame.Title != "" {
+			_, _ = renderer.WriteString(ansi.SetWindowTitle(""))
+		}
 		_, _ = renderer.WriteString("\x1b[?25h")
 		renderer.ExitAltScreen()
 		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
@@ -151,16 +158,18 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 
 	var screen uv.ScreenBuffer
 	var screenWidth, screenHeight int
-	lastFrame, drew := "", false
 	forceRepaint := false
 
 	draw := func() {
 		renderCtx := RenderContextFor(out)
 		frame := app.View(app.State, renderCtx)
-		if drew && !forceRepaint && frame == lastFrame && screenWidth == renderCtx.Width {
+		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			return // identical frame: write nothing, not even markers
 		}
-		styled := uv.NewStyledString(frame)
+		if frame.Title != lastFrame.Title {
+			_, _ = renderer.WriteString(ansi.SetWindowTitle(frame.Title))
+		}
+		styled := uv.NewStyledString(frame.Content)
 		_, terminalHeight := terminalSize(out)
 		height := max(styled.Height(), terminalHeight)
 		if screenWidth != renderCtx.Width || screenHeight != height {
@@ -175,9 +184,23 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			renderer.Erase()
 			forceRepaint = false
 		}
+		if cursorShown && frame.Cursor == nil {
+			// Hide before the diff writes so the cursor never lingers on
+			// stale cells.
+			_, _ = renderer.WriteString("\x1b[?25l")
+			cursorShown = false
+		}
 		screen.Clear()
 		styled.Draw(screen, screen.Bounds())
 		renderer.Render(screen.RenderBuffer)
+		if frame.Cursor != nil {
+			// MoveTo must come after Render: rendering moves the cursor.
+			renderer.MoveTo(frame.Cursor.X, frame.Cursor.Y)
+			if !cursorShown {
+				_, _ = renderer.WriteString("\x1b[?25h")
+				cursorShown = true
+			}
+		}
 		if err := renderer.Flush(); err != nil {
 			return
 		}

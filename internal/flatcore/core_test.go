@@ -169,8 +169,8 @@ func TestRunProcessesInputAndAsyncUpdates(t *testing.T) {
 					fx.Quit()
 				}
 			},
-			View: func(s *testState, ctx RenderContext) string {
-				return "count"
+			View: func(s *testState, ctx RenderContext) Frame {
+				return Frame{Content: "count"}
 			},
 			Tracer: tracer,
 		}, WithInput(reader), WithOutput(&out))
@@ -232,8 +232,8 @@ func TestRunSkipsTerminalWritesForUnchangedFrames(t *testing.T) {
 					fx.Quit()
 				}
 			},
-			View: func(s *testState, ctx RenderContext) string {
-				return "unchanged"
+			View: func(s *testState, ctx RenderContext) Frame {
+				return Frame{Content: "unchanged"}
 			},
 		}, WithInput(reader), WithOutput(&out))
 	}()
@@ -277,8 +277,8 @@ func TestRunExitsWhenInitRequestsQuit(t *testing.T) {
 			Init: func(s *testState, fx Effects[testState]) {
 				fx.Quit()
 			},
-			View: func(s *testState, ctx RenderContext) string {
-				return "init quit"
+			View: func(s *testState, ctx RenderContext) Frame {
+				return Frame{Content: "init quit"}
 			},
 		}, WithInput(reader), WithOutput(&out))
 	}()
@@ -334,7 +334,7 @@ func TestRunDeliversCtrlCToAppWithoutDefaultQuit(t *testing.T) {
 					fx.Quit()
 				}
 			},
-			View: func(s *testState, ctx RenderContext) string { return "x" },
+			View: func(s *testState, ctx RenderContext) Frame { return Frame{Content: "x"} },
 		}, WithInput(reader), WithOutput(&out), WithoutDefaultQuit())
 	}()
 
@@ -384,8 +384,8 @@ func TestRunCoalescesQueuedUpdatesIntoOneDraw(t *testing.T) {
 					fx.Quit()
 				}
 			},
-			View: func(s *testState, ctx RenderContext) string {
-				return fmt.Sprintf("count:%d", s.count)
+			View: func(s *testState, ctx RenderContext) Frame {
+				return Frame{Content: fmt.Sprintf("count:%d", s.count)}
 			},
 		}, WithInput(reader), WithOutput(&out))
 	}()
@@ -444,8 +444,8 @@ func TestRunWrapsFramesInSynchronizedOutput(t *testing.T) {
 				}
 				s.count++
 			},
-			View: func(s *testState, ctx RenderContext) string {
-				return fmt.Sprintf("count:%d", s.count)
+			View: func(s *testState, ctx RenderContext) Frame {
+				return Frame{Content: fmt.Sprintf("count:%d", s.count)}
 			},
 		}, WithInput(reader), WithOutput(&out))
 	}()
@@ -492,7 +492,7 @@ func TestRunEntersAltScreenThroughRenderer(t *testing.T) {
 					fx.Quit()
 				}
 			},
-			View: func(s *testState, ctx RenderContext) string { return "altscreen" },
+			View: func(s *testState, ctx RenderContext) Frame { return Frame{Content: "altscreen"} },
 		}, WithInput(reader), WithOutput(&out))
 	}()
 
@@ -549,7 +549,7 @@ func TestRunSkipsSyncMarkersForUnchangedFrames(t *testing.T) {
 					fx.Quit()
 				}
 			},
-			View: func(s *testState, ctx RenderContext) string { return "unchanged" },
+			View: func(s *testState, ctx RenderContext) Frame { return Frame{Content: "unchanged"} },
 		}, WithInput(reader), WithOutput(&out))
 	}()
 
@@ -595,7 +595,7 @@ func TestRunExitsWhenFoldRequestsQuit(t *testing.T) {
 					func(s *testState, _ int, _ error) { fx.Quit() },
 				)
 			},
-			View: func(s *testState, ctx RenderContext) string { return "x" },
+			View: func(s *testState, ctx RenderContext) Frame { return Frame{Content: "x"} },
 		}, WithInput(reader), WithOutput(&out))
 	}()
 

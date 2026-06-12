@@ -73,7 +73,7 @@ func handleBlurred(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) 
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) string {
+func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	lines := []string{
 		flatui.Title("Flat Form"),
 		flatui.Subtle("multi-input retained state sample"),
@@ -96,7 +96,7 @@ func View(s *State, ctx flatcore.RenderContext) string {
 	}
 	lines = append(lines, "", flatui.Subtle("tab focus | arrows move | esc blur | q quits blurred"))
 
-	return flatui.Card(lines, ctx.Width)
+	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func renderField(s *State, index int) string {

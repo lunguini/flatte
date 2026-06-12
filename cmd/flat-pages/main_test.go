@@ -94,14 +94,14 @@ func TestQQuitsOnlyFromHome(t *testing.T) {
 func TestViewDispatchesByScreen(t *testing.T) {
 	state := NewState()
 
-	home := View(state, flatcore.RenderContext{Width: 72})
+	home := View(state, flatcore.RenderContext{Width: 72}).Content
 	if !strings.Contains(home, "Flat Pages") || !strings.Contains(home, "Open details") {
 		t.Fatalf("home view missing expected content:\n%s", home)
 	}
 
 	state.screen = screenSettings
 	state.settingsName.Value = "Ada"
-	settings := View(state, flatcore.RenderContext{Width: 72})
+	settings := View(state, flatcore.RenderContext{Width: 72}).Content
 	if !strings.Contains(settings, "Settings") || !strings.Contains(settings, "Ada") {
 		t.Fatalf("settings view missing expected content:\n%s", settings)
 	}
@@ -111,7 +111,7 @@ func TestViewMatchesHomeSnapshot(t *testing.T) {
 	state := NewState()
 	state.homeCursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/home.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/home.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestViewMatchesDetailsSnapshot(t *testing.T) {
@@ -119,7 +119,7 @@ func TestViewMatchesDetailsSnapshot(t *testing.T) {
 	state.screen = screenDetails
 	state.selected = 2
 
-	flatuitest.AssertGolden(t, "testdata/details.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/details.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestViewMatchesSettingsSnapshot(t *testing.T) {
@@ -128,5 +128,5 @@ func TestViewMatchesSettingsSnapshot(t *testing.T) {
 	state.settingsName.Value = "Ada"
 	state.settingsName.Cursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/settings.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/settings.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
 }

@@ -94,7 +94,7 @@ func TestViewRendersFocusedCursorAndSubmittedState(t *testing.T) {
 	state.fields[1].Input.Value = "op"
 	state.submitted = "name=Ada filter=op"
 
-	frame := View(state, flatcore.RenderContext{Width: 72})
+	frame := View(state, flatcore.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Form", "A▌da", "filter", "name=Ada filter=op"} {
 		if !strings.Contains(frame, want) {
@@ -111,5 +111,5 @@ func TestViewMatchesSubmittedSnapshot(t *testing.T) {
 	state.fields[1].Input.Cursor = 2
 	state.submitted = "name=Ada filter=op"
 
-	flatuitest.AssertGolden(t, "testdata/submitted.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/submitted.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
 }

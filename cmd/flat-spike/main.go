@@ -65,7 +65,7 @@ func moveUp(s *State) {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) string {
+func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	rows := make([]string, 0, len(s.models))
 	if s.loading {
 		rows = append(rows, flatui.Subtle("  loading models..."))
@@ -102,7 +102,7 @@ func View(s *State, ctx flatcore.RenderContext) string {
 		flatui.Subtle("j/k move | enter select | q quit"),
 	}
 
-	return flatui.Card(lines, ctx.Width)
+	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func itemStyle() lipgloss.Style {

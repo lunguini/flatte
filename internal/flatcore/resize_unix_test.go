@@ -42,7 +42,7 @@ func TestRunDeliversResizeEvent(t *testing.T) {
 					}
 				}
 			},
-			View:   func(s *testState, ctx RenderContext) string { return "x" },
+			View:   func(s *testState, ctx RenderContext) Frame { return Frame{Content: "x"} },
 			Tracer: tracer,
 		}, WithInput(reader), WithOutput(&out))
 	}()
@@ -123,7 +123,7 @@ func TestRunRepaintsFullFrameAfterResize(t *testing.T) {
 					}
 				}
 			},
-			View: func(s *testState, ctx RenderContext) string { return "static-content" },
+			View: func(s *testState, ctx RenderContext) Frame { return Frame{Content: "static-content"} },
 		}, WithInput(reader), WithOutput(&out))
 	}()
 

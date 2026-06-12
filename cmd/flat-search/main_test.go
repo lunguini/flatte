@@ -138,7 +138,7 @@ func TestViewRendersSearchState(t *testing.T) {
 	state := State{searching: true}
 	state.query.Value = "o"
 
-	frame := View(&state, flatcore.RenderContext{Width: 72})
+	frame := View(&state, flatcore.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Search", "query: o", "searching..."} {
 		if !strings.Contains(frame, want) {
@@ -152,7 +152,7 @@ func TestViewMatchesFocusedSearchingSnapshot(t *testing.T) {
 	state.query.Value = "o"
 	state.query.Cursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/focused-searching.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/focused-searching.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestViewMatchesResultsSnapshot(t *testing.T) {
@@ -161,7 +161,7 @@ func TestViewMatchesResultsSnapshot(t *testing.T) {
 		results: []string{"sonnet", "opus", "freeform"},
 	}
 
-	flatuitest.AssertGolden(t, "testdata/results.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/results.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestSearchDelayEnvironmentOverride(t *testing.T) {

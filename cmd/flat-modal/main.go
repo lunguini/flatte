@@ -83,12 +83,12 @@ func handleModal(s *State, key flatcore.KeyEvent) {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) string {
+func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	base := viewMain(s, ctx)
 	if !s.modalOpen {
-		return base
+		return flatcore.Frame{Content: base}
 	}
-	return flatui.Overlay(base, viewModal(s, ctx))
+	return flatcore.Frame{Content: flatui.Overlay(base, viewModal(s, ctx))}
 }
 
 func viewMain(s *State, ctx flatcore.RenderContext) string {

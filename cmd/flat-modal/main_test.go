@@ -118,7 +118,7 @@ func TestViewRendersMainAndModalState(t *testing.T) {
 	state.modalInput.Value = "Ada"
 	state.modalInput.Cursor = 1
 
-	frame := View(state, flatcore.RenderContext{Width: 72})
+	frame := View(state, flatcore.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Modal", "background ticks: 4", "waiting \\", "Confirm Work", "A▌da"} {
 		if !strings.Contains(frame, want) {
@@ -136,7 +136,7 @@ func TestViewMatchesModalSnapshot(t *testing.T) {
 	state.modalInput.Value = "Ada"
 	state.modalInput.Cursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/modal-open.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/modal-open.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestTickIntervalEnvironmentOverride(t *testing.T) {

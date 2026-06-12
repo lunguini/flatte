@@ -74,8 +74,8 @@ func TestViewRendersCurrentStateDeterministically(t *testing.T) {
 	}
 
 	ctx := flatcore.RenderContext{Width: 72}
-	first := View(&state, ctx)
-	second := View(&state, ctx)
+	first := View(&state, ctx).Content
+	second := View(&state, ctx).Content
 	if first != second {
 		t.Fatal("View output changed without a state change")
 	}
@@ -93,7 +93,7 @@ func TestViewAdaptsRenderedLinesToContextWidth(t *testing.T) {
 	}
 
 	for _, frameWidth := range []int{40, 72, 96} {
-		for _, line := range strings.Split(View(&state, flatcore.RenderContext{Width: frameWidth}), "\n") {
+		for _, line := range strings.Split(View(&state, flatcore.RenderContext{Width: frameWidth}).Content, "\n") {
 			if width := lipgloss.Width(line); width > frameWidth {
 				t.Fatalf("line width = %d, want <= %d:\n%q", width, frameWidth, line)
 			}
@@ -106,7 +106,7 @@ func TestViewUsesCompactContentWidthWhenThereIsRoom(t *testing.T) {
 		models: []string{"haiku", "sonnet", "opus"},
 	}
 
-	frame := View(&state, flatcore.RenderContext{Width: 96})
+	frame := View(&state, flatcore.RenderContext{Width: 96}).Content
 	firstLine := strings.Split(frame, "\n")[0]
 	width := lipgloss.Width(firstLine)
 	if width >= 96 {
@@ -120,7 +120,7 @@ func TestViewUsesCompactContentWidthWhenThereIsRoom(t *testing.T) {
 func TestViewMatchesLoadingSnapshot(t *testing.T) {
 	state := State{loading: true}
 
-	flatuitest.AssertGolden(t, "testdata/loading.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/loading.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestViewMatchesLoadedSnapshot(t *testing.T) {
@@ -130,7 +130,7 @@ func TestViewMatchesLoadedSnapshot(t *testing.T) {
 		selectedModel: "opus",
 	}
 
-	flatuitest.AssertGolden(t, "testdata/loaded.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatuitest.AssertGolden(t, "testdata/loaded.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestRunAppliesStartupAsyncUpdateBeforeLaterInput(t *testing.T) {
