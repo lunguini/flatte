@@ -46,10 +46,25 @@ func (fx Effects[S]) Quit() {
 // Option configures Run behaviour.
 type Option func(*runConfig)
 
+// MouseMode selects which mouse events the terminal reports.
+type MouseMode int
+
+const (
+	// MouseModeNone reports no mouse events (the default).
+	MouseModeNone MouseMode = iota
+	// MouseModeCellMotion reports clicks, releases, wheel, and drag motion.
+	MouseModeCellMotion
+	// MouseModeAllMotion additionally reports motion with no button held.
+	MouseModeAllMotion
+)
+
 type runConfig struct {
-	input       io.Reader
-	output      io.Writer
-	defaultQuit bool
+	input          io.Reader
+	output         io.Writer
+	defaultQuit    bool
+	bracketedPaste bool
+	mouse          MouseMode
+	reportFocus    bool
 }
 
 // WithInput sets the event source. Default: os.Stdin.
@@ -62,6 +77,19 @@ func WithOutput(out io.Writer) Option { return func(c *runConfig) { c.output = o
 // The app must call fx.Quit(), close the input, or cancel the context to exit.
 func WithoutDefaultQuit() Option { return func(c *runConfig) { c.defaultQuit = false } }
 
+// WithoutBracketedPaste disables bracketed paste mode. It is on by
+// default: without it a paste arrives as a flood of individual key
+// events instead of one PasteEvent.
+func WithoutBracketedPaste() Option { return func(c *runConfig) { c.bracketedPaste = false } }
+
+// WithMouse enables terminal mouse reporting; events arrive as MouseEvent.
+func WithMouse(mode MouseMode) Option { return func(c *runConfig) { c.mouse = mode } }
+
+// WithReportFocus enables focus reporting; terminal focus changes arrive
+// as FocusEvent. Some terminals and multiplexers need configuration to
+// report focus (tmux: focus-events).
+func WithReportFocus() Option { return func(c *runConfig) { c.reportFocus = true } }
+
 func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	if app.State == nil {
 		panic("flatcore: App.State is nil")
@@ -70,7 +98,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		panic("flatcore: App.View is nil")
 	}
 
-	cfg := runConfig{input: os.Stdin, output: os.Stdout, defaultQuit: true}
+	cfg := runConfig{input: os.Stdin, output: os.Stdout, defaultQuit: true, bracketedPaste: true}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&cfg)
@@ -97,6 +125,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	renderer := uv.NewTerminalRenderer(renderOut, os.Environ())
 	renderer.EnterAltScreen()
 	_, _ = renderer.WriteString("\x1b[?25l") // hide cursor (terminals may reset it on alt-screen entry)
+	_, _ = renderer.WriteString(setModes(cfg))
 	var lastFrame Frame
 	drew := false
 	cursorShown := false
@@ -104,6 +133,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		if lastFrame.Title != "" {
 			_, _ = renderer.WriteString(ansi.SetWindowTitle(""))
 		}
+		_, _ = renderer.WriteString(resetModes(cfg))
 		_, _ = renderer.WriteString("\x1b[?25h")
 		renderer.ExitAltScreen()
 		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
@@ -257,6 +287,42 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		}
 		draw()
 	}
+}
+
+// setModes returns the terminal-mode escapes for the configured
+// capabilities; resetModes returns their inverses. Mouse reset clears
+// all mouse modes regardless of which one was set.
+func setModes(cfg runConfig) string {
+	var modes string
+	if cfg.bracketedPaste {
+		modes += ansi.SetModeBracketedPaste
+	}
+	if cfg.reportFocus {
+		modes += ansi.SetModeFocusEvent
+	}
+	switch cfg.mouse {
+	case MouseModeCellMotion:
+		modes += ansi.SetModeMouseButtonEvent + ansi.SetModeMouseExtSgr
+	case MouseModeAllMotion:
+		modes += ansi.SetModeMouseAnyEvent + ansi.SetModeMouseExtSgr
+	}
+	return modes
+}
+
+func resetModes(cfg runConfig) string {
+	var modes string
+	if cfg.bracketedPaste {
+		modes += ansi.ResetModeBracketedPaste
+	}
+	if cfg.reportFocus {
+		modes += ansi.ResetModeFocusEvent
+	}
+	if cfg.mouse != MouseModeNone {
+		modes += ansi.ResetModeMouseButtonEvent +
+			ansi.ResetModeMouseAnyEvent +
+			ansi.ResetModeMouseExtSgr
+	}
+	return modes
 }
 
 // drainUpdates applies at most len(updates) pending updates without blocking,

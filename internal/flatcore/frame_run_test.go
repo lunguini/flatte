@@ -12,7 +12,7 @@ import (
 // runFrameApp drives Run over a pipe with the given View, feeding it the
 // input bytes and returning the full terminal output. The Handle counts
 // 'x' presses into state.count and quits on 'q'.
-func runFrameApp(t *testing.T, view func(*testState, RenderContext) Frame, input string) string {
+func runFrameApp(t *testing.T, view func(*testState, RenderContext) Frame, input string, opts ...Option) string {
 	t.Helper()
 
 	reader, writer, err := os.Pipe()
@@ -41,7 +41,7 @@ func runFrameApp(t *testing.T, view func(*testState, RenderContext) Frame, input
 				}
 			},
 			View: view,
-		}, WithInput(reader), WithOutput(&out))
+		}, append([]Option{WithInput(reader), WithOutput(&out)}, opts...)...)
 	}()
 
 	if _, err := writer.Write([]byte(input)); err != nil {
