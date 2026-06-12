@@ -25,7 +25,8 @@ type App[S any] struct {
 // methods on the loop goroutine and drained by the loop before the next
 // flush.
 type action struct {
-	write string // raw escape sequence to emit (clipboard OSC52 etc.)
+	write   string // raw escape sequence to emit (clipboard OSC52 etc.)
+	suspend bool   // release the terminal, suspend the process, restore
 }
 
 type Effects[S any] struct {
@@ -70,6 +71,19 @@ func (fx Effects[S]) ReadClipboard() {
 	}
 }
 
+// Suspend releases the terminal (cooked mode, main screen, cursor
+// visible), suspends the process like the shell's Ctrl-Z would
+// (SIGTSTP to the process group), and on resume (fg/SIGCONT) restores
+// the terminal and repaints. On platforms without job control it is a
+// release/restore round trip. The framework never binds a key to this —
+// apps decide what (if anything) triggers it. Loop-goroutine-only, like
+// Quit. Safe on a zero Effects value.
+func (fx Effects[S]) Suspend() {
+	if fx.enqueue != nil {
+		fx.enqueue(action{suspend: true})
+	}
+}
+
 // Option configures Run behaviour.
 type Option func(*runConfig)
 
@@ -92,6 +106,14 @@ type runConfig struct {
 	bracketedPaste bool
 	mouse          MouseMode
 	reportFocus    bool
+	suspendProcess func() // test seam; defaults to the platform suspend
+}
+
+// withSuspendProcess overrides the process-suspension call. Test seam:
+// the real one stops the whole process group, which would stop the test
+// runner too.
+func withSuspendProcess(fn func()) Option {
+	return func(c *runConfig) { c.suspendProcess = fn }
 }
 
 // WithInput sets the event source. Default: os.Stdin.
@@ -125,7 +147,13 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		panic("flatcore: App.View is nil")
 	}
 
-	cfg := runConfig{input: os.Stdin, output: os.Stdout, defaultQuit: true, bracketedPaste: true}
+	cfg := runConfig{
+		input:          os.Stdin,
+		output:         os.Stdout,
+		defaultQuit:    true,
+		bracketedPaste: true,
+		suspendProcess: suspendProcess,
+	}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&cfg)
@@ -133,15 +161,37 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	}
 	in, out := cfg.input, cfg.output
 
+	// Raw mode enter/restore are reusable: suspend and exec hand the
+	// terminal back to the shell or a subprocess and re-enter afterwards.
+	// The state captured by the FIRST MakeRaw is the terminal's original
+	// state and is what every restore returns to.
+	var rawFile *os.File
 	if file, ok := in.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
-		oldState, err := term.MakeRaw(int(file.Fd()))
+		rawFile = file
+	}
+	var originalTermState *term.State
+	enterRaw := func() error {
+		if rawFile == nil {
+			return nil
+		}
+		state, err := term.MakeRaw(int(rawFile.Fd()))
 		if err != nil {
 			return err
 		}
-		defer func() {
-			_ = term.Restore(int(file.Fd()), oldState)
-		}()
+		if originalTermState == nil {
+			originalTermState = state
+		}
+		return nil
 	}
+	restoreRaw := func() {
+		if rawFile != nil && originalTermState != nil {
+			_ = term.Restore(int(rawFile.Fd()), originalTermState)
+		}
+	}
+	if err := enterRaw(); err != nil {
+		return err
+	}
+	defer restoreRaw()
 
 	// Alt-screen entry/exit goes through the renderer, not raw writes: it
 	// must also flip the renderer's fullscreen + absolute-cursor flags, or
@@ -182,21 +232,34 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	eventSource := io.Reader(in)
-	cancelInput := func() {}
-	if cancelable, err := uv.NewCancelReader(in); err == nil {
-		eventSource = cancelable
-		cancelInput = func() { _ = cancelable.Cancel() }
+	// The input pipeline is restartable: suspend and exec stop it before
+	// handing the terminal away (the subprocess must own stdin) and start
+	// a fresh incarnation afterwards. stop blocks until no goroutine can
+	// touch the input source anymore (a Close racing a blocked read is a
+	// data race).
+	type inputPipeline struct {
+		events <-chan inputResult
+		stop   func()
 	}
-	events, inputDone := readInput(runCtx, eventSource)
+	startInput := func() inputPipeline {
+		inputCtx, cancelCtx := context.WithCancel(runCtx)
+		eventSource := io.Reader(in)
+		cancelRead := func() {}
+		if cancelable, err := uv.NewCancelReader(in); err == nil {
+			eventSource = cancelable
+			cancelRead = func() { _ = cancelable.Cancel() }
+		}
+		events, done := readInput(inputCtx, eventSource)
+		return inputPipeline{events: events, stop: func() {
+			cancelCtx()
+			cancelRead()
+			<-done
+		}}
+	}
+	pipe := startInput()
 	defer func() {
-		// Stop the input pipeline before Run returns: cancel the stream,
-		// unblock any in-progress read, and wait until no reader goroutine
-		// can touch the input source anymore (a Close racing a blocked
-		// read is a data race).
 		cancel()
-		cancelInput()
-		<-inputDone
+		pipe.stop()
 	}()
 	resize, stopResize := notifyResize()
 	defer stopResize()
@@ -237,7 +300,6 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	}
 
 	draw := func() {
-		drainActions()
 		renderCtx := RenderContextFor(out)
 		frame := app.View(app.State, renderCtx)
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
@@ -289,24 +351,81 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		writeFrameOutput()
 	}
 
+	// releaseTerminal hands the terminal back (cooked mode, main screen,
+	// cursor visible) and fully stops the input pipeline so a subprocess
+	// or the shell owns stdin. restoreTerminal is its exact inverse plus a
+	// forced repaint and a fresh ResizeEvent — the terminal may have been
+	// resized while we were away, and no SIGWINCH was delivered to us.
+	releaseTerminal := func() {
+		pipe.stop()
+		_, _ = renderer.WriteString(resetModes(cfg))
+		_, _ = renderer.WriteString("\x1b[?25h")
+		renderer.ExitAltScreen()
+		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
+			_, _ = out.Write(renderOut.Bytes())
+			renderOut.Reset()
+		}
+		restoreRaw()
+	}
+	restoreTerminal := func() {
+		_ = enterRaw()
+		renderer.EnterAltScreen()
+		_, _ = renderer.WriteString("\x1b[?25l")
+		cursorShown = false
+		_, _ = renderer.WriteString(setModes(cfg))
+		pipe = startInput()
+		forceRepaint = true
+		width, height := terminalSize(out)
+		resizeEvent := Event(ResizeEvent{Width: width, Height: height})
+		app.Tracer.Event(resizeEvent)
+		if app.Handle != nil {
+			app.Handle(app.State, resizeEvent, effects)
+		}
+	}
+
+	// processActions drains the one-shot queue before each draw. Suspend
+	// runs here, not in drainActions: it re-enters the loop machinery
+	// (input restart, repaint) and must never run mid-render. The outer
+	// loop re-checks because the post-restore resize Handle may enqueue.
+	processActions := func() {
+		for len(pending) > 0 {
+			queued := pending
+			pending = nil
+			for _, a := range queued {
+				switch {
+				case a.suspend:
+					releaseTerminal()
+					cfg.suspendProcess()
+					restoreTerminal()
+				case a.write != "":
+					_, _ = renderer.WriteString(a.write)
+				}
+			}
+		}
+	}
+
+	processActions() // Init and the initial resize Handle may have enqueued
+	if quitRequested {
+		return nil
+	}
 	draw()
 	for {
 		select {
 		case <-runCtx.Done():
 			return nil
-		case input, ok := <-events:
+		case result, ok := <-pipe.events:
 			if !ok {
 				return nil
 			}
-			if input.err != nil {
-				return input.err
+			if result.err != nil {
+				return result.err
 			}
-			if key, isKey := input.event.(KeyEvent); isKey && key.Key == KeyCtrlC && cfg.defaultQuit {
+			if key, isKey := result.event.(KeyEvent); isKey && key.Key == KeyCtrlC && cfg.defaultQuit {
 				return nil
 			}
-			app.Tracer.Event(input.event)
+			app.Tracer.Event(result.event)
 			if app.Handle != nil {
-				app.Handle(app.State, input.event, effects)
+				app.Handle(app.State, result.event, effects)
 			}
 			// quitRequested flips synchronously inside Init, Handle, or a
 			// fold — all on the loop goroutine. The updates path is checked
@@ -329,6 +448,10 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			ApplyUpdate(app.State, app.Tracer, update)
 		}
 		drainUpdates(app, updates)
+		if quitRequested {
+			return nil
+		}
+		processActions()
 		if quitRequested {
 			return nil
 		}
