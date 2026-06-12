@@ -2,6 +2,7 @@ package flatcore
 
 import (
 	"context"
+	"os/exec"
 	"sync"
 	"time"
 )
@@ -10,6 +11,39 @@ import (
 // update. It is Async spelled through Effects.
 func Go[S, T any](fx Effects[S], name string, work func(context.Context) (T, error), fold func(*S, T, error)) {
 	Async(fx.context(), fx.Updates, name, work, fold)
+}
+
+// Exec releases the terminal (cooked mode, main screen), runs cmd
+// attached to it, restores the terminal, and applies the named fold with
+// the command's error — all synchronously on the loop goroutine: the TUI
+// is paused while cmd runs, exactly like shelling out to $EDITOR. cmd's
+// stdin/stdout default to Run's input/output and stderr to os.Stderr,
+// each only when unset. Loop-goroutine-only, like all effects; no-op on
+// a zero Effects value.
+func Exec[S any](fx Effects[S], name string, cmd *exec.Cmd, fold func(*S, error)) {
+	if fx.enqueue == nil {
+		return
+	}
+	fx.enqueue(action{exec: &execAction{
+		cmd: cmd,
+		done: func(err error) {
+			update := Named(name, func(s *S) { fold(s, err) })
+			select {
+			case fx.Updates <- update:
+			default:
+				// The updates channel is full (a burst of async results
+				// landed during the exec). Spill to a goroutine instead of
+				// deadlocking the loop against its own channel.
+				ctx := fx.context()
+				go func() {
+					select {
+					case fx.Updates <- update:
+					case <-ctx.Done():
+					}
+				}()
+			}
+		},
+	}})
 }
 
 // Every sends a named update on a fixed interval until the loop context is

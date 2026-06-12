@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -25,8 +26,14 @@ type App[S any] struct {
 // methods on the loop goroutine and drained by the loop before the next
 // flush.
 type action struct {
-	write   string // raw escape sequence to emit (clipboard OSC52 etc.)
-	suspend bool   // release the terminal, suspend the process, restore
+	write   string      // raw escape sequence to emit (clipboard OSC52 etc.)
+	suspend bool        // release the terminal, suspend the process, restore
+	exec    *execAction // release the terminal, run the command, restore
+}
+
+type execAction struct {
+	cmd  *exec.Cmd
+	done func(error) // delivers cmd.Run's error back to the app as a named update
 }
 
 type Effects[S any] struct {
@@ -397,6 +404,21 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 					releaseTerminal()
 					cfg.suspendProcess()
 					restoreTerminal()
+				case a.exec != nil:
+					releaseTerminal()
+					cmd := a.exec.cmd
+					if cmd.Stdin == nil {
+						cmd.Stdin = in
+					}
+					if cmd.Stdout == nil {
+						cmd.Stdout = out
+					}
+					if cmd.Stderr == nil {
+						cmd.Stderr = os.Stderr
+					}
+					err := cmd.Run() // blocking: the TUI is paused while it runs
+					restoreTerminal()
+					a.exec.done(err)
 				case a.write != "":
 					_, _ = renderer.WriteString(a.write)
 				}
