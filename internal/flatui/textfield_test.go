@@ -55,3 +55,26 @@ func TestTextFieldSetCursorClampsToRuneBoundary(t *testing.T) {
 		t.Fatalf("Render() = %q, want cursor clamped before multibyte rune", got)
 	}
 }
+
+func TestCursorColumnCountsDisplayCells(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  string
+		cursor int // byte offset
+		want   int
+	}{
+		{"empty", "", 0, 0},
+		{"ascii middle", "hello", 3, 3},
+		{"after multibyte rune", "héllo", 3, 2},
+		{"after wide rune", "a世b", 4, 3},
+		{"clamped past end", "hi", 99, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			field := TextField{Value: tc.value, Cursor: tc.cursor}
+			if got := field.CursorColumn(); got != tc.want {
+				t.Fatalf("CursorColumn() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}

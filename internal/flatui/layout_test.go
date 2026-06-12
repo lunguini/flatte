@@ -138,3 +138,24 @@ func TestOverlayUsesVisibleWidthForStyledContent(t *testing.T) {
 		t.Fatalf("Overlay() missing overlaid modal border:\n%s", got)
 	}
 }
+
+func TestCardOriginPointsAtFirstContentCell(t *testing.T) {
+	frame := Card([]string{"marker"}, 40)
+	x, y := CardOrigin()
+	rows := strings.Split(flatuitest.CleanFrame(frame), "\n")
+	// Index by rune: the card border is a multi-byte, single-cell rune.
+	row := []rune(rows[y])
+	if x >= len(row) || !strings.HasPrefix(string(row[x:]), "marker") {
+		t.Fatalf("CardOrigin() = (%d,%d), but row %d is %q", x, y, y, rows[y])
+	}
+}
+
+func TestOverlayOriginMatchesOverlayPlacement(t *testing.T) {
+	base := strings.TrimSuffix(strings.Repeat(strings.Repeat("b", 20)+"\n", 7), "\n")
+	layer := "XX\nXX"
+	x, y := OverlayOrigin(base, layer)
+	composed := strings.Split(Overlay(base, layer), "\n")
+	if composed[y][x:x+2] != "XX" {
+		t.Fatalf("OverlayOrigin() = (%d,%d), row %d = %q", x, y, y, composed[y])
+	}
+}

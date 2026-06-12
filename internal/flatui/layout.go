@@ -56,13 +56,33 @@ func Overlay(base string, layer string) string {
 	canvas := uv.NewScreenBuffer(width, height)
 	baseStyled.Draw(canvas, canvas.Bounds())
 
-	left := max(0, (width-layerBounds.Dx())/2)
-	top := max(0, (height-layerBounds.Dy())/2)
+	left, top := OverlayOrigin(base, layer)
 	layerArea := uv.Rect(left, top, layerBounds.Dx(), layerBounds.Dy())
 	canvas.FillArea(&uv.EmptyCell, layerArea) // the layer rectangle covers the base
 	layerStyled.Draw(canvas, layerArea)
 
 	return trimTrailingSpace(canvas.Render())
+}
+
+// CardOrigin is the cell offset of a Card's first content cell relative
+// to the card's top-left corner: one border column plus two padding
+// columns across, one border row down.
+func CardOrigin() (x, y int) {
+	return 1 + cardHorizontalPadding/2, 1
+}
+
+// OverlayOrigin returns where Overlay places layer's top-left cell inside
+// the composed frame. Same centering math as Overlay — Overlay calls
+// this, so they cannot drift apart.
+func OverlayOrigin(base, layer string) (x, y int) {
+	baseBounds := uv.NewStyledString(base).Bounds()
+	layerBounds := uv.NewStyledString(layer).Bounds()
+	if baseBounds.Empty() || layerBounds.Empty() {
+		return 0, 0
+	}
+	width := max(baseBounds.Dx(), layerBounds.Dx())
+	height := max(baseBounds.Dy(), layerBounds.Dy())
+	return max(0, (width-layerBounds.Dx())/2), max(0, (height-layerBounds.Dy())/2)
 }
 
 func trimTrailingSpace(frame string) string {

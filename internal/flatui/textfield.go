@@ -1,6 +1,10 @@
 package flatui
 
-import "unicode/utf8"
+import (
+	"unicode/utf8"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 type TextField struct {
 	Value  string
@@ -54,6 +58,14 @@ func (f *TextField) MoveRight() {
 func (f *TextField) SetCursor(cursor int) {
 	f.Cursor = cursor
 	f.clampCursor()
+}
+
+// CursorColumn returns the cursor offset in display cells within the
+// rendered value (wide runes count their terminal width, not their byte
+// or rune count).
+func (f TextField) CursorColumn() int {
+	f.clampCursor()
+	return lipgloss.Width(f.Value[:f.Cursor])
 }
 
 func (f TextField) Render(focused bool) string {
