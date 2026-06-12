@@ -107,11 +107,39 @@ func TestViewDispatchesByScreen(t *testing.T) {
 	}
 }
 
+func TestViewSetsTitlePerScreenAndCursorOnSettings(t *testing.T) {
+	state := NewState()
+
+	home := View(state, flatcore.RenderContext{Width: 72})
+	if home.Title != "Flatte \u2014 home" {
+		t.Fatalf("home title = %q, want Flatte \u2014 home", home.Title)
+	}
+	if home.Cursor != nil {
+		t.Fatalf("home view has a cursor: %+v", *home.Cursor)
+	}
+
+	state.screen = screenSettings
+	state.settingsName.Value = "Ada"
+	state.settingsName.Cursor = 1
+	settings := View(state, flatcore.RenderContext{Width: 72})
+	if settings.Title != "Flatte \u2014 settings" {
+		t.Fatalf("settings title = %q, want Flatte \u2014 settings", settings.Title)
+	}
+	if settings.Cursor == nil {
+		t.Fatal("settings view has no cursor")
+	}
+	// row: card border(1) + title,subtle,blank(3) = 4
+	// col: card origin(3) + "  name: "(8) + 1 typed cell = 12
+	if settings.Cursor.X != 12 || settings.Cursor.Y != 4 {
+		t.Fatalf("cursor = %+v, want (12,4)", *settings.Cursor)
+	}
+}
+
 func TestViewMatchesHomeSnapshot(t *testing.T) {
 	state := NewState()
 	state.homeCursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/home.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
+	flatuitest.AssertGoldenFrame(t, "testdata/home.golden", View(state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestViewMatchesDetailsSnapshot(t *testing.T) {
@@ -119,7 +147,7 @@ func TestViewMatchesDetailsSnapshot(t *testing.T) {
 	state.screen = screenDetails
 	state.selected = 2
 
-	flatuitest.AssertGolden(t, "testdata/details.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
+	flatuitest.AssertGoldenFrame(t, "testdata/details.golden", View(state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestViewMatchesSettingsSnapshot(t *testing.T) {
@@ -128,5 +156,5 @@ func TestViewMatchesSettingsSnapshot(t *testing.T) {
 	state.settingsName.Value = "Ada"
 	state.settingsName.Cursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/settings.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
+	flatuitest.AssertGoldenFrame(t, "testdata/settings.golden", View(state, flatcore.RenderContext{Width: 72}))
 }

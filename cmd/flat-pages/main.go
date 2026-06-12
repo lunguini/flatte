@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lunguini/flat/internal/flatcore"
 	"github.com/lunguini/flat/internal/flatui"
 )
@@ -139,7 +141,29 @@ func handleSettings(s *State, key flatcore.KeyEvent) {
 }
 
 func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
-	return flatcore.Frame{Content: viewContent(s, ctx)}
+	frame := flatcore.Frame{
+		Content: viewContent(s, ctx),
+		Title:   "Flatte \u2014 " + screenName(s.screen),
+	}
+	if s.screen == screenSettings {
+		originX, originY := flatui.CardOrigin()
+		frame.Cursor = &flatcore.Cursor{
+			X: originX + lipgloss.Width("  name: ") + s.settingsName.CursorColumn(),
+			Y: originY + 3, // title, subtle, blank precede the name row
+		}
+	}
+	return frame
+}
+
+func screenName(sc screen) string {
+	switch sc {
+	case screenDetails:
+		return "details"
+	case screenSettings:
+		return "settings"
+	default:
+		return "home"
+	}
 }
 
 func viewContent(s *State, ctx flatcore.RenderContext) string {
@@ -191,7 +215,7 @@ func viewSettings(s *State, ctx flatcore.RenderContext) string {
 		flatui.Title("Settings"),
 		flatui.Subtle("settings input is app-owned state"),
 		"",
-		"  name: " + s.settingsName.Render(true),
+		"  name: " + s.settingsName.Value,
 		"",
 		flatui.Subtle("type edit | arrows move | enter/esc back"),
 	}

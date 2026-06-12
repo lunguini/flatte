@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lunguini/flat/internal/flatcore"
 	"github.com/lunguini/flat/internal/flatui"
 )
@@ -96,12 +98,20 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	}
 	lines = append(lines, "", flatui.Subtle("tab focus | arrows move | esc blur | q quits blurred"))
 
-	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	frame := flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	if s.editing {
+		originX, originY := flatui.CardOrigin()
+		field := s.fields[s.focused]
+		frame.Cursor = &flatcore.Cursor{
+			X: originX + lipgloss.Width("> "+field.Label+": ") + field.Input.CursorColumn(),
+			Y: originY + 3 + s.focused, // title, subtle, blank precede the fields
+		}
+	}
+	return frame
 }
 
 func renderField(s *State, index int) string {
-	field := s.fields[index]
-	return field.Input.Render(s.editing && index == s.focused)
+	return s.fields[index].Input.Value
 }
 
 func main() {

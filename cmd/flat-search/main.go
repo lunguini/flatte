@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lunguini/flat/internal/flatcore"
 	"github.com/lunguini/flat/internal/flatui"
 )
@@ -135,11 +137,19 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		}
 	}
 	rows = append(rows, "", flatui.Subtle("enter blur/focus | q quits when blurred"))
-	return flatcore.Frame{Content: flatui.Card(rows, ctx.Width)}
+	frame := flatcore.Frame{Content: flatui.Card(rows, ctx.Width)}
+	if s.focused {
+		originX, originY := flatui.CardOrigin()
+		frame.Cursor = &flatcore.Cursor{
+			X: originX + lipgloss.Width("  query: ") + s.query.CursorColumn(),
+			Y: originY + 3, // title, subtle, blank precede the query row
+		}
+	}
+	return frame
 }
 
 func renderQuery(s *State) string {
-	return s.query.Render(s.focused)
+	return s.query.Value
 }
 
 func searchDelay() time.Duration {

@@ -96,10 +96,39 @@ func TestViewRendersFocusedCursorAndSubmittedState(t *testing.T) {
 
 	frame := View(state, flatcore.RenderContext{Width: 72}).Content
 
-	for _, want := range []string{"Flat Form", "A▌da", "filter", "name=Ada filter=op"} {
+	for _, want := range []string{"Flat Form", "Ada", "filter", "name=Ada filter=op"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("View() missing %q:\n%s", want, frame)
 		}
+	}
+	if strings.Contains(frame, "▌") {
+		t.Fatalf("View() still paints the fake cursor marker:\n%s", frame)
+	}
+}
+
+func TestViewPlacesCursorInFocusedField(t *testing.T) {
+	state := NewState()
+	state.fields[0].Input.Insert('a')
+	state.fields[0].Input.Insert('b')
+
+	frame := View(state, flatcore.RenderContext{Width: 72})
+	if frame.Cursor == nil {
+		t.Fatal("editing view has no cursor")
+	}
+	// row: card border(1) + title,subtle,blank(3) + field 0 = 4
+	// col: card origin(3) + "> name: "(8) + 2 typed cells = 13
+	if frame.Cursor.X != 13 || frame.Cursor.Y != 4 {
+		t.Fatalf("cursor = %+v, want (13,4)", *frame.Cursor)
+	}
+
+	state.focused = 1
+	if second := View(state, flatcore.RenderContext{Width: 72}); second.Cursor == nil || second.Cursor.Y != 5 {
+		t.Fatalf("cursor on second field = %+v, want row 5", second.Cursor)
+	}
+
+	state.editing = false
+	if blurred := View(state, flatcore.RenderContext{Width: 72}); blurred.Cursor != nil {
+		t.Fatalf("blurred view still has a cursor: %+v", *blurred.Cursor)
 	}
 }
 
@@ -111,5 +140,5 @@ func TestViewMatchesSubmittedSnapshot(t *testing.T) {
 	state.fields[1].Input.Cursor = 2
 	state.submitted = "name=Ada filter=op"
 
-	flatuitest.AssertGolden(t, "testdata/submitted.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
+	flatuitest.AssertGoldenFrame(t, "testdata/submitted.golden", View(state, flatcore.RenderContext{Width: 72}))
 }

@@ -2,10 +2,11 @@
 │   Flat Search                             │
 │  input-triggered async sample             │
 │                                           │
-│    query: o▌                              │
+│    query: o                               │
 │    state: searching...                    │
 │                                           │
 │    no results                             │
 │                                           │
 │  enter blur/focus | q quits when blurred  │
 └───────────────────────────────────────────┘
+[cursor 13,4]

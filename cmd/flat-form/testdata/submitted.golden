@@ -2,10 +2,11 @@
 │   Flat Form                                            │
 │  multi-input retained state sample                     │
 │                                                        │
-│  > name: A▌da                                          │
+│  > name: Ada                                           │
 │    filter: op                                          │
 │                                                        │
 │    name=Ada filter=op                                  │
 │                                                        │
 │  tab focus | arrows move | esc blur | q quits blurred  │
 └────────────────────────────────────────────────────────┘
+[cursor 12,4]

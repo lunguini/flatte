@@ -10,7 +10,7 @@
 │      │   Confirm Work               │       │
 │      │  modal captures input        │       │
 │      │                              │       │
-│      │    name: A▌da                │       │
+│      │    name: Ada                 │       │
 │      │                              │       │
 │      │  enter confirm | esc cancel  │       │
 │      └──────────────────────────────┘       │
@@ -23,3 +23,4 @@
 │  enter open modal | q quit                  │
 │  main view is waiting for modal input       │
 └─────────────────────────────────────────────┘
+[cursor 19,12]

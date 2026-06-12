@@ -68,14 +68,6 @@ func (f TextField) CursorColumn() int {
 	return lipgloss.Width(f.Value[:f.Cursor])
 }
 
-func (f TextField) Render(focused bool) string {
-	f.clampCursor()
-	if !focused {
-		return f.Value
-	}
-	return f.Value[:f.Cursor] + "▌" + f.Value[f.Cursor:]
-}
-
 func (f *TextField) clampCursor() {
 	if f.Cursor < 0 {
 		f.Cursor = 0

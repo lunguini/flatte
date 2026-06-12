@@ -156,7 +156,7 @@ func (m Model) viewModal() string {
 		flatui.Title("Confirm Work"),
 		flatui.Subtle("modal captures input"),
 		"",
-		"  name: " + m.modalInput.Render(true),
+		"  name: " + fakeCursor(m.modalInput, true),
 		"",
 		flatui.Subtle("enter confirm | esc cancel"),
 	}
@@ -180,4 +180,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// fakeCursor paints the historical ▌ marker. The Flatte counterparts
+// moved to the real hardware cursor (Frame.Cursor) in Phase 4; the
+// benchmarks keep their original rendering. (BT v2 has an equivalent
+// real-cursor facility, View.Cursor - adopt it only if a comparison
+// claim requires parity.)
+func fakeCursor(f flatui.TextField, focused bool) string {
+	if focused {
+		return f.Value[:f.Cursor] + "▌" + f.Value[f.Cursor:]
+	}
+	return f.Value
 }

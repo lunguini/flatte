@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lunguini/flat/internal/flatcore"
+	"github.com/lunguini/flat/internal/flatui"
 	"github.com/lunguini/flat/internal/flatuitest"
 )
 
@@ -120,7 +121,7 @@ func TestViewRendersMainAndModalState(t *testing.T) {
 
 	frame := View(state, flatcore.RenderContext{Width: 72}).Content
 
-	for _, want := range []string{"Flat Modal", "background ticks: 4", "waiting \\", "Confirm Work", "A▌da"} {
+	for _, want := range []string{"Flat Modal", "background ticks: 4", "waiting \\", "Confirm Work", "Ada"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("View() missing %q:\n%s", want, frame)
 		}
@@ -136,7 +137,37 @@ func TestViewMatchesModalSnapshot(t *testing.T) {
 	state.modalInput.Value = "Ada"
 	state.modalInput.Cursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/modal-open.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
+	flatuitest.AssertGoldenFrame(t, "testdata/modal-open.golden", View(state, flatcore.RenderContext{Width: 72}))
+}
+
+func TestViewPlacesCursorInsideModal(t *testing.T) {
+	state := NewState()
+	if closed := View(state, flatcore.RenderContext{Width: 72}); closed.Cursor != nil {
+		t.Fatalf("closed-modal view has a cursor: %+v", *closed.Cursor)
+	}
+
+	state.modalOpen = true
+	state.modalInput.Value = "Ada"
+	state.modalInput.Cursor = 1
+	ctx := flatcore.RenderContext{Width: 72}
+	frame := View(state, ctx)
+	if frame.Cursor == nil {
+		t.Fatal("open-modal view has no cursor")
+	}
+	// The expected position derives from the same helpers the app uses:
+	// overlay placement + card origin + label width + typed cells.
+	base := viewMain(state, ctx)
+	modal := viewModal(state, ctx)
+	overlayX, overlayY := flatui.OverlayOrigin(base, modal)
+	cardX, cardY := flatui.CardOrigin()
+	wantX := overlayX + cardX + len("  name: ") + 1
+	wantY := overlayY + cardY + 3
+	if frame.Cursor.X != wantX || frame.Cursor.Y != wantY {
+		t.Fatalf("cursor = %+v, want (%d,%d)", *frame.Cursor, wantX, wantY)
+	}
+	if overlayX == 0 || overlayY == 0 {
+		t.Fatalf("modal not centered (overlay origin %d,%d) - expected offsets inside a 72-col frame", overlayX, overlayY)
+	}
 }
 
 func TestTickIntervalEnvironmentOverride(t *testing.T) {

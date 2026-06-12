@@ -155,7 +155,7 @@ func (m Model) View() tea.View {
 		flatui.Title("Bubble v2 Search"),
 		flatui.Subtle("input-triggered async sample"),
 		"",
-		"  query: " + m.query.Render(m.focused),
+		"  query: " + fakeCursor(m.query, m.focused),
 		"  state: " + status,
 		"",
 	}
@@ -191,4 +191,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// fakeCursor paints the historical ▌ marker. The Flatte counterparts
+// moved to the real hardware cursor (Frame.Cursor) in Phase 4; the
+// benchmarks keep their original rendering. (BT v2 has an equivalent
+// real-cursor facility, View.Cursor - adopt it only if a comparison
+// claim requires parity.)
+func fakeCursor(f flatui.TextField, focused bool) string {
+	if focused {
+		return f.Value[:f.Cursor] + "▌" + f.Value[f.Cursor:]
+	}
+	return f.Value
 }

@@ -52,7 +52,7 @@ func TestMeasureOutputVolume(t *testing.T) {
 	}
 
 	const window = 2 * time.Second
-	const controlWrites = 2  // alt-screen/cursor setup + teardown
+	const controlWrites = 2 // alt-screen/cursor setup + teardown
 	const controlBytes = 28 // 14 bytes each
 
 	intervals := []time.Duration{

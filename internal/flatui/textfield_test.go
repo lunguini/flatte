@@ -35,24 +35,16 @@ func TestTextFieldHandlesMultibyteRunes(t *testing.T) {
 	}
 }
 
-func TestTextFieldRenderShowsCursorOnlyWhenFocused(t *testing.T) {
-	field := TextField{Value: "Ada", Cursor: 1}
-
-	if got := field.Render(true); got != "A▌da" {
-		t.Fatalf("focused Render() = %q, want A▌da", got)
-	}
-	if got := field.Render(false); got != "Ada" {
-		t.Fatalf("blurred Render() = %q, want Ada", got)
-	}
-}
-
 func TestTextFieldSetCursorClampsToRuneBoundary(t *testing.T) {
 	field := TextField{Value: "aăb"}
 
-	field.SetCursor(2)
+	field.SetCursor(2) // inside the 2-byte ă: must clamp back to its start
 
-	if got := field.Render(true); got != "a▌ăb" {
-		t.Fatalf("Render() = %q, want cursor clamped before multibyte rune", got)
+	if field.Cursor != 1 {
+		t.Fatalf("Cursor = %d, want clamped to byte 1", field.Cursor)
+	}
+	if got := field.CursorColumn(); got != 1 {
+		t.Fatalf("CursorColumn() = %d, want 1", got)
 	}
 }
 

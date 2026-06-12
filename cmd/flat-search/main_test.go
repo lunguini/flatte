@@ -147,12 +147,36 @@ func TestViewRendersSearchState(t *testing.T) {
 	}
 }
 
+func TestViewPlacesCursorOnlyWhenFocused(t *testing.T) {
+	state := State{focused: true}
+	state.query.Value = "ok"
+	state.query.Cursor = 2
+
+	frame := View(&state, flatcore.RenderContext{Width: 72})
+	if frame.Cursor == nil {
+		t.Fatal("focused view has no cursor")
+	}
+	// row: card border(1) + title,subtle,blank(3) = 4
+	// col: card origin(3) + "  query: "(9) + 2 typed cells = 14
+	if frame.Cursor.X != 14 || frame.Cursor.Y != 4 {
+		t.Fatalf("cursor = %+v, want (14,4)", *frame.Cursor)
+	}
+	if strings.Contains(frame.Content, "\u258c") {
+		t.Fatalf("View() still paints the fake cursor marker:\n%s", frame.Content)
+	}
+
+	state.focused = false
+	if blurred := View(&state, flatcore.RenderContext{Width: 72}); blurred.Cursor != nil {
+		t.Fatalf("blurred view still has a cursor: %+v", *blurred.Cursor)
+	}
+}
+
 func TestViewMatchesFocusedSearchingSnapshot(t *testing.T) {
 	state := State{focused: true, searching: true}
 	state.query.Value = "o"
 	state.query.Cursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/focused-searching.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
+	flatuitest.AssertGoldenFrame(t, "testdata/focused-searching.golden", View(&state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestViewMatchesResultsSnapshot(t *testing.T) {
@@ -161,7 +185,7 @@ func TestViewMatchesResultsSnapshot(t *testing.T) {
 		results: []string{"sonnet", "opus", "freeform"},
 	}
 
-	flatuitest.AssertGolden(t, "testdata/results.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
+	flatuitest.AssertGoldenFrame(t, "testdata/results.golden", View(&state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestSearchDelayEnvironmentOverride(t *testing.T) {

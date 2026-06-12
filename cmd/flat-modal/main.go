@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/lunguini/flat/internal/flatcore"
 	"github.com/lunguini/flat/internal/flatui"
 )
@@ -88,7 +90,15 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	if !s.modalOpen {
 		return flatcore.Frame{Content: base}
 	}
-	return flatcore.Frame{Content: flatui.Overlay(base, viewModal(s, ctx))}
+	modal := viewModal(s, ctx)
+	frame := flatcore.Frame{Content: flatui.Overlay(base, modal)}
+	overlayX, overlayY := flatui.OverlayOrigin(base, modal)
+	cardX, cardY := flatui.CardOrigin()
+	frame.Cursor = &flatcore.Cursor{
+		X: overlayX + cardX + lipgloss.Width("  name: ") + s.modalInput.CursorColumn(),
+		Y: overlayY + cardY + 3, // title, subtle, blank precede the name row
+	}
+	return frame
 }
 
 func viewMain(s *State, ctx flatcore.RenderContext) string {
@@ -137,7 +147,7 @@ func viewModal(s *State, ctx flatcore.RenderContext) string {
 		flatui.Title("Confirm Work"),
 		flatui.Subtle("modal captures input"),
 		"",
-		"  name: " + s.modalInput.Render(true),
+		"  name: " + s.modalInput.Value,
 		"",
 		flatui.Subtle("enter confirm | esc cancel"),
 	}

@@ -2,7 +2,9 @@
 │   Settings                                 │
 │  settings input is app-owned state         │
 │                                            │
-│    name: A▌da                              │
+│    name: Ada                               │
 │                                            │
 │  type edit | arrows move | enter/esc back  │
 └────────────────────────────────────────────┘
+[cursor 12,4]
+[title Flatte — settings]
