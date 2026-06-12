@@ -35,6 +35,7 @@ func TestTranslateEvent(t *testing.T) {
 		{"release", uv.MouseReleaseEvent{X: 3, Y: 4, Button: uv.MouseLeft}, MouseEvent{X: 3, Y: 4, Button: MouseLeft, Action: MouseRelease}},
 		{"motion", uv.MouseMotionEvent{X: 5, Y: 6}, MouseEvent{X: 5, Y: 6, Button: MouseNone, Action: MouseMotion}},
 		{"wheel", uv.MouseWheelEvent{Button: uv.MouseWheelDown}, MouseEvent{Button: MouseWheelDown, Action: MousePress}},
+		{"clipboard", uv.ClipboardEvent{Selection: uv.SystemClipboard, Content: "hello"}, ClipboardEvent{Text: "hello"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

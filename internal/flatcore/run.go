@@ -21,10 +21,18 @@ type App[S any] struct {
 	Tracer Tracer
 }
 
+// action is a one-shot terminal capability request, queued by Effects
+// methods on the loop goroutine and drained by the loop before the next
+// flush.
+type action struct {
+	write string // raw escape sequence to emit (clipboard OSC52 etc.)
+}
+
 type Effects[S any] struct {
 	Context context.Context
 	Updates chan<- StateUpdate[S]
 	quit    func()
+	enqueue func(action)
 	latest  *latestRegistry
 }
 
@@ -40,6 +48,25 @@ func NewEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit 
 func (fx Effects[S]) Quit() {
 	if fx.quit != nil {
 		fx.quit()
+	}
+}
+
+// SetClipboard writes text to the system clipboard via OSC52 on the next
+// flush. Loop-goroutine-only, like Quit. Terminals without OSC52 support
+// ignore it. Safe on a zero Effects value.
+func (fx Effects[S]) SetClipboard(text string) {
+	if fx.enqueue != nil {
+		fx.enqueue(action{write: ansi.SetSystemClipboard(text)})
+	}
+}
+
+// ReadClipboard asks the terminal for its clipboard content via OSC52.
+// A supporting terminal answers with a ClipboardEvent; unsupported
+// terminals never answer — treat the event as optional and do not wait
+// for it. Loop-goroutine-only, like Quit. Safe on a zero Effects value.
+func (fx Effects[S]) ReadClipboard() {
+	if fx.enqueue != nil {
+		fx.enqueue(action{write: ansi.RequestSystemClipboard})
 	}
 }
 
@@ -129,7 +156,17 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	var lastFrame Frame
 	drew := false
 	cursorShown := false
+	var pending []action
+	drainActions := func() {
+		for _, a := range pending {
+			if a.write != "" {
+				_, _ = renderer.WriteString(a.write)
+			}
+		}
+		pending = pending[:0]
+	}
 	defer func() {
+		drainActions() // actions enqueued on the quit iteration still emit
 		if lastFrame.Title != "" {
 			_, _ = renderer.WriteString(ansi.SetWindowTitle(""))
 		}
@@ -166,6 +203,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	updates := make(chan StateUpdate[S], 64)
 	quitRequested := false
 	effects := NewEffects(runCtx, updates, func() { quitRequested = true })
+	effects.enqueue = func(a action) { pending = append(pending, a) }
 	if app.Init != nil {
 		app.Init(app.State, effects)
 	}
@@ -190,11 +228,24 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	var screenWidth, screenHeight int
 	forceRepaint := false
 
+	writeFrameOutput := func() {
+		if renderOut.Len() == 0 {
+			return // nothing to write, not even markers
+		}
+		fmt.Fprintf(out, "\x1b[?2026h%s\x1b[?2026l", renderOut.Bytes())
+		renderOut.Reset()
+	}
+
 	draw := func() {
+		drainActions()
 		renderCtx := RenderContextFor(out)
 		frame := app.View(app.State, renderCtx)
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
-			return // identical frame: write nothing, not even markers
+			// Identical frame: only queued one-shot actions (if any) go out.
+			if err := renderer.Flush(); err == nil {
+				writeFrameOutput()
+			}
+			return
 		}
 		if frame.Title != lastFrame.Title {
 			_, _ = renderer.WriteString(ansi.SetWindowTitle(frame.Title))
@@ -235,11 +286,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			return
 		}
 		lastFrame, drew = frame, true
-		if renderOut.Len() == 0 {
-			return // uv's diff found no terminal-state change to write
-		}
-		fmt.Fprintf(out, "\x1b[?2026h%s\x1b[?2026l", renderOut.Bytes())
-		renderOut.Reset()
+		writeFrameOutput()
 	}
 
 	draw()

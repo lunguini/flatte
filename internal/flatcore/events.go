@@ -49,12 +49,16 @@ type ResizeEvent struct {
 	Height int
 }
 
-// PasteEvent is a bracketed paste. Paste mode is not enabled until Phase 5;
-// the type exists so the event set is closed once, not grown ad hoc.
+// PasteEvent is a bracketed paste (paste mode is on by default; see
+// WithoutBracketedPaste).
 type PasteEvent struct{ Text string }
 
-// FocusEvent reports terminal focus changes (focus reporting enabled in
-// Phase 5).
+// ClipboardEvent delivers the terminal's answer to fx.ReadClipboard
+// (OSC52, system selection). Unsupported terminals never answer — treat
+// the event as optional and do not wait for it.
+type ClipboardEvent struct{ Text string }
+
+// FocusEvent reports terminal focus changes (see WithReportFocus).
 type FocusEvent struct{ Focused bool }
 
 type MouseButton int
@@ -85,8 +89,9 @@ type MouseEvent struct {
 	Mod    Mod
 }
 
-func (KeyEvent) isEvent()    {}
-func (ResizeEvent) isEvent() {}
-func (PasteEvent) isEvent()  {}
-func (FocusEvent) isEvent()  {}
-func (MouseEvent) isEvent()  {}
+func (KeyEvent) isEvent()       {}
+func (ResizeEvent) isEvent()    {}
+func (PasteEvent) isEvent()     {}
+func (ClipboardEvent) isEvent() {}
+func (FocusEvent) isEvent()     {}
+func (MouseEvent) isEvent()     {}

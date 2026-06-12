@@ -16,6 +16,8 @@ func translateEvent(event uv.Event) (Event, bool) {
 		return translateKey(uv.Key(event))
 	case uv.PasteEvent:
 		return PasteEvent{Text: event.Content}, true
+	case uv.ClipboardEvent:
+		return ClipboardEvent{Text: event.Content}, true
 	case uv.FocusEvent:
 		return FocusEvent{Focused: true}, true
 	case uv.BlurEvent:
