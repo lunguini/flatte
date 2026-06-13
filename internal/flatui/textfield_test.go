@@ -48,6 +48,36 @@ func TestTextFieldSetCursorClampsToRuneBoundary(t *testing.T) {
 	}
 }
 
+func TestTextFieldMovesAndDeletesByGraphemeCluster(t *testing.T) {
+	// "a" + combining acute (U+0301) forms ONE grapheme cluster (two runes,
+	// three bytes), then "bc". Movement and deletion must treat the cluster as
+	// an indivisible unit, not step into it rune-by-rune. The ́ escape is
+	// deliberate — a literal "á" would be the precomposed single rune.
+	base := "ábc" // grapheme boundaries [0,3,4,5]
+
+	f := TextField{Value: base}
+	f.MoveRight() // skip the whole cluster, not just the base 'a'
+	if f.Cursor != 3 {
+		t.Fatalf("MoveRight cursor = %d, want 3 (past the combining cluster)", f.Cursor)
+	}
+	f.MoveLeft()
+	if f.Cursor != 0 {
+		t.Fatalf("MoveLeft cursor = %d, want 0", f.Cursor)
+	}
+
+	bs := TextField{Value: base, Cursor: 3}
+	bs.Backspace() // removes the whole cluster
+	if bs.Value != "bc" || bs.Cursor != 0 {
+		t.Fatalf("Backspace -> %q cursor %d, want \"bc\" 0", bs.Value, bs.Cursor)
+	}
+
+	del := TextField{Value: base, Cursor: 0}
+	del.Delete() // removes the whole cluster
+	if del.Value != "bc" {
+		t.Fatalf("Delete -> %q, want \"bc\"", del.Value)
+	}
+}
+
 func TestCursorColumnCountsDisplayCells(t *testing.T) {
 	cases := []struct {
 		name   string
