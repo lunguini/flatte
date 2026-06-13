@@ -47,26 +47,21 @@ func Exec[S any](fx Effects[S], name string, cmd *exec.Cmd, fold func(*S, error)
 }
 
 // Every sends a named update on a fixed interval until the loop context is
-// cancelled. It owns the ticker goroutine and the cancellation dance.
+// cancelled. Timing comes from the Clock (real ticker by default; a fake
+// clock drives it deterministically under test).
 func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) {
+	clk := fx.clock
+	if clk == nil {
+		clk = realClock{}
+	}
 	ctx := fx.context()
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case now := <-ticker.C:
-				update := Named(name, func(s *S) { fold(s, now) })
-				select {
-				case fx.Updates <- update:
-				case <-ctx.Done():
-					return
-				}
-			}
+	clk.Tick(ctx, interval, func(now time.Time) {
+		update := Named(name, func(s *S) { fold(s, now) })
+		select {
+		case fx.Updates <- update:
+		case <-ctx.Done():
 		}
-	}()
+	})
 }
 
 // Stream runs a long-lived source that emits many values over time; each
