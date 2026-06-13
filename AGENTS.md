@@ -8,6 +8,31 @@ loop. It is the deliberate inverse of Bubble Tea while reusing Charm's MIT
 substrate (lipgloss for styling; ultraviolet for input parsing and
 cell-buffer rendering, wrapped entirely behind `internal/`).
 
+## Mission and quality bar (read this first)
+
+Flatte is being built to be **the production-grade, idiomatic-Go Bubble Tea
+alternative** — software teams ship on and depend on, not a research spike.
+**This is not experimentation.** The phased roadmap and the "abstraction is
+found, not designed" rule are about *engineering rigor* (don't add surface
+ahead of evidence), **not** about hedging on whether to deliver. We are
+committed to carrying the roadmap to a 1.0 that production TUIs can be built on.
+
+What that means in practice, on every increment:
+
+- **Reliability and correctness are non-negotiable.** Treat it as if critical
+  systems depended on its correctness. Every code path is tested; no path is
+  left "probably fine."
+- **Full QA, every time:** TDD (red→green), unit tests for logic, golden
+  snapshots for views, `-race` on touched packages, `go vet` on darwin **and**
+  `GOOS=windows`, `gofmt` clean, and a real-terminal (TTY) pass wherever
+  behavior is terminal-conditional. Benchmark goldens stay byte-identical.
+- **Honesty over advocacy stays** — `.docs/evaluation.md` still records what got
+  worse. Honest evidence is a *quality control*, not a sign of tentativeness.
+- **Keep momentum.** Drive each well-scoped unit to done and continue to the
+  next; don't stop to ask "should I proceed?" between them. Stop only when
+  genuinely blocked, when a decision is truly the user's to make, or at a
+  required TTY/verification gate. Finishing the roadmap is the job.
+
 ## Document map (read in this order for context)
 
 | Document | Role |
