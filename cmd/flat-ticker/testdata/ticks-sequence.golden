@@ -1,0 +1,39 @@
+┌────────────────────────────────────┐
+│   Flat Ticker                      │
+│  streaming update sample           │
+│                                    │
+│    ticks: 0                        │
+│    state: running                  │
+│                                    │
+│  space/p pause | r reset | q quit  │
+└────────────────────────────────────┘
+───
+┌────────────────────────────────────┐
+│   Flat Ticker                      │
+│  streaming update sample           │
+│                                    │
+│    ticks: 1                        │
+│    state: running                  │
+│                                    │
+│  space/p pause | r reset | q quit  │
+└────────────────────────────────────┘
+───
+┌────────────────────────────────────┐
+│   Flat Ticker                      │
+│  streaming update sample           │
+│                                    │
+│    ticks: 1                        │
+│    state: paused                   │
+│                                    │
+│  space/p pause | r reset | q quit  │
+└────────────────────────────────────┘
+───
+┌────────────────────────────────────┐
+│   Flat Ticker                      │
+│  streaming update sample           │
+│                                    │
+│    ticks: 3                        │
+│    state: running                  │
+│                                    │
+│  space/p pause | r reset | q quit  │
+└────────────────────────────────────┘

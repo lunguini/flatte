@@ -63,3 +63,29 @@ func TestTickIntervalEnvironmentOverride(t *testing.T) {
 		t.Fatalf("tickInterval() = %s, want 25ms", got)
 	}
 }
+
+func TestTicksAreDeterministicUnderFakeClock(t *testing.T) {
+	t.Setenv("FLAT_TICKER_INTERVAL", "10ms")
+
+	d := flatest.Start(flatcore.App[State]{
+		State:  &State{},
+		Init:   Init,
+		Handle: Handle,
+		View:   View,
+	}, 72)
+
+	frames := flatest.Frames(d,
+		func(d *flatest.Driver[State]) {},                                   // ticks: 0
+		func(d *flatest.Driver[State]) { d.Advance(10 * time.Millisecond) }, // ticks: 1
+		func(d *flatest.Driver[State]) {
+			d.Send(flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'p'})
+			d.Advance(30 * time.Millisecond)
+		}, // paused: still 1
+		func(d *flatest.Driver[State]) {
+			d.Send(flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'p'})
+			d.Advance(20 * time.Millisecond)
+		}, // resumed: 3
+	)
+
+	flatest.AssertFrames(t, "testdata/ticks-sequence.golden", frames)
+}
