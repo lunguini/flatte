@@ -63,12 +63,26 @@ func (s *State) layout(width, height int) {
 	s.vp.SetSize(vpWidth, vpHeight)
 }
 
+// wheelLines is how many lines one mouse-wheel notch scrolls.
+const wheelLines = 3
+
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	switch e := ev.(type) {
 	case flatcore.ResizeEvent:
 		s.layout(e.Width, e.Height)
 	case flatcore.KeyEvent:
 		handleKey(s, e, fx)
+	case flatcore.MouseEvent:
+		handleMouse(s, e)
+	}
+}
+
+func handleMouse(s *State, m flatcore.MouseEvent) {
+	switch m.Button {
+	case flatcore.MouseWheelUp:
+		s.vp.LineUp(wheelLines)
+	case flatcore.MouseWheelDown:
+		s.vp.LineDown(wheelLines)
 	}
 }
 
@@ -119,7 +133,7 @@ func main() {
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}); err != nil {
+	}, flatcore.WithMouse(flatcore.MouseModeCellMotion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

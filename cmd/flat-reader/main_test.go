@@ -56,6 +56,18 @@ func TestResizeShrinksViewportInsteadOfBreaking(t *testing.T) {
 	}
 }
 
+func TestMouseWheelScrollsTheViewport(t *testing.T) {
+	s := ready()
+	Handle(s, flatcore.MouseEvent{Button: flatcore.MouseWheelDown}, flatcore.Effects[State]{})
+	if s.vp.Offset() != 3 {
+		t.Fatalf("wheel down Offset() = %d, want 3 (wheelLines)", s.vp.Offset())
+	}
+	Handle(s, flatcore.MouseEvent{Button: flatcore.MouseWheelUp}, flatcore.Effects[State]{})
+	if s.vp.Offset() != 0 {
+		t.Fatalf("wheel up Offset() = %d, want 0", s.vp.Offset())
+	}
+}
+
 func TestViewKeepsChromePinnedWhileScrolling(t *testing.T) {
 	s := ready()
 	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'G'}, flatcore.Effects[State]{})
