@@ -100,3 +100,43 @@ func (v *Viewport) clamp() {
 
 // TotalLines is the number of content lines after ingestion/wrapping.
 func (v Viewport) TotalLines() int { return len(v.lines) }
+
+// LineDown scrolls down by n lines (clamped). LineUp scrolls up.
+func (v *Viewport) LineDown(n int) { v.offset += n; v.clamp() }
+func (v *Viewport) LineUp(n int)   { v.offset -= n; v.clamp() }
+
+// HalfPageDown/Up and PageDown/Up scroll by half / a full visible window.
+func (v *Viewport) HalfPageDown() { v.LineDown(v.height / 2) }
+func (v *Viewport) HalfPageUp()   { v.LineUp(v.height / 2) }
+func (v *Viewport) PageDown()     { v.LineDown(v.height) }
+func (v *Viewport) PageUp()       { v.LineUp(v.height) }
+
+// GotoTop/GotoBottom jump to the first/last window.
+func (v *Viewport) GotoTop()    { v.offset = 0 }
+func (v *Viewport) GotoBottom() { v.offset = v.maxOffset() }
+
+// ScrollToLine positions the window so line i is at the top (clamped).
+func (v *Viewport) ScrollToLine(i int) { v.offset = i; v.clamp() }
+
+// AtTop / AtBottom report whether the window is at an extreme.
+func (v Viewport) AtTop() bool    { return v.offset <= 0 }
+func (v Viewport) AtBottom() bool { return v.offset >= v.maxOffset() }
+
+// ScrollPercent is the fraction scrolled, 0.0 at top to 1.0 at bottom. When
+// all content fits (nothing to scroll), it reports 1.0.
+func (v Viewport) ScrollPercent() float64 {
+	maxOff := v.maxOffset()
+	if maxOff <= 0 {
+		return 1.0
+	}
+	return float64(v.offset) / float64(maxOff)
+}
+
+// Offset is the current top-line index.
+func (v Viewport) Offset() int { return v.offset }
+
+// VisibleLines is how many content rows View currently emits.
+func (v Viewport) VisibleLines() int {
+	n := min(len(v.lines)-v.offset, v.height)
+	return max(n, 0)
+}
