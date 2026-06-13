@@ -1,0 +1,24 @@
+┌──────────────────────────────────────────────────────────────────────┐
+│   Flat Reader                                                        │
+│  scrollable viewport sample                                          │
+│                                                                      │
+│  This first paragraph is intentionally longer than the viewport wid  │
+│  th so that soft wrapping splits it across several rows inside the   │
+│  card.                                                               │
+│  line 02                                                             │
+│  line 03                                                             │
+│  line 04                                                             │
+│  line 05                                                             │
+│  line 06                                                             │
+│  line 07                                                             │
+│  line 08                                                             │
+│  line 09                                                             │
+│  line 10                                                             │
+│  line 11                                                             │
+│  line 12                                                             │
+│  line 13                                                             │
+│  line 14                                                             │
+│  line 15                                                             │
+│                                                                      │
+│  j/k line  d/u half  f/b page  g/G ends  q quit     0%               │
+└──────────────────────────────────────────────────────────────────────┘
