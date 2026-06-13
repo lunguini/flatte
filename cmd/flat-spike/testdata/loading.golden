@@ -1,9 +1,9 @@
-┌────────────────────────────────────┐
-│   Flatte                           │
-│  async list selection              │
-│                                    │
-│    loading models...               │
-│                                    │
-│  selected: none                    │
-│  j/k move | enter select | q quit  │
-└────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│   Flatte                                     │
+│  async list selection                        │
+│                                              │
+│    loading models...                         │
+│                                              │
+│  selected: none                              │
+│  j/k or click/wheel | enter select | q quit  │
+└──────────────────────────────────────────────┘

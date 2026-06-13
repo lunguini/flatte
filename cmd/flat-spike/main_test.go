@@ -66,6 +66,63 @@ func TestQQuits(t *testing.T) {
 	}
 }
 
+func TestClickSelectsModelOnItsRow(t *testing.T) {
+	state := State{models: []string{"haiku", "sonnet", "opus", "freeform"}}
+
+	// Card top border (row 1) + 3 lines (title, subtitle, blank) precede
+	// the list, so model index 2 ("opus") renders on absolute row 6.
+	Handle(&state, flatcore.MouseEvent{
+		X: 5, Y: 6, Button: flatcore.MouseLeft, Action: flatcore.MousePress,
+	}, flatcore.Effects[State]{})
+
+	if state.cursor != 2 || state.selectedModel != "opus" {
+		t.Fatalf("cursor=%d selected=%q, want 2/opus after clicking opus's row", state.cursor, state.selectedModel)
+	}
+}
+
+func TestClickOutsideListIsIgnored(t *testing.T) {
+	state := State{models: []string{"haiku", "sonnet"}, cursor: 1, selectedModel: "sonnet"}
+
+	// Row 2 is the subtitle line, above the list — no model there.
+	Handle(&state, flatcore.MouseEvent{
+		X: 5, Y: 2, Button: flatcore.MouseLeft, Action: flatcore.MousePress,
+	}, flatcore.Effects[State]{})
+	// A row past the last model.
+	Handle(&state, flatcore.MouseEvent{
+		X: 5, Y: 20, Button: flatcore.MouseLeft, Action: flatcore.MousePress,
+	}, flatcore.Effects[State]{})
+
+	if state.cursor != 1 || state.selectedModel != "sonnet" {
+		t.Fatalf("cursor=%d selected=%q, want unchanged 1/sonnet", state.cursor, state.selectedModel)
+	}
+}
+
+func TestClickReleaseDoesNotSelect(t *testing.T) {
+	state := State{models: []string{"haiku", "sonnet", "opus"}}
+
+	Handle(&state, flatcore.MouseEvent{
+		X: 5, Y: 5, Button: flatcore.MouseLeft, Action: flatcore.MouseRelease,
+	}, flatcore.Effects[State]{})
+
+	if state.selectedModel != "" {
+		t.Fatalf("selectedModel = %q, want empty (release must not select)", state.selectedModel)
+	}
+}
+
+func TestWheelMovesCursor(t *testing.T) {
+	state := State{models: []string{"haiku", "sonnet", "opus"}}
+
+	Handle(&state, flatcore.MouseEvent{Button: flatcore.MouseWheelDown, Action: flatcore.MousePress}, flatcore.Effects[State]{})
+	Handle(&state, flatcore.MouseEvent{Button: flatcore.MouseWheelDown, Action: flatcore.MousePress}, flatcore.Effects[State]{})
+	if state.cursor != 2 {
+		t.Fatalf("cursor = %d, want 2 after two wheel-downs", state.cursor)
+	}
+	Handle(&state, flatcore.MouseEvent{Button: flatcore.MouseWheelUp, Action: flatcore.MousePress}, flatcore.Effects[State]{})
+	if state.cursor != 1 {
+		t.Fatalf("cursor = %d, want 1 after wheel-up", state.cursor)
+	}
+}
+
 func TestViewRendersCurrentStateDeterministically(t *testing.T) {
 	state := State{
 		models:        []string{"haiku", "sonnet", "opus"},

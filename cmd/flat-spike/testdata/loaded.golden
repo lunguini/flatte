@@ -1,12 +1,12 @@
-┌────────────────────────────────────┐
-│   Flatte                           │
-│  async list selection              │
-│                                    │
-│    haiku                           │
-│    sonnet                          │
-│  > opus (selected)                 │
-│    freeform                        │
-│                                    │
-│  selected: opus                    │
-│  j/k move | enter select | q quit  │
-└────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│   Flatte                                     │
+│  async list selection                        │
+│                                              │
+│    haiku                                     │
+│    sonnet                                    │
+│  > opus (selected)                           │
+│    freeform                                  │
+│                                              │
+│  selected: opus                              │
+│  j/k or click/wheel | enter select | q quit  │
+└──────────────────────────────────────────────┘

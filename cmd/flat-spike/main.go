@@ -27,11 +27,20 @@ func NewState() *State {
 	return &State{loading: true}
 }
 
+// listTopLine is the content-line index of the first model row: the
+// title, subtitle, and a blank line precede it.
+const listTopLine = 3
+
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	key, ok := ev.(flatcore.KeyEvent)
-	if !ok {
-		return
+	switch ev := ev.(type) {
+	case flatcore.KeyEvent:
+		handleKey(s, ev, fx)
+	case flatcore.MouseEvent:
+		handleMouse(s, ev)
 	}
+}
+
+func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 	switch key.Key {
 	case flatcore.KeyDown:
 		moveDown(s)
@@ -49,6 +58,28 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 			moveUp(s)
 		case 'q', 'Q':
 			fx.Quit()
+		}
+	}
+}
+
+func handleMouse(s *State, m flatcore.MouseEvent) {
+	switch m.Button {
+	case flatcore.MouseWheelUp:
+		moveUp(s)
+	case flatcore.MouseWheelDown:
+		moveDown(s)
+	case flatcore.MouseLeft:
+		if m.Action != flatcore.MousePress {
+			return
+		}
+		// Map the click row back to a model index through the same layout
+		// arithmetic the cursor uses: card top border + the lines above
+		// the list.
+		_, cardTop := flatui.CardOrigin()
+		row := m.Y - cardTop - listTopLine
+		if row >= 0 && row < len(s.models) {
+			s.cursor = row
+			s.selectedModel = s.models[row]
 		}
 	}
 }
@@ -99,7 +130,7 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		strings.Join(rows, "\n"),
 		"",
 		selected,
-		flatui.Subtle("j/k move | enter select | q quit"),
+		flatui.Subtle("j/k or click/wheel | enter select | q quit"),
 	}
 
 	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
@@ -168,7 +199,7 @@ func main() {
 		Init:   loadModels,
 		Handle: Handle,
 		View:   View,
-	})
+	}, flatcore.WithMouse(flatcore.MouseModeCellMotion))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

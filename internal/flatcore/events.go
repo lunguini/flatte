@@ -80,8 +80,8 @@ const (
 	MouseMotion
 )
 
-// MouseEvent is a mouse press/release/motion/wheel (mouse reporting enabled
-// in Phase 5).
+// MouseEvent is a mouse press/release/motion/wheel; X/Y are zero-based
+// cell coordinates from the top-left of the frame (see WithMouse).
 type MouseEvent struct {
 	X, Y   int
 	Button MouseButton
