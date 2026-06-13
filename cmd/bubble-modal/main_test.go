@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lunguini/flat/internal/flatuitest"
+	"github.com/lunguini/flat/internal/flatest"
 )
 
 func TestEnterOpensModalAndStartsWaiting(t *testing.T) {
@@ -149,7 +149,7 @@ func TestViewMatchesModalSnapshot(t *testing.T) {
 	model.modalInput.Value = "Ada"
 	model.modalInput.Cursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/modal-open.golden", model.View())
+	flatest.AssertGolden(t, "testdata/modal-open.golden", model.View())
 }
 
 func TestTickIntervalEnvironmentOverride(t *testing.T) {

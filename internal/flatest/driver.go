@@ -111,6 +111,17 @@ func (d *Driver[S]) Frame() flatcore.Frame {
 	return d.app.View(d.app.State, flatcore.RenderContext{Width: d.width})
 }
 
+// Frames runs the driver through a sequence of steps and returns the
+// frame after each, for sequence goldens (see AssertFrames).
+func Frames[S any](d *Driver[S], steps ...func(*Driver[S])) []flatcore.Frame {
+	frames := make([]flatcore.Frame, 0, len(steps))
+	for _, step := range steps {
+		step(d)
+		frames = append(frames, d.Frame())
+	}
+	return frames
+}
+
 // State exposes the live state for field assertions.
 func (d *Driver[S]) State() *S { return d.app.State }
 

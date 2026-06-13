@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/lunguini/flat/internal/flatcore"
+	"github.com/lunguini/flat/internal/flatest"
 	"github.com/lunguini/flat/internal/flatui"
-	"github.com/lunguini/flat/internal/flatuitest"
 )
 
 func TestEnterOpensModalAndStartsWaiting(t *testing.T) {
@@ -137,7 +137,7 @@ func TestViewMatchesModalSnapshot(t *testing.T) {
 	state.modalInput.Value = "Ada"
 	state.modalInput.Cursor = 1
 
-	flatuitest.AssertGoldenFrame(t, "testdata/modal-open.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/modal-open.golden", View(state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestViewPlacesCursorInsideModal(t *testing.T) {

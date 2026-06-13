@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatuitest"
+	"github.com/lunguini/flat/internal/flatest"
 )
 
 func TestHandleEditsFocusedFieldWithoutHiddenWidgetOwnership(t *testing.T) {
@@ -140,5 +140,5 @@ func TestViewMatchesSubmittedSnapshot(t *testing.T) {
 	state.fields[1].Input.Cursor = 2
 	state.submitted = "name=Ada filter=op"
 
-	flatuitest.AssertGoldenFrame(t, "testdata/submitted.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/submitted.golden", View(state, flatcore.RenderContext{Width: 72}))
 }

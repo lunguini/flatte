@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/lunguini/flat/internal/flatcore"
+	"github.com/lunguini/flat/internal/flatest"
 	"github.com/lunguini/flat/internal/flatui"
-	"github.com/lunguini/flat/internal/flatuitest"
 )
 
 func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
@@ -176,7 +176,7 @@ func TestViewMatchesFocusedSearchingSnapshot(t *testing.T) {
 	state.query.Value = "o"
 	state.query.Cursor = 1
 
-	flatuitest.AssertGoldenFrame(t, "testdata/focused-searching.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/focused-searching.golden", View(&state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestViewMatchesResultsSnapshot(t *testing.T) {
@@ -185,7 +185,7 @@ func TestViewMatchesResultsSnapshot(t *testing.T) {
 		results: []string{"sonnet", "opus", "freeform"},
 	}
 
-	flatuitest.AssertGoldenFrame(t, "testdata/results.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/results.golden", View(&state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestSearchDelayEnvironmentOverride(t *testing.T) {

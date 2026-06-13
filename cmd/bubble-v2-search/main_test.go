@@ -6,8 +6,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/lunguini/flat/internal/flatest"
 	"github.com/lunguini/flat/internal/flatui"
-	"github.com/lunguini/flat/internal/flatuitest"
 )
 
 func TestTypedCharacterStartsSearchAndResultApplies(t *testing.T) {
@@ -194,7 +194,7 @@ func TestViewMatchesFocusedSearchingSnapshot(t *testing.T) {
 	model.query.Value = "o"
 	model.query.Cursor = 1
 
-	flatuitest.AssertGolden(t, "testdata/focused-searching.golden", model.View().Content)
+	flatest.AssertGolden(t, "testdata/focused-searching.golden", model.View().Content)
 }
 
 func TestViewMatchesResultsSnapshot(t *testing.T) {
@@ -203,7 +203,7 @@ func TestViewMatchesResultsSnapshot(t *testing.T) {
 	model.query = newSearchField("o")
 	model.results = []string{"sonnet", "opus", "freeform"}
 
-	flatuitest.AssertGolden(t, "testdata/results.golden", model.View().Content)
+	flatest.AssertGolden(t, "testdata/results.golden", model.View().Content)
 }
 
 func TestSearchDelayEnvironmentOverride(t *testing.T) {

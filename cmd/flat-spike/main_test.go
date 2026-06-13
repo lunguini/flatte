@@ -10,7 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatuitest"
+	"github.com/lunguini/flat/internal/flatest"
 )
 
 func TestVimKeysMoveCursor(t *testing.T) {
@@ -177,7 +177,7 @@ func TestViewUsesCompactContentWidthWhenThereIsRoom(t *testing.T) {
 func TestViewMatchesLoadingSnapshot(t *testing.T) {
 	state := State{loading: true}
 
-	flatuitest.AssertGolden(t, "testdata/loading.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/loading.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestViewMatchesLoadedSnapshot(t *testing.T) {
@@ -187,7 +187,7 @@ func TestViewMatchesLoadedSnapshot(t *testing.T) {
 		selectedModel: "opus",
 	}
 
-	flatuitest.AssertGolden(t, "testdata/loaded.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/loaded.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestRunAppliesStartupAsyncUpdateBeforeLaterInput(t *testing.T) {

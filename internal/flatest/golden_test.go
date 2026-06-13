@@ -1,4 +1,4 @@
-package flatuitest
+package flatest
 
 import (
 	"testing"
@@ -23,4 +23,14 @@ func TestRenderFrameAppendsMetadataFooters(t *testing.T) {
 	if got := RenderFrame(frame); got != want {
 		t.Fatalf("RenderFrame = %q, want %q", got, want)
 	}
+}
+
+func TestAssertFramesMatchesSequenceGolden(t *testing.T) {
+	d := Start(counterApp(), 40)
+	frames := Frames(d,
+		func(d *Driver[counter]) {}, // initial frame
+		func(d *Driver[counter]) { d.Send(flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: '+'}) },
+		func(d *Driver[counter]) { d.Send(flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: '+'}) },
+	)
+	AssertFrames(t, "testdata/counter-sequence.golden", frames)
 }

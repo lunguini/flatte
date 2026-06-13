@@ -11,7 +11,7 @@ func TestDispatchSeamRunsWorkThroughInjectedRunner(t *testing.T) {
 	fx := NewHarnessEffects[testState](
 		context.Background(), updates, func() {},
 		func(f func()) { ran = append(ran, f) }, // capture, don't run
-		nil, // real clock unused here
+		nil,                                     // real clock unused here
 	)
 
 	Go(fx, "load", func(context.Context) (int, error) { return 7, nil },

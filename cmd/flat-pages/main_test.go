@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatuitest"
+	"github.com/lunguini/flat/internal/flatest"
 )
 
 func TestVimKeysMoveCursorOnHome(t *testing.T) {
@@ -139,7 +139,7 @@ func TestViewMatchesHomeSnapshot(t *testing.T) {
 	state := NewState()
 	state.homeCursor = 1
 
-	flatuitest.AssertGoldenFrame(t, "testdata/home.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/home.golden", View(state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestViewMatchesDetailsSnapshot(t *testing.T) {
@@ -147,7 +147,7 @@ func TestViewMatchesDetailsSnapshot(t *testing.T) {
 	state.screen = screenDetails
 	state.selected = 2
 
-	flatuitest.AssertGoldenFrame(t, "testdata/details.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/details.golden", View(state, flatcore.RenderContext{Width: 72}))
 }
 
 func TestViewMatchesSettingsSnapshot(t *testing.T) {
@@ -156,5 +156,5 @@ func TestViewMatchesSettingsSnapshot(t *testing.T) {
 	state.settingsName.Value = "Ada"
 	state.settingsName.Cursor = 1
 
-	flatuitest.AssertGoldenFrame(t, "testdata/settings.golden", View(state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/settings.golden", View(state, flatcore.RenderContext{Width: 72}))
 }

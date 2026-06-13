@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatuitest"
+	"github.com/lunguini/flat/internal/flatest"
 )
 
 func TestTickUpdateIncrementsOnlyWhenRunning(t *testing.T) {
@@ -53,7 +53,7 @@ func TestViewRendersTickerState(t *testing.T) {
 func TestViewMatchesPausedSnapshot(t *testing.T) {
 	state := State{ticks: 3, paused: true}
 
-	flatuitest.AssertGolden(t, "testdata/paused.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/paused.golden", View(&state, flatcore.RenderContext{Width: 72}).Content)
 }
 
 func TestTickIntervalEnvironmentOverride(t *testing.T) {

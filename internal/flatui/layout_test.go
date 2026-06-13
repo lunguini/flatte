@@ -7,12 +7,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/lunguini/flat/internal/flatuitest"
+	"github.com/lunguini/flat/internal/flatest"
 )
 
 func TestCardUsesCompactWidthAndBorders(t *testing.T) {
 	frame := Card([]string{Title("Flat"), Subtle("sample"), "", "  body"}, 72)
-	got := flatuitest.CleanFrame(frame)
+	got := flatest.CleanFrame(frame)
 
 	for _, want := range []string{
 		"┌──────────┐",
@@ -40,7 +40,7 @@ func TestCardCapsWidthToRenderContext(t *testing.T) {
 
 func TestCardMeasuresMultilineRows(t *testing.T) {
 	frame := Card([]string{"x\na much longer row"}, 72)
-	got := flatuitest.CleanFrame(frame)
+	got := flatest.CleanFrame(frame)
 
 	if !strings.Contains(got, "│  a much longer row  │") {
 		t.Fatalf("Card() did not size to multiline content:\n%s", got)
@@ -126,7 +126,7 @@ func TestOverlayUsesVisibleWidthForStyledContent(t *testing.T) {
 	base := Card([]string{"  one", "  two", "  a much wider background row", "  four", "  five", "  six"}, 40)
 	layer := Card([]string{Title("Modal"), "  ok"}, 20)
 
-	got := flatuitest.CleanFrame(Overlay(base, layer))
+	got := flatest.CleanFrame(Overlay(base, layer))
 
 	if strings.Contains(got, "\n\n") {
 		t.Fatalf("Overlay() stacked the layer instead of overlaying it:\n%s", got)
@@ -142,7 +142,7 @@ func TestOverlayUsesVisibleWidthForStyledContent(t *testing.T) {
 func TestCardOriginPointsAtFirstContentCell(t *testing.T) {
 	frame := Card([]string{"marker"}, 40)
 	x, y := CardOrigin()
-	rows := strings.Split(flatuitest.CleanFrame(frame), "\n")
+	rows := strings.Split(flatest.CleanFrame(frame), "\n")
 	// Index by rune: the card border is a multi-byte, single-cell rune.
 	row := []rune(rows[y])
 	if x >= len(row) || !strings.HasPrefix(string(row[x:]), "marker") {

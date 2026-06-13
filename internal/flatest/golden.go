@@ -1,4 +1,4 @@
-package flatuitest
+package flatest
 
 import (
 	"fmt"
@@ -33,6 +33,21 @@ func AssertGolden(t *testing.T, path string, frame string) {
 func AssertGoldenFrame(t *testing.T, path string, frame flatcore.Frame) {
 	t.Helper()
 	AssertGolden(t, path, RenderFrame(frame))
+}
+
+// frameSeparator delimits frames in a sequence golden.
+const frameSeparator = "\n───\n"
+
+// AssertFrames compares a frame sequence against a golden: each frame
+// RenderFrame'd, joined by a separator line, so an interaction can be
+// regression-tested as an ordered series of frames.
+func AssertFrames(t *testing.T, path string, frames []flatcore.Frame) {
+	t.Helper()
+	parts := make([]string, len(frames))
+	for i, frame := range frames {
+		parts[i] = RenderFrame(frame)
+	}
+	AssertGolden(t, path, strings.Join(parts, frameSeparator))
 }
 
 // RenderFrame serializes a frame for golden comparison.

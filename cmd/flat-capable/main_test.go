@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatuitest"
+	"github.com/lunguini/flat/internal/flatest"
 )
 
 // A zero-enqueue Effects makes SetClipboard/ReadClipboard/Suspend/Exec
@@ -68,5 +68,5 @@ func TestViewMatchesSnapshot(t *testing.T) {
 		editorText: "edited line",
 	}
 
-	flatuitest.AssertGolden(t, "testdata/capable.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/capable.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
 }
