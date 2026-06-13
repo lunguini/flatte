@@ -518,10 +518,12 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			if result.err != nil {
 				return result.err
 			}
+			// Trace before any exit decision so the recorder sees the
+			// exit-causing event too (incl. a default-quit Ctrl-C).
+			app.Tracer.Event(result.event)
 			if key, isKey := result.event.(KeyEvent); isKey && key.Key == KeyCtrlC && cfg.defaultQuit {
 				return nil
 			}
-			app.Tracer.Event(result.event)
 			if app.Handle != nil {
 				app.Handle(app.State, result.event, effects)
 			}
