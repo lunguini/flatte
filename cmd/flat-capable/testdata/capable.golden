@@ -1,0 +1,10 @@
+┌──────────────────────────────────────────────────────────┐
+│   Flat Capable                                           │
+│  clipboard · suspend · exec                              │
+│                                                          │
+│    status: clipboard read                                │
+│    last clipboard read: hello from the system clipboard  │
+│    last editor text: edited line                         │
+│                                                          │
+│  y copy | p paste | z suspend | e edit | q quit          │
+└──────────────────────────────────────────────────────────┘
