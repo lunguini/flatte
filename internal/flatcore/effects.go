@@ -10,7 +10,7 @@ import (
 // Go runs work off-loop and folds its result back into state as one named
 // update. It is Async spelled through Effects.
 func Go[S, T any](fx Effects[S], name string, work func(context.Context) (T, error), fold func(*S, T, error)) {
-	Async(fx.context(), fx.Updates, name, work, fold)
+	Async(fx.context(), fx.Updates, fx.dispatch, name, work, fold)
 }
 
 // Exec releases the terminal (cooked mode, main screen), runs cmd
@@ -74,7 +74,7 @@ func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(
 // context is cancelled.
 func Stream[S, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T)) {
 	ctx := fx.context()
-	go func() {
+	fx.spawn(func() {
 		source(ctx, func(value T) {
 			update := Named(name, func(s *S) { fold(s, value) })
 			select {
@@ -82,7 +82,7 @@ func Stream[S, T any](fx Effects[S], name string, source func(context.Context, f
 			case <-ctx.Done():
 			}
 		})
-	}()
+	})
 }
 
 // Latest is Go with supersede-by-name semantics: starting new work under a
@@ -97,7 +97,7 @@ func Latest[S, T any](fx Effects[S], name string, work func(context.Context) (T,
 		return
 	}
 	ctx, entry := fx.latest.replace(name, fx.context())
-	go func() {
+	fx.spawn(func() {
 		value, err := work(ctx)
 		if ctx.Err() != nil {
 			// Superseded, Cancelled, or parent shutdown. release is
@@ -122,7 +122,7 @@ func Latest[S, T any](fx Effects[S], name string, work func(context.Context) (T,
 		case <-ctx.Done():
 			fx.latest.release(name, entry)
 		}
-	}()
+	})
 }
 
 // Cancel stops in-flight Latest work under name, if any.

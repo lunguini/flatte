@@ -37,17 +37,40 @@ type execAction struct {
 }
 
 type Effects[S any] struct {
-	Context context.Context
-	Updates chan<- StateUpdate[S]
-	quit    func()
-	enqueue func(action)
-	latest  *latestRegistry
+	Context  context.Context
+	Updates  chan<- StateUpdate[S]
+	quit     func()
+	enqueue  func(action)
+	latest   *latestRegistry
+	dispatch func(func())
+	clock    Clock
 }
 
 // NewEffects builds an Effects value with an observable quit callback.
 // Run uses it internally; tests use it to assert quit requests.
 func NewEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func()) Effects[S] {
 	return Effects[S]{Context: ctx, Updates: updates, quit: quit, latest: newLatestRegistry()}
+}
+
+// NewHarnessEffects builds an Effects wired for deterministic testing:
+// dispatch controls how async bodies are spawned (nil = real goroutine)
+// and clock controls time-based effects (nil = real clock). For flatest;
+// not app API.
+func NewHarnessEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S] {
+	fx := NewEffects(ctx, updates, quit)
+	fx.dispatch = dispatch
+	fx.clock = clock
+	return fx
+}
+
+// spawn runs f on a goroutine by default, or through the injected dispatch
+// (tests defer it to a controlled queue).
+func (fx Effects[S]) spawn(f func()) {
+	if fx.dispatch != nil {
+		fx.dispatch(f)
+		return
+	}
+	go f()
 }
 
 // Quit requests a clean exit of the Run loop. Safe on a zero Effects value.

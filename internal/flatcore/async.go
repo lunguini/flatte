@@ -22,11 +22,12 @@ func (n named[S]) Apply(s *S)   { n.apply(s) }
 func Async[S, T any](
 	ctx context.Context,
 	updates chan<- StateUpdate[S],
+	spawn func(func()),
 	name string,
 	work func(context.Context) (T, error),
 	fold func(*S, T, error),
 ) {
-	go func() {
+	run := func() {
 		value, err := work(ctx)
 		if ctx.Err() != nil {
 			return
@@ -39,5 +40,10 @@ func Async[S, T any](
 		case updates <- update:
 		case <-ctx.Done():
 		}
-	}()
+	}
+	if spawn != nil {
+		spawn(run)
+		return
+	}
+	go run()
 }

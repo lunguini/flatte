@@ -61,7 +61,7 @@ func TestAsyncSendsNamedFoldedUpdate(t *testing.T) {
 	ctx := context.Background()
 	updates := make(chan StateUpdate[testState], 1)
 
-	Async(ctx, updates, "counter.load",
+	Async(ctx, updates, nil, "counter.load",
 		func(context.Context) (int, error) {
 			return 7, nil
 		},
@@ -87,7 +87,7 @@ func TestAsyncSuppressesCancelledUpdate(t *testing.T) {
 	cancel()
 	updates := make(chan StateUpdate[testState], 1)
 
-	Async(ctx, updates, "counter.stale",
+	Async(ctx, updates, nil, "counter.stale",
 		func(context.Context) (int, error) {
 			return 7, nil
 		},
@@ -150,7 +150,7 @@ func TestRunProcessesInputAndAsyncUpdates(t *testing.T) {
 		done <- Run(ctx, App[testState]{
 			State: &state,
 			Init: func(s *testState, fx Effects[testState]) {
-				Async(fx.Context, fx.Updates, "counter.load",
+				Async(fx.Context, fx.Updates, nil, "counter.load",
 					func(context.Context) (int, error) {
 						return 3, nil
 					},
