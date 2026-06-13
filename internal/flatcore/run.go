@@ -113,6 +113,7 @@ type runConfig struct {
 	bracketedPaste bool
 	mouse          MouseMode
 	reportFocus    bool
+	inline         bool
 	suspendProcess func() // test seam; defaults to the platform suspend
 }
 
@@ -145,6 +146,12 @@ func WithMouse(mode MouseMode) Option { return func(c *runConfig) { c.mouse = mo
 // as FocusEvent. Some terminals and multiplexers need configuration to
 // report focus (tmux: focus-events).
 func WithReportFocus() Option { return func(c *runConfig) { c.reportFocus = true } }
+
+// WithInline renders below the shell prompt instead of in the alternate
+// screen: the frame occupies exactly its own lines, the terminal's
+// scrollback stays intact, and on exit the final frame remains visible
+// with the prompt landing below it.
+func WithInline() Option { return func(c *runConfig) { c.inline = true } }
 
 func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	if app.State == nil {
@@ -200,20 +207,38 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	}
 	defer restoreRaw()
 
-	// Alt-screen entry/exit goes through the renderer, not raw writes: it
-	// must also flip the renderer's fullscreen + absolute-cursor flags, or
-	// its inline-mode cursor/scroll optimizations desync the screen (frames
-	// drift one row off). EnterAltScreen queues the escape; the first draw
-	// flushes it together with the initial frame.
 	renderOut := &bytes.Buffer{}
 	renderer := uv.NewTerminalRenderer(renderOut, os.Environ())
-	renderer.EnterAltScreen()
-	_, _ = renderer.WriteString("\x1b[?25l") // hide cursor (terminals may reset it on alt-screen entry)
-	_, _ = renderer.WriteString(setModes(cfg))
 	var lastFrame Frame
 	drew := false
 	cursorShown := false
+	var screen uv.ScreenBuffer
+	var screenWidth, screenHeight int
+	forceRepaint := false
 	var pending []action
+
+	// enterRenderer applies the renderer-side entry state: alt screen
+	// (unless inline), cursor hidden, terminal modes. Alt-screen entry must
+	// go through the renderer, not a raw write: EnterAltScreen also flips
+	// the renderer's fullscreen + absolute-cursor flags, or its inline-mode
+	// cursor/scroll optimizations desync the screen (frames drift one row
+	// off). A fresh renderer's default state (relative cursor, not
+	// fullscreen) IS inline mode, so WithInline simply leaves it alone.
+	// Reused at startup and after a suspend/exec hands the terminal back.
+	enterRenderer := func() {
+		if !cfg.inline {
+			renderer.EnterAltScreen()
+		}
+		_, _ = renderer.WriteString("\x1b[?25l") // hide cursor (terminals may reset it on alt-screen entry)
+		_, _ = renderer.WriteString(setModes(cfg))
+		cursorShown = false
+	}
+	enterRenderer()
+	// drainActions emits only the write-type actions (clipboard OSC52). It
+	// runs in the cleanup defer so a write enqueued on the quit iteration
+	// still reaches the terminal. Suspend/exec actions are NOT run here —
+	// they re-enter the loop machinery (input restart, repaint) and only
+	// make sense while the loop is live; processActions handles those.
 	drainActions := func() {
 		for _, a := range pending {
 			if a.write != "" {
@@ -229,7 +254,16 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		}
 		_, _ = renderer.WriteString(resetModes(cfg))
 		_, _ = renderer.WriteString("\x1b[?25h")
-		renderer.ExitAltScreen()
+		if cfg.inline {
+			// The final frame stays in the terminal; park the cursor below
+			// it so the shell prompt does not overwrite the last line.
+			if drew && screenHeight > 0 {
+				renderer.MoveTo(0, screenHeight-1)
+			}
+			_, _ = renderer.WriteString("\r\n")
+		} else {
+			renderer.ExitAltScreen()
+		}
 		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
 			_, _ = out.Write(renderOut.Bytes())
 			renderOut.Reset()
@@ -294,10 +328,6 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		return nil
 	}
 
-	var screen uv.ScreenBuffer
-	var screenWidth, screenHeight int
-	forceRepaint := false
-
 	writeFrameOutput := func() {
 		if renderOut.Len() == 0 {
 			return // nothing to write, not even markers
@@ -320,8 +350,15 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			_, _ = renderer.WriteString(ansi.SetWindowTitle(frame.Title))
 		}
 		styled := uv.NewStyledString(frame.Content)
-		_, terminalHeight := terminalSize(out)
-		height := max(styled.Height(), terminalHeight)
+		// Alt-screen frames fill the terminal (so a shrunk frame clears the
+		// rows it vacated); inline frames own exactly their own lines and
+		// must not pad to the terminal height, or they would scroll the
+		// shell's scrollback away.
+		height := styled.Height()
+		if !cfg.inline {
+			_, terminalHeight := terminalSize(out)
+			height = max(height, terminalHeight)
+		}
 		if screenWidth != renderCtx.Width || screenHeight != height {
 			screen = uv.NewScreenBuffer(renderCtx.Width, height)
 			renderer.Resize(renderCtx.Width, height)
@@ -358,16 +395,26 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		writeFrameOutput()
 	}
 
-	// releaseTerminal hands the terminal back (cooked mode, main screen,
-	// cursor visible) and fully stops the input pipeline so a subprocess
-	// or the shell owns stdin. restoreTerminal is its exact inverse plus a
-	// forced repaint and a fresh ResizeEvent — the terminal may have been
-	// resized while we were away, and no SIGWINCH was delivered to us.
+	// releaseTerminal hands the terminal back (cooked mode, main screen or
+	// below the inline frame, cursor visible) and fully stops the input
+	// pipeline so a subprocess or the shell owns stdin. restoreTerminal is
+	// its inverse plus a forced repaint and a fresh ResizeEvent — the
+	// terminal may have been resized while we were away, and no SIGWINCH
+	// was delivered to us.
 	releaseTerminal := func() {
 		pipe.stop()
 		_, _ = renderer.WriteString(resetModes(cfg))
 		_, _ = renderer.WriteString("\x1b[?25h")
-		renderer.ExitAltScreen()
+		if cfg.inline {
+			// Leave the frame in place; park the cursor below it so the
+			// shell or subprocess starts on a fresh line.
+			if drew && screenHeight > 0 {
+				renderer.MoveTo(0, screenHeight-1)
+			}
+			_, _ = renderer.WriteString("\r\n")
+		} else {
+			renderer.ExitAltScreen()
+		}
 		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
 			_, _ = out.Write(renderOut.Bytes())
 			renderOut.Reset()
@@ -376,10 +423,16 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	}
 	restoreTerminal := func() {
 		_ = enterRaw()
-		renderer.EnterAltScreen()
-		_, _ = renderer.WriteString("\x1b[?25l")
-		cursorShown = false
-		_, _ = renderer.WriteString(setModes(cfg))
+		if cfg.inline {
+			// Foreign output (a subprocess, or the shell during suspend) has
+			// moved the real cursor, so the renderer's screen model is now
+			// stale. Recreate it: a fresh inline renderer draws the frame at
+			// the current cursor, below whatever was printed. forceRepaint +
+			// the zeroed buffer dimensions rebuild everything from scratch.
+			renderer = uv.NewTerminalRenderer(renderOut, os.Environ())
+			screenWidth, screenHeight = 0, 0
+		}
+		enterRenderer()
 		pipe = startInput()
 		forceRepaint = true
 		width, height := terminalSize(out)
