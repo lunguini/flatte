@@ -6,6 +6,7 @@ package flatest
 
 import (
 	"context"
+	"time"
 
 	"github.com/lunguini/flat/internal/flatcore"
 )
@@ -21,6 +22,7 @@ type Driver[S any] struct {
 	clock   *fakeClock
 	pending []func()
 	quit    bool
+	fx      flatcore.Effects[S]
 }
 
 // Start builds a Driver, runs Init, delivers the initial ResizeEvent, and
@@ -32,20 +34,20 @@ func Start[S any](app flatcore.App[S], width int) *Driver[S] {
 		updates: make(chan flatcore.StateUpdate[S], 1024),
 		clock:   newFakeClock(),
 	}
-	if app.Init != nil {
-		app.Init(app.State, d.effects())
-	}
-	d.deliver(flatcore.ResizeEvent{Width: width, Height: 24})
-	return d
-}
-
-func (d *Driver[S]) effects() flatcore.Effects[S] {
-	return flatcore.NewHarnessEffects(
+	// One Effects for the whole session: the latest registry (and thus
+	// Latest's cross-event supersede) must persist across events, exactly
+	// like Run's single long-lived Effects.
+	d.fx = flatcore.NewHarnessEffects(
 		context.Background(), d.updates,
 		func() { d.quit = true },
 		func(f func()) { d.pending = append(d.pending, f) },
 		d.clock,
 	)
+	if app.Init != nil {
+		app.Init(app.State, d.fx)
+	}
+	d.deliver(flatcore.ResizeEvent{Width: width, Height: 24})
+	return d
 }
 
 // Send delivers one event, drains the synchronous updates it produced,
@@ -61,7 +63,7 @@ func (d *Driver[S]) deliver(ev flatcore.Event) {
 		d.app.Tracer.Event(ev)
 	}
 	if d.app.Handle != nil {
-		d.app.Handle(d.app.State, ev, d.effects())
+		d.app.Handle(d.app.State, ev, d.fx)
 	}
 	d.drain()
 }
@@ -77,6 +79,31 @@ func (d *Driver[S]) drain() {
 			return
 		}
 	}
+}
+
+// Settle runs every pending async body (to fixpoint — a body may dispatch
+// more) and drains the updates each produces, then renders. This is where
+// Go/Latest/Stream results land, under test control. drain runs after each
+// body so Latest's apply-time guard sees a superseded ctx and drops the
+// stale result.
+func (d *Driver[S]) Settle() flatcore.Frame {
+	for len(d.pending) > 0 {
+		batch := d.pending
+		d.pending = nil
+		for _, f := range batch {
+			f()
+			d.drain()
+		}
+	}
+	return d.Frame()
+}
+
+// Advance moves the fake clock, firing due Every ticks (which queue
+// updates), then settles any async those ticks triggered.
+func (d *Driver[S]) Advance(by time.Duration) flatcore.Frame {
+	d.clock.advance(by)
+	d.drain()
+	return d.Settle()
 }
 
 // Frame renders the current state without changing it.
