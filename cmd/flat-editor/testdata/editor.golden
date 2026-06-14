@@ -1,0 +1,11 @@
+┌────────────────────────────────────────┐
+│   Flat Editor                          │
+│  multi-line textarea sample            │
+│                                        │
+│  Edit me.                              │
+│  Multiple lines.                       │
+│  Grapheme-correct.                     │
+│                                        │
+│  arrows move  enter newline  esc quit  │
+└────────────────────────────────────────┘
+[cursor 3,4]
