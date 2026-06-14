@@ -66,16 +66,24 @@ func TestRunPrintEmitsLineInInlineMode(t *testing.T) {
 	if !strings.Contains(out, "hello scrollback") {
 		t.Fatalf("fx.Print content not emitted above the inline frame:\n%q", out)
 	}
-	// The scroll-and-insert path (mirroring Bubble Tea's insertAbove) writes
-	// InsertLine to open room and terminates each inserted line with
-	// EraseLineRight + CRLF. The discriminator from uv's PrependString (which
-	// desynced the cursor model and walked the frame down the screen on each
-	// print) is the EraseLineRight after the content.
-	if !strings.Contains(out, "\x1b[L") { // ansi.InsertLine(1)
-		t.Fatalf("fx.Print did not open a line with InsertLine:\n%q", out)
+	// The position-independent path erases the old frame from the screen
+	// (EraseScreenBelow) and writes the unmanaged line terminated with
+	// EraseLineRight + CRLF, then repaints the frame fresh below it. The earlier
+	// scroll-and-insert approaches (uv PrependString / BT v2 insertAbove) used
+	// InsertLine and assumed the frame sat at the screen bottom, which walked the
+	// frame down the screen on each print; assert we no longer do that.
+	if !strings.Contains(out, "\x1b[J") { // ansi.EraseScreenBelow
+		t.Fatalf("fx.Print did not erase the frame before emitting scrollback:\n%q", out)
 	}
 	if !strings.Contains(out, "hello scrollback\x1b[K\r\n") {
-		t.Fatalf("inserted line not terminated with EraseLineRight+CRLF (insertAbove path):\n%q", out)
+		t.Fatalf("inserted line not terminated with EraseLineRight+CRLF:\n%q", out)
+	}
+	afterLine := out[strings.Index(out, "hello scrollback\x1b[K\r\n")+len("hello scrollback\x1b[K\r\n"):]
+	if beforeFrame, _, ok := strings.Cut(afterLine, "x"); ok && strings.Contains(beforeFrame, "\x1b[J") {
+		t.Fatalf("fx.Print erased after emitting the scrollback line, so the line is not visible before repaint:\n%q", out)
+	}
+	if strings.Contains(out, "\x1b[L") || strings.Contains(out, "\x1b[1L") {
+		t.Fatalf("fx.Print must not use InsertLine (the scroll-at-bottom approach):\n%q", out)
 	}
 }
 

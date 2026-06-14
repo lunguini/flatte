@@ -17,6 +17,9 @@ func TestRunInlineSkipsAltScreenAndEndsBelowTheFrame(t *testing.T) {
 	if strings.Contains(output, "1049") {
 		t.Fatalf("inline run must never touch the alt screen:\n%q", output)
 	}
+	if strings.Contains(output, "\x1b[H") {
+		t.Fatalf("inline run must use relative cursor movement, not absolute home:\n%q", output)
+	}
 	if !strings.Contains(output, "inline-frame") {
 		t.Fatalf("frame content missing:\n%q", output)
 	}
