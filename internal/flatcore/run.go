@@ -259,6 +259,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	var screen uv.ScreenBuffer
 	var screenWidth, screenHeight int
 	forceRepaint := false
+	// forceRender bypasses the identical-frame short-circuit for one draw
+	// WITHOUT an Erase — used after fx.Print so the frame re-renders in place
+	// below freshly-inserted scrollback (PrependString already moved the
+	// renderer's cursor model; an Erase would void it).
+	forceRender := false
 	var pending []action
 
 	// enterRenderer applies the renderer-side entry state: alt screen
@@ -383,13 +388,14 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	draw := func() {
 		renderCtx := RenderContextFor(out)
 		frame := app.View(app.State, renderCtx)
-		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
+		if drew && !forceRepaint && !forceRender && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
 			if err := renderer.Flush(); err == nil {
 				writeFrameOutput()
 			}
 			return
 		}
+		forceRender = false
 		if frame.Title != lastFrame.Title {
 			_, _ = renderer.WriteString(ansi.SetWindowTitle(frame.Title))
 		}
@@ -520,12 +526,16 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 					_, _ = renderer.WriteString(a.write)
 				case a.print != "":
 					// Insert into scrollback above the inline frame via uv's
-					// PrependString, then force the frame to repaint below it.
-					// Only meaningful inline and after a frame exists; in
-					// alt-screen the lines would be overwritten, so skip.
+					// PrependString, then force a normal re-render so the frame
+					// is redrawn in its new position below the inserted lines.
+					// NOT a forceRepaint: PrependString sets up the renderer's
+					// cursor model, and an Erase would void it (uv's own usage
+					// is PrependString → Render → Flush, never Erase). Only
+					// meaningful inline and after a frame exists; in alt-screen
+					// the lines would be overwritten, so skip.
 					if cfg.inline && drew {
 						renderer.PrependString(screen.RenderBuffer, a.print)
-						forceRepaint = true
+						forceRender = true
 					}
 				}
 			}
