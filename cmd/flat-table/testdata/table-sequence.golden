@@ -1,0 +1,74 @@
+┌─────────────────────────────────────────────────────────────┐
+│   Flat Table                                                │
+│  scrollable selectable table                                │
+│                                                             │
+│    ID   Name           Status                               │
+│  > 1    service-01     ok                                   │
+│    2    service-02     warn                                 │
+│    3    service-03     down                                 │
+│    4    service-04     ok                                   │
+│    5    service-05     warn                                 │
+│    6    service-06     down                                 │
+│    7    service-07     ok                                   │
+│    8    service-08     warn                                 │
+│    9    service-09     down                                 │
+│    10   service-10     ok                                   │
+│    11   service-11     warn                                 │
+│    12   service-12     down                                 │
+│    13   service-13     ok                                   │
+│    14   service-14     warn                                 │
+│    15   service-15     down                                 │
+│    16   service-16     ok                                   │
+│                                                             │
+│  j/k move  g/G ends  q quit   selected: service-01  [1/20]  │
+└─────────────────────────────────────────────────────────────┘
+───
+┌──────────────────────────────────────────────────────────────┐
+│   Flat Table                                                 │
+│  scrollable selectable table                                 │
+│                                                              │
+│    ID   Name           Status                                │
+│    1    service-01     ok                                    │
+│    2    service-02     warn                                  │
+│    3    service-03     down                                  │
+│    4    service-04     ok                                    │
+│    5    service-05     warn                                  │
+│    6    service-06     down                                  │
+│    7    service-07     ok                                    │
+│    8    service-08     warn                                  │
+│    9    service-09     down                                  │
+│    10   service-10     ok                                    │
+│    11   service-11     warn                                  │
+│    12   service-12     down                                  │
+│  > 13   service-13     ok                                    │
+│    14   service-14     warn                                  │
+│    15   service-15     down                                  │
+│    16   service-16     ok                                    │
+│                                                              │
+│  j/k move  g/G ends  q quit   selected: service-13  [13/20]  │
+└──────────────────────────────────────────────────────────────┘
+───
+┌──────────────────────────────────────────────────────────────┐
+│   Flat Table                                                 │
+│  scrollable selectable table                                 │
+│                                                              │
+│    ID   Name           Status                                │
+│    5    service-05     warn                                  │
+│    6    service-06     down                                  │
+│    7    service-07     ok                                    │
+│    8    service-08     warn                                  │
+│    9    service-09     down                                  │
+│    10   service-10     ok                                    │
+│    11   service-11     warn                                  │
+│    12   service-12     down                                  │
+│    13   service-13     ok                                    │
+│    14   service-14     warn                                  │
+│    15   service-15     down                                  │
+│    16   service-16     ok                                    │
+│    17   service-17     warn                                  │
+│    18   service-18     down                                  │
+│    19   service-19     ok                                    │
+│  > 20   service-20     warn                                  │
+│                                                              │
+│  j/k move  g/G ends  q quit   selected: service-20  [20/20]  │
+└──────────────────────────────────────────────────────────────┘
