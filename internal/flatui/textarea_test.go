@@ -88,6 +88,36 @@ func TestTextareaVerticalMovePreservesGoalColumn(t *testing.T) {
 	}
 }
 
+func TestTextareaMovesByWordWithinAndAcrossLines(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("hello, world\nnext line")
+	for range len("hello, world") {
+		ta.MoveRight()
+	}
+
+	ta.MoveWordLeft()
+	if ta.Row() != 0 || ta.Col() != len("hello, ") {
+		t.Fatalf("MoveWordLeft = (%d,%d), want start of world", ta.Row(), ta.Col())
+	}
+	ta.MoveWordRight()
+	if ta.Row() != 0 || ta.Col() != len("hello, world") {
+		t.Fatalf("MoveWordRight = (%d,%d), want end of world", ta.Row(), ta.Col())
+	}
+	ta.MoveRight() // row 1, col 0
+	ta.MoveWordLeft()
+	if ta.Row() != 0 || ta.Col() != len("hello, ") {
+		t.Fatalf("MoveWordLeft across line = (%d,%d), want previous word start", ta.Row(), ta.Col())
+	}
+	ta.MoveWordRight()
+	if ta.Row() != 0 || ta.Col() != len("hello, world") {
+		t.Fatalf("MoveWordRight after cross-line left = (%d,%d), want previous line word end", ta.Row(), ta.Col())
+	}
+	ta.MoveWordRight()
+	if ta.Row() != 1 || ta.Col() != len("next") {
+		t.Fatalf("MoveWordRight across line = (%d,%d), want end of next", ta.Row(), ta.Col())
+	}
+}
+
 func TestTextareaBackspaceRemovesWholeGraphemeCluster(t *testing.T) {
 	var ta Textarea
 	ta.SetValue("ábc") // a + combining acute = one cluster (3 bytes)

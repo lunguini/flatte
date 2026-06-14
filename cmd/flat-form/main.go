@@ -52,16 +52,46 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	case flatcore.KeyEnter:
 		s.submitted = fmt.Sprintf("name=%s filter=%s", s.fields[0].Input.Value, s.fields[1].Input.Value)
 	case flatcore.KeyLeft:
-		field.Input.MoveLeft()
+		if wordMove(key.Mod) {
+			field.Input.MoveWordLeft()
+		} else {
+			field.Input.MoveLeft()
+		}
 	case flatcore.KeyRight:
-		field.Input.MoveRight()
+		if wordMove(key.Mod) {
+			field.Input.MoveWordRight()
+		} else {
+			field.Input.MoveRight()
+		}
 	case flatcore.KeyBackspace:
 		field.Input.Backspace()
 	case flatcore.KeyDelete:
 		field.Input.Delete()
 	case flatcore.KeyCharacter:
+		if handleAltWordKey(key, field.Input.MoveWordLeft, field.Input.MoveWordRight) {
+			return
+		}
 		field.Input.Insert(key.Rune)
 	}
+}
+
+func wordMove(mod flatcore.Mod) bool {
+	return mod.Contains(flatcore.ModAlt) || mod.Contains(flatcore.ModCtrl)
+}
+
+func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flatcore.ModAlt) {
+		return false
+	}
+	switch key.Rune {
+	case 'b', 'B':
+		moveLeft()
+		return true
+	case 'f', 'F':
+		moveRight()
+		return true
+	}
+	return false
 }
 
 func handleBlurred(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {

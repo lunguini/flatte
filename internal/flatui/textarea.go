@@ -138,6 +138,28 @@ func (t *Textarea) MoveRight() {
 	t.keepVisible()
 }
 
+func (t *Textarea) MoveWordLeft() {
+	t.ensure()
+	if t.col == 0 && t.row > 0 {
+		t.row--
+		t.col = len(t.lines[t.row])
+	}
+	t.col = prevWordBoundary(t.lines[t.row], t.col)
+	t.syncGoal()
+	t.keepVisible()
+}
+
+func (t *Textarea) MoveWordRight() {
+	t.ensure()
+	if t.col >= len(t.lines[t.row]) && t.row < len(t.lines)-1 {
+		t.row++
+		t.col = 0
+	}
+	t.col = nextWordBoundary(t.lines[t.row], t.col)
+	t.syncGoal()
+	t.keepVisible()
+}
+
 func (t *Textarea) MoveUp() {
 	t.ensure()
 	if t.row > 0 {

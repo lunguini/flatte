@@ -36,6 +36,33 @@ func TestPasteKeyRequestsRead(t *testing.T) {
 	}
 }
 
+func TestCtrlZRequestsSuspend(t *testing.T) {
+	state := NewState()
+
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'z', Mod: flatcore.ModCtrl}, noEffects())
+
+	if state.status != "suspended; resumed" {
+		t.Fatalf("status = %q, want suspended status", state.status)
+	}
+}
+
+func TestModifiedPlainCommandsAreIgnored(t *testing.T) {
+	state := NewState()
+	var quit bool
+	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
+
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'z', Mod: flatcore.ModAlt}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'y', Mod: flatcore.ModCtrl}, fx)
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q', Mod: flatcore.ModAlt}, fx)
+
+	if state.status != "ready" {
+		t.Fatalf("status = %q, want ready", state.status)
+	}
+	if quit {
+		t.Fatal("modified q should not request quit")
+	}
+}
+
 func TestClipboardEventStoresContent(t *testing.T) {
 	state := NewState()
 

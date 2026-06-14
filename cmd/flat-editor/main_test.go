@@ -44,6 +44,41 @@ func TestArrowsAndBackspaceEdit(t *testing.T) {
 	}
 }
 
+func TestModifiedArrowsMoveByWord(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello world")
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyLeft, Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello ") {
+		t.Fatalf("alt-left cursor = (%d,%d), want start of world", s.ta.Row(), s.ta.Col())
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyLeft, Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != 0 {
+		t.Fatalf("ctrl-left cursor = (%d,%d), want start", s.ta.Row(), s.ta.Col())
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyRight, Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello") {
+		t.Fatalf("ctrl-right cursor = (%d,%d), want end of hello", s.ta.Row(), s.ta.Col())
+	}
+}
+
+func TestAltBFMoveByWord(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello world")
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'b', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello ") {
+		t.Fatalf("alt-b cursor = (%d,%d), want start of world", s.ta.Row(), s.ta.Col())
+	}
+	if s.ta.Value() != "hello world" {
+		t.Fatalf("alt-b inserted text: %q", s.ta.Value())
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'f', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello world") {
+		t.Fatalf("alt-f cursor = (%d,%d), want end", s.ta.Row(), s.ta.Col())
+	}
+}
+
 func TestEscQuits(t *testing.T) {
 	s := emptyState()
 	var quit bool

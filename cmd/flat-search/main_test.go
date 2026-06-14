@@ -67,6 +67,29 @@ func TestFocusedSearchCanTypeQ(t *testing.T) {
 	}
 }
 
+func TestFocusedSearchUsesAltBFForWordMovement(t *testing.T) {
+	t.Setenv("FLAT_SEARCH_DELAY", "0s")
+	state := State{focused: true}
+	state.query.Value = "hello world"
+	state.query.Cursor = len("hello world")
+
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'b', Mod: flatcore.ModAlt}, flatcore.Effects[State]{
+		Context: context.Background(),
+	})
+	if state.query.Cursor != len("hello ") {
+		t.Fatalf("alt-b cursor = %d, want start of world", state.query.Cursor)
+	}
+	if state.query.Value != "hello world" {
+		t.Fatalf("alt-b inserted text: %q", state.query.Value)
+	}
+	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'f', Mod: flatcore.ModAlt}, flatcore.Effects[State]{
+		Context: context.Background(),
+	})
+	if state.query.Cursor != len("hello world") {
+		t.Fatalf("alt-f cursor = %d, want end", state.query.Cursor)
+	}
+}
+
 func TestUnfocusedSearchUsesQToQuit(t *testing.T) {
 	state := State{focused: false}
 	var quit bool

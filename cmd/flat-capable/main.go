@@ -42,6 +42,14 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 	if key.Key != flatcore.KeyCharacter {
 		return
 	}
+	mod := key.Mod &^ flatcore.ModShift
+	if mod != 0 {
+		if mod == flatcore.ModCtrl && (key.Rune == 'z' || key.Rune == 'Z') {
+			s.status = "suspended; resumed"
+			fx.Suspend()
+		}
+		return
+	}
 	switch key.Rune {
 	case 'y', 'Y':
 		fx.SetClipboard(clipboardLine)
@@ -50,10 +58,6 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 		fx.ReadClipboard()
 		s.status = "requested clipboard read…"
 	case 'z', 'Z':
-		// The conventional suspend key is Ctrl-Z, but control combinations
-		// other than Ctrl-C are not in the event set yet (see STATUS debt),
-		// so the demo binds plain 'z'. Raw mode disables the terminal's own
-		// Ctrl-Z anyway, so an app-driven suspend is the only path.
 		s.status = "suspended; resumed"
 		fx.Suspend()
 	case 'e', 'E':
@@ -112,7 +116,7 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		"  last clipboard read: " + clip,
 		"  last editor text: " + edited,
 		"",
-		flatui.Subtle("y copy | p paste | z suspend | e edit | q quit"),
+		flatui.Subtle("y copy | p paste | z/Ctrl-Z suspend | e edit | q quit"),
 	}
 	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
 }

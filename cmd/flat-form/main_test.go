@@ -55,6 +55,43 @@ func TestCursorMovementBackspaceAndDeleteAreFieldLocal(t *testing.T) {
 	}
 }
 
+func TestModifiedArrowsMoveFocusedFieldByWord(t *testing.T) {
+	state := NewState()
+	state.fields[0].Input.Value = "hello world"
+	state.fields[0].Input.Cursor = len("hello world")
+
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyLeft, Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if state.fields[0].Input.Cursor != len("hello ") {
+		t.Fatalf("alt-left cursor = %d, want start of world", state.fields[0].Input.Cursor)
+	}
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyLeft, Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if state.fields[0].Input.Cursor != 0 {
+		t.Fatalf("ctrl-left cursor = %d, want start", state.fields[0].Input.Cursor)
+	}
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyRight, Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if state.fields[0].Input.Cursor != len("hello") {
+		t.Fatalf("ctrl-right cursor = %d, want end of hello", state.fields[0].Input.Cursor)
+	}
+}
+
+func TestAltBFMoveFocusedFieldByWord(t *testing.T) {
+	state := NewState()
+	state.fields[0].Input.Value = "hello world"
+	state.fields[0].Input.Cursor = len("hello world")
+
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'b', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if state.fields[0].Input.Cursor != len("hello ") {
+		t.Fatalf("alt-b cursor = %d, want start of world", state.fields[0].Input.Cursor)
+	}
+	if state.fields[0].Input.Value != "hello world" {
+		t.Fatalf("alt-b inserted text: %q", state.fields[0].Input.Value)
+	}
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'f', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if state.fields[0].Input.Cursor != len("hello world") {
+		t.Fatalf("alt-f cursor = %d, want end", state.fields[0].Input.Cursor)
+	}
+}
+
 func TestEscapeBlursAndQQuitsOnlyWhenBlurred(t *testing.T) {
 	state := NewState()
 	var quit bool

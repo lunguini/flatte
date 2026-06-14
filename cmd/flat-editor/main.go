@@ -50,16 +50,46 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 	case flatcore.KeyDelete:
 		s.ta.Delete()
 	case flatcore.KeyLeft:
-		s.ta.MoveLeft()
+		if wordMove(key.Mod) {
+			s.ta.MoveWordLeft()
+		} else {
+			s.ta.MoveLeft()
+		}
 	case flatcore.KeyRight:
-		s.ta.MoveRight()
+		if wordMove(key.Mod) {
+			s.ta.MoveWordRight()
+		} else {
+			s.ta.MoveRight()
+		}
 	case flatcore.KeyUp:
 		s.ta.MoveUp()
 	case flatcore.KeyDown:
 		s.ta.MoveDown()
 	case flatcore.KeyCharacter:
+		if handleAltWordKey(key, s.ta.MoveWordLeft, s.ta.MoveWordRight) {
+			return
+		}
 		s.ta.Insert(key.Rune)
 	}
+}
+
+func wordMove(mod flatcore.Mod) bool {
+	return mod.Contains(flatcore.ModAlt) || mod.Contains(flatcore.ModCtrl)
+}
+
+func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flatcore.ModAlt) {
+		return false
+	}
+	switch key.Rune {
+	case 'b', 'B':
+		moveLeft()
+		return true
+	case 'f', 'F':
+		moveRight()
+		return true
+	}
+	return false
 }
 
 func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {

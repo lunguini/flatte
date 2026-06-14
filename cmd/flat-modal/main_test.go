@@ -63,6 +63,25 @@ func TestModalCapturesQInsteadOfQuitting(t *testing.T) {
 	}
 }
 
+func TestModalUsesAltBFForWordMovement(t *testing.T) {
+	state := NewState()
+	state.modalOpen = true
+	state.modalInput.Value = "hello world"
+	state.modalInput.Cursor = len("hello world")
+
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'b', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if state.modalInput.Cursor != len("hello ") {
+		t.Fatalf("alt-b cursor = %d, want start of world", state.modalInput.Cursor)
+	}
+	if state.modalInput.Value != "hello world" {
+		t.Fatalf("alt-b inserted text: %q", state.modalInput.Value)
+	}
+	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'f', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if state.modalInput.Cursor != len("hello world") {
+		t.Fatalf("alt-f cursor = %d, want end", state.modalInput.Cursor)
+	}
+}
+
 func TestEscapeCancelsModal(t *testing.T) {
 	state := NewState()
 	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyEnter}, flatcore.Effects[State]{})

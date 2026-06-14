@@ -1,6 +1,7 @@
 package flatcore
 
 import (
+	"unicode"
 	"unicode/utf8"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -67,7 +68,14 @@ func translateKey(key uv.Key) (Event, bool) {
 		r, _ := utf8.DecodeRuneInString(key.Text)
 		return KeyEvent{Key: KeyCharacter, Rune: r, Mod: mod}, true
 	}
+	if mod != 0 && isPrintableKeyCode(key.Code) {
+		return KeyEvent{Key: KeyCharacter, Rune: unicode.ToLower(key.Code), Mod: mod}, true
+	}
 	return nil, false
+}
+
+func isPrintableKeyCode(code rune) bool {
+	return code >= ' ' && code < uv.KeyExtended
 }
 
 func translateMouse(mouse uv.Mouse, action MouseAction) MouseEvent {

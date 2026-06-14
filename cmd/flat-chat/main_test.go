@@ -38,6 +38,41 @@ func TestEnterOnEmptyInputDoesNothing(t *testing.T) {
 	}
 }
 
+func TestModifiedArrowsMoveInputByWord(t *testing.T) {
+	s := NewState()
+	typeRunes(s, "hello world")
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyLeft, Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("alt-left cursor = %d, want start of world", s.input.Cursor)
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyLeft, Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.input.Cursor != 0 {
+		t.Fatalf("ctrl-left cursor = %d, want start", s.input.Cursor)
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyRight, Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.input.Cursor != len("hello") {
+		t.Fatalf("ctrl-right cursor = %d, want end of hello", s.input.Cursor)
+	}
+}
+
+func TestAltBFMoveInputByWord(t *testing.T) {
+	s := NewState()
+	typeRunes(s, "hello world")
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'b', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("alt-b cursor = %d, want start of world", s.input.Cursor)
+	}
+	if s.input.Value != "hello world" {
+		t.Fatalf("alt-b inserted text: %q", s.input.Value)
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'f', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.input.Cursor != len("hello world") {
+		t.Fatalf("alt-f cursor = %d, want end", s.input.Cursor)
+	}
+}
+
 func TestEscQuits(t *testing.T) {
 	var quit bool
 	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })

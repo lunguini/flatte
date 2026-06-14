@@ -65,6 +65,9 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 func handleModal(s *State, key flatcore.KeyEvent) {
 	switch key.Key {
 	case flatcore.KeyCharacter:
+		if handleAltWordKey(key, s.modalInput.MoveWordLeft, s.modalInput.MoveWordRight) {
+			return
+		}
 		s.modalInput.Insert(key.Rune)
 	case flatcore.KeyBackspace:
 		s.modalInput.Backspace()
@@ -83,6 +86,21 @@ func handleModal(s *State, key flatcore.KeyEvent) {
 		s.waiting = false
 		s.modalResult = "cancelled"
 	}
+}
+
+func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flatcore.ModAlt) {
+		return false
+	}
+	switch key.Rune {
+	case 'b', 'B':
+		moveLeft()
+		return true
+	case 'f', 'F':
+		moveRight()
+		return true
+	}
+	return false
 }
 
 func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {

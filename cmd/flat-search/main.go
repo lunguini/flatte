@@ -51,6 +51,9 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 
 	switch key.Key {
 	case flatcore.KeyCharacter:
+		if handleAltWordKey(key, s.query.MoveWordLeft, s.query.MoveWordRight) {
+			return
+		}
 		s.query.Insert(key.Rune)
 		startSearch(s, fx)
 	case flatcore.KeyBackspace:
@@ -66,6 +69,21 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	case flatcore.KeyEnter:
 		s.focused = false
 	}
+}
+
+func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flatcore.ModAlt) {
+		return false
+	}
+	switch key.Rune {
+	case 'b', 'B':
+		moveLeft()
+		return true
+	case 'f', 'F':
+		moveRight()
+		return true
+	}
+	return false
 }
 
 func startSearch(s *State, fx flatcore.Effects[State]) {

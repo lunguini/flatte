@@ -1,6 +1,7 @@
 package flatui
 
 import (
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
@@ -51,6 +52,16 @@ func (f *TextField) MoveLeft() {
 func (f *TextField) MoveRight() {
 	f.clampCursor()
 	f.Cursor = nextGraphemeBoundary(f.Value, f.Cursor)
+}
+
+func (f *TextField) MoveWordLeft() {
+	f.clampCursor()
+	f.Cursor = prevWordBoundary(f.Value, f.Cursor)
+}
+
+func (f *TextField) MoveWordRight() {
+	f.clampCursor()
+	f.Cursor = nextWordBoundary(f.Value, f.Cursor)
 }
 
 func (f *TextField) SetCursor(cursor int) {
@@ -114,4 +125,85 @@ func nextGraphemeBoundary(s string, pos int) int {
 		at = next
 	}
 	return len(s)
+}
+
+type textCluster struct {
+	start int
+	end   int
+	word  bool
+}
+
+func wordClusters(s string) []textCluster {
+	var clusters []textCluster
+	state := -1
+	rest := s
+	at := 0
+	for len(rest) > 0 {
+		cluster, next, _, nextState := uniseg.StepString(rest, state)
+		end := at + len(cluster)
+		clusters = append(clusters, textCluster{
+			start: at,
+			end:   end,
+			word:  isWordCluster(cluster),
+		})
+		rest, state, at = next, nextState, end
+	}
+	return clusters
+}
+
+func isWordCluster(cluster string) bool {
+	for _, r := range cluster {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) || r == '_' {
+			return true
+		}
+	}
+	return false
+}
+
+func prevWordBoundary(s string, pos int) int {
+	if pos <= 0 {
+		return 0
+	}
+	if pos > len(s) {
+		pos = len(s)
+	}
+	clusters := wordClusters(s)
+	i := len(clusters) - 1
+	for i >= 0 && clusters[i].start >= pos {
+		i--
+	}
+	for i >= 0 && !clusters[i].word {
+		i--
+	}
+	if i < 0 {
+		return 0
+	}
+	for i >= 0 && clusters[i].word {
+		i--
+	}
+	return clusters[i+1].start
+}
+
+func nextWordBoundary(s string, pos int) int {
+	if pos >= len(s) {
+		return len(s)
+	}
+	if pos < 0 {
+		pos = 0
+	}
+	clusters := wordClusters(s)
+	i := 0
+	for i < len(clusters) && clusters[i].end <= pos {
+		i++
+	}
+	for i < len(clusters) && !clusters[i].word {
+		i++
+	}
+	if i >= len(clusters) {
+		return len(s)
+	}
+	for i < len(clusters) && clusters[i].word {
+		i++
+	}
+	return clusters[i-1].end
 }

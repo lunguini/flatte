@@ -78,6 +78,37 @@ func TestTextFieldMovesAndDeletesByGraphemeCluster(t *testing.T) {
 	}
 }
 
+func TestTextFieldMovesByWord(t *testing.T) {
+	value := "hello, world café"
+	field := TextField{Value: value, Cursor: len(value)}
+
+	field.MoveWordLeft()
+	if field.Cursor != len("hello, world ") {
+		t.Fatalf("MoveWordLeft from end = %d, want start of café", field.Cursor)
+	}
+	field.MoveWordLeft()
+	if field.Cursor != len("hello, ") {
+		t.Fatalf("second MoveWordLeft = %d, want start of world", field.Cursor)
+	}
+	field.MoveWordLeft()
+	if field.Cursor != 0 {
+		t.Fatalf("third MoveWordLeft = %d, want start", field.Cursor)
+	}
+
+	field.MoveWordRight()
+	if field.Cursor != len("hello") {
+		t.Fatalf("MoveWordRight from start = %d, want end of hello", field.Cursor)
+	}
+	field.MoveWordRight()
+	if field.Cursor != len("hello, world") {
+		t.Fatalf("second MoveWordRight = %d, want end of world", field.Cursor)
+	}
+	field.MoveWordRight()
+	if field.Cursor != len(value) {
+		t.Fatalf("third MoveWordRight = %d, want end", field.Cursor)
+	}
+}
+
 func TestCursorColumnCountsDisplayCells(t *testing.T) {
 	cases := []struct {
 		name   string
