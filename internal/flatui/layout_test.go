@@ -159,3 +159,35 @@ func TestOverlayOriginMatchesOverlayPlacement(t *testing.T) {
 		t.Fatalf("OverlayOrigin() = (%d,%d), row %d = %q", x, y, y, composed[y])
 	}
 }
+
+func TestCardBodyWidthMatchesCardChrome(t *testing.T) {
+	const total = 40
+	bw := CardBodyWidth(total)
+	// A body line exactly CardBodyWidth wide must not push the card past total.
+	card := Card([]string{strings.Repeat("x", bw)}, total)
+	if w := lipgloss.Width(strings.Split(card, "\n")[0]); w != total {
+		t.Fatalf("card width = %d, want %d (body sized via CardBodyWidth=%d)", w, total, bw)
+	}
+}
+
+func TestCardBodyHeightMatchesCardChrome(t *testing.T) {
+	const total, pinned = 12, 3
+	bh := CardBodyHeight(total, pinned)
+	lines := make([]string, pinned+bh)
+	for i := range lines {
+		lines[i] = "x"
+	}
+	rows := strings.Split(Card(lines, 40), "\n")
+	if len(rows) != total {
+		t.Fatalf("card = %d rows, want %d (pinned %d + body %d + 2 border)", len(rows), total, pinned, bh)
+	}
+}
+
+func TestCardBodyDimensionsClampToZero(t *testing.T) {
+	if got := CardBodyHeight(1, 5); got != 0 {
+		t.Fatalf("CardBodyHeight(1,5) = %d, want 0", got)
+	}
+	if got := CardBodyWidth(2); got != 0 {
+		t.Fatalf("CardBodyWidth(2) = %d, want 0", got)
+	}
+}

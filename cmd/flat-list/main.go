@@ -41,9 +41,8 @@ func NewState() *State {
 // layout sizes the list to the rows left after the pinned chrome (title,
 // subtitle, blank, blank, footer = 5) and the card's top+bottom border (2).
 func (s *State) layout(height int) {
-	const pinnedRows = 5
-	const vChrome = 2
-	s.list.SetHeight(max(height-pinnedRows-vChrome, 1))
+	const pinnedRows = 5 // title, subtitle, blank, blank, footer
+	s.list.SetHeight(max(flatui.CardBodyHeight(height, pinnedRows), 1))
 }
 
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {

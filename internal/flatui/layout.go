@@ -124,3 +124,23 @@ func ContentWidth(totalWidth int) int {
 	}
 	return width
 }
+
+// cardBorderRows is the card's top + bottom border (it has no vertical padding).
+const cardBorderRows = 2
+
+// CardBodyWidth returns the usable content width for a body placed inside a
+// Card of the given total width — the total minus the card's border and
+// horizontal padding. Size a body widget with this (in Handle, on ResizeEvent)
+// so it tracks the card chrome instead of a hardcoded constant.
+func CardBodyWidth(totalWidth int) int {
+	return max(totalWidth-cardBorderColumns-cardHorizontalPadding, 0)
+}
+
+// CardBodyHeight returns the rows available for a body inside a Card of the
+// given total height, after the card's top and bottom border and the
+// pinnedRows of non-body content (title, footer, etc.) the app stacks around
+// the body. The app still declares its own pinnedRows — that count is app
+// layout, not card chrome — but the card's border math lives here.
+func CardBodyHeight(totalHeight, pinnedRows int) int {
+	return max(totalHeight-cardBorderRows-pinnedRows, 0)
+}

@@ -56,11 +56,10 @@ func NewState() *State {
 // warranted (see .docs/evaluation.md).
 func (s *State) layout(width, height int) {
 	const pinnedRows = 5 // title, subtitle, blank, blank, footer
-	const vChrome = 2    // card top+bottom border
-	const hChrome = 6    // card border (2) + padding (4)
-	vpHeight := max(height-pinnedRows-vChrome, 1)
-	vpWidth := max(width-hChrome, 1)
-	s.vp.SetSize(vpWidth, vpHeight)
+	s.vp.SetSize(
+		max(flatui.CardBodyWidth(width), 1),
+		max(flatui.CardBodyHeight(height, pinnedRows), 1),
+	)
 }
 
 // wheelLines is how many lines one mouse-wheel notch scrolls.

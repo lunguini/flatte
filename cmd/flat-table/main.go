@@ -51,7 +51,8 @@ func status(i int) string {
 // layout sizes the body to the rows left after the pinned chrome: title,
 // subtitle, blank, header, blank, footer = 6, plus the card border (2).
 func (s *State) layout(height int) {
-	s.tb.SetHeight(max(height-6-2, 1))
+	const pinnedRows = 6 // title, subtitle, blank, header, blank, footer
+	s.tb.SetHeight(max(flatui.CardBodyHeight(height, pinnedRows), 1))
 }
 
 func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
