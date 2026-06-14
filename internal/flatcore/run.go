@@ -27,6 +27,7 @@ type App[S any] struct {
 // flush.
 type action struct {
 	write   string      // raw escape sequence to emit (clipboard OSC52 etc.)
+	print   string      // content to insert into scrollback above the inline frame
 	suspend bool        // release the terminal, suspend the process, restore
 	exec    *execAction // release the terminal, run the command, restore
 }
@@ -112,6 +113,26 @@ func (fx Effects[S]) Suspend() {
 	if fx.enqueue != nil {
 		fx.enqueue(action{suspend: true})
 	}
+}
+
+// Print writes s into the terminal's scrollback above the live frame, then
+// repaints the frame below it — the Claude-Code "message stream + pinned input"
+// model: emitted lines flow into the real terminal's history (which the user
+// scrolls with the terminal/mouse) while the frame stays put at the bottom.
+// Requires inline rendering (WithInline); in alt-screen mode it is a no-op,
+// because the prepended lines would be overwritten by the next frame. The
+// content is the app's to format (no trailing newline is added). Newlines in s
+// produce multiple scrollback lines. Loop-goroutine-only, like Quit. Safe on a
+// zero Effects value.
+func (fx Effects[S]) Print(s string) {
+	if fx.enqueue != nil {
+		fx.enqueue(action{print: s})
+	}
+}
+
+// Printf is Print with fmt.Sprintf formatting.
+func (fx Effects[S]) Printf(format string, args ...any) {
+	fx.Print(fmt.Sprintf(format, args...))
 }
 
 // Option configures Run behaviour.
@@ -497,6 +518,15 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 					a.exec.done(err)
 				case a.write != "":
 					_, _ = renderer.WriteString(a.write)
+				case a.print != "":
+					// Insert into scrollback above the inline frame via uv's
+					// PrependString, then force the frame to repaint below it.
+					// Only meaningful inline and after a frame exists; in
+					// alt-screen the lines would be overwritten, so skip.
+					if cfg.inline && drew {
+						renderer.PrependString(screen.RenderBuffer, a.print)
+						forceRepaint = true
+					}
 				}
 			}
 		}
