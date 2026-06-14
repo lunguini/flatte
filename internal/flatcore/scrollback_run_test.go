@@ -66,6 +66,17 @@ func TestRunPrintEmitsLineInInlineMode(t *testing.T) {
 	if !strings.Contains(out, "hello scrollback") {
 		t.Fatalf("fx.Print content not emitted above the inline frame:\n%q", out)
 	}
+	// The scroll-and-insert path (mirroring Bubble Tea's insertAbove) writes
+	// InsertLine to open room and terminates each inserted line with
+	// EraseLineRight + CRLF. The discriminator from uv's PrependString (which
+	// desynced the cursor model and walked the frame down the screen on each
+	// print) is the EraseLineRight after the content.
+	if !strings.Contains(out, "\x1b[L") { // ansi.InsertLine(1)
+		t.Fatalf("fx.Print did not open a line with InsertLine:\n%q", out)
+	}
+	if !strings.Contains(out, "hello scrollback\x1b[K\r\n") {
+		t.Fatalf("inserted line not terminated with EraseLineRight+CRLF (insertAbove path):\n%q", out)
+	}
 }
 
 func TestRunPrintfFormats(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -260,9 +261,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	var screenWidth, screenHeight int
 	forceRepaint := false
 	// forceRender bypasses the identical-frame short-circuit for one draw
-	// WITHOUT an Erase — used after fx.Print so the frame re-renders in place
-	// below freshly-inserted scrollback (PrependString already moved the
-	// renderer's cursor model; an Erase would void it).
+	// WITHOUT an Erase — used after fx.Print so the frame re-renders (and the
+	// cursor repositions) in place below freshly-inserted scrollback. insertAbove
+	// has already scrolled the screen and told the renderer the frame's top-left
+	// is back under the cursor (SetPosition); an Erase would clear the inserted
+	// lines, and the normal short-circuit would skip the needed cursor move.
 	forceRender := false
 	var pending []action
 
@@ -493,6 +496,58 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		}
 	}
 
+	// insertAbove inserts unmanaged lines into the scrollback above the inline
+	// frame, then leaves the frame to be repainted in place below them — the
+	// mechanism behind fx.Print. It mirrors Bubble Tea v2's
+	// cursedRenderer.insertAbove rather than uv's PrependString: PrependString
+	// leaves the renderer's logical cursor at (0,0) while the physical cursor
+	// ends up below the inserted lines, so every subsequent diff renders against
+	// a screen that has shifted underneath it — the frame visibly walks down the
+	// terminal on each print. Instead, scroll using the renderer's *current*
+	// cursor row, emit the scroll/insert directly to the output (out of band, so
+	// it is not batched inside the frame's synchronized-output block), and reset
+	// the logical cursor to the frame's top-left with SetPosition so the next
+	// Render repaints the frame correctly. The caller sets forceRender so that
+	// next draw always runs (re-rendering the frame and re-placing the cursor)
+	// without an Erase.
+	insertAbove := func(str string) {
+		if str == "" {
+			return
+		}
+		// Flush any buffered renderer output first so the inserted lines land in
+		// order relative to a pending frame.
+		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
+			_, _ = out.Write(renderOut.Bytes())
+			renderOut.Reset()
+		}
+		w, h := screenWidth, screenHeight
+		_, y := renderer.Position()
+		var sb strings.Builder
+		sb.WriteByte('\r')
+		if down := h - y - 1; down > 0 {
+			sb.WriteString(ansi.CursorDown(down))
+		}
+		lines := strings.Split(str, "\n")
+		offset := len(lines)
+		for _, line := range lines {
+			if lw := ansi.StringWidth(line); w > 0 && lw > w {
+				offset += lw / w
+			}
+		}
+		// Scroll up by offset to open room, climb back to the frame's top, insert
+		// the blank lines, then fill them with the unmanaged content.
+		sb.WriteString(strings.Repeat("\n", offset))
+		sb.WriteString(ansi.CursorUp(offset + h - 1))
+		sb.WriteString(ansi.InsertLine(offset))
+		for _, line := range lines {
+			sb.WriteString(line)
+			sb.WriteString(ansi.EraseLineRight)
+			sb.WriteString("\r\n")
+		}
+		_, _ = io.WriteString(out, sb.String())
+		renderer.SetPosition(0, 0)
+	}
+
 	// processActions drains the one-shot queue before each draw. Suspend
 	// runs here, not in drainActions: it re-enters the loop machinery
 	// (input restart, repaint) and must never run mid-render. The outer
@@ -525,16 +580,13 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 				case a.write != "":
 					_, _ = renderer.WriteString(a.write)
 				case a.print != "":
-					// Insert into scrollback above the inline frame via uv's
-					// PrependString, then force a normal re-render so the frame
-					// is redrawn in its new position below the inserted lines.
-					// NOT a forceRepaint: PrependString sets up the renderer's
-					// cursor model, and an Erase would void it (uv's own usage
-					// is PrependString → Render → Flush, never Erase). Only
+					// Insert into scrollback above the inline frame, then force a
+					// re-render (without an Erase) so the frame repaints in place
+					// below the inserted lines and its cursor is replaced. Only
 					// meaningful inline and after a frame exists; in alt-screen
 					// the lines would be overwritten, so skip.
 					if cfg.inline && drew {
-						renderer.PrependString(screen.RenderBuffer, a.print)
+						insertAbove(a.print)
 						forceRender = true
 					}
 				}
