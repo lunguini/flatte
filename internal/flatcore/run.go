@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
@@ -254,11 +255,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 
 	renderOut := &bytes.Buffer{}
 	newRenderer := func() *uv.TerminalRenderer {
-		renderer := uv.NewTerminalRenderer(renderOut, os.Environ())
-		if cfg.inline {
-			renderer.SetRelativeCursor(true)
-		}
-		return renderer
+		return newTerminalRenderer(renderOut, out, os.Environ(), cfg.inline)
 	}
 	renderer := newRenderer()
 	var lastFrame Frame
@@ -699,6 +696,17 @@ func drainUpdates[S any](app App[S], updates <-chan StateUpdate[S]) {
 			return
 		}
 	}
+}
+
+var detectRendererColorProfile = colorprofile.Detect
+
+func newTerminalRenderer(renderBuffer io.Writer, output io.Writer, env []string, inline bool) *uv.TerminalRenderer {
+	renderer := uv.NewTerminalRenderer(renderBuffer, env)
+	renderer.SetColorProfile(detectRendererColorProfile(output, env))
+	if inline {
+		renderer.SetRelativeCursor(true)
+	}
+	return renderer
 }
 
 type inputResult struct {

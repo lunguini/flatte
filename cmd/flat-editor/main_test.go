@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/lunguini/flat/internal/flatcore"
 	"github.com/lunguini/flat/internal/flatest"
@@ -79,6 +83,141 @@ func TestAltBFMoveByWord(t *testing.T) {
 	}
 }
 
+func TestModifiedBackspaceAndDeleteRemoveWords(t *testing.T) {
+	s := emptyState()
+	s.ta.SetValue("hello world\nnext line")
+	s.ta.SetSize(80, 4)
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyBackspace, Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.ta.Value() != "hello next line" {
+		t.Fatalf("ctrl-backspace value = %q, want %q", s.ta.Value(), "hello next line")
+	}
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello ") {
+		t.Fatalf("ctrl-backspace cursor = (%d,%d), want (0,%d)", s.ta.Row(), s.ta.Col(), len("hello "))
+	}
+
+	s.ta.SetValue("hello\nnext line")
+	for range len("hello") {
+		Handle(s, flatcore.KeyEvent{Key: flatcore.KeyRight}, flatcore.Effects[State]{})
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyDelete, Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.ta.Value() != "hello line" {
+		t.Fatalf("alt-delete value = %q, want %q", s.ta.Value(), "hello line")
+	}
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello") {
+		t.Fatalf("alt-delete cursor = (%d,%d), want (0,%d)", s.ta.Row(), s.ta.Col(), len("hello"))
+	}
+}
+
+func TestReadlineWordDeleteAliases(t *testing.T) {
+	s := emptyState()
+	s.ta.SetValue("hello world\nnext line")
+	s.ta.SetSize(80, 4)
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'w', Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.ta.Value() != "hello next line" {
+		t.Fatalf("ctrl-w value = %q, want %q", s.ta.Value(), "hello next line")
+	}
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello ") {
+		t.Fatalf("ctrl-w cursor = (%d,%d), want (0,%d)", s.ta.Row(), s.ta.Col(), len("hello "))
+	}
+
+	s.ta.SetValue("hello\nnext line")
+	for range len("hello") {
+		Handle(s, flatcore.KeyEvent{Key: flatcore.KeyRight}, flatcore.Effects[State]{})
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'd', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.ta.Value() != "hello line" {
+		t.Fatalf("alt-d value = %q, want %q", s.ta.Value(), "hello line")
+	}
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello") {
+		t.Fatalf("alt-d cursor = (%d,%d), want (0,%d)", s.ta.Row(), s.ta.Col(), len("hello"))
+	}
+}
+
+func TestCtrlAltHDWordDeleteAliases(t *testing.T) {
+	s := emptyState()
+	s.ta.SetValue("hello world\nnext line")
+	s.ta.SetSize(80, 4)
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'h', Mod: flatcore.ModCtrl | flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.ta.Value() != "hello next line" {
+		t.Fatalf("ctrl-alt-h value = %q, want %q", s.ta.Value(), "hello next line")
+	}
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello ") {
+		t.Fatalf("ctrl-alt-h cursor = (%d,%d), want (0,%d)", s.ta.Row(), s.ta.Col(), len("hello "))
+	}
+
+	s.ta.SetValue("hello\nnext line")
+	for range len("hello") {
+		Handle(s, flatcore.KeyEvent{Key: flatcore.KeyRight}, flatcore.Effects[State]{})
+	}
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'd', Mod: flatcore.ModCtrl | flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.ta.Value() != "hello line" {
+		t.Fatalf("ctrl-alt-d value = %q, want %q", s.ta.Value(), "hello line")
+	}
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello") {
+		t.Fatalf("ctrl-alt-d cursor = (%d,%d), want (0,%d)", s.ta.Row(), s.ta.Col(), len("hello"))
+	}
+}
+
+func TestCtrlHDeletesWordBackward(t *testing.T) {
+	s := emptyState()
+	s.ta.SetValue("hello world\nnext line")
+	s.ta.SetSize(80, 4)
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyDown}, flatcore.Effects[State]{})
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'h', Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.ta.Value() != "hello next line" {
+		t.Fatalf("ctrl-h value = %q, want %q", s.ta.Value(), "hello next line")
+	}
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello ") {
+		t.Fatalf("ctrl-h cursor = (%d,%d), want (0,%d)", s.ta.Row(), s.ta.Col(), len("hello "))
+	}
+}
+
+func TestRawCtrlWDeletesWordThroughRun(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+
+	state := emptyState()
+	var out bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- flatcore.Run(context.Background(), flatcore.App[State]{
+			State:  state,
+			Handle: Handle,
+			View:   View,
+		}, flatcore.WithInput(reader), flatcore.WithOutput(&out))
+	}()
+
+	_, _ = writer.Write([]byte("hello world\x17\x1b"))
+	_ = writer.Close()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run did not exit")
+	}
+
+	if state.ta.Value() != "hello " {
+		t.Fatalf("raw ctrl-w value = %q, want %q", state.ta.Value(), "hello ")
+	}
+	if state.ta.Row() != 0 || state.ta.Col() != len("hello ") {
+		t.Fatalf("raw ctrl-w cursor = (%d,%d), want (0,%d)", state.ta.Row(), state.ta.Col(), len("hello "))
+	}
+}
+
 func TestEscQuits(t *testing.T) {
 	s := emptyState()
 	var quit bool
@@ -99,6 +238,19 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	// card origin (3,1) + 3 pinned lines + cell (0,0) = (3,4)
 	if frame.Cursor.X != 3 || frame.Cursor.Y != 4 {
 		t.Fatalf("cursor = %+v, want (3,4)", *frame.Cursor)
+	}
+}
+
+func TestDebugViewShowsLastDecodedKeyAndAction(t *testing.T) {
+	s := emptyState()
+	s.debugKeys = true
+	s.layout(72, 24)
+	typeRunes(s, "hello world")
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'w', Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+
+	frame := View(s, flatcore.RenderContext{Width: 72})
+	if !strings.Contains(frame.Content, "last: character 'w' ctrl -> delete-word-left") {
+		t.Fatalf("debug footer missing last key/action:\n%s", frame.Content)
 	}
 }
 

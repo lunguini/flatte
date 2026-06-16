@@ -131,6 +131,56 @@ func TestTextareaBackspaceRemovesWholeGraphemeCluster(t *testing.T) {
 	}
 }
 
+func TestTextareaDeletesByWordWithinLine(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("hello, world café")
+	for range len("hello, world") {
+		ta.MoveRight()
+	}
+
+	ta.DeleteWordLeft()
+	if ta.Value() != "hello,  café" {
+		t.Fatalf("DeleteWordLeft value = %q, want %q", ta.Value(), "hello,  café")
+	}
+	if ta.Row() != 0 || ta.Col() != len("hello, ") {
+		t.Fatalf("DeleteWordLeft cursor = (%d,%d), want (0,%d)", ta.Row(), ta.Col(), len("hello, "))
+	}
+
+	ta.DeleteWordRight()
+	if ta.Value() != "hello, " {
+		t.Fatalf("DeleteWordRight value = %q, want %q", ta.Value(), "hello, ")
+	}
+	if ta.Row() != 0 || ta.Col() != len("hello, ") {
+		t.Fatalf("DeleteWordRight cursor = (%d,%d), want (0,%d)", ta.Row(), ta.Col(), len("hello, "))
+	}
+}
+
+func TestTextareaDeletesByWordAcrossLines(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("hello world\nnext line")
+	ta.MoveDown() // row 1, col 0
+
+	ta.DeleteWordLeft()
+	if ta.Value() != "hello next line" {
+		t.Fatalf("DeleteWordLeft across line value = %q, want %q", ta.Value(), "hello next line")
+	}
+	if ta.Row() != 0 || ta.Col() != len("hello ") {
+		t.Fatalf("DeleteWordLeft across line cursor = (%d,%d), want (0,%d)", ta.Row(), ta.Col(), len("hello "))
+	}
+
+	ta.SetValue("hello\nnext line")
+	for range len("hello") {
+		ta.MoveRight()
+	}
+	ta.DeleteWordRight()
+	if ta.Value() != "hello line" {
+		t.Fatalf("DeleteWordRight across line value = %q, want %q", ta.Value(), "hello line")
+	}
+	if ta.Row() != 0 || ta.Col() != len("hello") {
+		t.Fatalf("DeleteWordRight across line cursor = (%d,%d), want (0,%d)", ta.Row(), ta.Col(), len("hello"))
+	}
+}
+
 func TestTextareaVerticalScrollKeepsCursorVisible(t *testing.T) {
 	var ta Textarea
 	lines := make([]string, 10)

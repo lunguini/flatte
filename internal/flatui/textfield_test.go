@@ -109,6 +109,26 @@ func TestTextFieldMovesByWord(t *testing.T) {
 	}
 }
 
+func TestTextFieldDeletesByWord(t *testing.T) {
+	field := TextField{Value: "hello, world café", Cursor: len("hello, world")}
+
+	field.DeleteWordLeft()
+	if field.Value != "hello,  café" {
+		t.Fatalf("DeleteWordLeft value = %q, want %q", field.Value, "hello,  café")
+	}
+	if field.Cursor != len("hello, ") {
+		t.Fatalf("DeleteWordLeft cursor = %d, want %d", field.Cursor, len("hello, "))
+	}
+
+	field.DeleteWordRight()
+	if field.Value != "hello, " {
+		t.Fatalf("DeleteWordRight value = %q, want %q", field.Value, "hello, ")
+	}
+	if field.Cursor != len("hello, ") {
+		t.Fatalf("DeleteWordRight cursor = %d, want %d", field.Cursor, len("hello, "))
+	}
+}
+
 func TestCursorColumnCountsDisplayCells(t *testing.T) {
 	cases := []struct {
 		name   string

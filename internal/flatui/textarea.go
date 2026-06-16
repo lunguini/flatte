@@ -160,6 +160,41 @@ func (t *Textarea) MoveWordRight() {
 	t.keepVisible()
 }
 
+func (t *Textarea) DeleteWordLeft() {
+	t.ensure()
+	if t.col > 0 {
+		line := t.lines[t.row]
+		start := prevWordBoundary(line, t.col)
+		t.lines[t.row] = line[:start] + line[t.col:]
+		t.col = start
+	} else if t.row > 0 {
+		prev := t.lines[t.row-1]
+		start := prevWordBoundary(prev, len(prev))
+		merged := prev[:start] + t.lines[t.row]
+		t.lines = removeLineMerging(t.lines, t.row-1, merged)
+		t.row--
+		t.col = start
+	}
+	t.syncGoal()
+	t.keepVisible()
+}
+
+func (t *Textarea) DeleteWordRight() {
+	t.ensure()
+	line := t.lines[t.row]
+	if t.col < len(line) {
+		end := nextWordBoundary(line, t.col)
+		t.lines[t.row] = line[:t.col] + line[end:]
+	} else if t.row < len(t.lines)-1 {
+		next := t.lines[t.row+1]
+		end := nextWordBoundary(next, 0)
+		merged := line + next[end:]
+		t.lines = removeLineMerging(t.lines, t.row, merged)
+	}
+	t.syncGoal()
+	t.keepVisible()
+}
+
 func (t *Textarea) MoveUp() {
 	t.ensure()
 	if t.row > 0 {

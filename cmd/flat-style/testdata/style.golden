@@ -1,0 +1,14 @@
+Flat Style                                                 Delivery  70%
+
+╭─────────────────────────────────────────────╮  ╭─────────────────────╮
+│ Delivery                                    │  │ Palette             │
+│                                             │  │                     │
+│ > deploy-api     platform ready             │  │ ready   deploy      │
+│   billing-sync   finance  watch             │  │ watch   review      │
+│   edge-cache     infra    ready             │  │ blocked stop        │
+│   search-index   growth   blocked           │  │                     │
+│                                             │  │ Local palette       │
+│ ██████████████░░░░░░   70%                  │  │ App-owned styles    │
+╰─────────────────────────────────────────────╯  ╰─────────────────────╯
+
+j/k move  h/l progress  q quit

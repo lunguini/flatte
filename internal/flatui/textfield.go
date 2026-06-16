@@ -64,6 +64,25 @@ func (f *TextField) MoveWordRight() {
 	f.Cursor = nextWordBoundary(f.Value, f.Cursor)
 }
 
+func (f *TextField) DeleteWordLeft() {
+	f.clampCursor()
+	if f.Cursor == 0 {
+		return
+	}
+	start := prevWordBoundary(f.Value, f.Cursor)
+	f.Value = f.Value[:start] + f.Value[f.Cursor:]
+	f.Cursor = start
+}
+
+func (f *TextField) DeleteWordRight() {
+	f.clampCursor()
+	if f.Cursor >= len(f.Value) {
+		return
+	}
+	end := nextWordBoundary(f.Value, f.Cursor)
+	f.Value = f.Value[:f.Cursor] + f.Value[end:]
+}
+
 func (f *TextField) SetCursor(cursor int) {
 	f.Cursor = cursor
 	f.clampCursor()

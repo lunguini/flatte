@@ -40,9 +40,17 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 			s.sent++
 		}
 	case flatcore.KeyBackspace:
-		s.input.Backspace()
+		if wordMove(key.Mod) {
+			s.input.DeleteWordLeft()
+		} else {
+			s.input.Backspace()
+		}
 	case flatcore.KeyDelete:
-		s.input.Delete()
+		if wordMove(key.Mod) {
+			s.input.DeleteWordRight()
+		} else {
+			s.input.Delete()
+		}
 	case flatcore.KeyLeft:
 		if wordMove(key.Mod) {
 			s.input.MoveWordLeft()
@@ -56,6 +64,9 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 			s.input.MoveRight()
 		}
 	case flatcore.KeyCharacter:
+		if handleWordDeleteKey(key, s.input.DeleteWordLeft, s.input.DeleteWordRight) {
+			return
+		}
 		if handleAltWordKey(key, s.input.MoveWordLeft, s.input.MoveWordRight) {
 			return
 		}
@@ -77,6 +88,18 @@ func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
 		return true
 	case 'f', 'F':
 		moveRight()
+		return true
+	}
+	return false
+}
+
+func handleWordDeleteKey(key flatcore.KeyEvent, deleteLeft, deleteRight func()) bool {
+	if key.Mod.Contains(flatcore.ModCtrl) && (key.Rune == 'w' || key.Rune == 'W' || key.Rune == 'h' || key.Rune == 'H') {
+		deleteLeft()
+		return true
+	}
+	if key.Mod.Contains(flatcore.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
+		deleteRight()
 		return true
 	}
 	return false

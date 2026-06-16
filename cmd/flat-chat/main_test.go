@@ -73,6 +73,86 @@ func TestAltBFMoveInputByWord(t *testing.T) {
 	}
 }
 
+func TestModifiedBackspaceAndDeleteRemoveInputWords(t *testing.T) {
+	s := NewState()
+	typeRunes(s, "hello world café")
+	s.input.SetCursor(len("hello world"))
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyBackspace, Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.input.Value != "hello  café" {
+		t.Fatalf("ctrl-backspace value = %q, want %q", s.input.Value, "hello  café")
+	}
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("ctrl-backspace cursor = %d, want %d", s.input.Cursor, len("hello "))
+	}
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyDelete, Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.input.Value != "hello " {
+		t.Fatalf("alt-delete value = %q, want %q", s.input.Value, "hello ")
+	}
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("alt-delete cursor = %d, want %d", s.input.Cursor, len("hello "))
+	}
+}
+
+func TestReadlineWordDeleteAliases(t *testing.T) {
+	s := NewState()
+	typeRunes(s, "hello world café")
+	s.input.SetCursor(len("hello world"))
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'w', Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.input.Value != "hello  café" {
+		t.Fatalf("ctrl-w value = %q, want %q", s.input.Value, "hello  café")
+	}
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("ctrl-w cursor = %d, want %d", s.input.Cursor, len("hello "))
+	}
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'd', Mod: flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.input.Value != "hello " {
+		t.Fatalf("alt-d value = %q, want %q", s.input.Value, "hello ")
+	}
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("alt-d cursor = %d, want %d", s.input.Cursor, len("hello "))
+	}
+}
+
+func TestCtrlAltHDWordDeleteAliases(t *testing.T) {
+	s := NewState()
+	typeRunes(s, "hello world café")
+	s.input.SetCursor(len("hello world"))
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'h', Mod: flatcore.ModCtrl | flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.input.Value != "hello  café" {
+		t.Fatalf("ctrl-alt-h value = %q, want %q", s.input.Value, "hello  café")
+	}
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("ctrl-alt-h cursor = %d, want %d", s.input.Cursor, len("hello "))
+	}
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'd', Mod: flatcore.ModCtrl | flatcore.ModAlt}, flatcore.Effects[State]{})
+	if s.input.Value != "hello " {
+		t.Fatalf("ctrl-alt-d value = %q, want %q", s.input.Value, "hello ")
+	}
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("ctrl-alt-d cursor = %d, want %d", s.input.Cursor, len("hello "))
+	}
+}
+
+func TestCtrlHDeletesInputWordBackward(t *testing.T) {
+	s := NewState()
+	typeRunes(s, "hello world café")
+	s.input.SetCursor(len("hello world"))
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'h', Mod: flatcore.ModCtrl}, flatcore.Effects[State]{})
+	if s.input.Value != "hello  café" {
+		t.Fatalf("ctrl-h value = %q, want %q", s.input.Value, "hello  café")
+	}
+	if s.input.Cursor != len("hello ") {
+		t.Fatalf("ctrl-h cursor = %d, want %d", s.input.Cursor, len("hello "))
+	}
+}
+
 func TestEscQuits(t *testing.T) {
 	var quit bool
 	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
