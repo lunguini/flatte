@@ -181,6 +181,78 @@ func TestTextareaDeletesByWordAcrossLines(t *testing.T) {
 	}
 }
 
+func TestTextareaSelectingMoveReportsRangeAndReplacesSelection(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("abcdef")
+	for range 2 {
+		ta.MoveRight()
+	}
+
+	ta.MoveRightSelecting()
+	ta.MoveRightSelecting()
+	rng, ok := ta.Selection()
+	if !ok || rng.Start != (TextPosition{Row: 0, Col: 2}) || rng.End != (TextPosition{Row: 0, Col: 4}) {
+		t.Fatalf("Selection() = (%+v,%v), want row 0 cols 2..4", rng, ok)
+	}
+	if got := ta.SelectedText(); got != "cd" {
+		t.Fatalf("SelectedText() = %q, want %q", got, "cd")
+	}
+
+	ta.Insert('X')
+	if ta.Value() != "abXef" {
+		t.Fatalf("Value after replacing selection = %q, want %q", ta.Value(), "abXef")
+	}
+	if ta.Row() != 0 || ta.Col() != 3 {
+		t.Fatalf("cursor after replacing selection = (%d,%d), want (0,3)", ta.Row(), ta.Col())
+	}
+	if _, ok := ta.Selection(); ok {
+		t.Fatal("selection still active after insert")
+	}
+}
+
+func TestTextareaSelectionDeletesAcrossLines(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("hello\nworld")
+	for range 5 {
+		ta.MoveRight()
+	}
+
+	ta.MoveRightSelecting() // selects the newline
+	ta.MoveRightSelecting()
+	ta.MoveRightSelecting() // selects "\nwo"
+	if got := ta.SelectedText(); got != "\nwo" {
+		t.Fatalf("SelectedText() = %q, want %q", got, "\nwo")
+	}
+
+	ta.Backspace()
+	if ta.Value() != "hellorld" {
+		t.Fatalf("Value after deleting multiline selection = %q, want %q", ta.Value(), "hellorld")
+	}
+	if ta.Row() != 0 || ta.Col() != 5 {
+		t.Fatalf("cursor after deleting multiline selection = (%d,%d), want (0,5)", ta.Row(), ta.Col())
+	}
+}
+
+func TestTextareaViewWithSelectionUsesRenderCallback(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("abcdef")
+	ta.SetSize(4, 3)
+	ta.MoveRight()
+	for range 3 {
+		ta.MoveRightSelecting()
+	}
+
+	got := ta.ViewWithSelection(func(text string, selected bool) string {
+		if selected {
+			return "[" + text + "]"
+		}
+		return text
+	})
+	if got != "[bcd]e" {
+		t.Fatalf("ViewWithSelection() = %q, want %q", got, "[bcd]e")
+	}
+}
+
 func TestTextareaVerticalScrollKeepsCursorVisible(t *testing.T) {
 	var ta Textarea
 	lines := make([]string, 10)
@@ -194,6 +266,61 @@ func TestTextareaVerticalScrollKeepsCursorVisible(t *testing.T) {
 	}
 	if ta.Offset() != 3 { // 5 - 3 + 1
 		t.Fatalf("Offset() = %d, want 3", ta.Offset())
+	}
+}
+
+func TestTextareaHorizontallyScrollsLongLineToKeepCursorVisible(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("abcdefghij")
+	ta.SetSize(4, 3)
+	if got := ta.View(); got != "abcd" {
+		t.Fatalf("initial View() = %q, want %q", got, "abcd")
+	}
+
+	for range 6 {
+		ta.MoveRight()
+	}
+	if got := ta.View(); got != "defg" {
+		t.Fatalf("View() after moving right = %q, want %q", got, "defg")
+	}
+	x, y := ta.CursorCell()
+	if x != 3 || y != 0 {
+		t.Fatalf("CursorCell() after moving right = (%d,%d), want (3,0)", x, y)
+	}
+}
+
+func TestTextareaHorizontalScrollMovesBackLeft(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("abcdefghij")
+	ta.SetSize(4, 3)
+	for range 6 {
+		ta.MoveRight()
+	}
+	for range 5 {
+		ta.MoveLeft()
+	}
+	if got := ta.View(); got != "bcde" {
+		t.Fatalf("View() after moving back left = %q, want %q", got, "bcde")
+	}
+	x, y := ta.CursorCell()
+	if x != 0 || y != 0 {
+		t.Fatalf("CursorCell() after moving back left = (%d,%d), want (0,0)", x, y)
+	}
+}
+
+func TestTextareaHorizontalWindowDoesNotSplitWideGrapheme(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("ab界cd")
+	ta.SetSize(4, 3)
+	for range 5 {
+		ta.MoveRight()
+	}
+	if got := ta.View(); got != "cd" {
+		t.Fatalf("View() after wide scroll = %q, want %q", got, "cd")
+	}
+	x, y := ta.CursorCell()
+	if x != 2 || y != 0 {
+		t.Fatalf("CursorCell() after wide scroll = (%d,%d), want (2,0)", x, y)
 	}
 }
 

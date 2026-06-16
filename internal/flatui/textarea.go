@@ -8,28 +8,44 @@ import (
 	"github.com/rivo/uniseg"
 )
 
+type TextPosition struct {
+	Row int
+	Col int
+}
+
+type TextRange struct {
+	Start TextPosition
+	End   TextPosition
+}
+
 // Textarea is a multi-line editable text buffer. The app owns it (like
 // TextField): no goroutines, no key policy. Content is kept as logical lines;
 // the cursor is a (row, byte-col) pair that the movement and edit methods keep
 // on a grapheme-cluster boundary, so multi-rune clusters are never split.
 // Vertical movement preserves a display "goal column"; the visible window
-// scrolls to keep the cursor row in view. There is no soft-wrapping yet —
-// lines longer than the width are the app's concern (a card or the terminal
-// clips them); horizontal scrolling is a future addition.
+// scrolls to keep the cursor row in view. Width, when positive, horizontally
+// scrolls long lines to keep the cursor cell visible. There is no soft-wrapping
+// yet.
 type Textarea struct {
 	lines   []string
 	row     int // cursor line
 	col     int // cursor byte offset within lines[row]
 	goalCol int // desired display column, preserved across vertical moves
-	width   int // reserved for future horizontal handling
+	width   int // visible columns (0 = no horizontal window)
 	height  int // visible rows (0 = show all)
 	offset  int // index of the first visible line
+	xOffset int // display-cell offset of the first visible column
+
+	selectionActive bool
+	anchorRow       int
+	anchorCol       int
 }
 
 // SetValue replaces the content (split on newlines) and resets the cursor.
 func (t *Textarea) SetValue(s string) {
 	t.lines = strings.Split(s, "\n")
-	t.row, t.col, t.goalCol, t.offset = 0, 0, 0, 0
+	t.row, t.col, t.goalCol, t.offset, t.xOffset = 0, 0, 0, 0, 0
+	t.ClearSelection()
 	t.ensure()
 }
 
@@ -41,8 +57,9 @@ func (t Textarea) Value() string {
 	return strings.Join(t.lines, "\n")
 }
 
-// SetSize sets the visible window. Width is reserved (no wrapping yet); height
-// caps the rows View emits and drives vertical scrolling.
+// SetSize sets the visible window. Width caps the columns View emits and drives
+// horizontal scrolling; height caps the rows View emits and drives vertical
+// scrolling.
 func (t *Textarea) SetSize(width, height int) {
 	t.width, t.height = width, height
 	t.ensure()
@@ -56,8 +73,50 @@ func (t Textarea) Col() int { return t.col }
 // Offset is the index of the first visible line.
 func (t Textarea) Offset() int { return t.offset }
 
+// Selection returns the selected logical range, normalized as [Start,End). Col
+// values are byte offsets into their rows. The range is false when no non-empty
+// selection is active.
+func (t Textarea) Selection() (TextRange, bool) {
+	if !t.selectionActive || len(t.lines) == 0 {
+		return TextRange{}, false
+	}
+	cursor := t.clampedPosition(TextPosition{Row: t.row, Col: t.col})
+	anchor := t.clampedPosition(TextPosition{Row: t.anchorRow, Col: t.anchorCol})
+	if compareTextPosition(cursor, anchor) == 0 {
+		return TextRange{}, false
+	}
+	if compareTextPosition(anchor, cursor) < 0 {
+		return TextRange{Start: anchor, End: cursor}, true
+	}
+	return TextRange{Start: cursor, End: anchor}, true
+}
+
+func (t Textarea) SelectedText() string {
+	rng, ok := t.Selection()
+	if !ok {
+		return ""
+	}
+	if rng.Start.Row == rng.End.Row {
+		line := t.lines[rng.Start.Row]
+		return line[rng.Start.Col:rng.End.Col]
+	}
+	parts := make([]string, 0, rng.End.Row-rng.Start.Row+1)
+	parts = append(parts, t.lines[rng.Start.Row][rng.Start.Col:])
+	for row := rng.Start.Row + 1; row < rng.End.Row; row++ {
+		parts = append(parts, t.lines[row])
+	}
+	parts = append(parts, t.lines[rng.End.Row][:rng.End.Col])
+	return strings.Join(parts, "\n")
+}
+
+func (t *Textarea) ClearSelection() {
+	t.selectionActive = false
+	t.anchorRow, t.anchorCol = 0, 0
+}
+
 func (t *Textarea) Insert(r rune) {
 	t.ensure()
+	t.deleteSelection()
 	s := string(r)
 	line := t.lines[t.row]
 	t.lines[t.row] = line[:t.col] + s + line[t.col:]
@@ -69,6 +128,7 @@ func (t *Textarea) Insert(r rune) {
 // InsertNewline splits the current line at the cursor.
 func (t *Textarea) InsertNewline() {
 	t.ensure()
+	t.deleteSelection()
 	line := t.lines[t.row]
 	left, right := line[:t.col], line[t.col:]
 	next := make([]string, 0, len(t.lines)+1)
@@ -84,6 +144,9 @@ func (t *Textarea) InsertNewline() {
 
 func (t *Textarea) Backspace() {
 	t.ensure()
+	if t.deleteSelection() {
+		return
+	}
 	if t.col > 0 {
 		line := t.lines[t.row]
 		start := prevGraphemeBoundary(line, t.col)
@@ -102,6 +165,9 @@ func (t *Textarea) Backspace() {
 
 func (t *Textarea) Delete() {
 	t.ensure()
+	if t.deleteSelection() {
+		return
+	}
 	line := t.lines[t.row]
 	if t.col < len(line) {
 		end := nextGraphemeBoundary(line, t.col)
@@ -115,6 +181,26 @@ func (t *Textarea) Delete() {
 }
 
 func (t *Textarea) MoveLeft() {
+	t.moveLeft()
+	t.ClearSelection()
+}
+
+func (t *Textarea) MoveRight() {
+	t.moveRight()
+	t.ClearSelection()
+}
+
+func (t *Textarea) MoveLeftSelecting() {
+	t.startSelection()
+	t.moveLeft()
+}
+
+func (t *Textarea) MoveRightSelecting() {
+	t.startSelection()
+	t.moveRight()
+}
+
+func (t *Textarea) moveLeft() {
 	t.ensure()
 	if t.col > 0 {
 		t.col = prevGraphemeBoundary(t.lines[t.row], t.col)
@@ -126,7 +212,7 @@ func (t *Textarea) MoveLeft() {
 	t.keepVisible()
 }
 
-func (t *Textarea) MoveRight() {
+func (t *Textarea) moveRight() {
 	t.ensure()
 	if t.col < len(t.lines[t.row]) {
 		t.col = nextGraphemeBoundary(t.lines[t.row], t.col)
@@ -139,6 +225,26 @@ func (t *Textarea) MoveRight() {
 }
 
 func (t *Textarea) MoveWordLeft() {
+	t.moveWordLeft()
+	t.ClearSelection()
+}
+
+func (t *Textarea) MoveWordRight() {
+	t.moveWordRight()
+	t.ClearSelection()
+}
+
+func (t *Textarea) MoveWordLeftSelecting() {
+	t.startSelection()
+	t.moveWordLeft()
+}
+
+func (t *Textarea) MoveWordRightSelecting() {
+	t.startSelection()
+	t.moveWordRight()
+}
+
+func (t *Textarea) moveWordLeft() {
 	t.ensure()
 	if t.col == 0 && t.row > 0 {
 		t.row--
@@ -149,7 +255,7 @@ func (t *Textarea) MoveWordLeft() {
 	t.keepVisible()
 }
 
-func (t *Textarea) MoveWordRight() {
+func (t *Textarea) moveWordRight() {
 	t.ensure()
 	if t.col >= len(t.lines[t.row]) && t.row < len(t.lines)-1 {
 		t.row++
@@ -162,6 +268,9 @@ func (t *Textarea) MoveWordRight() {
 
 func (t *Textarea) DeleteWordLeft() {
 	t.ensure()
+	if t.deleteSelection() {
+		return
+	}
 	if t.col > 0 {
 		line := t.lines[t.row]
 		start := prevWordBoundary(line, t.col)
@@ -181,6 +290,9 @@ func (t *Textarea) DeleteWordLeft() {
 
 func (t *Textarea) DeleteWordRight() {
 	t.ensure()
+	if t.deleteSelection() {
+		return
+	}
 	line := t.lines[t.row]
 	if t.col < len(line) {
 		end := nextWordBoundary(line, t.col)
@@ -196,6 +308,26 @@ func (t *Textarea) DeleteWordRight() {
 }
 
 func (t *Textarea) MoveUp() {
+	t.moveUp()
+	t.ClearSelection()
+}
+
+func (t *Textarea) MoveDown() {
+	t.moveDown()
+	t.ClearSelection()
+}
+
+func (t *Textarea) MoveUpSelecting() {
+	t.startSelection()
+	t.moveUp()
+}
+
+func (t *Textarea) MoveDownSelecting() {
+	t.startSelection()
+	t.moveDown()
+}
+
+func (t *Textarea) moveUp() {
 	t.ensure()
 	if t.row > 0 {
 		t.row--
@@ -204,7 +336,7 @@ func (t *Textarea) MoveUp() {
 	t.keepVisible()
 }
 
-func (t *Textarea) MoveDown() {
+func (t *Textarea) moveDown() {
 	t.ensure()
 	if t.row < len(t.lines)-1 {
 		t.row++
@@ -222,7 +354,7 @@ func (t Textarea) CursorCell() (x, y int) {
 	}
 	row := min(max(t.row, 0), len(t.lines)-1)
 	col := min(max(t.col, 0), len(t.lines[row]))
-	return lipgloss.Width(t.lines[row][:col]), row - t.offset
+	return max(lipgloss.Width(t.lines[row][:col])-t.xOffset, 0), row - t.offset
 }
 
 // View returns the visible lines joined by newlines (windowed to height).
@@ -231,10 +363,33 @@ func (t Textarea) View() string {
 		return ""
 	}
 	if t.height <= 0 {
-		return strings.Join(t.lines, "\n")
+		return horizontalWindowLines(t.lines, t.xOffset, t.width)
 	}
 	end := min(t.offset+t.height, len(t.lines))
-	return strings.Join(t.lines[t.offset:end], "\n")
+	return horizontalWindowLines(t.lines[t.offset:end], t.xOffset, t.width)
+}
+
+// ViewWithSelection renders the visible textarea window and calls render for
+// selected and unselected runs. The callback owns style policy.
+func (t Textarea) ViewWithSelection(render func(text string, selected bool) string) string {
+	if render == nil {
+		return t.View()
+	}
+	if len(t.lines) == 0 {
+		return ""
+	}
+	startRow, endRow := 0, len(t.lines)
+	if t.height > 0 {
+		startRow = t.offset
+		endRow = min(t.offset+t.height, len(t.lines))
+	}
+	rng, hasSelection := t.Selection()
+	lines := make([]string, 0, endRow-startRow)
+	for row := startRow; row < endRow; row++ {
+		selStart, selEnd, selected := selectionColumnsForLine(t.lines[row], row, rng, hasSelection)
+		lines = append(lines, horizontalWindowLineWithSelection(t.lines[row], t.xOffset, t.width, selStart, selEnd, selected, render))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // syncGoal records the cursor's current display column as the goal for
@@ -243,17 +398,29 @@ func (t *Textarea) syncGoal() {
 	t.goalCol = lipgloss.Width(t.lines[t.row][:t.col])
 }
 
-// keepVisible scrolls the window so the cursor row stays inside it.
+// keepVisible scrolls the window so the cursor row and column stay inside it.
 func (t *Textarea) keepVisible() {
-	if t.height <= 0 {
+	if t.height > 0 {
+		if t.row < t.offset {
+			t.offset = t.row
+		} else if t.row >= t.offset+t.height {
+			t.offset = t.row - t.height + 1
+		}
+		t.offset = min(max(t.offset, 0), max(len(t.lines)-t.height, 0))
+	}
+
+	if t.width <= 0 {
+		t.xOffset = 0
 		return
 	}
-	if t.row < t.offset {
-		t.offset = t.row
-	} else if t.row >= t.offset+t.height {
-		t.offset = t.row - t.height + 1
+	line := t.lines[t.row]
+	cursorCol := lipgloss.Width(line[:t.col])
+	if cursorCol < t.xOffset {
+		t.xOffset = cursorCol
+	} else if cursorCol >= t.xOffset+t.width {
+		t.xOffset = displayColumnAtOrAfter(line, cursorCol-t.width+1)
 	}
-	t.offset = min(max(t.offset, 0), max(len(t.lines)-t.height, 0))
+	t.xOffset = min(max(t.xOffset, 0), lipgloss.Width(line))
 }
 
 // ensure guarantees at least one line and a cursor on a valid rune boundary.
@@ -266,6 +433,51 @@ func (t *Textarea) ensure() {
 	for t.col > 0 && t.col < len(t.lines[t.row]) && !utf8.RuneStart(t.lines[t.row][t.col]) {
 		t.col--
 	}
+}
+
+func (t *Textarea) startSelection() {
+	t.ensure()
+	if !t.selectionActive {
+		t.anchorRow = t.row
+		t.anchorCol = t.col
+		t.selectionActive = true
+	}
+}
+
+func (t *Textarea) deleteSelection() bool {
+	rng, ok := t.Selection()
+	if !ok {
+		return false
+	}
+	if rng.Start.Row == rng.End.Row {
+		line := t.lines[rng.Start.Row]
+		t.lines[rng.Start.Row] = line[:rng.Start.Col] + line[rng.End.Col:]
+	} else {
+		merged := t.lines[rng.Start.Row][:rng.Start.Col] + t.lines[rng.End.Row][rng.End.Col:]
+		next := make([]string, 0, len(t.lines)-(rng.End.Row-rng.Start.Row))
+		next = append(next, t.lines[:rng.Start.Row]...)
+		next = append(next, merged)
+		next = append(next, t.lines[rng.End.Row+1:]...)
+		t.lines = next
+	}
+	t.row = rng.Start.Row
+	t.col = rng.Start.Col
+	t.ClearSelection()
+	t.syncGoal()
+	t.keepVisible()
+	return true
+}
+
+func (t Textarea) clampedPosition(pos TextPosition) TextPosition {
+	if len(t.lines) == 0 {
+		return TextPosition{}
+	}
+	row := min(max(pos.Row, 0), len(t.lines)-1)
+	col := min(max(pos.Col, 0), len(t.lines[row]))
+	for col > 0 && col < len(t.lines[row]) && !utf8.RuneStart(t.lines[row][col]) {
+		col--
+	}
+	return TextPosition{Row: row, Col: col}
 }
 
 // removeLineMerging replaces lines[at] and lines[at+1] with a single merged
@@ -295,4 +507,130 @@ func byteOffsetForColumn(line string, col int) int {
 		rest, state = r, st
 	}
 	return at
+}
+
+func horizontalWindowLines(lines []string, offset, width int) string {
+	if width <= 0 && offset <= 0 {
+		return strings.Join(lines, "\n")
+	}
+	windowed := make([]string, len(lines))
+	for i, line := range lines {
+		windowed[i] = horizontalWindowLine(line, offset, width)
+	}
+	return strings.Join(windowed, "\n")
+}
+
+func horizontalWindowLine(line string, offset, width int) string {
+	return horizontalWindowLineWithSelection(line, offset, width, 0, 0, false, func(text string, _ bool) string {
+		return text
+	})
+}
+
+func horizontalWindowLineWithSelection(line string, offset, width int, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) string {
+	if width <= 0 {
+		return renderLineWithSelection(line, selStart, selEnd, hasSelection, render)
+	}
+	right := offset + width
+	state := -1
+	rest := line
+	display := 0
+	var out strings.Builder
+	var segment strings.Builder
+	segmentSelected := false
+	haveSegment := false
+	flush := func() {
+		if !haveSegment {
+			return
+		}
+		out.WriteString(render(segment.String(), segmentSelected))
+		segment.Reset()
+		haveSegment = false
+	}
+	at := 0
+	for len(rest) > 0 {
+		cluster, r, _, st := uniseg.StepString(rest, state)
+		clusterWidth := lipgloss.Width(cluster)
+		nextDisplay := display + clusterWidth
+		if display >= offset && nextDisplay <= right {
+			selected := hasSelection && at >= selStart && at+len(cluster) <= selEnd
+			if haveSegment && selected != segmentSelected {
+				flush()
+			}
+			segment.WriteString(cluster)
+			segmentSelected = selected
+			haveSegment = true
+		}
+		at += len(cluster)
+		display = nextDisplay
+		rest, state = r, st
+	}
+	flush()
+	return out.String()
+}
+
+func displayColumnAtOrAfter(line string, col int) int {
+	if col <= 0 {
+		return 0
+	}
+	state := -1
+	rest := line
+	display := 0
+	for len(rest) > 0 {
+		cluster, r, _, st := uniseg.StepString(rest, state)
+		if display >= col {
+			return display
+		}
+		display += lipgloss.Width(cluster)
+		rest, state = r, st
+	}
+	return display
+}
+
+func renderLineWithSelection(line string, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) string {
+	if !hasSelection {
+		return render(line, false)
+	}
+	var out strings.Builder
+	if selStart > 0 {
+		out.WriteString(render(line[:selStart], false))
+	}
+	if selStart < selEnd {
+		out.WriteString(render(line[selStart:selEnd], true))
+	}
+	if selEnd < len(line) {
+		out.WriteString(render(line[selEnd:], false))
+	}
+	return out.String()
+}
+
+func selectionColumnsForLine(line string, row int, rng TextRange, hasSelection bool) (start, end int, selected bool) {
+	if !hasSelection || row < rng.Start.Row || row > rng.End.Row {
+		return 0, 0, false
+	}
+	switch {
+	case rng.Start.Row == rng.End.Row:
+		return rng.Start.Col, rng.End.Col, rng.Start.Col != rng.End.Col
+	case row == rng.Start.Row:
+		return rng.Start.Col, len(line), rng.Start.Col != len(line)
+	case row == rng.End.Row:
+		return 0, rng.End.Col, rng.End.Col != 0
+	default:
+		return 0, len(line), len(line) != 0
+	}
+}
+
+func compareTextPosition(a, b TextPosition) int {
+	if a.Row < b.Row {
+		return -1
+	}
+	if a.Row > b.Row {
+		return 1
+	}
+	if a.Col < b.Col {
+		return -1
+	}
+	if a.Col > b.Col {
+		return 1
+	}
+	return 0
 }

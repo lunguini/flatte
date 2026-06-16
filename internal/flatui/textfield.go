@@ -14,12 +14,15 @@ import (
 // are treated as indivisible units and never split. clampCursor additionally
 // guards against a manually-set offset landing inside a UTF-8 rune.
 type TextField struct {
-	Value  string
-	Cursor int
+	Value           string
+	Cursor          int
+	selectionActive bool
+	selectionAnchor int
 }
 
 func (f *TextField) Insert(r rune) {
 	f.clampCursor()
+	f.deleteSelection()
 	text := string(r)
 	f.Value = f.Value[:f.Cursor] + text + f.Value[f.Cursor:]
 	f.Cursor += len(text)
@@ -27,6 +30,9 @@ func (f *TextField) Insert(r rune) {
 
 func (f *TextField) Backspace() {
 	f.clampCursor()
+	if f.deleteSelection() {
+		return
+	}
 	if f.Cursor == 0 {
 		return
 	}
@@ -37,6 +43,9 @@ func (f *TextField) Backspace() {
 
 func (f *TextField) Delete() {
 	f.clampCursor()
+	if f.deleteSelection() {
+		return
+	}
 	if f.Cursor >= len(f.Value) {
 		return
 	}
@@ -47,9 +56,23 @@ func (f *TextField) Delete() {
 func (f *TextField) MoveLeft() {
 	f.clampCursor()
 	f.Cursor = prevGraphemeBoundary(f.Value, f.Cursor)
+	f.ClearSelection()
 }
 
 func (f *TextField) MoveRight() {
+	f.clampCursor()
+	f.Cursor = nextGraphemeBoundary(f.Value, f.Cursor)
+	f.ClearSelection()
+}
+
+func (f *TextField) MoveLeftSelecting() {
+	f.startSelection()
+	f.clampCursor()
+	f.Cursor = prevGraphemeBoundary(f.Value, f.Cursor)
+}
+
+func (f *TextField) MoveRightSelecting() {
+	f.startSelection()
 	f.clampCursor()
 	f.Cursor = nextGraphemeBoundary(f.Value, f.Cursor)
 }
@@ -57,15 +80,32 @@ func (f *TextField) MoveRight() {
 func (f *TextField) MoveWordLeft() {
 	f.clampCursor()
 	f.Cursor = prevWordBoundary(f.Value, f.Cursor)
+	f.ClearSelection()
 }
 
 func (f *TextField) MoveWordRight() {
+	f.clampCursor()
+	f.Cursor = nextWordBoundary(f.Value, f.Cursor)
+	f.ClearSelection()
+}
+
+func (f *TextField) MoveWordLeftSelecting() {
+	f.startSelection()
+	f.clampCursor()
+	f.Cursor = prevWordBoundary(f.Value, f.Cursor)
+}
+
+func (f *TextField) MoveWordRightSelecting() {
+	f.startSelection()
 	f.clampCursor()
 	f.Cursor = nextWordBoundary(f.Value, f.Cursor)
 }
 
 func (f *TextField) DeleteWordLeft() {
 	f.clampCursor()
+	if f.deleteSelection() {
+		return
+	}
 	if f.Cursor == 0 {
 		return
 	}
@@ -76,6 +116,9 @@ func (f *TextField) DeleteWordLeft() {
 
 func (f *TextField) DeleteWordRight() {
 	f.clampCursor()
+	if f.deleteSelection() {
+		return
+	}
 	if f.Cursor >= len(f.Value) {
 		return
 	}
@@ -86,6 +129,37 @@ func (f *TextField) DeleteWordRight() {
 func (f *TextField) SetCursor(cursor int) {
 	f.Cursor = cursor
 	f.clampCursor()
+	f.ClearSelection()
+}
+
+// Selection returns the selected byte range, normalized as [start,end). The
+// range is false when no non-empty selection is active.
+func (f TextField) Selection() (start, end int, ok bool) {
+	if !f.selectionActive {
+		return 0, 0, false
+	}
+	cursor := f.clampedOffset(f.Cursor)
+	anchor := f.clampedOffset(f.selectionAnchor)
+	if cursor == anchor {
+		return 0, 0, false
+	}
+	if anchor < cursor {
+		return anchor, cursor, true
+	}
+	return cursor, anchor, true
+}
+
+func (f TextField) SelectedText() string {
+	start, end, ok := f.Selection()
+	if !ok {
+		return ""
+	}
+	return f.Value[start:end]
+}
+
+func (f *TextField) ClearSelection() {
+	f.selectionActive = false
+	f.selectionAnchor = 0
 }
 
 // CursorColumn returns the cursor offset in display cells within the
@@ -94,6 +168,31 @@ func (f *TextField) SetCursor(cursor int) {
 func (f TextField) CursorColumn() int {
 	f.clampCursor()
 	return lipgloss.Width(f.Value[:f.Cursor])
+}
+
+func (f *TextField) startSelection() {
+	f.clampCursor()
+	if !f.selectionActive {
+		f.selectionAnchor = f.Cursor
+		f.selectionActive = true
+	}
+}
+
+func (f *TextField) deleteSelection() bool {
+	start, end, ok := f.Selection()
+	if !ok {
+		return false
+	}
+	f.Value = f.Value[:start] + f.Value[end:]
+	f.Cursor = start
+	f.ClearSelection()
+	return true
+}
+
+func (f TextField) clampedOffset(offset int) int {
+	f.Cursor = offset
+	f.clampCursor()
+	return f.Cursor
 }
 
 func (f *TextField) clampCursor() {

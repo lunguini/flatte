@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/lunguini/flat/internal/flatcore"
 	"github.com/lunguini/flat/internal/flatui"
 )
@@ -73,7 +74,13 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 			s.ta.Delete()
 		}
 	case flatcore.KeyLeft:
-		if wordMove(key.Mod) {
+		if key.Mod.Contains(flatcore.ModShift) && wordMove(key.Mod) {
+			s.lastAction = "select-word-left"
+			s.ta.MoveWordLeftSelecting()
+		} else if key.Mod.Contains(flatcore.ModShift) {
+			s.lastAction = "select-left"
+			s.ta.MoveLeftSelecting()
+		} else if wordMove(key.Mod) {
 			s.lastAction = "move-word-left"
 			s.ta.MoveWordLeft()
 		} else {
@@ -81,7 +88,13 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 			s.ta.MoveLeft()
 		}
 	case flatcore.KeyRight:
-		if wordMove(key.Mod) {
+		if key.Mod.Contains(flatcore.ModShift) && wordMove(key.Mod) {
+			s.lastAction = "select-word-right"
+			s.ta.MoveWordRightSelecting()
+		} else if key.Mod.Contains(flatcore.ModShift) {
+			s.lastAction = "select-right"
+			s.ta.MoveRightSelecting()
+		} else if wordMove(key.Mod) {
 			s.lastAction = "move-word-right"
 			s.ta.MoveWordRight()
 		} else {
@@ -89,11 +102,21 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 			s.ta.MoveRight()
 		}
 	case flatcore.KeyUp:
-		s.lastAction = "move-up"
-		s.ta.MoveUp()
+		if key.Mod.Contains(flatcore.ModShift) {
+			s.lastAction = "select-up"
+			s.ta.MoveUpSelecting()
+		} else {
+			s.lastAction = "move-up"
+			s.ta.MoveUp()
+		}
 	case flatcore.KeyDown:
-		s.lastAction = "move-down"
-		s.ta.MoveDown()
+		if key.Mod.Contains(flatcore.ModShift) {
+			s.lastAction = "select-down"
+			s.ta.MoveDownSelecting()
+		} else {
+			s.lastAction = "move-down"
+			s.ta.MoveDown()
+		}
 	case flatcore.KeyCharacter:
 		if handleWordDeleteKey(key, s.ta.DeleteWordLeft, s.ta.DeleteWordRight) {
 			if key.Mod.Contains(flatcore.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
@@ -204,7 +227,7 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		flatui.Subtle("multi-line textarea sample"),
 		"",
 	}
-	lines = append(lines, strings.Split(s.ta.View(), "\n")...)
+	lines = append(lines, strings.Split(s.ta.ViewWithSelection(renderSelection), "\n")...)
 	lines = append(lines, "", flatui.Subtle("arrows move  enter newline  esc quit"))
 	if s.debugKeys {
 		lines = append(lines, flatui.Subtle(fmt.Sprintf("last: %s -> %s", s.lastKey, s.lastAction)))
@@ -217,6 +240,16 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	cx, cy := s.ta.CursorCell()
 	frame.Cursor = &flatcore.Cursor{X: ox + cx, Y: oy + 3 + cy}
 	return frame
+}
+
+func renderSelection(text string, selected bool) string {
+	if !selected {
+		return text
+	}
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color("16")).
+		Background(lipgloss.Color("229")).
+		Render(text)
 }
 
 func main() {

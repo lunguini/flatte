@@ -129,6 +129,31 @@ func TestTextFieldDeletesByWord(t *testing.T) {
 	}
 }
 
+func TestTextFieldSelectingMoveReportsRangeAndReplacesSelection(t *testing.T) {
+	field := TextField{Value: "abcde", Cursor: 2}
+
+	field.MoveRightSelecting()
+	field.MoveRightSelecting()
+	start, end, ok := field.Selection()
+	if !ok || start != 2 || end != 4 {
+		t.Fatalf("Selection() = (%d,%d,%v), want (2,4,true)", start, end, ok)
+	}
+	if got := field.SelectedText(); got != "cd" {
+		t.Fatalf("SelectedText() = %q, want %q", got, "cd")
+	}
+
+	field.Insert('X')
+	if field.Value != "abXe" {
+		t.Fatalf("Value after replacing selection = %q, want %q", field.Value, "abXe")
+	}
+	if field.Cursor != 3 {
+		t.Fatalf("Cursor after replacing selection = %d, want 3", field.Cursor)
+	}
+	if _, _, ok := field.Selection(); ok {
+		t.Fatal("selection still active after insert")
+	}
+}
+
 func TestCursorColumnCountsDisplayCells(t *testing.T) {
 	cases := []struct {
 		name   string

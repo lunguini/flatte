@@ -110,6 +110,25 @@ func TestModifiedBackspaceAndDeleteRemoveWords(t *testing.T) {
 	}
 }
 
+func TestShiftArrowsSelectAndTypingReplacesSelection(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "abcd")
+
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyLeft, Mod: flatcore.ModShift}, flatcore.Effects[State]{})
+	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyLeft, Mod: flatcore.ModShift}, flatcore.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "cd" {
+		t.Fatalf("SelectedText() = %q, want %q", got, "cd")
+	}
+
+	typeRunes(s, "X")
+	if s.ta.Value() != "abX" {
+		t.Fatalf("Value after replacing selection = %q, want %q", s.ta.Value(), "abX")
+	}
+	if _, ok := s.ta.Selection(); ok {
+		t.Fatal("selection still active after typing")
+	}
+}
+
 func TestReadlineWordDeleteAliases(t *testing.T) {
 	s := emptyState()
 	s.ta.SetValue("hello world\nnext line")
@@ -238,6 +257,23 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	// card origin (3,1) + 3 pinned lines + cell (0,0) = (3,4)
 	if frame.Cursor.X != 3 || frame.Cursor.Y != 4 {
 		t.Fatalf("cursor = %+v, want (3,4)", *frame.Cursor)
+	}
+}
+
+func TestViewKeepsLongLineCursorInsideTextareaBody(t *testing.T) {
+	s := emptyState()
+	s.layout(18, 10)
+	typeRunes(s, "abcdefghijklmnopqrstuvwxyz")
+
+	if got := s.ta.View(); got != "pqrstuvwxyz" {
+		t.Fatalf("textarea view = %q, want %q", got, "pqrstuvwxyz")
+	}
+	frame := View(s, flatcore.RenderContext{Width: 18})
+	if frame.Cursor == nil {
+		t.Fatal("editor view has no cursor")
+	}
+	if frame.Cursor.X != 14 || frame.Cursor.Y != 4 {
+		t.Fatalf("cursor = %+v, want (14,4)", *frame.Cursor)
 	}
 }
 
