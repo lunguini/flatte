@@ -3,7 +3,7 @@ package flatui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -16,7 +16,7 @@ const (
 func Card(lines []string, maxWidth int) string {
 	width := FrameWidth(maxWidth, lines)
 	return lipgloss.NewStyle().
-		Width(ContentWidth(width)).
+		Width(width).
 		Padding(0, 2).
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).

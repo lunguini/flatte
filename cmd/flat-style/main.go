@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
+	"image/color"
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 
 	"github.com/lunguini/flat"
 	"github.com/lunguini/flat/flatui"
@@ -77,14 +76,14 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 }
 
 type palette struct {
-	base     lipgloss.Color
-	muted    lipgloss.Color
-	panel    lipgloss.Color
-	accent   lipgloss.Color
-	good     lipgloss.Color
-	warn     lipgloss.Color
-	bad      lipgloss.Color
-	selected lipgloss.Color
+	base     color.Color
+	muted    color.Color
+	panel    color.Color
+	accent   color.Color
+	good     color.Color
+	warn     color.Color
+	bad      color.Color
+	selected color.Color
 }
 
 func defaultPalette() palette {
@@ -113,9 +112,7 @@ type styles struct {
 }
 
 func newStyles(p palette) styles {
-	renderer := lipgloss.NewRenderer(io.Discard)
-	renderer.SetColorProfile(termenv.TrueColor)
-	base := lipgloss.NewStyle().Renderer(renderer)
+	base := lipgloss.NewStyle()
 	return styles{
 		title: base.
 			Bold(true).
@@ -159,8 +156,8 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		st.status.Render(fmt.Sprintf(" Delivery %3.0f%%", s.progress.Percent())),
 	)
 
-	left := st.panel.Width(max(leftOuter-4, 1)).Render(deliveryPanel(s, st, leftOuter-4))
-	right := st.panel.Width(max(rightOuter-4, 1)).Render(palettePanel(st, rightOuter-4))
+	left := st.panel.Width(leftOuter - 2).Render(deliveryPanel(s, st, leftOuter-4))
+	right := st.panel.Width(rightOuter - 2).Render(palettePanel(st, rightOuter-4))
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", right)
 
 	footer := st.subtle.Render("j/k move  h/l progress  q quit")
