@@ -2,7 +2,9 @@ package flat
 
 import (
 	"io"
+	"os"
 
+	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
 )
 
@@ -12,7 +14,8 @@ const (
 )
 
 type RenderContext struct {
-	Width int
+	Width        int
+	ColorProfile colorprofile.Profile
 }
 
 type fdWriter interface {
@@ -37,7 +40,13 @@ func terminalSize(out io.Writer) (width, height int) {
 	return width, height
 }
 
+// RenderContextFor reports the terminal facts available to View. It mirrors
+// renderer color-profile detection so apps can pick theme styles without
+// owning terminal probing.
 func RenderContextFor(out io.Writer) RenderContext {
 	width, _ := terminalSize(out)
-	return RenderContext{Width: width}
+	return RenderContext{
+		Width:        width,
+		ColorProfile: detectRendererColorProfile(out, os.Environ()),
+	}
 }
