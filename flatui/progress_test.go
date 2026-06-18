@@ -1,6 +1,12 @@
 package flatui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+)
 
 func TestProgressRendersFilledCellsAndPercent(t *testing.T) {
 	p := NewProgress(10)
@@ -41,5 +47,22 @@ func TestProgressZeroValueIsSafe(t *testing.T) {
 
 	if got, want := p.View(), " 75%"; got != want {
 		t.Fatalf("zero-width View() = %q, want %q", got, want)
+	}
+}
+
+func TestProgressViewWithStyle(t *testing.T) {
+	p := NewProgress(4)
+	p.SetPercent(50)
+
+	got := p.ViewWithStyle(ProgressStyle{
+		Filled: lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+		Empty:  lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
+		Label:  lipgloss.NewStyle().Bold(true),
+	})
+	if strings.Count(got, "\x1b[") < 3 {
+		t.Fatalf("ViewWithStyle() missing styled segments: %q", got)
+	}
+	if clean := ansi.Strip(got); clean != "██░░   50%" {
+		t.Fatalf("stripped ViewWithStyle() = %q, want %q", clean, "██░░   50%")
 	}
 }

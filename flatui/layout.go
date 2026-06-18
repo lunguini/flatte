@@ -14,28 +14,41 @@ const (
 )
 
 func Card(lines []string, maxWidth int) string {
+	return CardWithStyle(lines, maxWidth, CardStyle{})
+}
+
+func CardWithStyle(lines []string, maxWidth int, style CardStyle) string {
 	width := FrameWidth(maxWidth, lines)
-	return lipgloss.NewStyle().
+	container := style.Container.
 		Width(width).
 		Padding(0, 2).
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Render(strings.Join(lines, "\n"))
+		Border(lipgloss.NormalBorder())
+	if style.BorderForeground != nil {
+		container = container.BorderForeground(style.BorderForeground)
+	} else {
+		container = container.BorderForeground(lipgloss.Color("240"))
+	}
+	return container.Render(strings.Join(lines, "\n"))
 }
 
 func Title(text string) string {
-	return lipgloss.NewStyle().
+	return TitleWithStyle(text, lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("230")).
 		Background(lipgloss.Color("235")).
-		Padding(0, 1).
-		Render(text)
+		Padding(0, 1))
+}
+
+func TitleWithStyle(text string, style lipgloss.Style) string {
+	return style.Render(text)
 }
 
 func Subtle(text string) string {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("244")).
-		Render(text)
+	return SubtleWithStyle(text, lipgloss.NewStyle().Foreground(lipgloss.Color("244")))
+}
+
+func SubtleWithStyle(text string, style lipgloss.Style) string {
+	return style.Render(text)
 }
 
 // Overlay draws layer centered over base as a cell-buffer composite: both

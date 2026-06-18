@@ -65,6 +65,10 @@ func (t Table) Header() string {
 	return t.alignRow(titles)
 }
 
+func (t Table) HeaderWithStyle(style TableStyle) string {
+	return style.Header.Render(t.Header())
+}
+
 // View returns the visible body rows, each aligned to the columns and passed
 // through renderRow with whether it is the selected row. renderRow may be nil
 // to render the aligned rows verbatim.
@@ -75,6 +79,15 @@ func (t Table) View(renderRow func(text string, selected bool) string) string {
 			return renderRow(text, selected)
 		}
 		return text
+	})
+}
+
+func (t Table) ViewWithStyle(style TableStyle) string {
+	return t.View(func(text string, selected bool) string {
+		if selected {
+			return style.Active.Render(text)
+		}
+		return style.Row.Render(text)
 	})
 }
 

@@ -28,6 +28,30 @@ func TestCardUsesCompactWidthAndBorders(t *testing.T) {
 	}
 }
 
+func TestCardWithStyleUsesProvidedStyles(t *testing.T) {
+	got := CardWithStyle([]string{"hello"}, 20, CardStyle{
+		BorderForeground: lipgloss.Color("5"),
+	})
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("CardWithStyle() missing ANSI styling: %q", got)
+	}
+	if clean := ansi.Strip(got); !strings.Contains(clean, "hello") {
+		t.Fatalf("CardWithStyle() missing content: %q", clean)
+	}
+}
+
+func TestTitleAndSubtleWithStyleUseProvidedStyle(t *testing.T) {
+	title := TitleWithStyle("Hi", lipgloss.NewStyle().Foreground(lipgloss.Color("2")))
+	if !strings.Contains(title, "\x1b[") || ansi.Strip(title) != "Hi" {
+		t.Fatalf("TitleWithStyle() = %q", title)
+	}
+
+	subtle := SubtleWithStyle("lo", lipgloss.NewStyle().Bold(true))
+	if !strings.Contains(subtle, "\x1b[") || ansi.Strip(subtle) != "lo" {
+		t.Fatalf("SubtleWithStyle() = %q", subtle)
+	}
+}
+
 func TestCardCapsWidthToRenderContext(t *testing.T) {
 	frame := Card([]string{"  this line is too long for the target width"}, 24)
 

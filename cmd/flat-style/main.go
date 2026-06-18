@@ -179,7 +179,11 @@ func deliveryPanel(s *State, st styles, width int) string {
 	if list != "" {
 		rows = append(rows, strings.Split(list, "\n")...)
 	}
-	rows = append(rows, "", truncate(s.progress.View(), width))
+	rows = append(rows, "", truncate(s.progress.ViewWithStyle(flatui.ProgressStyle{
+		Filled: st.good,
+		Empty:  st.subtle,
+		Label:  st.section,
+	}), width))
 	return strings.Join(rows, "\n")
 }
 

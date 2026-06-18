@@ -47,3 +47,21 @@ func (p Progress) View() string {
 	filled = min(max(filled, 0), p.width)
 	return strings.Repeat("█", filled) + strings.Repeat("░", p.width-filled) + "  " + label
 }
+
+func (p Progress) ViewWithStyle(style ProgressStyle) string {
+	label := fmt.Sprintf("%3d%%", int(math.Round(p.percent)))
+	if p.width <= 0 {
+		return style.Label.Render(label)
+	}
+	filled := int(math.Round(p.percent / 100 * float64(p.width)))
+	filled = min(max(filled, 0), p.width)
+	filledText := strings.Repeat("█", filled)
+	emptyText := strings.Repeat("░", p.width-filled)
+	if filledText != "" {
+		filledText = style.Filled.Render(filledText)
+	}
+	if emptyText != "" {
+		emptyText = style.Empty.Render(emptyText)
+	}
+	return filledText + emptyText + "  " + style.Label.Render(label)
+}

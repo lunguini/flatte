@@ -85,6 +85,7 @@ flatui
   func CardBodyHeight
   func CardBodyWidth
   func CardOrigin
+  func CardWithStyle
   func ContentWidth
   func FrameWidth
   func NewProgress
@@ -92,7 +93,9 @@ flatui
   func Overlay
   func OverlayOrigin
   func Subtle
+  func SubtleWithStyle
   func Title
+  func TitleWithStyle
   method List.Count
   method List.Cursor
   method List.MoveDown
@@ -106,12 +109,14 @@ flatui
   method Progress.SetPercent
   method Progress.SetWidth
   method Progress.View
+  method Progress.ViewWithStyle
   method Progress.Width
   method Spinner.Frame
   method Spinner.Tick
   method Spinner.View
   method Table.Cursor
   method Table.Header
+  method Table.HeaderWithStyle
   method Table.MoveDown
   method Table.MoveUp
   method Table.Select
@@ -120,6 +125,7 @@ flatui
   method Table.SetHeight
   method Table.SetRows
   method Table.View
+  method Table.ViewWithStyle
   method TextField.Backspace
   method TextField.ClearSelection
   method TextField.CursorColumn
@@ -188,11 +194,14 @@ flatui
   method Viewport.TotalLines
   method Viewport.View
   method Viewport.VisibleLines
+  type CardStyle
   type Column
   type List
   type Progress
+  type ProgressStyle
   type Spinner
   type Table
+  type TableStyle
   type TextField
   type TextPosition
   type TextRange

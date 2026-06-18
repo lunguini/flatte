@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func sampleTable() Table {
@@ -100,5 +101,26 @@ func TestTableEmptyView(t *testing.T) {
 	tb.SetHeight(3)
 	if got := tb.View(nil); got != "" {
 		t.Fatalf("empty View() = %q, want empty", got)
+	}
+}
+
+func TestTableViewWithStyle(t *testing.T) {
+	tb := sampleTable()
+	gotHeader := tb.HeaderWithStyle(TableStyle{
+		Header: lipgloss.NewStyle().Bold(true),
+	})
+	if !strings.Contains(gotHeader, "\x1b[") || ansi.Strip(gotHeader) != tb.Header() {
+		t.Fatalf("HeaderWithStyle() = %q", gotHeader)
+	}
+
+	gotBody := tb.ViewWithStyle(TableStyle{
+		Row:    lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+		Active: lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+	})
+	if strings.Count(gotBody, "\x1b[") < 2 {
+		t.Fatalf("ViewWithStyle() missing styled rows: %q", gotBody)
+	}
+	if ansi.Strip(gotBody) != tb.View(nil) {
+		t.Fatalf("stripped ViewWithStyle() = %q, want %q", ansi.Strip(gotBody), tb.View(nil))
 	}
 }
