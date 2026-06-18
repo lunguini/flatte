@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 const defaultTickInterval = time.Second
@@ -17,8 +17,8 @@ type State struct {
 	paused bool
 }
 
-func Init(s *State, fx flatcore.Effects[State]) {
-	flatcore.Every(fx, "ticker.tick", tickInterval(), applyTick)
+func Init(s *State, fx flat.Effects[State]) {
+	flat.Every(fx, "ticker.tick", tickInterval(), applyTick)
 }
 
 func applyTick(s *State, _ time.Time) {
@@ -27,9 +27,9 @@ func applyTick(s *State, _ time.Time) {
 	}
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	key, ok := ev.(flatcore.KeyEvent)
-	if !ok || key.Key != flatcore.KeyCharacter {
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+	key, ok := ev.(flat.KeyEvent)
+	if !ok || key.Key != flat.KeyCharacter {
 		return
 	}
 	switch key.Rune {
@@ -42,7 +42,7 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	status := "running"
 	if s.paused {
 		status = "paused"
@@ -57,7 +57,7 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		"",
 		flatui.Subtle("space/p pause | r reset | q quit"),
 	}
-	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func tickInterval() time.Duration {
@@ -74,7 +74,7 @@ func tickInterval() time.Duration {
 
 func main() {
 	state := &State{}
-	err := flatcore.Run(context.Background(), flatcore.App[State]{
+	err := flat.Run(context.Background(), flat.App[State]{
 		State:  state,
 		Init:   Init,
 		Handle: Handle,

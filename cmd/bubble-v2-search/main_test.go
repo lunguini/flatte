@@ -6,8 +6,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/lunguini/flat/internal/flatest"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flat/flatui"
 )
 
 func TestTypedCharacterStartsSearchAndResultApplies(t *testing.T) {

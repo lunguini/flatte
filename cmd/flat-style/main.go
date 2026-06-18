@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 type delivery struct {
@@ -45,22 +45,22 @@ func (s *State) layout(width, height int) {
 	s.progress.SetWidth(max(width/4, 8))
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	switch ev := ev.(type) {
-	case flatcore.ResizeEvent:
+	case flat.ResizeEvent:
 		s.layout(ev.Width, ev.Height)
-	case flatcore.KeyEvent:
+	case flat.KeyEvent:
 		handleKey(s, ev, fx)
 	}
 }
 
-func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
+func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	switch key.Key {
-	case flatcore.KeyDown:
+	case flat.KeyDown:
 		s.list.MoveDown()
-	case flatcore.KeyUp:
+	case flat.KeyUp:
 		s.list.MoveUp()
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		switch key.Rune {
 		case 'j', 'J':
 			s.list.MoveDown()
@@ -144,7 +144,7 @@ func newStyles(p palette) styles {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	st := newStyles(defaultPalette())
 	width := max(ctx.Width, 40)
 	bodyWidth := max(width-4, 36)
@@ -165,7 +165,7 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 
 	footer := st.subtle.Render("j/k move  h/l progress  q quit")
 	content := lipgloss.JoinVertical(lipgloss.Left, header, "", body, "", footer)
-	return flatcore.Frame{Content: trimRightLines(content)}
+	return flat.Frame{Content: trimRightLines(content)}
 }
 
 func deliveryPanel(s *State, st styles, width int) string {
@@ -237,7 +237,7 @@ func trimRightLines(s string) string {
 }
 
 func main() {
-	if err := flatcore.Run(context.Background(), flatcore.App[State]{
+	if err := flat.Run(context.Background(), flat.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,

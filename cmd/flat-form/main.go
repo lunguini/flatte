@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 type Field struct {
@@ -33,8 +33,8 @@ func NewState() *State {
 	}
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	key, ok := ev.(flatcore.KeyEvent)
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+	key, ok := ev.(flat.KeyEvent)
 	if !ok {
 		return
 	}
@@ -45,29 +45,29 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 
 	field := &s.fields[s.focused]
 	switch key.Key {
-	case flatcore.KeyTab:
+	case flat.KeyTab:
 		s.focused = (s.focused + 1) % len(s.fields)
-	case flatcore.KeyEscape:
+	case flat.KeyEscape:
 		s.editing = false
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		s.submitted = fmt.Sprintf("name=%s filter=%s", s.fields[0].Input.Value, s.fields[1].Input.Value)
-	case flatcore.KeyLeft:
+	case flat.KeyLeft:
 		if wordMove(key.Mod) {
 			field.Input.MoveWordLeft()
 		} else {
 			field.Input.MoveLeft()
 		}
-	case flatcore.KeyRight:
+	case flat.KeyRight:
 		if wordMove(key.Mod) {
 			field.Input.MoveWordRight()
 		} else {
 			field.Input.MoveRight()
 		}
-	case flatcore.KeyBackspace:
+	case flat.KeyBackspace:
 		field.Input.Backspace()
-	case flatcore.KeyDelete:
+	case flat.KeyDelete:
 		field.Input.Delete()
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		if handleAltWordKey(key, field.Input.MoveWordLeft, field.Input.MoveWordRight) {
 			return
 		}
@@ -75,12 +75,12 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	}
 }
 
-func wordMove(mod flatcore.Mod) bool {
-	return mod.Contains(flatcore.ModAlt) || mod.Contains(flatcore.ModCtrl)
+func wordMove(mod flat.Mod) bool {
+	return mod.Contains(flat.ModAlt) || mod.Contains(flat.ModCtrl)
 }
 
-func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatcore.ModAlt) {
+func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flat.ModAlt) {
 		return false
 	}
 	switch key.Rune {
@@ -94,18 +94,18 @@ func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-func handleBlurred(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
+func handleBlurred(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	switch key.Key {
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		s.editing = true
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		if key.Rune == 'q' || key.Rune == 'Q' {
 			fx.Quit()
 		}
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	lines := []string{
 		flatui.Title("Flat Form"),
 		flatui.Subtle("multi-input retained state sample"),
@@ -128,11 +128,11 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	}
 	lines = append(lines, "", flatui.Subtle("tab focus | arrows move | esc blur | q quits blurred"))
 
-	frame := flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	frame := flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 	if s.editing {
 		originX, originY := flatui.CardOrigin()
 		field := s.fields[s.focused]
-		frame.Cursor = &flatcore.Cursor{
+		frame.Cursor = &flat.Cursor{
 			X: originX + lipgloss.Width("> "+field.Label+": ") + field.Input.CursorColumn(),
 			Y: originY + 3 + s.focused, // title, subtle, blank precede the fields
 		}
@@ -146,7 +146,7 @@ func renderField(s *State, index int) string {
 
 func main() {
 	state := NewState()
-	err := flatcore.Run(context.Background(), flatcore.App[State]{
+	err := flat.Run(context.Background(), flat.App[State]{
 		State:  state,
 		Handle: Handle,
 		View:   View,

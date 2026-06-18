@@ -10,8 +10,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 const clipboardLine = "flatte: copied from the capability demo"
@@ -28,23 +28,23 @@ func NewState() *State {
 	return &State{status: "ready"}
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	switch ev := ev.(type) {
-	case flatcore.ClipboardEvent:
+	case flat.ClipboardEvent:
 		s.clipboard = ev.Text
 		s.status = "clipboard read"
-	case flatcore.KeyEvent:
+	case flat.KeyEvent:
 		handleKey(s, ev, fx)
 	}
 }
 
-func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
-	if key.Key != flatcore.KeyCharacter {
+func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+	if key.Key != flat.KeyCharacter {
 		return
 	}
-	mod := key.Mod &^ flatcore.ModShift
+	mod := key.Mod &^ flat.ModShift
 	if mod != 0 {
-		if mod == flatcore.ModCtrl && (key.Rune == 'z' || key.Rune == 'Z') {
+		if mod == flat.ModCtrl && (key.Rune == 'z' || key.Rune == 'Z') {
 			s.status = "suspended; resumed"
 			fx.Suspend()
 		}
@@ -67,7 +67,7 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 	}
 }
 
-func openEditor(s *State, fx flatcore.Effects[State]) {
+func openEditor(s *State, fx flat.Effects[State]) {
 	file, err := os.CreateTemp("", "flat-capable-*.txt")
 	if err != nil {
 		s.status = "temp file: " + err.Error()
@@ -82,7 +82,7 @@ func openEditor(s *State, fx flatcore.Effects[State]) {
 		editor = "vi"
 	}
 	s.status = "running " + editor + "…"
-	flatcore.Exec(fx, "editor", exec.Command(editor, name), func(s *State, err error) {
+	flat.Exec(fx, "editor", exec.Command(editor, name), func(s *State, err error) {
 		defer func() { _ = os.Remove(name) }()
 		if err != nil {
 			s.status = "editor: " + err.Error()
@@ -98,7 +98,7 @@ func openEditor(s *State, fx flatcore.Effects[State]) {
 	})
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	clip := s.clipboard
 	if clip == "" {
 		clip = "(none read yet)"
@@ -118,12 +118,12 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		"",
 		flatui.Subtle("y copy | p paste | z/Ctrl-Z suspend | e edit | q quit"),
 	}
-	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func main() {
 	state := NewState()
-	err := flatcore.Run(context.Background(), flatcore.App[State]{
+	err := flat.Run(context.Background(), flat.App[State]{
 		State:  state,
 		Handle: Handle,
 		View:   View,

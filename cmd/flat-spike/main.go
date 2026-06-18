@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 const defaultLoadDelay = 250 * time.Millisecond
@@ -31,26 +31,26 @@ func NewState() *State {
 // title, subtitle, and a blank line precede it.
 const listTopLine = 3
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	switch ev := ev.(type) {
-	case flatcore.KeyEvent:
+	case flat.KeyEvent:
 		handleKey(s, ev, fx)
-	case flatcore.MouseEvent:
+	case flat.MouseEvent:
 		handleMouse(s, ev)
 	}
 }
 
-func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
+func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	switch key.Key {
-	case flatcore.KeyDown:
+	case flat.KeyDown:
 		moveDown(s)
-	case flatcore.KeyUp:
+	case flat.KeyUp:
 		moveUp(s)
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		if len(s.models) > 0 {
 			s.selectedModel = s.models[s.cursor]
 		}
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		switch key.Rune {
 		case 'j', 'J':
 			moveDown(s)
@@ -62,14 +62,14 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 	}
 }
 
-func handleMouse(s *State, m flatcore.MouseEvent) {
+func handleMouse(s *State, m flat.MouseEvent) {
 	switch m.Button {
-	case flatcore.MouseWheelUp:
+	case flat.MouseWheelUp:
 		moveUp(s)
-	case flatcore.MouseWheelDown:
+	case flat.MouseWheelDown:
 		moveDown(s)
-	case flatcore.MouseLeft:
-		if m.Action != flatcore.MousePress {
+	case flat.MouseLeft:
+		if m.Action != flat.MousePress {
 			return
 		}
 		// Map the click row back to a model index through the same layout
@@ -96,7 +96,7 @@ func moveUp(s *State) {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	rows := make([]string, 0, len(s.models))
 	if s.loading {
 		rows = append(rows, flatui.Subtle("  loading models..."))
@@ -133,7 +133,7 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		flatui.Subtle("j/k or click/wheel | enter select | q quit"),
 	}
 
-	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func itemStyle() lipgloss.Style {
@@ -157,8 +157,8 @@ func errorStyle() lipgloss.Style {
 		Foreground(lipgloss.Color("203"))
 }
 
-func loadModels(s *State, fx flatcore.Effects[State]) {
-	flatcore.Go(fx, "models.load", fetchModels, func(s *State, models []string, err error) {
+func loadModels(s *State, fx flat.Effects[State]) {
+	flat.Go(fx, "models.load", fetchModels, func(s *State, models []string, err error) {
 		s.loading = false
 		if err != nil {
 			s.err = err
@@ -194,12 +194,12 @@ func loadDelay() time.Duration {
 
 func main() {
 	state := NewState()
-	err := flatcore.Run(context.Background(), flatcore.App[State]{
+	err := flat.Run(context.Background(), flat.App[State]{
 		State:  state,
 		Init:   loadModels,
 		Handle: Handle,
 		View:   View,
-	}, flatcore.WithMouse(flatcore.MouseModeCellMotion))
+	}, flat.WithMouse(flat.MouseModeCellMotion))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

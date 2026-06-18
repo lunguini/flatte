@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lunguini/flat/internal/flatest"
+	"github.com/lunguini/flat/flatest"
 )
 
 func TestEnterOpensModalAndStartsWaiting(t *testing.T) {

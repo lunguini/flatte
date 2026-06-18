@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 type screen int
@@ -33,8 +33,8 @@ func NewState() *State {
 	return &State{}
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	key, ok := ev.(flatcore.KeyEvent)
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+	key, ok := ev.(flat.KeyEvent)
 	if !ok {
 		return
 	}
@@ -48,13 +48,13 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	}
 }
 
-func handleHome(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
+func handleHome(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	switch key.Key {
-	case flatcore.KeyDown:
+	case flat.KeyDown:
 		homeCursorDown(s)
-	case flatcore.KeyUp:
+	case flat.KeyUp:
 		homeCursorUp(s)
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		switch s.homeCursor {
 		case 0:
 			s.selected = s.homeCursor
@@ -69,7 +69,7 @@ func handleHome(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 			s.screen = screenSettings
 			s.settingsName.SetCursor(len(s.settingsName.Value))
 		}
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		switch key.Rune {
 		case 'j', 'J':
 			homeCursorDown(s)
@@ -93,15 +93,15 @@ func homeCursorUp(s *State) {
 	}
 }
 
-func handleDetails(s *State, key flatcore.KeyEvent) {
+func handleDetails(s *State, key flat.KeyEvent) {
 	switch key.Key {
-	case flatcore.KeyDown:
+	case flat.KeyDown:
 		detailsCursorDown(s)
-	case flatcore.KeyUp:
+	case flat.KeyUp:
 		detailsCursorUp(s)
-	case flatcore.KeyEscape:
+	case flat.KeyEscape:
 		s.screen = screenHome
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		switch key.Rune {
 		case 'j', 'J':
 			detailsCursorDown(s)
@@ -123,31 +123,31 @@ func detailsCursorUp(s *State) {
 	}
 }
 
-func handleSettings(s *State, key flatcore.KeyEvent) {
+func handleSettings(s *State, key flat.KeyEvent) {
 	switch key.Key {
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		s.settingsName.Insert(key.Rune)
-	case flatcore.KeyBackspace:
+	case flat.KeyBackspace:
 		s.settingsName.Backspace()
-	case flatcore.KeyDelete:
+	case flat.KeyDelete:
 		s.settingsName.Delete()
-	case flatcore.KeyLeft:
+	case flat.KeyLeft:
 		s.settingsName.MoveLeft()
-	case flatcore.KeyRight:
+	case flat.KeyRight:
 		s.settingsName.MoveRight()
-	case flatcore.KeyEscape, flatcore.KeyEnter:
+	case flat.KeyEscape, flat.KeyEnter:
 		s.screen = screenHome
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
-	frame := flatcore.Frame{
+func View(s *State, ctx flat.RenderContext) flat.Frame {
+	frame := flat.Frame{
 		Content: viewContent(s, ctx),
 		Title:   "Flatte \u2014 " + screenName(s.screen),
 	}
 	if s.screen == screenSettings {
 		originX, originY := flatui.CardOrigin()
-		frame.Cursor = &flatcore.Cursor{
+		frame.Cursor = &flat.Cursor{
 			X: originX + lipgloss.Width("  name: ") + s.settingsName.CursorColumn(),
 			Y: originY + 3, // title, subtle, blank precede the name row
 		}
@@ -166,7 +166,7 @@ func screenName(sc screen) string {
 	}
 }
 
-func viewContent(s *State, ctx flatcore.RenderContext) string {
+func viewContent(s *State, ctx flat.RenderContext) string {
 	switch s.screen {
 	case screenHome:
 		return viewHome(s, ctx)
@@ -179,7 +179,7 @@ func viewContent(s *State, ctx flatcore.RenderContext) string {
 	}
 }
 
-func viewHome(s *State, ctx flatcore.RenderContext) string {
+func viewHome(s *State, ctx flat.RenderContext) string {
 	lines := []string{
 		flatui.Title("Flat Pages"),
 		flatui.Subtle("multi-screen navigation sample"),
@@ -196,7 +196,7 @@ func viewHome(s *State, ctx flatcore.RenderContext) string {
 	return flatui.Card(lines, ctx.Width)
 }
 
-func viewDetails(s *State, ctx flatcore.RenderContext) string {
+func viewDetails(s *State, ctx flat.RenderContext) string {
 	item := details[s.selected]
 	lines := []string{
 		flatui.Title("Details"),
@@ -210,7 +210,7 @@ func viewDetails(s *State, ctx flatcore.RenderContext) string {
 	return flatui.Card(lines, ctx.Width)
 }
 
-func viewSettings(s *State, ctx flatcore.RenderContext) string {
+func viewSettings(s *State, ctx flat.RenderContext) string {
 	lines := []string{
 		flatui.Title("Settings"),
 		flatui.Subtle("settings input is app-owned state"),
@@ -224,7 +224,7 @@ func viewSettings(s *State, ctx flatcore.RenderContext) string {
 
 func main() {
 	state := NewState()
-	err := flatcore.Run(context.Background(), flatcore.App[State]{
+	err := flat.Run(context.Background(), flat.App[State]{
 		State:  state,
 		Handle: Handle,
 		View:   View,

@@ -6,15 +6,15 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatest"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatest"
 )
 
 func TestStyleViewUsesStyledLipglossComposition(t *testing.T) {
 	state := NewState()
 	state.layout(80, 24)
 
-	frame := View(state, flatcore.RenderContext{Width: 80}).Content
+	frame := View(state, flat.RenderContext{Width: 80}).Content
 
 	if !strings.Contains(frame, "\x1b[") {
 		t.Fatalf("View() has no ANSI styling:\n%s", frame)
@@ -31,7 +31,7 @@ func TestStyleViewFitsRequestedWidth(t *testing.T) {
 	state := NewState()
 	state.layout(64, 18)
 
-	frame := flatest.CleanFrame(View(state, flatcore.RenderContext{Width: 64}).Content)
+	frame := flatest.CleanFrame(View(state, flat.RenderContext{Width: 64}).Content)
 
 	for _, line := range strings.Split(frame, "\n") {
 		if width := lipgloss.Width(line); width > 64 {
@@ -43,17 +43,17 @@ func TestStyleViewFitsRequestedWidth(t *testing.T) {
 func TestStyleHandleMovesSelectionAndProgress(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'j'}, flatcore.Effects[State]{})
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'j'}, flat.Effects[State]{})
 	if got, want := state.list.Cursor(), 1; got != want {
 		t.Fatalf("cursor after j = %d, want %d", got, want)
 	}
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'l'}, flatcore.Effects[State]{})
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'l'}, flat.Effects[State]{})
 	if got, want := state.progress.Percent(), 80.0; got != want {
 		t.Fatalf("percent after l = %.1f, want %.1f", got, want)
 	}
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'h'}, flatcore.Effects[State]{})
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'h'}, flat.Effects[State]{})
 	if got, want := state.progress.Percent(), 70.0; got != want {
 		t.Fatalf("percent after h = %.1f, want %.1f", got, want)
 	}
@@ -63,5 +63,5 @@ func TestStyleViewMatchesSnapshot(t *testing.T) {
 	state := NewState()
 	state.layout(80, 24)
 
-	flatest.AssertGolden(t, "testdata/style.golden", View(state, flatcore.RenderContext{Width: 80}).Content)
+	flatest.AssertGolden(t, "testdata/style.golden", View(state, flat.RenderContext{Width: 80}).Content)
 }

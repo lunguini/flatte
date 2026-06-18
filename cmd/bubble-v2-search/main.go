@@ -7,7 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat/flatui"
 )
 
 const (

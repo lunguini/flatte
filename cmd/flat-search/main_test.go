@@ -6,17 +6,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatest"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flat/flatui"
 )
 
 func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "0s")
-	updates := make(chan flatcore.StateUpdate[State], 1)
+	updates := make(chan flat.StateUpdate[State], 1)
 	state := State{focused: true}
 
-	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'o'}, flatcore.Effects[State]{
+	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'o'}, flat.Effects[State]{
 		Context: context.Background(),
 		Updates: updates,
 	})
@@ -40,12 +40,12 @@ func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
 
 func TestTypingJAndKEditsQuery(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "1ms")
-	updates := make(chan flatcore.StateUpdate[State], 4)
-	fx := flatcore.NewEffects(t.Context(), updates, nil)
+	updates := make(chan flat.StateUpdate[State], 4)
+	fx := flat.NewEffects(t.Context(), updates, nil)
 	state := &State{focused: true}
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'j'}, fx)
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'k'}, fx)
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'j'}, fx)
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'k'}, fx)
 
 	if state.query.Value != "jk" {
 		t.Fatalf("query = %q, want %q", state.query.Value, "jk")
@@ -54,10 +54,10 @@ func TestTypingJAndKEditsQuery(t *testing.T) {
 
 func TestFocusedSearchCanTypeQ(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "0s")
-	updates := make(chan flatcore.StateUpdate[State], 1)
+	updates := make(chan flat.StateUpdate[State], 1)
 	state := State{focused: true}
 
-	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, flatcore.Effects[State]{
+	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, flat.Effects[State]{
 		Context: context.Background(),
 		Updates: updates,
 	})
@@ -73,7 +73,7 @@ func TestFocusedSearchUsesAltBFForWordMovement(t *testing.T) {
 	state.query.Value = "hello world"
 	state.query.Cursor = len("hello world")
 
-	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'b', Mod: flatcore.ModAlt}, flatcore.Effects[State]{
+	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'b', Mod: flat.ModAlt}, flat.Effects[State]{
 		Context: context.Background(),
 	})
 	if state.query.Cursor != len("hello ") {
@@ -82,7 +82,7 @@ func TestFocusedSearchUsesAltBFForWordMovement(t *testing.T) {
 	if state.query.Value != "hello world" {
 		t.Fatalf("alt-b inserted text: %q", state.query.Value)
 	}
-	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'f', Mod: flatcore.ModAlt}, flatcore.Effects[State]{
+	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'f', Mod: flat.ModAlt}, flat.Effects[State]{
 		Context: context.Background(),
 	})
 	if state.query.Cursor != len("hello world") {
@@ -93,9 +93,9 @@ func TestFocusedSearchUsesAltBFForWordMovement(t *testing.T) {
 func TestUnfocusedSearchUsesQToQuit(t *testing.T) {
 	state := State{focused: false}
 	var quit bool
-	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
 		t.Fatal("expected q to request quit when search input is unfocused")
@@ -104,12 +104,12 @@ func TestUnfocusedSearchUsesQToQuit(t *testing.T) {
 
 func TestBackspaceStartsSearchForEditedQuery(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "0s")
-	updates := make(chan flatcore.StateUpdate[State], 2)
+	updates := make(chan flat.StateUpdate[State], 2)
 	state := State{focused: true}
 	state.query.Value = "op"
 	state.query.Cursor = 2
 
-	Handle(&state, flatcore.KeyEvent{Key: flatcore.KeyBackspace}, flatcore.Effects[State]{
+	Handle(&state, flat.KeyEvent{Key: flat.KeyBackspace}, flat.Effects[State]{
 		Context: context.Background(),
 		Updates: updates,
 	})
@@ -121,8 +121,8 @@ func TestBackspaceStartsSearchForEditedQuery(t *testing.T) {
 
 func TestStaleSearchUpdateIsIgnored(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "1ms")
-	updates := make(chan flatcore.StateUpdate[State], 16)
-	fx := flatcore.NewEffects(t.Context(), updates, nil)
+	updates := make(chan flat.StateUpdate[State], 16)
+	fx := flat.NewEffects(t.Context(), updates, nil)
 
 	// First search: "op" — will be superseded immediately.
 	state := State{focused: true}
@@ -161,7 +161,7 @@ func TestViewRendersSearchState(t *testing.T) {
 	state := State{searching: true}
 	state.query.Value = "o"
 
-	frame := View(&state, flatcore.RenderContext{Width: 72}).Content
+	frame := View(&state, flat.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Search", "query: o", "searching..."} {
 		if !strings.Contains(frame, want) {
@@ -175,7 +175,7 @@ func TestViewPlacesCursorOnlyWhenFocused(t *testing.T) {
 	state.query.Value = "ok"
 	state.query.Cursor = 2
 
-	frame := View(&state, flatcore.RenderContext{Width: 72})
+	frame := View(&state, flat.RenderContext{Width: 72})
 	if frame.Cursor == nil {
 		t.Fatal("focused view has no cursor")
 	}
@@ -189,7 +189,7 @@ func TestViewPlacesCursorOnlyWhenFocused(t *testing.T) {
 	}
 
 	state.focused = false
-	if blurred := View(&state, flatcore.RenderContext{Width: 72}); blurred.Cursor != nil {
+	if blurred := View(&state, flat.RenderContext{Width: 72}); blurred.Cursor != nil {
 		t.Fatalf("blurred view still has a cursor: %+v", *blurred.Cursor)
 	}
 }
@@ -199,7 +199,7 @@ func TestViewMatchesFocusedSearchingSnapshot(t *testing.T) {
 	state.query.Value = "o"
 	state.query.Cursor = 1
 
-	flatest.AssertGoldenFrame(t, "testdata/focused-searching.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/focused-searching.golden", View(&state, flat.RenderContext{Width: 72}))
 }
 
 func TestViewMatchesResultsSnapshot(t *testing.T) {
@@ -208,7 +208,7 @@ func TestViewMatchesResultsSnapshot(t *testing.T) {
 		results: []string{"sonnet", "opus", "freeform"},
 	}
 
-	flatest.AssertGoldenFrame(t, "testdata/results.golden", View(&state, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/results.golden", View(&state, flat.RenderContext{Width: 72}))
 }
 
 func TestSearchDelayEnvironmentOverride(t *testing.T) {
@@ -223,7 +223,7 @@ func newSearchField(value string) flatui.TextField {
 	return flatui.TextField{Value: value, Cursor: len(value)}
 }
 
-func receiveSearchUpdate(t *testing.T, updates <-chan flatcore.StateUpdate[State]) flatcore.StateUpdate[State] {
+func receiveSearchUpdate(t *testing.T, updates <-chan flat.StateUpdate[State]) flat.StateUpdate[State] {
 	t.Helper()
 
 	select {

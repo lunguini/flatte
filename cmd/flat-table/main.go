@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 type State struct {
@@ -55,29 +55,29 @@ func (s *State) layout(height int) {
 	s.tb.SetHeight(max(flatui.CardBodyHeight(height, pinnedRows), 1))
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	switch e := ev.(type) {
-	case flatcore.ResizeEvent:
+	case flat.ResizeEvent:
 		s.layout(e.Height)
-	case flatcore.KeyEvent:
+	case flat.KeyEvent:
 		handleKey(s, e, fx)
-	case flatcore.MouseEvent:
+	case flat.MouseEvent:
 		switch e.Button {
-		case flatcore.MouseWheelUp:
+		case flat.MouseWheelUp:
 			s.tb.MoveUp()
-		case flatcore.MouseWheelDown:
+		case flat.MouseWheelDown:
 			s.tb.MoveDown()
 		}
 	}
 }
 
-func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
+func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	switch key.Key {
-	case flatcore.KeyDown:
+	case flat.KeyDown:
 		s.tb.MoveDown()
-	case flatcore.KeyUp:
+	case flat.KeyUp:
 		s.tb.MoveUp()
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		switch key.Rune {
 		case 'j':
 			s.tb.MoveDown()
@@ -93,7 +93,7 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	selLabel := "none"
 	if sel := s.tb.SelectedRow(); len(sel) >= 2 {
 		selLabel = sel[1]
@@ -118,7 +118,7 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	lines = append(lines, strings.Split(body, "\n")...)
 	lines = append(lines, "", footer)
 
-	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func headerStyle() lipgloss.Style {
@@ -130,11 +130,11 @@ func activeStyle() lipgloss.Style {
 }
 
 func main() {
-	if err := flatcore.Run(context.Background(), flatcore.App[State]{
+	if err := flat.Run(context.Background(), flat.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flatcore.WithMouse(flatcore.MouseModeCellMotion)); err != nil {
+	}, flat.WithMouse(flat.MouseModeCellMotion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

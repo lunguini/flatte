@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat/internal/flatcore"
+	"github.com/lunguini/flat"
 )
 
 // countingWriter counts Write calls and bytes. All writes happen on the Run
@@ -78,12 +78,12 @@ func TestMeasureOutputVolume(t *testing.T) {
 			out := &countingWriter{}
 			done := make(chan error, 1)
 			go func() {
-				done <- flatcore.Run(context.Background(), flatcore.App[State]{
+				done <- flat.Run(context.Background(), flat.App[State]{
 					State:  state,
 					Init:   Init,
 					Handle: Handle,
 					View:   View,
-				}, flatcore.WithInput(reader), flatcore.WithOutput(out))
+				}, flat.WithInput(reader), flat.WithOutput(out))
 			}()
 
 			time.Sleep(window)

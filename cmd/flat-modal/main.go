@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 const defaultTickInterval = 300 * time.Millisecond
@@ -29,8 +29,8 @@ func NewState() *State {
 	return &State{}
 }
 
-func Init(s *State, fx flatcore.Effects[State]) {
-	flatcore.Every(fx, "modal.background.tick", tickInterval(), applyTick)
+func Init(s *State, fx flat.Effects[State]) {
+	flat.Every(fx, "modal.background.tick", tickInterval(), applyTick)
 }
 
 func applyTick(s *State, _ time.Time) {
@@ -40,8 +40,8 @@ func applyTick(s *State, _ time.Time) {
 	}
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	key, ok := ev.(flatcore.KeyEvent)
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+	key, ok := ev.(flat.KeyEvent)
 	if !ok {
 		return
 	}
@@ -51,45 +51,45 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	}
 
 	switch key.Key {
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		s.waiting = true
 		s.modalOpen = true
 		s.modalInput = flatui.TextField{}
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		if key.Rune == 'q' || key.Rune == 'Q' {
 			fx.Quit()
 		}
 	}
 }
 
-func handleModal(s *State, key flatcore.KeyEvent) {
+func handleModal(s *State, key flat.KeyEvent) {
 	switch key.Key {
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		if handleAltWordKey(key, s.modalInput.MoveWordLeft, s.modalInput.MoveWordRight) {
 			return
 		}
 		s.modalInput.Insert(key.Rune)
-	case flatcore.KeyBackspace:
+	case flat.KeyBackspace:
 		s.modalInput.Backspace()
-	case flatcore.KeyDelete:
+	case flat.KeyDelete:
 		s.modalInput.Delete()
-	case flatcore.KeyLeft:
+	case flat.KeyLeft:
 		s.modalInput.MoveLeft()
-	case flatcore.KeyRight:
+	case flat.KeyRight:
 		s.modalInput.MoveRight()
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		s.modalOpen = false
 		s.waiting = false
 		s.modalResult = "accepted: " + s.modalInput.Value
-	case flatcore.KeyEscape:
+	case flat.KeyEscape:
 		s.modalOpen = false
 		s.waiting = false
 		s.modalResult = "cancelled"
 	}
 }
 
-func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatcore.ModAlt) {
+func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flat.ModAlt) {
 		return false
 	}
 	switch key.Rune {
@@ -103,23 +103,23 @@ func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	base := viewMain(s, ctx)
 	if !s.modalOpen {
-		return flatcore.Frame{Content: base}
+		return flat.Frame{Content: base}
 	}
 	modal := viewModal(s, ctx)
-	frame := flatcore.Frame{Content: flatui.Overlay(base, modal)}
+	frame := flat.Frame{Content: flatui.Overlay(base, modal)}
 	overlayX, overlayY := flatui.OverlayOrigin(base, modal)
 	cardX, cardY := flatui.CardOrigin()
-	frame.Cursor = &flatcore.Cursor{
+	frame.Cursor = &flat.Cursor{
 		X: overlayX + cardX + lipgloss.Width("  name: ") + s.modalInput.CursorColumn(),
 		Y: overlayY + cardY + 3, // title, subtle, blank precede the name row
 	}
 	return frame
 }
 
-func viewMain(s *State, ctx flatcore.RenderContext) string {
+func viewMain(s *State, ctx flat.RenderContext) string {
 	loader := "idle"
 	if s.waiting {
 		loader = "waiting " + spinnerFrames[s.spinner%len(spinnerFrames)]
@@ -160,7 +160,7 @@ func viewMain(s *State, ctx flatcore.RenderContext) string {
 	return flatui.Card(lines, ctx.Width)
 }
 
-func viewModal(s *State, ctx flatcore.RenderContext) string {
+func viewModal(s *State, ctx flat.RenderContext) string {
 	lines := []string{
 		flatui.Title("Confirm Work"),
 		flatui.Subtle("modal captures input"),
@@ -186,7 +186,7 @@ func tickInterval() time.Duration {
 
 func main() {
 	state := NewState()
-	err := flatcore.Run(context.Background(), flatcore.App[State]{
+	err := flat.Run(context.Background(), flat.App[State]{
 		State:  state,
 		Init:   Init,
 		Handle: Handle,

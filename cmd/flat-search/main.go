@@ -9,8 +9,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 const defaultSearchDelay = 300 * time.Millisecond
@@ -33,16 +33,16 @@ type State struct {
 	err       error
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	key, ok := ev.(flatcore.KeyEvent)
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+	key, ok := ev.(flat.KeyEvent)
 	if !ok {
 		return
 	}
 	if !s.focused {
-		if key.Key == flatcore.KeyCharacter && (key.Rune == 'q' || key.Rune == 'Q') {
+		if key.Key == flat.KeyCharacter && (key.Rune == 'q' || key.Rune == 'Q') {
 			fx.Quit()
 		}
-		if key.Key == flatcore.KeyEnter {
+		if key.Key == flat.KeyEnter {
 			s.focused = true
 			s.query.SetCursor(len(s.query.Value))
 		}
@@ -50,29 +50,29 @@ func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
 	}
 
 	switch key.Key {
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		if handleAltWordKey(key, s.query.MoveWordLeft, s.query.MoveWordRight) {
 			return
 		}
 		s.query.Insert(key.Rune)
 		startSearch(s, fx)
-	case flatcore.KeyBackspace:
+	case flat.KeyBackspace:
 		s.query.Backspace()
 		startSearch(s, fx)
-	case flatcore.KeyDelete:
+	case flat.KeyDelete:
 		s.query.Delete()
 		startSearch(s, fx)
-	case flatcore.KeyLeft:
+	case flat.KeyLeft:
 		s.query.MoveLeft()
-	case flatcore.KeyRight:
+	case flat.KeyRight:
 		s.query.MoveRight()
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		s.focused = false
 	}
 }
 
-func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatcore.ModAlt) {
+func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flat.ModAlt) {
 		return false
 	}
 	switch key.Rune {
@@ -86,19 +86,19 @@ func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-func startSearch(s *State, fx flatcore.Effects[State]) {
+func startSearch(s *State, fx flat.Effects[State]) {
 	query := s.query.Value
 	s.err = nil
 
 	if strings.TrimSpace(query) == "" {
 		s.searching = false
 		s.results = nil
-		flatcore.Cancel(fx, "search.run")
+		flat.Cancel(fx, "search.run")
 		return
 	}
 
 	s.searching = true
-	flatcore.Latest(fx, "search.run",
+	flat.Latest(fx, "search.run",
 		func(ctx context.Context) ([]string, error) {
 			return search(ctx, query)
 		},
@@ -130,7 +130,7 @@ func search(ctx context.Context, query string) ([]string, error) {
 	return results, nil
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	status := "idle"
 	if s.searching {
 		status = "searching..."
@@ -155,10 +155,10 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		}
 	}
 	rows = append(rows, "", flatui.Subtle("enter blur/focus | q quits when blurred"))
-	frame := flatcore.Frame{Content: flatui.Card(rows, ctx.Width)}
+	frame := flat.Frame{Content: flatui.Card(rows, ctx.Width)}
 	if s.focused {
 		originX, originY := flatui.CardOrigin()
-		frame.Cursor = &flatcore.Cursor{
+		frame.Cursor = &flat.Cursor{
 			X: originX + lipgloss.Width("  query: ") + s.query.CursorColumn(),
 			Y: originY + 3, // title, subtle, blank precede the query row
 		}
@@ -184,7 +184,7 @@ func searchDelay() time.Duration {
 
 func main() {
 	state := &State{focused: true}
-	err := flatcore.Run(context.Background(), flatcore.App[State]{
+	err := flat.Run(context.Background(), flat.App[State]{
 		State:  state,
 		Handle: Handle,
 		View:   View,

@@ -16,7 +16,7 @@ import (
 const quietWindow = 80 * time.Millisecond
 
 func main() {
-	appModes := flag.Bool("app-modes", false, "enter alt-screen and bracketed-paste modes like flatcore.Run")
+	appModes := flag.Bool("app-modes", false, "enter alt-screen and bracketed-paste modes like flat.Run")
 	flag.Parse()
 	if err := run(os.Stdin, os.Stdout, *appModes); err != nil {
 		fmt.Fprintln(os.Stderr, err)

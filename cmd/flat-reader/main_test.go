@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatest"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatest"
 )
 
 // ready builds a state already sized to an 80x24 terminal.
@@ -18,12 +18,12 @@ func ready() *State {
 
 func TestHandleScrollKeysMoveTheViewport(t *testing.T) {
 	s := ready()
-	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'j'}, flatcore.Effects[State]{})
-	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'j'}, flatcore.Effects[State]{})
+	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'j'}, flat.Effects[State]{})
+	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'j'}, flat.Effects[State]{})
 	if s.vp.Offset() != 2 {
 		t.Fatalf("after jj Offset() = %d, want 2", s.vp.Offset())
 	}
-	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'k'}, flatcore.Effects[State]{})
+	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'k'}, flat.Effects[State]{})
 	if s.vp.Offset() != 1 {
 		t.Fatalf("after k Offset() = %d, want 1", s.vp.Offset())
 	}
@@ -31,13 +31,13 @@ func TestHandleScrollKeysMoveTheViewport(t *testing.T) {
 
 func TestHandleGotoBottomAndQuit(t *testing.T) {
 	s := ready()
-	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'G'}, flatcore.Effects[State]{})
+	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'G'}, flat.Effects[State]{})
 	if !s.vp.AtBottom() {
 		t.Fatal("G did not reach bottom")
 	}
 	var quit bool
-	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
-	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
+	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")
 	}
@@ -58,11 +58,11 @@ func TestResizeShrinksViewportInsteadOfBreaking(t *testing.T) {
 
 func TestMouseWheelScrollsTheViewport(t *testing.T) {
 	s := ready()
-	Handle(s, flatcore.MouseEvent{Button: flatcore.MouseWheelDown}, flatcore.Effects[State]{})
+	Handle(s, flat.MouseEvent{Button: flat.MouseWheelDown}, flat.Effects[State]{})
 	if s.vp.Offset() != 3 {
 		t.Fatalf("wheel down Offset() = %d, want 3 (wheelLines)", s.vp.Offset())
 	}
-	Handle(s, flatcore.MouseEvent{Button: flatcore.MouseWheelUp}, flatcore.Effects[State]{})
+	Handle(s, flat.MouseEvent{Button: flat.MouseWheelUp}, flat.Effects[State]{})
 	if s.vp.Offset() != 0 {
 		t.Fatalf("wheel up Offset() = %d, want 0", s.vp.Offset())
 	}
@@ -70,8 +70,8 @@ func TestMouseWheelScrollsTheViewport(t *testing.T) {
 
 func TestViewKeepsChromePinnedWhileScrolling(t *testing.T) {
 	s := ready()
-	Handle(s, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'G'}, flatcore.Effects[State]{})
-	frame := View(s, flatcore.RenderContext{Width: 80}).Content
+	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'G'}, flat.Effects[State]{})
+	frame := View(s, flat.RenderContext{Width: 80}).Content
 	for _, want := range []string{"Flat Reader", "scrollable viewport sample", "q quit"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("scrolled view missing pinned %q:\n%s", want, frame)
@@ -85,11 +85,11 @@ func TestViewKeepsChromePinnedWhileScrolling(t *testing.T) {
 func TestViewMatchesInitialSnapshot(t *testing.T) {
 	s := NewState()
 	s.layout(72, 24)
-	flatest.AssertGoldenFrame(t, "testdata/reader.golden", View(s, flatcore.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/reader.golden", View(s, flat.RenderContext{Width: 72}))
 }
 
 func TestScrollThenShrinkSequenceSnapshot(t *testing.T) {
-	d := flatest.Start(flatcore.App[State]{
+	d := flatest.Start(flat.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
@@ -99,11 +99,11 @@ func TestScrollThenShrinkSequenceSnapshot(t *testing.T) {
 		func(d *flatest.Driver[State]) {}, // initial frame at 72x24, offset 0
 		func(d *flatest.Driver[State]) {
 			for range 5 {
-				d.Send(flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'j'})
+				d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'j'})
 			}
 		}, // scrolled down 5
 		func(d *flatest.Driver[State]) {
-			d.Send(flatcore.ResizeEvent{Width: 72, Height: 10})
+			d.Send(flat.ResizeEvent{Width: 72, Height: 10})
 		}, // shrink: body clips to fewer rows, chrome still pinned
 	)
 	flatest.AssertFrames(t, "testdata/reader-sequence.golden", frames)

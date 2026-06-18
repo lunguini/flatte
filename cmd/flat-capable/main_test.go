@@ -5,21 +5,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatest"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatest"
 )
 
 // A zero-enqueue Effects makes SetClipboard/ReadClipboard/Suspend/Exec
 // safe no-ops, so Handle's state transitions are testable without a live
 // terminal.
-func noEffects() flatcore.Effects[State] {
-	return flatcore.Effects[State]{}
+func noEffects() flat.Effects[State] {
+	return flat.Effects[State]{}
 }
 
 func TestCopyKeySetsStatus(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'y'}, noEffects())
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'y'}, noEffects())
 
 	if state.status != "copied to clipboard" {
 		t.Fatalf("status = %q, want copied to clipboard", state.status)
@@ -29,7 +29,7 @@ func TestCopyKeySetsStatus(t *testing.T) {
 func TestPasteKeyRequestsRead(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'p'}, noEffects())
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'p'}, noEffects())
 
 	if !strings.HasPrefix(state.status, "requested clipboard read") {
 		t.Fatalf("status = %q, want a read-requested message", state.status)
@@ -39,7 +39,7 @@ func TestPasteKeyRequestsRead(t *testing.T) {
 func TestCtrlZRequestsSuspend(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'z', Mod: flatcore.ModCtrl}, noEffects())
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'z', Mod: flat.ModCtrl}, noEffects())
 
 	if state.status != "suspended; resumed" {
 		t.Fatalf("status = %q, want suspended status", state.status)
@@ -49,11 +49,11 @@ func TestCtrlZRequestsSuspend(t *testing.T) {
 func TestModifiedPlainCommandsAreIgnored(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'z', Mod: flatcore.ModAlt}, fx)
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'y', Mod: flatcore.ModCtrl}, fx)
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q', Mod: flatcore.ModAlt}, fx)
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'z', Mod: flat.ModAlt}, fx)
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'y', Mod: flat.ModCtrl}, fx)
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q', Mod: flat.ModAlt}, fx)
 
 	if state.status != "ready" {
 		t.Fatalf("status = %q, want ready", state.status)
@@ -66,7 +66,7 @@ func TestModifiedPlainCommandsAreIgnored(t *testing.T) {
 func TestClipboardEventStoresContent(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatcore.ClipboardEvent{Text: "pasted text"}, noEffects())
+	Handle(state, flat.ClipboardEvent{Text: "pasted text"}, noEffects())
 
 	if state.clipboard != "pasted text" {
 		t.Fatalf("clipboard = %q, want pasted text", state.clipboard)
@@ -79,9 +79,9 @@ func TestClipboardEventStoresContent(t *testing.T) {
 func TestQuitKeyRequestsQuit(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flatcore.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(state, flatcore.KeyEvent{Key: flatcore.KeyCharacter, Rune: 'q'}, fx)
+	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
 		t.Fatal("q should request quit")
@@ -95,5 +95,5 @@ func TestViewMatchesSnapshot(t *testing.T) {
 		editorText: "edited line",
 	}
 
-	flatest.AssertGolden(t, "testdata/capable.golden", View(state, flatcore.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/capable.golden", View(state, flat.RenderContext{Width: 72}).Content)
 }

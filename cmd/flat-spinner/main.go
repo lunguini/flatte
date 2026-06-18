@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 const interval = 100 * time.Millisecond
@@ -23,19 +23,19 @@ func NewState() *State {
 
 // Init starts the animation: Every drives the spinner from the loop goroutine;
 // the widget itself owns no timer.
-func Init(s *State, fx flatcore.Effects[State]) {
-	flatcore.Every(fx, "spin", interval, func(s *State, _ time.Time) {
+func Init(s *State, fx flat.Effects[State]) {
+	flat.Every(fx, "spin", interval, func(s *State, _ time.Time) {
 		s.spinner.Tick()
 	})
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
-	if key, ok := ev.(flatcore.KeyEvent); ok && key.Key == flatcore.KeyCharacter && key.Rune == 'q' {
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+	if key, ok := ev.(flat.KeyEvent); ok && key.Key == flat.KeyCharacter && key.Rune == 'q' {
 		fx.Quit()
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	lines := []string{
 		flatui.Title("Flat Spinner"),
 		flatui.Subtle("activity indicator sample"),
@@ -44,11 +44,11 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		"",
 		flatui.Subtle("q quit"),
 	}
-	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func main() {
-	if err := flatcore.Run(context.Background(), flatcore.App[State]{
+	if err := flat.Run(context.Background(), flat.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,

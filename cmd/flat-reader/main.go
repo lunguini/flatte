@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 // document is fixed so goldens stay deterministic. The long line near the top
@@ -65,28 +65,28 @@ func (s *State) layout(width, height int) {
 // wheelLines is how many lines one mouse-wheel notch scrolls.
 const wheelLines = 3
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	switch e := ev.(type) {
-	case flatcore.ResizeEvent:
+	case flat.ResizeEvent:
 		s.layout(e.Width, e.Height)
-	case flatcore.KeyEvent:
+	case flat.KeyEvent:
 		handleKey(s, e, fx)
-	case flatcore.MouseEvent:
+	case flat.MouseEvent:
 		handleMouse(s, e)
 	}
 }
 
-func handleMouse(s *State, m flatcore.MouseEvent) {
+func handleMouse(s *State, m flat.MouseEvent) {
 	switch m.Button {
-	case flatcore.MouseWheelUp:
+	case flat.MouseWheelUp:
 		s.vp.LineUp(wheelLines)
-	case flatcore.MouseWheelDown:
+	case flat.MouseWheelDown:
 		s.vp.LineDown(wheelLines)
 	}
 }
 
-func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
-	if key.Key != flatcore.KeyCharacter {
+func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+	if key.Key != flat.KeyCharacter {
 		return
 	}
 	switch key.Rune {
@@ -111,7 +111,7 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	footer := flatui.Subtle(fmt.Sprintf(
 		"j/k line  d/u half  f/b page  g/G ends  q quit   %3.0f%%",
 		s.vp.ScrollPercent()*100))
@@ -124,15 +124,15 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 	lines = append(lines, strings.Split(s.vp.View(), "\n")...)
 	lines = append(lines, "", footer)
 
-	return flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func main() {
-	if err := flatcore.Run(context.Background(), flatcore.App[State]{
+	if err := flat.Run(context.Background(), flat.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flatcore.WithMouse(flatcore.MouseModeCellMotion)); err != nil {
+	}, flat.WithMouse(flat.MouseModeCellMotion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

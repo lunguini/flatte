@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/lunguini/flat/internal/flatcore"
-	"github.com/lunguini/flat/internal/flatui"
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
 )
 
 type State struct {
@@ -38,26 +38,26 @@ func (s *State) layout(width, height int) {
 	)
 }
 
-func Handle(s *State, ev flatcore.Event, fx flatcore.Effects[State]) {
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	switch e := ev.(type) {
-	case flatcore.ResizeEvent:
+	case flat.ResizeEvent:
 		s.layout(e.Width, e.Height)
-	case flatcore.KeyEvent:
+	case flat.KeyEvent:
 		handleKey(s, e, fx)
 	}
 }
 
-func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
+func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	s.lastKey = describeKey(key)
 	s.lastAction = "ignored"
 	switch key.Key {
-	case flatcore.KeyEscape:
+	case flat.KeyEscape:
 		s.lastAction = "quit"
 		fx.Quit()
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		s.lastAction = "newline"
 		s.ta.InsertNewline()
-	case flatcore.KeyBackspace:
+	case flat.KeyBackspace:
 		if wordMove(key.Mod) {
 			s.lastAction = "delete-word-left"
 			s.ta.DeleteWordLeft()
@@ -65,7 +65,7 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 			s.lastAction = "backspace"
 			s.ta.Backspace()
 		}
-	case flatcore.KeyDelete:
+	case flat.KeyDelete:
 		if wordMove(key.Mod) {
 			s.lastAction = "delete-word-right"
 			s.ta.DeleteWordRight()
@@ -73,11 +73,11 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 			s.lastAction = "delete"
 			s.ta.Delete()
 		}
-	case flatcore.KeyLeft:
-		if key.Mod.Contains(flatcore.ModShift) && wordMove(key.Mod) {
+	case flat.KeyLeft:
+		if key.Mod.Contains(flat.ModShift) && wordMove(key.Mod) {
 			s.lastAction = "select-word-left"
 			s.ta.MoveWordLeftSelecting()
-		} else if key.Mod.Contains(flatcore.ModShift) {
+		} else if key.Mod.Contains(flat.ModShift) {
 			s.lastAction = "select-left"
 			s.ta.MoveLeftSelecting()
 		} else if wordMove(key.Mod) {
@@ -87,11 +87,11 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 			s.lastAction = "move-left"
 			s.ta.MoveLeft()
 		}
-	case flatcore.KeyRight:
-		if key.Mod.Contains(flatcore.ModShift) && wordMove(key.Mod) {
+	case flat.KeyRight:
+		if key.Mod.Contains(flat.ModShift) && wordMove(key.Mod) {
 			s.lastAction = "select-word-right"
 			s.ta.MoveWordRightSelecting()
-		} else if key.Mod.Contains(flatcore.ModShift) {
+		} else if key.Mod.Contains(flat.ModShift) {
 			s.lastAction = "select-right"
 			s.ta.MoveRightSelecting()
 		} else if wordMove(key.Mod) {
@@ -101,25 +101,25 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 			s.lastAction = "move-right"
 			s.ta.MoveRight()
 		}
-	case flatcore.KeyUp:
-		if key.Mod.Contains(flatcore.ModShift) {
+	case flat.KeyUp:
+		if key.Mod.Contains(flat.ModShift) {
 			s.lastAction = "select-up"
 			s.ta.MoveUpSelecting()
 		} else {
 			s.lastAction = "move-up"
 			s.ta.MoveUp()
 		}
-	case flatcore.KeyDown:
-		if key.Mod.Contains(flatcore.ModShift) {
+	case flat.KeyDown:
+		if key.Mod.Contains(flat.ModShift) {
 			s.lastAction = "select-down"
 			s.ta.MoveDownSelecting()
 		} else {
 			s.lastAction = "move-down"
 			s.ta.MoveDown()
 		}
-	case flatcore.KeyCharacter:
+	case flat.KeyCharacter:
 		if handleWordDeleteKey(key, s.ta.DeleteWordLeft, s.ta.DeleteWordRight) {
-			if key.Mod.Contains(flatcore.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
+			if key.Mod.Contains(flat.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
 				s.lastAction = "delete-word-right"
 			} else {
 				s.lastAction = "delete-word-left"
@@ -139,12 +139,12 @@ func handleKey(s *State, key flatcore.KeyEvent, fx flatcore.Effects[State]) {
 	}
 }
 
-func wordMove(mod flatcore.Mod) bool {
-	return mod.Contains(flatcore.ModAlt) || mod.Contains(flatcore.ModCtrl)
+func wordMove(mod flat.Mod) bool {
+	return mod.Contains(flat.ModAlt) || mod.Contains(flat.ModCtrl)
 }
 
-func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatcore.ModAlt) {
+func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flat.ModAlt) {
 		return false
 	}
 	switch key.Rune {
@@ -158,34 +158,34 @@ func handleAltWordKey(key flatcore.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-func handleWordDeleteKey(key flatcore.KeyEvent, deleteLeft, deleteRight func()) bool {
-	if key.Mod.Contains(flatcore.ModCtrl) && (key.Rune == 'w' || key.Rune == 'W' || key.Rune == 'h' || key.Rune == 'H') {
+func handleWordDeleteKey(key flat.KeyEvent, deleteLeft, deleteRight func()) bool {
+	if key.Mod.Contains(flat.ModCtrl) && (key.Rune == 'w' || key.Rune == 'W' || key.Rune == 'h' || key.Rune == 'H') {
 		deleteLeft()
 		return true
 	}
-	if key.Mod.Contains(flatcore.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
+	if key.Mod.Contains(flat.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
 		deleteRight()
 		return true
 	}
 	return false
 }
 
-func describeKey(key flatcore.KeyEvent) string {
-	if key.Key == flatcore.KeyCharacter {
+func describeKey(key flat.KeyEvent) string {
+	if key.Key == flat.KeyCharacter {
 		return fmt.Sprintf("character %q %s", key.Rune, describeMod(key.Mod))
 	}
 	return fmt.Sprintf("%s %s", keyName(key.Key), describeMod(key.Mod))
 }
 
-func describeMod(mod flatcore.Mod) string {
+func describeMod(mod flat.Mod) string {
 	var parts []string
-	if mod.Contains(flatcore.ModCtrl) {
+	if mod.Contains(flat.ModCtrl) {
 		parts = append(parts, "ctrl")
 	}
-	if mod.Contains(flatcore.ModAlt) {
+	if mod.Contains(flat.ModAlt) {
 		parts = append(parts, "alt")
 	}
-	if mod.Contains(flatcore.ModShift) {
+	if mod.Contains(flat.ModShift) {
 		parts = append(parts, "shift")
 	}
 	if len(parts) == 0 {
@@ -194,34 +194,34 @@ func describeMod(mod flatcore.Mod) string {
 	return strings.Join(parts, "+")
 }
 
-func keyName(key flatcore.Key) string {
+func keyName(key flat.Key) string {
 	switch key {
-	case flatcore.KeyUp:
+	case flat.KeyUp:
 		return "up"
-	case flatcore.KeyDown:
+	case flat.KeyDown:
 		return "down"
-	case flatcore.KeyEnter:
+	case flat.KeyEnter:
 		return "enter"
-	case flatcore.KeyCtrlC:
+	case flat.KeyCtrlC:
 		return "ctrl-c"
-	case flatcore.KeyBackspace:
+	case flat.KeyBackspace:
 		return "backspace"
-	case flatcore.KeyTab:
+	case flat.KeyTab:
 		return "tab"
-	case flatcore.KeyEscape:
+	case flat.KeyEscape:
 		return "escape"
-	case flatcore.KeyLeft:
+	case flat.KeyLeft:
 		return "left"
-	case flatcore.KeyRight:
+	case flat.KeyRight:
 		return "right"
-	case flatcore.KeyDelete:
+	case flat.KeyDelete:
 		return "delete"
 	default:
 		return "unknown"
 	}
 }
 
-func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
+func View(s *State, ctx flat.RenderContext) flat.Frame {
 	lines := []string{
 		flatui.Title("Flat Editor"),
 		flatui.Subtle("multi-line textarea sample"),
@@ -233,12 +233,12 @@ func View(s *State, ctx flatcore.RenderContext) flatcore.Frame {
 		lines = append(lines, flatui.Subtle(fmt.Sprintf("last: %s -> %s", s.lastKey, s.lastAction)))
 	}
 
-	frame := flatcore.Frame{Content: flatui.Card(lines, ctx.Width)}
+	frame := flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 	// Place the hardware cursor: card origin + the three pinned lines (title,
 	// subtitle, blank) that precede the textarea body + the cell within it.
 	ox, oy := flatui.CardOrigin()
 	cx, cy := s.ta.CursorCell()
-	frame.Cursor = &flatcore.Cursor{X: ox + cx, Y: oy + 3 + cy}
+	frame.Cursor = &flat.Cursor{X: ox + cx, Y: oy + 3 + cy}
 	return frame
 }
 
@@ -253,7 +253,7 @@ func renderSelection(text string, selected bool) string {
 }
 
 func main() {
-	if err := flatcore.Run(context.Background(), flatcore.App[State]{
+	if err := flat.Run(context.Background(), flat.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
