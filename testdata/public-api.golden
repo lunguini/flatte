@@ -112,6 +112,16 @@ flatui
   method List.SetCount
   method List.SetHeight
   method List.View
+  method Paginator.NextPage
+  method Paginator.Page
+  method Paginator.PageSize
+  method Paginator.Pages
+  method Paginator.PrevPage
+  method Paginator.Range
+  method Paginator.SelectPage
+  method Paginator.SetPageSize
+  method Paginator.SetTotal
+  method Paginator.Total
   method Progress.Percent
   method Progress.SetPercent
   method Progress.SetWidth
@@ -205,6 +215,7 @@ flatui
   type Column
   type FocusRing
   type List
+  type Paginator
   type Progress
   type ProgressStyle
   type Spinner
