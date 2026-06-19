@@ -1,0 +1,18 @@
+Flat Workspace                                          focus tree | 6 visible
+
+╭──────────────────╮  ╭────────────────────────────────╮  ╭────────────────────╮
+│ [tree]           │  │ [work]                         │  │ [details]          │
+│                  │  │ search: (empty)                │  │                    │
+│ > ▾ workspace    │  │                                │  │ API gateway        │
+│   ▸ services     │  │ work         owner    state    │  │ owner: platform    │
+│   ▸ operations   │  │ API gateway  platform ready    │  │ area: services     │
+╰──────────────────╯  │ Billing sync finance  watch    │  │ status: ready      │
+                      │ API schema   platform ready    │  │ progress: 68%      │
+                      │ Search index growth   blocked  │  │                    │
+                      │ Release trai release  ready    │  │ Routes edge.       │
+                      │ Incident rev sre      watch    │  │ Canary next.       │
+                      │                                │  ╰────────────────────╯
+                      │ ██████████████░░░░░░░   68%    │
+                      ╰────────────────────────────────╯
+
+tab focus  enter toggle  up/down move  esc quit
