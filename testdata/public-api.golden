@@ -96,6 +96,13 @@ flatui
   func SubtleWithStyle
   func Title
   func TitleWithStyle
+  method FocusRing.Count
+  method FocusRing.Focused
+  method FocusRing.Index
+  method FocusRing.Next
+  method FocusRing.Prev
+  method FocusRing.Select
+  method FocusRing.SetCount
   method List.Count
   method List.Cursor
   method List.MoveDown
@@ -196,6 +203,7 @@ flatui
   method Viewport.VisibleLines
   type CardStyle
   type Column
+  type FocusRing
   type List
   type Progress
   type ProgressStyle

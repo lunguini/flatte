@@ -117,6 +117,11 @@ deterministic (no wall-clock, no randomness in `View`).
 
 ## Working conventions
 
+- Commit messages must use Conventional Commits style for semantic-release
+  compatibility: `type(scope): subject` when a useful scope exists, otherwise
+  `type: subject`. Use standard release-driving types such as `feat`, `fix`,
+  `docs`, `test`, `refactor`, `perf`, `build`, `ci`, and `chore`; mark breaking
+  changes with `!` and/or a `BREAKING CHANGE:` footer.
 - **Update `.docs/STATUS.md` in the same commit** as any change that adds,
   fixes, or removes something it lists. It is the answer to "what's done
   and what's left" — keep it honest, including the *Known bugs / debt*
