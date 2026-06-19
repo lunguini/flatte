@@ -1,0 +1,13 @@
+┌────────────────────────────────────────────────────────┐
+│   Flat Filter                                          │
+│    query: api                                          │
+│    3 of 14 results                                     │
+│                                                        │
+│  > API gateway        service                          │
+│    API schema         contract                         │
+│    API client         sdk                              │
+│                                                        │
+│    page 1/1                                            │
+│  type filter  up/down move  backspace clear  esc quit  │
+└────────────────────────────────────────────────────────┘
+[cursor 15,2]
