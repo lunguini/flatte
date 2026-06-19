@@ -73,14 +73,14 @@ func workspaceTree() []flatui.TreeNode {
 	return []flatui.TreeNode{
 		{ID: "workspace", Label: "workspace", Children: []flatui.TreeNode{
 			{ID: "services", Label: "services", Children: []flatui.TreeNode{
-				{ID: "api-gateway", Label: "API gateway"},
-				{ID: "billing-sync", Label: "Billing sync"},
-				{ID: "api-schema", Label: "API schema"},
+				{ID: "api-gateway", Label: "API"},
+				{ID: "billing-sync", Label: "Billing"},
+				{ID: "api-schema", Label: "Schema"},
 			}},
-			{ID: "operations", Label: "operations", Children: []flatui.TreeNode{
-				{ID: "search-index", Label: "Search index"},
-				{ID: "release-train", Label: "Release train"},
-				{ID: "incident-review", Label: "Incident review"},
+			{ID: "operations", Label: "ops", Children: []flatui.TreeNode{
+				{ID: "search-index", Label: "Search"},
+				{ID: "release-train", Label: "Release"},
+				{ID: "incident-review", Label: "Incident"},
 			}},
 		}},
 	}
@@ -149,15 +149,43 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 			s.syncResults()
 		}
 	case flat.KeyLeft:
-		if s.focus.Focused(int(focusSearch)) {
+		if s.focus.Focused(int(focusTree)) {
+			collapseSelectedTreeRow(s)
+		} else if s.focus.Focused(int(focusSearch)) {
 			s.search.MoveLeft()
 		}
 	case flat.KeyRight:
-		if s.focus.Focused(int(focusSearch)) {
+		if s.focus.Focused(int(focusTree)) {
+			expandSelectedTreeRow(s)
+		} else if s.focus.Focused(int(focusSearch)) {
 			s.search.MoveRight()
 		}
 	case flat.KeyCharacter:
 		handleCharacter(s, key)
+	}
+}
+
+func selectedTreeRow(s *State) (flatui.TreeRow, bool) {
+	id := s.tree.CursorID()
+	for _, row := range s.tree.VisibleRows() {
+		if row.ID == id {
+			return row, true
+		}
+	}
+	return flatui.TreeRow{}, false
+}
+
+func expandSelectedTreeRow(s *State) {
+	row, ok := selectedTreeRow(s)
+	if ok && row.Expandable && !row.Expanded {
+		s.tree.Toggle(row.ID)
+	}
+}
+
+func collapseSelectedTreeRow(s *State) {
+	row, ok := selectedTreeRow(s)
+	if ok && row.Expandable && row.Expanded {
+		s.tree.Toggle(row.ID)
 	}
 }
 
@@ -396,6 +424,9 @@ func treePanel(s *State, st styles, width int) string {
 			icon = "▸"
 		}
 		indent := ""
+		if row.Depth > 0 {
+			indent = " "
+		}
 		text := indent + icon + " " + row.Label
 		text = fit(text, max(width-2, 0))
 		if selected {
@@ -461,6 +492,7 @@ func keyMap(s *State) flatui.KeyMap {
 		return flatui.KeyMap{
 			{Keys: []string{"tab"}, Help: "focus"},
 			{Keys: []string{"enter"}, Help: "toggle"},
+			{Keys: []string{"left", "right"}, Help: "open/close"},
 			{Keys: []string{"up", "down"}, Help: "move"},
 			{Keys: []string{"esc"}, Help: "quit"},
 		}

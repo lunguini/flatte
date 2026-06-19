@@ -8,6 +8,7 @@ import (
 
 	"github.com/lunguini/flat"
 	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flat/flatui"
 )
 
 func ready() *State {
@@ -47,6 +48,24 @@ func TestTreeExpansionChangesVisibleRows(t *testing.T) {
 
 	if after := len(s.tree.VisibleRows()); after >= before {
 		t.Fatalf("visible rows after collapsing root = %d, want less than %d", after, before)
+	}
+}
+
+func TestTreeLeftRightExpandAndCollapseSelectedBranch(t *testing.T) {
+	s := ready()
+	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	if got := s.tree.CursorID(); got != "services" {
+		t.Fatalf("selected tree node = %q, want services", got)
+	}
+
+	Handle(s, flat.KeyEvent{Key: flat.KeyRight}, flat.Effects[State]{})
+	if got := treeLabels(s.tree.VisibleRows()); strings.Join(got, ",") != "workspace,services,API,Billing,Schema,ops" {
+		t.Fatalf("right expanded labels = %v, want services children visible", got)
+	}
+
+	Handle(s, flat.KeyEvent{Key: flat.KeyLeft}, flat.Effects[State]{})
+	if got := treeLabels(s.tree.VisibleRows()); strings.Join(got, ",") != "workspace,services,ops" {
+		t.Fatalf("left collapsed labels = %v, want services children hidden", got)
 	}
 }
 
@@ -126,7 +145,7 @@ func TestFocusDetailsIsVisibleAndDescribesScroll(t *testing.T) {
 func TestTreeRowsShowExpansionMarkers(t *testing.T) {
 	s := ready()
 	frame := flatest.CleanFrame(View(s, flat.RenderContext{Width: 86}).Content)
-	for _, want := range []string{"▾ workspace", "▸ services", "▸ operations"} {
+	for _, want := range []string{"▾ workspace", " ▸ services", " ▸ ops"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("tree frame missing %q:\n%s", want, frame)
 		}
@@ -164,6 +183,14 @@ func resultTitles(results []WorkItem) []string {
 	out := make([]string, 0, len(results))
 	for _, result := range results {
 		out = append(out, result.Title)
+	}
+	return out
+}
+
+func treeLabels(rows []flatui.TreeRow) []string {
+	out := make([]string, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.Label)
 	}
 	return out
 }
