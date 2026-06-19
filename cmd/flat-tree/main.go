@@ -203,7 +203,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	}, "\n"))
 	body := lipgloss.JoinHorizontal(lipgloss.Top, treePanel, "  ", detailsPanel)
 	searchLine := sectionTitle("search", s.focus.Focused(int(focusSearch))) + ": " + s.search.Value
-	footer := flatui.Subtle("tab focus  enter/space toggle  j/k move  q quit")
+	footer := flatui.Subtle(keyMap(s).View())
 	lines := []string{
 		flatui.Title("Flat Tree"),
 		searchLine,
@@ -221,6 +221,15 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		}
 	}
 	return frame
+}
+
+func keyMap(s *State) flatui.KeyMap {
+	return flatui.KeyMap{
+		{Keys: []string{"tab"}, Help: "focus"},
+		{Keys: []string{"enter", "space"}, Help: "toggle", Disabled: !s.focus.Focused(int(focusTree))},
+		{Keys: []string{"j", "k"}, Help: "move"},
+		{Keys: []string{"q"}, Help: "quit", Disabled: s.focus.Focused(int(focusSearch))},
+	}
 }
 
 func renderTreeRow(row flatui.TreeRow, selected bool) string {

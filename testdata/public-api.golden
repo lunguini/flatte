@@ -104,6 +104,7 @@ flatui
   method FocusRing.Prev
   method FocusRing.Select
   method FocusRing.SetCount
+  method KeyMap.View
   method List.Count
   method List.Cursor
   method List.MoveDown
@@ -225,6 +226,8 @@ flatui
   type CardStyle
   type Column
   type FocusRing
+  type KeyBinding
+  type KeyMap
   type List
   type Paginator
   type Progress
