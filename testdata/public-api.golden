@@ -90,6 +90,7 @@ flatui
   func FrameWidth
   func NewProgress
   func NewSpinner
+  func NewTree
   func Overlay
   func OverlayOrigin
   func Subtle
@@ -191,6 +192,16 @@ flatui
   method Textarea.Value
   method Textarea.View
   method Textarea.ViewWithSelection
+  method Tree.CursorID
+  method Tree.MoveDown
+  method Tree.MoveUp
+  method Tree.Offset
+  method Tree.SelectVisible
+  method Tree.SetHeight
+  method Tree.SetNodes
+  method Tree.Toggle
+  method Tree.View
+  method Tree.VisibleRows
   method Viewport.AtBottom
   method Viewport.AtTop
   method Viewport.GotoBottom
@@ -225,6 +236,9 @@ flatui
   type TextPosition
   type TextRange
   type Textarea
+  type Tree
+  type TreeNode
+  type TreeRow
   type Viewport
   var SpinnerDots
   var SpinnerLine

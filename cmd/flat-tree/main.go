@@ -1,0 +1,271 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+
+	"charm.land/lipgloss/v2"
+
+	"github.com/lunguini/flat"
+	"github.com/lunguini/flat/flatui"
+)
+
+type focusArea int
+
+const (
+	focusTree focusArea = iota
+	focusSearch
+	focusDetails
+)
+
+type State struct {
+	focus   flatui.FocusRing
+	tree    flatui.Tree
+	search  flatui.TextField
+	details flatui.Viewport
+}
+
+func NewState() *State {
+	s := &State{tree: flatui.NewTree(treeNodes())}
+	s.focus.SetCount(3)
+	s.tree.Toggle("workspace")
+	s.layout(72, 18)
+	return s
+}
+
+func treeNodes() []flatui.TreeNode {
+	return []flatui.TreeNode{
+		{ID: "workspace", Label: "workspace", Children: []flatui.TreeNode{
+			{ID: "flatui", Label: "flatui", Children: []flatui.TreeNode{
+				{ID: "tree", Label: "tree.go"},
+				{ID: "viewport", Label: "viewport.go"},
+				{ID: "textfield", Label: "textfield.go"},
+			}},
+			{ID: "cmd", Label: "cmd", Children: []flatui.TreeNode{
+				{ID: "flat-tree", Label: "flat-tree"},
+				{ID: "flat-style", Label: "flat-style"},
+			}},
+			{ID: "docs", Label: ".docs"},
+		}},
+	}
+}
+
+func (s *State) layout(width, height int) {
+	_, _, detailsWidth := paneSizes(width)
+	bodyRows := max(flatui.CardBodyHeight(height, 5), 5)
+	bodyHeight := max(bodyRows-2, 1)
+	s.tree.SetHeight(bodyHeight)
+	s.details.SetSize(detailsWidth, bodyHeight)
+	s.syncDetails()
+}
+
+func paneSizes(width int) (left, right, detailsWidth int) {
+	bodyWidth := max(flatui.CardBodyWidth(width), 40)
+	left = max(bodyWidth*2/5, 20)
+	right = max(bodyWidth-left-2, 20)
+	if left+right+2 > bodyWidth {
+		left = max(bodyWidth-right-2, 12)
+	}
+	return left, right, max(right-4, 1)
+}
+
+func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+	switch ev := ev.(type) {
+	case flat.ResizeEvent:
+		s.layout(ev.Width, ev.Height)
+	case flat.KeyEvent:
+		handleKey(s, ev, fx)
+	}
+}
+
+func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+	if key.Key == flat.KeyTab {
+		if key.Mod.Contains(flat.ModShift) {
+			s.focus.Prev()
+		} else {
+			s.focus.Next()
+		}
+		return
+	}
+
+	switch focusArea(s.focus.Index()) {
+	case focusTree:
+		handleTreeKey(s, key, fx)
+	case focusSearch:
+		handleSearchKey(s, key, fx)
+	case focusDetails:
+		handleDetailsKey(s, key, fx)
+	}
+}
+
+func handleTreeKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+	switch key.Key {
+	case flat.KeyDown:
+		s.tree.MoveDown()
+	case flat.KeyUp:
+		s.tree.MoveUp()
+	case flat.KeyEnter:
+		s.tree.Toggle(s.tree.CursorID())
+	case flat.KeyCharacter:
+		switch key.Rune {
+		case 'j':
+			s.tree.MoveDown()
+		case 'k':
+			s.tree.MoveUp()
+		case ' ':
+			s.tree.Toggle(s.tree.CursorID())
+		case 'q':
+			fx.Quit()
+		}
+	}
+	s.syncDetails()
+}
+
+func handleSearchKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+	switch key.Key {
+	case flat.KeyLeft:
+		s.search.MoveLeft()
+	case flat.KeyRight:
+		s.search.MoveRight()
+	case flat.KeyBackspace:
+		s.search.Backspace()
+	case flat.KeyDelete:
+		s.search.Delete()
+	case flat.KeyCharacter:
+		s.search.Insert(key.Rune)
+	}
+	s.syncDetails()
+}
+
+func handleDetailsKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+	switch key.Key {
+	case flat.KeyDown:
+		s.details.LineDown(1)
+	case flat.KeyUp:
+		s.details.LineUp(1)
+	case flat.KeyCharacter:
+		switch key.Rune {
+		case 'j':
+			s.details.LineDown(1)
+		case 'k':
+			s.details.LineUp(1)
+		case 'q':
+			fx.Quit()
+		}
+	}
+}
+
+func (s *State) syncDetails() {
+	row := s.selectedRow()
+	lines := []string{
+		"Selected: " + row.Label,
+		"ID: " + row.ID,
+		fmt.Sprintf("Depth: %d", row.Depth),
+		"",
+		"Search: " + searchValue(s.search.Value),
+		"",
+		"Tree state stays app-owned.",
+		"Tab moves focus between sections.",
+	}
+	s.details.SetWrappedContent(strings.Join(lines, "\n"))
+}
+
+func (s *State) selectedRow() flatui.TreeRow {
+	id := s.tree.CursorID()
+	for _, row := range s.tree.VisibleRows() {
+		if row.ID == id {
+			return row
+		}
+	}
+	return flatui.TreeRow{Label: "(none)"}
+}
+
+func searchValue(value string) string {
+	if value == "" {
+		return "(empty)"
+	}
+	return value
+}
+
+func View(s *State, ctx flat.RenderContext) flat.Frame {
+	leftWidth, rightWidth, _ := paneSizes(ctx.Width)
+	treePanel := panelStyle().Width(leftWidth).Render(strings.Join([]string{
+		sectionTitle("tree", s.focus.Focused(int(focusTree))),
+		"",
+		s.tree.View(renderTreeRow),
+	}, "\n"))
+	detailsPanel := panelStyle().Width(rightWidth).Render(strings.Join([]string{
+		sectionTitle("details", s.focus.Focused(int(focusDetails))),
+		"",
+		s.details.View(),
+	}, "\n"))
+	body := lipgloss.JoinHorizontal(lipgloss.Top, treePanel, "  ", detailsPanel)
+	searchLine := sectionTitle("search", s.focus.Focused(int(focusSearch))) + ": " + s.search.Value
+	footer := flatui.Subtle("tab focus  enter/space toggle  j/k move  q quit")
+	lines := []string{
+		flatui.Title("Flat Tree"),
+		searchLine,
+		"",
+		body,
+		"",
+		footer,
+	}
+	frame := flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	if s.focus.Focused(int(focusSearch)) {
+		x, y := flatui.CardOrigin()
+		frame.Cursor = &flat.Cursor{
+			X: x + lipgloss.Width(sectionTitle("search", true)+": ") + s.search.CursorColumn(),
+			Y: y + 1,
+		}
+	}
+	return frame
+}
+
+func renderTreeRow(row flatui.TreeRow, selected bool) string {
+	cursor := "  "
+	if selected {
+		cursor = "> "
+	}
+	toggle := "  "
+	if row.Expandable && row.Expanded {
+		toggle = "v "
+	} else if row.Expandable {
+		toggle = "> "
+	}
+	return cursor + strings.Repeat("  ", row.Depth) + toggle + row.Label
+}
+
+func sectionTitle(label string, focused bool) string {
+	if focused {
+		return activeStyle().Render("[" + label + "]")
+	}
+	return mutedStyle().Render(" " + label + " ")
+}
+
+func panelStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(0, 1)
+}
+
+func activeStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("229"))
+}
+
+func mutedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+}
+
+func main() {
+	if err := flat.Run(context.Background(), flat.App[State]{
+		State:  NewState(),
+		Handle: Handle,
+		View:   View,
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

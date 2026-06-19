@@ -1,0 +1,19 @@
+┌──────────────────────────────────────────────────────────────────────┐
+│   Flat Tree                                                          │
+│   search :                                                           │
+│                                                                      │
+│  ╭────────────────────────╮  ╭────────────────────────────────────╮  │
+│  │ [tree]                 │  │  details                           │  │
+│  │                        │  │                                    │  │
+│  │ > v workspace          │  │ Selected: workspace                │  │
+│  │     > flatui           │  │ ID: workspace                      │  │
+│  │     > cmd              │  │ Depth: 0                           │  │
+│  │       .docs            │  │                                    │  │
+│  ╰────────────────────────╯  │ Search: (empty)                    │  │
+│                              │                                    │  │
+│                              │ Tree state stays app-owned.        │  │
+│                              │ Tab moves focus between sections.  │  │
+│                              ╰────────────────────────────────────╯  │
+│                                                                      │
+│  tab focus  enter/space toggle  j/k move  q quit                     │
+└──────────────────────────────────────────────────────────────────────┘
