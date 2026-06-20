@@ -24,17 +24,19 @@ type TextRange struct {
 // on a grapheme-cluster boundary, so multi-rune clusters are never split.
 // Vertical movement preserves a display "goal column"; the visible window
 // scrolls to keep the cursor row in view. Width, when positive, horizontally
-// scrolls long lines to keep the cursor cell visible. There is no soft-wrapping
-// yet.
+// scrolls long lines to keep the cursor cell visible unless soft-wrap is
+// enabled.
 type Textarea struct {
-	lines   []string
-	row     int // cursor line
-	col     int // cursor byte offset within lines[row]
-	goalCol int // desired display column, preserved across vertical moves
-	width   int // visible columns (0 = no horizontal window)
-	height  int // visible rows (0 = show all)
-	offset  int // index of the first visible line
-	xOffset int // display-cell offset of the first visible column
+	lines      []string
+	row        int // cursor line
+	col        int // cursor byte offset within lines[row]
+	goalCol    int // desired display column, preserved across vertical moves
+	width      int // visible columns (0 = no horizontal window)
+	height     int // visible rows (0 = show all)
+	offset     int // index of the first visible line
+	xOffset    int // display-cell offset of the first visible column
+	softWrap   bool
+	wrapOffset int // visual row offset when soft-wrap is enabled
 
 	selectionActive bool
 	anchorRow       int
@@ -65,6 +67,18 @@ func (t *Textarea) SetSize(width, height int) {
 	t.ensure()
 	t.keepVisible()
 }
+
+// SetSoftWrap controls whether View wraps long logical lines to the textarea
+// width. Soft-wrap is opt-in; the default keeps long lines horizontally
+// windowed.
+func (t *Textarea) SetSoftWrap(enabled bool) {
+	t.softWrap = enabled
+	t.ensure()
+	t.keepVisible()
+}
+
+// SoftWrap reports whether visual soft-wrapping is enabled.
+func (t Textarea) SoftWrap() bool { return t.softWrap }
 
 // Row and Col expose the cursor position (line index, byte offset) for tests.
 func (t Textarea) Row() int { return t.row }
@@ -329,6 +343,14 @@ func (t *Textarea) MoveDownSelecting() {
 
 func (t *Textarea) moveUp() {
 	t.ensure()
+	if t.softWrap && t.width > 0 {
+		visualRow := visualCursorRow(t.lines, t.row, t.col, t.width)
+		if visualRow > 0 {
+			t.row, t.col = positionForVisualCell(t.lines, visualRow-1, t.goalCol, t.width)
+		}
+		t.keepVisible()
+		return
+	}
 	if t.row > 0 {
 		t.row--
 		t.col = byteOffsetForColumn(t.lines[t.row], t.goalCol)
@@ -338,6 +360,14 @@ func (t *Textarea) moveUp() {
 
 func (t *Textarea) moveDown() {
 	t.ensure()
+	if t.softWrap && t.width > 0 {
+		visualRow := visualCursorRow(t.lines, t.row, t.col, t.width)
+		if visualRow < totalWrappedRows(t.lines, t.width)-1 {
+			t.row, t.col = positionForVisualCell(t.lines, visualRow+1, t.goalCol, t.width)
+		}
+		t.keepVisible()
+		return
+	}
 	if t.row < len(t.lines)-1 {
 		t.row++
 		t.col = byteOffsetForColumn(t.lines[t.row], t.goalCol)
@@ -354,6 +384,10 @@ func (t Textarea) CursorCell() (x, y int) {
 	}
 	row := min(max(t.row, 0), len(t.lines)-1)
 	col := min(max(t.col, 0), len(t.lines[row]))
+	if t.softWrap {
+		wrapX, wrapY := wrappedCursorCell(t.lines[row], col, t.width)
+		return wrapX, visualRowsBefore(t.lines, row, t.width) + wrapY - t.wrapOffset
+	}
 	return max(lipgloss.Width(t.lines[row][:col])-t.xOffset, 0), row - t.offset
 }
 
@@ -361,6 +395,9 @@ func (t Textarea) CursorCell() (x, y int) {
 func (t Textarea) View() string {
 	if len(t.lines) == 0 {
 		return ""
+	}
+	if t.softWrap {
+		return visibleWrappedLines(t.lines, t.width, t.height, t.wrapOffset)
 	}
 	if t.height <= 0 {
 		return horizontalWindowLines(t.lines, t.xOffset, t.width)
@@ -377,6 +414,20 @@ func (t Textarea) ViewWithSelection(render func(text string, selected bool) stri
 	}
 	if len(t.lines) == 0 {
 		return ""
+	}
+	if t.softWrap {
+		rng, hasSelection := t.Selection()
+		lines := make([]string, 0, len(t.lines))
+		for row, line := range t.lines {
+			selStart, selEnd, selected := selectionColumnsForLine(line, row, rng, hasSelection)
+			lines = append(lines, softWrapLineWithSelection(line, t.width, selStart, selEnd, selected, render)...)
+		}
+		if t.height <= 0 {
+			return strings.Join(lines, "\n")
+		}
+		start := min(max(t.wrapOffset, 0), len(lines))
+		end := min(start+t.height, len(lines))
+		return strings.Join(lines[start:end], "\n")
 	}
 	startRow, endRow := 0, len(t.lines)
 	if t.height > 0 {
@@ -395,11 +446,40 @@ func (t Textarea) ViewWithSelection(render func(text string, selected bool) stri
 // syncGoal records the cursor's current display column as the goal for
 // subsequent vertical moves.
 func (t *Textarea) syncGoal() {
+	if t.softWrap && t.width > 0 {
+		x, _ := wrappedCursorCell(t.lines[t.row], t.col, t.width)
+		t.goalCol = x
+		return
+	}
 	t.goalCol = lipgloss.Width(t.lines[t.row][:t.col])
 }
 
 // keepVisible scrolls the window so the cursor row and column stay inside it.
 func (t *Textarea) keepVisible() {
+	if t.softWrap {
+		t.xOffset = 0
+		visualRow := visualCursorRow(t.lines, t.row, t.col, t.width)
+		if t.height > 0 {
+			if visualRow < t.wrapOffset {
+				t.wrapOffset = visualRow
+			} else if visualRow >= t.wrapOffset+t.height {
+				t.wrapOffset = visualRow - t.height + 1
+			}
+			t.wrapOffset = min(max(t.wrapOffset, 0), max(totalWrappedRows(t.lines, t.width)-t.height, 0))
+		} else {
+			t.wrapOffset = 0
+		}
+		if t.height > 0 {
+			if t.row < t.offset {
+				t.offset = t.row
+			} else if t.row >= t.offset+t.height {
+				t.offset = t.row - t.height + 1
+			}
+			t.offset = min(max(t.offset, 0), max(len(t.lines)-t.height, 0))
+		}
+		return
+	}
+	t.wrapOffset = 0
 	if t.height > 0 {
 		if t.row < t.offset {
 			t.offset = t.row
@@ -524,6 +604,168 @@ func horizontalWindowLine(line string, offset, width int) string {
 	return horizontalWindowLineWithSelection(line, offset, width, 0, 0, false, func(text string, _ bool) string {
 		return text
 	})
+}
+
+func visibleWrappedLines(lines []string, width, height, offset int) string {
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		wrapped = append(wrapped, softWrapLine(line, width)...)
+	}
+	if height <= 0 {
+		return strings.Join(wrapped, "\n")
+	}
+	start := min(max(offset, 0), len(wrapped))
+	end := min(start+height, len(wrapped))
+	return strings.Join(wrapped[start:end], "\n")
+}
+
+func softWrapLine(line string, width int) []string {
+	return softWrapLineWithSelection(line, width, 0, 0, false, func(text string, _ bool) string {
+		return text
+	})
+}
+
+func softWrapLineWithSelection(line string, width int, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) []string {
+	if width <= 0 {
+		return []string{renderLineWithSelection(line, selStart, selEnd, hasSelection, render)}
+	}
+	if line == "" {
+		return []string{render("", hasSelection && selStart == 0 && selEnd == 0)}
+	}
+	rows := make([]string, 0, max(lipgloss.Width(line)/width, 1))
+	state := -1
+	rest := line
+	at := 0
+	rowWidth := 0
+	var row strings.Builder
+	var segment strings.Builder
+	segmentSelected := false
+	haveSegment := false
+	flushSegment := func() {
+		if !haveSegment {
+			return
+		}
+		row.WriteString(render(segment.String(), segmentSelected))
+		segment.Reset()
+		haveSegment = false
+	}
+	flushRow := func() {
+		flushSegment()
+		rows = append(rows, row.String())
+		row.Reset()
+		rowWidth = 0
+	}
+	for len(rest) > 0 {
+		cluster, r, _, st := uniseg.StepString(rest, state)
+		clusterWidth := lipgloss.Width(cluster)
+		if rowWidth > 0 && rowWidth+clusterWidth > width {
+			flushRow()
+		}
+		selected := hasSelection && at >= selStart && at+len(cluster) <= selEnd
+		if haveSegment && selected != segmentSelected {
+			flushSegment()
+		}
+		segment.WriteString(cluster)
+		segmentSelected = selected
+		haveSegment = true
+		rowWidth += clusterWidth
+		at += len(cluster)
+		rest, state = r, st
+	}
+	flushRow()
+	return rows
+}
+
+func wrappedCursorCell(line string, col, width int) (x, y int) {
+	if width <= 0 {
+		return lipgloss.Width(line[:col]), 0
+	}
+	state := -1
+	rest := line[:col]
+	for len(rest) > 0 {
+		cluster, r, _, st := uniseg.StepString(rest, state)
+		clusterWidth := lipgloss.Width(cluster)
+		if x > 0 && x+clusterWidth > width {
+			y++
+			x = 0
+		}
+		x += clusterWidth
+		rest, state = r, st
+	}
+	if x == width && col < len(line) {
+		return 0, y + 1
+	}
+	return x, y
+}
+
+func visualCursorRow(lines []string, row, col, width int) int {
+	_, wrapY := wrappedCursorCell(lines[row], col, width)
+	return visualRowsBefore(lines, row, width) + wrapY
+}
+
+func visualRowsBefore(lines []string, row, width int) int {
+	total := 0
+	for i := 0; i < row && i < len(lines); i++ {
+		total += len(softWrapLine(lines[i], width))
+	}
+	return total
+}
+
+func totalWrappedRows(lines []string, width int) int {
+	return visualRowsBefore(lines, len(lines), width)
+}
+
+func positionForVisualCell(lines []string, visualRow, col, width int) (row, byteCol int) {
+	if len(lines) == 0 {
+		return 0, 0
+	}
+	remaining := max(visualRow, 0)
+	for row, line := range lines {
+		rows := len(softWrapLine(line, width))
+		if remaining < rows {
+			return row, byteOffsetForWrappedCell(line, remaining, col, width)
+		}
+		remaining -= rows
+	}
+	last := len(lines) - 1
+	return last, len(lines[last])
+}
+
+func byteOffsetForWrappedCell(line string, targetRow, col, width int) int {
+	if width <= 0 || targetRow <= 0 {
+		return byteOffsetForColumn(line, col)
+	}
+	if line == "" {
+		return 0
+	}
+	state := -1
+	rest := line
+	row, display := 0, 0
+	at, lastInTarget := 0, 0
+	for len(rest) > 0 {
+		cluster, r, _, st := uniseg.StepString(rest, state)
+		cw := lipgloss.Width(cluster)
+		if display > 0 && display+cw > width {
+			if row == targetRow {
+				return at
+			}
+			row++
+			display = 0
+		}
+		if row == targetRow {
+			if display+cw > col {
+				return at
+			}
+			lastInTarget = at + len(cluster)
+		}
+		display += cw
+		at += len(cluster)
+		rest, state = r, st
+	}
+	if row == targetRow {
+		return lastInTarget
+	}
+	return len(line)
 }
 
 func horizontalWindowLineWithSelection(line string, offset, width int, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) string {

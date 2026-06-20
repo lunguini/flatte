@@ -31,12 +31,49 @@ func TestFocusCyclesBetweenWorkspaceSections(t *testing.T) {
 		t.Fatalf("after tab focus = %d, want search", s.focus.Index())
 	}
 	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
-	if !s.focus.Focused(int(focusTable)) {
-		t.Fatalf("second tab focus = %d, want table", s.focus.Index())
+	if !s.focus.Focused(int(focusDetails)) {
+		t.Fatalf("second tab focus = %d, want details", s.focus.Index())
 	}
 	Handle(s, flat.KeyEvent{Key: flat.KeyTab, Mod: flat.ModShift}, flat.Effects[State]{})
 	if !s.focus.Focused(int(focusSearch)) {
 		t.Fatalf("shift-tab focus = %d, want search", s.focus.Index())
+	}
+}
+
+func TestFocusTabsSpanFullWidth(t *testing.T) {
+	s := ready()
+	frame := flatest.CleanFrame(View(s, flat.RenderContext{Width: 86}).Content)
+	line, _ := cleanLineContaining(frame, "Tree")
+	for _, want := range []string{"Tree", "Search", "Details"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("tab line missing %q:\n%s", want, frame)
+		}
+	}
+	if strings.Contains(line, "Work") {
+		t.Fatalf("tab line includes redundant Work focus target:\n%s", frame)
+	}
+	if width := lipgloss.Width(line); width != 86 {
+		t.Fatalf("tab line width = %d, want 86: %q", width, line)
+	}
+}
+
+func TestHelpLinePinnedToBottom(t *testing.T) {
+	s := ready()
+	frame := flatest.CleanFrame(View(s, flat.RenderContext{Width: 86}).Content)
+	lines := strings.Split(frame, "\n")
+	if len(lines) != 24 {
+		t.Fatalf("frame line count = %d, want terminal height 24:\n%s", len(lines), frame)
+	}
+	if !strings.Contains(lines[len(lines)-1], "tab focus") {
+		t.Fatalf("last line is not help: %q", lines[len(lines)-1])
+	}
+}
+
+func TestProgressUsesWorkPanelWidth(t *testing.T) {
+	s := ready()
+	_, centerOuter, _ := layoutWidths(86)
+	if got, want := s.progress.Width(), centerOuter-12; got != want {
+		t.Fatalf("progress width = %d, want work content width minus label = %d", got, want)
 	}
 }
 
@@ -89,9 +126,32 @@ func TestSearchFiltersTableOnlyWhenFocused(t *testing.T) {
 	}
 }
 
-func TestTableSelectionUpdatesDetailsAndProgress(t *testing.T) {
+func TestSearchFocusCanMoveWorkRowsAndKeepEditing(t *testing.T) {
 	s := ready()
 	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
+
+	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	if s.table.Cursor() != 1 {
+		t.Fatalf("table cursor after search-down = %d, want 1", s.table.Cursor())
+	}
+	if got := s.selectedResult().Title; got != "Billing sync" {
+		t.Fatalf("selected title = %q, want Billing sync", got)
+	}
+	if !strings.Contains(s.details.View(), "Billing sync") {
+		t.Fatalf("details missing selected title:\n%s", s.details.View())
+	}
+
+	Handle(s, key('a'), flat.Effects[State]{})
+	if s.search.Value != "a" {
+		t.Fatalf("search after row move = %q, want a", s.search.Value)
+	}
+	if !s.focus.Focused(int(focusSearch)) {
+		t.Fatalf("focus after search row move = %d, want search", s.focus.Index())
+	}
+}
+
+func TestSearchSelectionUpdatesDetailsAndProgress(t *testing.T) {
+	s := ready()
 	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
 	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
 
@@ -130,7 +190,7 @@ func TestSearchCursorTracksTypedText(t *testing.T) {
 
 func TestFocusDetailsIsVisibleAndDescribesScroll(t *testing.T) {
 	s := ready()
-	for range 3 {
+	for range 2 {
 		Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
 	}
 

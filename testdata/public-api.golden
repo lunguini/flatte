@@ -189,7 +189,9 @@ flatui
   method Textarea.SelectedText
   method Textarea.Selection
   method Textarea.SetSize
+  method Textarea.SetSoftWrap
   method Textarea.SetValue
+  method Textarea.SoftWrap
   method Textarea.Value
   method Textarea.View
   method Textarea.ViewWithSelection

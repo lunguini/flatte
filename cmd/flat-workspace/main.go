@@ -19,7 +19,6 @@ type focusArea int
 const (
 	focusTree focusArea = iota
 	focusSearch
-	focusTable
 	focusDetails
 	focusCount
 )
@@ -50,6 +49,7 @@ type State struct {
 	table    flatui.Table
 	details  flatui.Viewport
 	progress flatui.Progress
+	height   int
 
 	results []WorkItem
 }
@@ -65,6 +65,7 @@ func NewState() *State {
 	s.tree.SetHeight(6)
 	s.table.SetHeight(6)
 	s.details.SetSize(24, 6)
+	s.height = 24
 	s.syncResults()
 	return s
 }
@@ -89,11 +90,12 @@ func workspaceTree() []flatui.TreeNode {
 func (s *State) layout(width, height int) {
 	_, centerOuter, rightOuter := layoutWidths(width)
 	bodyRows := max(min(height-13, 8), 4)
+	s.height = max(height, 0)
 	s.tree.SetHeight(bodyRows)
 	s.table.SetHeight(bodyRows)
 	s.setTableColumns(max(centerOuter-6, 20))
 	s.details.SetSize(max(rightOuter-6, 14), bodyRows)
-	s.progress.SetWidth(max(min(width/4, 24), 10))
+	s.progress.SetWidth(max(centerOuter-12, 8))
 	s.syncDetails()
 }
 
@@ -197,7 +199,7 @@ func handleVertical(s *State, delta int) {
 		} else {
 			s.tree.MoveDown()
 		}
-	case s.focus.Focused(int(focusTable)):
+	case s.focus.Focused(int(focusSearch)):
 		if delta < 0 {
 			s.table.MoveUp()
 		} else {
@@ -218,16 +220,6 @@ func handleCharacter(s *State, key flat.KeyEvent) {
 		s.search.Insert(key.Rune)
 		s.syncResults()
 		return
-	}
-	if s.focus.Focused(int(focusTable)) {
-		switch key.Rune {
-		case 'j', 'J':
-			s.table.MoveDown()
-			s.syncDetails()
-		case 'k', 'K':
-			s.table.MoveUp()
-			s.syncDetails()
-		}
 	}
 	if s.focus.Focused(int(focusDetails)) {
 		switch key.Rune {
@@ -352,13 +344,19 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		st.title.Width(leftOuter+centerOuter-2).Render("Flat Workspace"),
 		st.subtle.Render(fmt.Sprintf("focus %s | %d visible", focusName(s), len(s.results))),
 	)
+	tabs := focusTabs(s, width)
 	left := panel(st, s.focus.Focused(int(focusTree)), leftOuter, treePanel(s, st, leftOuter-4))
-	center := panel(st, s.focus.Focused(int(focusSearch)) || s.focus.Focused(int(focusTable)), centerOuter, centerPanel(s, st, centerOuter-6))
+	center := panel(st, s.focus.Focused(int(focusSearch)), centerOuter, centerPanel(s, st, centerOuter-6))
 	right := panel(st, s.focus.Focused(int(focusDetails)), rightOuter, detailsPanel(s, st, rightOuter-6))
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", center, "  ", right)
 	footer := st.subtle.Render(keyMap(s).View())
 
-	content := lipgloss.JoinVertical(lipgloss.Left, header, "", body, "", footer)
+	sections := []string{header, tabs, "", body}
+	for range max(s.height-(1+1+1+lineCount(body)+1), 0) {
+		sections = append(sections, "")
+	}
+	sections = append(sections, footer)
+	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	frame := flat.Frame{Content: trimRightLines(content)}
 	if s.focus.Focused(int(focusSearch)) {
 		frame.Cursor = searchCursor(frame.Content, s.search.CursorColumn())
@@ -366,12 +364,44 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	return frame
 }
 
+func focusTabs(s *State, width int) string {
+	labels := []struct {
+		name    string
+		focused bool
+	}{
+		{name: "Tree", focused: s.focus.Focused(int(focusTree))},
+		{name: "Search", focused: s.focus.Focused(int(focusSearch))},
+		{name: "Details", focused: s.focus.Focused(int(focusDetails))},
+	}
+	parts := make([]string, 0, len(labels))
+	remaining := width
+	for i, label := range labels {
+		segmentWidth := remaining / (len(labels) - i)
+		remaining -= segmentWidth
+		text := label.name
+		if label.focused {
+			text = "[" + text + "]"
+		}
+		parts = append(parts, centerFillText(text, segmentWidth))
+	}
+	return strings.Join(parts, "")
+}
+
+func centerFillText(text string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	text = fit(text, width)
+	pad := width - lipgloss.Width(text)
+	left := pad / 2
+	right := pad - left
+	return strings.Repeat("─", left) + text + strings.Repeat("─", right)
+}
+
 func focusName(s *State) string {
 	switch {
 	case s.focus.Focused(int(focusSearch)):
 		return "search"
-	case s.focus.Focused(int(focusTable)):
-		return "work"
 	case s.focus.Focused(int(focusDetails)):
 		return "details"
 	default:
@@ -501,6 +531,7 @@ func keyMap(s *State) flatui.KeyMap {
 			{Keys: []string{"tab"}, Help: "focus"},
 			{Keys: []string{"type"}, Help: "search"},
 			{Keys: []string{"backspace"}, Help: "edit"},
+			{Keys: []string{"up", "down"}, Help: "rows"},
 			{Keys: []string{"esc"}, Help: "quit"},
 		}
 	case s.focus.Focused(int(focusDetails)):
@@ -509,12 +540,10 @@ func keyMap(s *State) flatui.KeyMap {
 			{Keys: []string{"j", "k"}, Help: "scroll"},
 			{Keys: []string{"esc"}, Help: "quit"},
 		}
-	default:
-		return flatui.KeyMap{
-			{Keys: []string{"tab"}, Help: "focus"},
-			{Keys: []string{"up", "down"}, Help: "rows"},
-			{Keys: []string{"esc"}, Help: "quit"},
-		}
+	}
+	return flatui.KeyMap{
+		{Keys: []string{"tab"}, Help: "focus"},
+		{Keys: []string{"esc"}, Help: "quit"},
 	}
 }
 
@@ -534,6 +563,13 @@ func trimRightLines(s string) string {
 		lines[i] = strings.TrimRight(line, " ")
 	}
 	return strings.Join(lines, "\n")
+}
+
+func lineCount(s string) int {
+	if s == "" {
+		return 0
+	}
+	return strings.Count(s, "\n") + 1
 }
 
 func main() {

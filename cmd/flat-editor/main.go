@@ -36,6 +36,7 @@ func (s *State) layout(width, height int) {
 		max(flatui.CardBodyWidth(width), 1),
 		max(flatui.CardBodyHeight(height, pinnedRows+extraRows), 1),
 	)
+	s.ta.SetSoftWrap(true)
 }
 
 func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {

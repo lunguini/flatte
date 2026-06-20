@@ -260,20 +260,20 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	}
 }
 
-func TestViewKeepsLongLineCursorInsideTextareaBody(t *testing.T) {
+func TestViewSoftWrapsLongLineAndKeepsCursorInsideTextareaBody(t *testing.T) {
 	s := emptyState()
 	s.layout(18, 10)
 	typeRunes(s, "abcdefghijklmnopqrstuvwxyz")
 
-	if got := s.ta.View(); got != "pqrstuvwxyz" {
-		t.Fatalf("textarea view = %q, want %q", got, "pqrstuvwxyz")
+	if got := s.ta.View(); got != "abcdefghijkl\nmnopqrstuvwx\nyz" {
+		t.Fatalf("textarea view = %q, want wrapped rows", got)
 	}
 	frame := View(s, flat.RenderContext{Width: 18})
 	if frame.Cursor == nil {
 		t.Fatal("editor view has no cursor")
 	}
-	if frame.Cursor.X != 14 || frame.Cursor.Y != 4 {
-		t.Fatalf("cursor = %+v, want (14,4)", *frame.Cursor)
+	if frame.Cursor.X != 5 || frame.Cursor.Y != 6 {
+		t.Fatalf("cursor = %+v, want (5,6)", *frame.Cursor)
 	}
 }
 

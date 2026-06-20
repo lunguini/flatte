@@ -324,6 +324,67 @@ func TestTextareaHorizontalWindowDoesNotSplitWideGrapheme(t *testing.T) {
 	}
 }
 
+func TestTextareaSoftWrapViewsLongLogicalLine(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("abcdefghij")
+	ta.SetSize(4, 3)
+	ta.SetSoftWrap(true)
+
+	if !ta.SoftWrap() {
+		t.Fatal("SoftWrap() = false, want true")
+	}
+	if got := ta.View(); got != "abcd\nefgh\nij" {
+		t.Fatalf("View() = %q, want wrapped visual rows", got)
+	}
+
+	for range 6 {
+		ta.MoveRight()
+	}
+	x, y := ta.CursorCell()
+	if x != 2 || y != 1 {
+		t.Fatalf("CursorCell() after moving right = (%d,%d), want (2,1)", x, y)
+	}
+}
+
+func TestTextareaSoftWrapCursorAtWrapBoundaryUsesNextVisualRow(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("abcdefgh")
+	ta.SetSize(4, 3)
+	ta.SetSoftWrap(true)
+	for range 4 {
+		ta.MoveRight()
+	}
+
+	x, y := ta.CursorCell()
+	if x != 0 || y != 1 {
+		t.Fatalf("CursorCell() at wrap boundary = (%d,%d), want (0,1)", x, y)
+	}
+}
+
+func TestTextareaSoftWrapVerticalMovesWithinLogicalLine(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("abcdefghij")
+	ta.SetSize(4, 3)
+	ta.SetSoftWrap(true)
+	for range 2 {
+		ta.MoveRight()
+	}
+
+	ta.MoveDown()
+	if ta.Row() != 0 || ta.Col() != 6 {
+		t.Fatalf("MoveDown within wrapped line = (%d,%d), want (0,6)", ta.Row(), ta.Col())
+	}
+	x, y := ta.CursorCell()
+	if x != 2 || y != 1 {
+		t.Fatalf("CursorCell after wrapped down = (%d,%d), want (2,1)", x, y)
+	}
+
+	ta.MoveUp()
+	if ta.Row() != 0 || ta.Col() != 2 {
+		t.Fatalf("MoveUp within wrapped line = (%d,%d), want (0,2)", ta.Row(), ta.Col())
+	}
+}
+
 func TestTextareaCursorCell(t *testing.T) {
 	var ta Textarea
 	ta.SetValue("ab\ncd")
