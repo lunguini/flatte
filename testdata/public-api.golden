@@ -38,6 +38,7 @@ flat
   func NewHarnessEffects
   func RenderContextFor
   func Run
+  func SelectFile
   func Stream
   func WithInline
   func WithInput
@@ -63,6 +64,7 @@ flat
   type Cursor
   type Effects
   type Event
+  type FileSelection
   type FocusEvent
   type Frame
   type Key
@@ -80,6 +82,7 @@ flat
   type StateUpdate
   type Tracer
   type UpdateTracer
+  var ErrNoSelection
 flatui
   func Card
   func CardBodyHeight
