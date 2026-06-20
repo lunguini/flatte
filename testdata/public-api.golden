@@ -93,6 +93,8 @@ flatui
   func FrameWidth
   func NewProgress
   func NewSpinner
+  func NewStopwatch
+  func NewTimer
   func NewTree
   func Overlay
   func OverlayOrigin
@@ -136,6 +138,13 @@ flatui
   method Spinner.Frame
   method Spinner.Tick
   method Spinner.View
+  method Stopwatch.Elapsed
+  method Stopwatch.Reset
+  method Stopwatch.Running
+  method Stopwatch.Start
+  method Stopwatch.Stop
+  method Stopwatch.Tick
+  method Stopwatch.Toggle
   method Table.Cursor
   method Table.Header
   method Table.HeaderWithStyle
@@ -198,6 +207,13 @@ flatui
   method Textarea.Value
   method Textarea.View
   method Textarea.ViewWithSelection
+  method Timer.Done
+  method Timer.Duration
+  method Timer.Elapsed
+  method Timer.Percent
+  method Timer.Remaining
+  method Timer.Reset
+  method Timer.Tick
   method Tree.CursorID
   method Tree.MoveDown
   method Tree.MoveUp
@@ -238,12 +254,14 @@ flatui
   type Progress
   type ProgressStyle
   type Spinner
+  type Stopwatch
   type Table
   type TableStyle
   type TextField
   type TextPosition
   type TextRange
   type Textarea
+  type Timer
   type Tree
   type TreeNode
   type TreeRow

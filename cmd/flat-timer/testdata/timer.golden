@@ -1,0 +1,10 @@
+┌─────────────────────────────────────────────────────────────────────┐
+│   Flat Timer                                                        │
+│  countdown + stopwatch sample                                       │
+│                                                                     │
+│    timer:     00:10 remaining (running)                             │
+│    progress:  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░    0%  │
+│    stopwatch: 00:00 (stopped)                                       │
+│                                                                     │
+│  space start/stop | r reset all | t restart timer | q/esc quit      │
+└─────────────────────────────────────────────────────────────────────┘
