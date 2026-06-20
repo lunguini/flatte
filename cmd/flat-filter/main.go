@@ -153,7 +153,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		query = "(empty)"
 	}
 	summary := fmt.Sprintf("%d of %d results", len(s.filteredIndexes), len(s.items))
-	pageLine := pageStatus(s)
+	pageLine := s.pages.View()
 
 	lines := []string{
 		flatui.Title("Flat Filter"),
@@ -176,13 +176,6 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		Y: originY + 1,
 	}
 	return frame
-}
-
-func pageStatus(s *State) string {
-	if s.pages.Pages() <= 1 {
-		return "page 1/1"
-	}
-	return fmt.Sprintf("page %d/%d", s.pages.Page()+1, s.pages.Pages())
 }
 
 func keyMap(s *State) flatui.KeyMap {

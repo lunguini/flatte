@@ -1,7 +1,9 @@
 package flatui
 
-// Paginator is app-owned page/range state. It owns no key policy and renders
-// no controls; apps choose whether to bind arrows, h/l, PgUp/PgDn, or buttons.
+import "fmt"
+
+// Paginator is app-owned page/range state. It owns no key policy; apps choose
+// whether to bind arrows, h/l, PgUp/PgDn, or buttons.
 type Paginator struct {
 	total    int
 	pageSize int
@@ -58,6 +60,15 @@ func (p Paginator) Range() (first, last int) {
 	first = p.page * p.pageSize
 	last = min(first+p.pageSize, p.total)
 	return first, last
+}
+
+// View renders a compact page indicator for the selected page.
+func (p Paginator) View() string {
+	pages := p.Pages()
+	if pages <= 1 {
+		return "page 1/1"
+	}
+	return fmt.Sprintf("page %d/%d", p.page+1, pages)
 }
 
 func (p *Paginator) clamp() {

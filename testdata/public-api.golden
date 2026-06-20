@@ -132,6 +132,7 @@ flatui
   method Paginator.SetPageSize
   method Paginator.SetTotal
   method Paginator.Total
+  method Paginator.View
   method Progress.Percent
   method Progress.SetPercent
   method Progress.SetWidth

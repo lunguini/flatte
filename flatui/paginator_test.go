@@ -34,3 +34,22 @@ func TestPaginatorZeroPageSize(t *testing.T) {
 		t.Fatalf("Range() = %d,%d want 0,0", first, last)
 	}
 }
+
+func TestPaginatorView(t *testing.T) {
+	var p Paginator
+	p.SetPageSize(10)
+	p.SetTotal(45)
+	p.SelectPage(2)
+
+	if got := p.View(); got != "page 3/5" {
+		t.Fatalf("View() = %q, want %q", got, "page 3/5")
+	}
+}
+
+func TestPaginatorViewWithNoPages(t *testing.T) {
+	var p Paginator
+
+	if got := p.View(); got != "page 1/1" {
+		t.Fatalf("View() = %q, want %q", got, "page 1/1")
+	}
+}
