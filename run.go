@@ -261,10 +261,35 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	var lastFrame Frame
 	drew := false
 	cursorShown := false
+	currentCursorShape := -1
+	currentCursorColor := ""
 	var screen uv.ScreenBuffer
 	var screenWidth, screenHeight int
 	forceRepaint := false
 	var pending []action
+	applyCursorStyle := func(style *CursorStyle) {
+		if code, ok := cursorShapeCode(style); ok {
+			if currentCursorShape != code {
+				_, _ = renderer.WriteString(fmt.Sprintf("\x1b[%d q", code))
+				currentCursorShape = code
+			}
+		} else if currentCursorShape != -1 {
+			_, _ = renderer.WriteString("\x1b[0 q")
+			currentCursorShape = -1
+		}
+		if token := cursorColorToken(style); token != "" {
+			if currentCursorColor != token {
+				_, _ = renderer.WriteString("\x1b]12;" + token + "\x07")
+				currentCursorColor = token
+			}
+		} else if currentCursorColor != "" {
+			_, _ = renderer.WriteString("\x1b]112\x07")
+			currentCursorColor = ""
+		}
+	}
+	resetCursorStyle := func() {
+		applyCursorStyle(nil)
+	}
 
 	// enterRenderer applies the renderer-side entry state: alt screen
 	// (unless inline), cursor hidden, terminal modes. Alt-screen entry must
@@ -278,6 +303,8 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		if !cfg.inline {
 			renderer.EnterAltScreen()
 		}
+		currentCursorShape = -1
+		currentCursorColor = ""
 		_, _ = renderer.WriteString("\x1b[?25l") // hide cursor (terminals may reset it on alt-screen entry)
 		_, _ = renderer.WriteString(setModes(cfg))
 		cursorShown = false
@@ -301,6 +328,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		if lastFrame.Title != "" {
 			_, _ = renderer.WriteString(ansi.SetWindowTitle(""))
 		}
+		resetCursorStyle()
 		_, _ = renderer.WriteString(resetModes(cfg))
 		_, _ = renderer.WriteString("\x1b[?25h")
 		if cfg.inline {
@@ -423,6 +451,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		if cursorShown && frame.Cursor == nil {
 			// Hide before the diff writes so the cursor never lingers on
 			// stale cells.
+			resetCursorStyle()
 			_, _ = renderer.WriteString("\x1b[?25l")
 			cursorShown = false
 		}
@@ -430,6 +459,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		styled.Draw(screen, screen.Bounds())
 		renderer.Render(screen.RenderBuffer)
 		if frame.Cursor != nil {
+			applyCursorStyle(frame.Cursor.Style)
 			// MoveTo must come after Render: rendering moves the cursor.
 			renderer.MoveTo(frame.Cursor.X, frame.Cursor.Y)
 			if !cursorShown {
@@ -452,6 +482,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	// was delivered to us.
 	releaseTerminal := func() {
 		pipe.stop()
+		resetCursorStyle()
 		_, _ = renderer.WriteString(resetModes(cfg))
 		_, _ = renderer.WriteString("\x1b[?25h")
 		if cfg.inline {
@@ -707,6 +738,39 @@ func newTerminalRenderer(renderBuffer io.Writer, output io.Writer, env []string,
 		renderer.SetRelativeCursor(true)
 	}
 	return renderer
+}
+
+func cursorShapeCode(style *CursorStyle) (int, bool) {
+	if style == nil {
+		return 0, false
+	}
+	switch style.Shape {
+	case CursorShapeBlock:
+		if style.Blink {
+			return 1, true
+		}
+		return 2, true
+	case CursorShapeUnderline:
+		if style.Blink {
+			return 3, true
+		}
+		return 4, true
+	case CursorShapeBar:
+		if style.Blink {
+			return 5, true
+		}
+		return 6, true
+	default:
+		return 0, false
+	}
+}
+
+func cursorColorToken(style *CursorStyle) string {
+	if style == nil || style.Color == nil {
+		return ""
+	}
+	r, g, b, _ := style.Color.RGBA()
+	return fmt.Sprintf("#%02x%02x%02x", uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
 
 type inputResult struct {

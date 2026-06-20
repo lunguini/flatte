@@ -258,6 +258,9 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	if frame.Cursor.X != 3 || frame.Cursor.Y != 4 {
 		t.Fatalf("cursor = %+v, want (3,4)", *frame.Cursor)
 	}
+	if frame.Cursor.Style == nil || frame.Cursor.Style.Shape != flat.CursorShapeBar || frame.Cursor.Style.Blink {
+		t.Fatalf("cursor style = %+v, want steady bar", frame.Cursor.Style)
+	}
 }
 
 func TestViewSoftWrapsLongLineAndKeepsCursorInsideTextareaBody(t *testing.T) {

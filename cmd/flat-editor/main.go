@@ -239,7 +239,14 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	// subtitle, blank) that precede the textarea body + the cell within it.
 	ox, oy := flatui.CardOrigin()
 	cx, cy := s.ta.CursorCell()
-	frame.Cursor = &flat.Cursor{X: ox + cx, Y: oy + 3 + cy}
+	frame.Cursor = &flat.Cursor{
+		X: ox + cx,
+		Y: oy + 3 + cy,
+		Style: &flat.CursorStyle{
+			Shape: flat.CursorShapeBar,
+			Blink: false,
+		},
+	}
 	return frame
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image/color"
 	"os"
 	"strings"
 	"testing"
@@ -87,6 +88,36 @@ func TestRunKeepsCursorHiddenWithoutFrameCursor(t *testing.T) {
 	}
 	if strings.Index(output, "\x1b[?25h") < strings.LastIndex(output, "\x1b[?2026l") {
 		t.Fatalf("cursor shown before the last frame write:\n%q", output)
+	}
+}
+
+func TestRunEmitsCursorStyleAndResetsOnExit(t *testing.T) {
+	output := runFrameApp(t, func(s *testState, ctx RenderContext) Frame {
+		return Frame{
+			Content: "field",
+			Cursor: &Cursor{
+				X: 1,
+				Y: 0,
+				Style: &CursorStyle{
+					Shape: CursorShapeBar,
+					Blink: false,
+					Color: color.RGBA{R: 255, G: 128, B: 0, A: 255},
+				},
+			},
+		}
+	}, "q")
+
+	if !strings.Contains(output, "\x1b[6 q") {
+		t.Fatalf("bar cursor shape not emitted:\n%q", output)
+	}
+	if !strings.Contains(output, "\x1b]12;#ff8000\x07") {
+		t.Fatalf("cursor color not emitted:\n%q", output)
+	}
+	if !strings.Contains(output, "\x1b[0 q") {
+		t.Fatalf("cursor shape not reset on exit:\n%q", output)
+	}
+	if !strings.Contains(output, "\x1b]112\x07") {
+		t.Fatalf("cursor color not reset on exit:\n%q", output)
 	}
 }
 

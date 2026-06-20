@@ -1,4 +1,8 @@
 flat
+  const CursorShapeBar
+  const CursorShapeBlock
+  const CursorShapeDefault
+  const CursorShapeUnderline
   const KeyBackspace
   const KeyCharacter
   const KeyCtrlC
@@ -62,6 +66,8 @@ flat
   type ClipboardEvent
   type Clock
   type Cursor
+  type CursorShape
+  type CursorStyle
   type Effects
   type Event
   type FileSelection

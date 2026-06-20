@@ -1,5 +1,7 @@
 package flat
 
+import "image/color"
+
 // Frame is what View returns: rendered content plus terminal metadata.
 // The zero value is a blank frame with no cursor and no title.
 type Frame struct {
@@ -15,7 +17,25 @@ type Frame struct {
 
 // Cursor is a hardware-cursor position in frame cell coordinates.
 type Cursor struct {
-	X, Y int
+	X, Y  int
+	Style *CursorStyle
+}
+
+type CursorShape int
+
+const (
+	CursorShapeDefault CursorShape = iota
+	CursorShapeBlock
+	CursorShapeUnderline
+	CursorShapeBar
+)
+
+// CursorStyle configures the terminal hardware cursor when supported. A nil
+// style leaves the terminal default in place.
+type CursorStyle struct {
+	Shape CursorShape
+	Blink bool
+	Color color.Color
 }
 
 // framesEqual reports whether two frames would render identically,
@@ -24,8 +44,43 @@ func framesEqual(a, b Frame) bool {
 	if a.Content != b.Content || a.Title != b.Title {
 		return false
 	}
-	if (a.Cursor == nil) != (b.Cursor == nil) {
+	return cursorsEqual(a.Cursor, b.Cursor)
+}
+
+func cursorsEqual(a, b *Cursor) bool {
+	if (a == nil) != (b == nil) {
 		return false
 	}
-	return a.Cursor == nil || *a.Cursor == *b.Cursor
+	if a == nil {
+		return true
+	}
+	if a.X != b.X || a.Y != b.Y {
+		return false
+	}
+	return cursorStylesEqual(a.Style, b.Style)
+}
+
+func cursorStylesEqual(a, b *CursorStyle) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	if a.Shape != b.Shape || a.Blink != b.Blink {
+		return false
+	}
+	return colorsEqual(a.Color, b.Color)
+}
+
+func colorsEqual(a, b color.Color) bool {
+	if (a == nil) != (b == nil) {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
 }
