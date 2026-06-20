@@ -24,3 +24,89 @@ func (m KeyMap) View() string {
 	}
 	return strings.Join(parts, "  ")
 }
+
+// KeyMapMode selects how grouped key bindings are rendered.
+type KeyMapMode int
+
+const (
+	// KeyMapShort renders the first enabled binding per group.
+	KeyMapShort KeyMapMode = iota
+	// KeyMapFull renders every enabled binding per group.
+	KeyMapFull
+)
+
+// KeyMapOptions configures grouped key map rendering.
+type KeyMapOptions struct {
+	Width int
+	Mode  KeyMapMode
+}
+
+// KeyGroup is a named group of command binding metadata.
+type KeyGroup struct {
+	Title    string
+	Bindings KeyMap
+}
+
+// KeyGroups renders context-sensitive help across named groups.
+type KeyGroups []KeyGroup
+
+// ViewWithOptions renders grouped key metadata. It owns no key matching or
+// input policy; apps still decide how events map to commands.
+func (groups KeyGroups) ViewWithOptions(opts KeyMapOptions) string {
+	parts := make([]string, 0, len(groups))
+	for _, group := range groups {
+		bindings := groupBindings(group.Bindings, opts.Mode)
+		if len(bindings) == 0 {
+			continue
+		}
+		text := bindings.View()
+		if group.Title != "" {
+			text = group.Title + ": " + text
+		}
+		parts = append(parts, text)
+	}
+	return wrapKeyMapParts(parts, opts.Width)
+}
+
+func groupBindings(bindings KeyMap, mode KeyMapMode) KeyMap {
+	out := make(KeyMap, 0, len(bindings))
+	for _, binding := range bindings {
+		if binding.Disabled || len(binding.Keys) == 0 || binding.Help == "" {
+			continue
+		}
+		out = append(out, binding)
+		if mode == KeyMapShort {
+			break
+		}
+	}
+	return out
+}
+
+func wrapKeyMapParts(parts []string, width int) string {
+	if width <= 0 {
+		return strings.Join(parts, "  ")
+	}
+	var lines []string
+	current := ""
+	for _, part := range parts {
+		for _, segment := range strings.Split(part, "  ") {
+			if segment == "" {
+				continue
+			}
+			next := segment
+			if current != "" {
+				next = current + "  " + segment
+			}
+			if current != "" && len(next) > width {
+				lines = append(lines, current)
+				current = segment
+				continue
+			}
+			current = next
+		}
+	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	return strings.Join(lines, "\n")
+}

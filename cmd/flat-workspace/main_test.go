@@ -67,6 +67,11 @@ func TestHelpLinePinnedToBottom(t *testing.T) {
 	if !strings.Contains(lines[len(lines)-1], "tab focus") {
 		t.Fatalf("last line is not help: %q", lines[len(lines)-1])
 	}
+	for _, want := range []string{"nav:", "app:"} {
+		if !strings.Contains(lines[len(lines)-1], want) {
+			t.Fatalf("last line missing grouped help label %q: %q", want, lines[len(lines)-1])
+		}
+	}
 }
 
 func TestProgressUsesWorkPanelWidth(t *testing.T) {

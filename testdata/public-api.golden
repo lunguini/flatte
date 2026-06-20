@@ -84,6 +84,8 @@ flat
   type UpdateTracer
   var ErrNoSelection
 flatui
+  const KeyMapFull
+  const KeyMapShort
   func Card
   func CardBodyHeight
   func CardBodyWidth
@@ -109,6 +111,7 @@ flatui
   method FocusRing.Prev
   method FocusRing.Select
   method FocusRing.SetCount
+  method KeyGroups.ViewWithOptions
   method KeyMap.View
   method List.Count
   method List.Cursor
@@ -248,7 +251,11 @@ flatui
   type Column
   type FocusRing
   type KeyBinding
+  type KeyGroup
+  type KeyGroups
   type KeyMap
+  type KeyMapMode
+  type KeyMapOptions
   type List
   type Paginator
   type Progress

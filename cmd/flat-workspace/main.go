@@ -349,10 +349,10 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	center := panel(st, s.focus.Focused(int(focusSearch)), centerOuter, centerPanel(s, st, centerOuter-6))
 	right := panel(st, s.focus.Focused(int(focusDetails)), rightOuter, detailsPanel(s, st, rightOuter-6))
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, "  ", center, "  ", right)
-	footer := st.subtle.Render(keyMap(s).View())
+	footer := st.subtle.Render(keyGroups(s).ViewWithOptions(flatui.KeyMapOptions{Mode: flatui.KeyMapFull, Width: width}))
 
 	sections := []string{header, tabs, "", body}
-	for range max(s.height-(1+1+1+lineCount(body)+1), 0) {
+	for range max(s.height-(1+1+1+lineCount(body)+lineCount(footer)), 0) {
 		sections = append(sections, "")
 	}
 	sections = append(sections, footer)
@@ -516,34 +516,54 @@ func detailsPanel(s *State, st styles, width int) string {
 	return strings.Join(rows, "\n")
 }
 
-func keyMap(s *State) flatui.KeyMap {
+func keyGroups(s *State) flatui.KeyGroups {
 	switch {
 	case s.focus.Focused(int(focusTree)):
-		return flatui.KeyMap{
-			{Keys: []string{"tab"}, Help: "focus"},
-			{Keys: []string{"enter"}, Help: "toggle"},
-			{Keys: []string{"left", "right"}, Help: "open/close"},
-			{Keys: []string{"up", "down"}, Help: "move"},
-			{Keys: []string{"esc"}, Help: "quit"},
+		return flatui.KeyGroups{
+			{Title: "nav", Bindings: flatui.KeyMap{
+				{Keys: []string{"tab"}, Help: "focus"},
+				{Keys: []string{"enter"}, Help: "toggle"},
+				{Keys: []string{"left", "right"}, Help: "open/close"},
+				{Keys: []string{"up", "down"}, Help: "move"},
+			}},
+			{Title: "app", Bindings: flatui.KeyMap{
+				{Keys: []string{"esc"}, Help: "quit"},
+			}},
 		}
 	case s.focus.Focused(int(focusSearch)):
-		return flatui.KeyMap{
-			{Keys: []string{"tab"}, Help: "focus"},
-			{Keys: []string{"type"}, Help: "search"},
-			{Keys: []string{"backspace"}, Help: "edit"},
-			{Keys: []string{"up", "down"}, Help: "rows"},
-			{Keys: []string{"esc"}, Help: "quit"},
+		return flatui.KeyGroups{
+			{Title: "nav", Bindings: flatui.KeyMap{
+				{Keys: []string{"tab"}, Help: "focus"},
+				{Keys: []string{"up", "down"}, Help: "rows"},
+			}},
+			{Title: "edit", Bindings: flatui.KeyMap{
+				{Keys: []string{"type"}, Help: "search"},
+				{Keys: []string{"backspace"}, Help: "edit"},
+			}},
+			{Title: "app", Bindings: flatui.KeyMap{
+				{Keys: []string{"esc"}, Help: "quit"},
+			}},
 		}
 	case s.focus.Focused(int(focusDetails)):
-		return flatui.KeyMap{
-			{Keys: []string{"tab"}, Help: "focus"},
-			{Keys: []string{"j", "k"}, Help: "scroll"},
-			{Keys: []string{"esc"}, Help: "quit"},
+		return flatui.KeyGroups{
+			{Title: "nav", Bindings: flatui.KeyMap{
+				{Keys: []string{"tab"}, Help: "focus"},
+			}},
+			{Title: "details", Bindings: flatui.KeyMap{
+				{Keys: []string{"j", "k"}, Help: "scroll"},
+			}},
+			{Title: "app", Bindings: flatui.KeyMap{
+				{Keys: []string{"esc"}, Help: "quit"},
+			}},
 		}
 	}
-	return flatui.KeyMap{
-		{Keys: []string{"tab"}, Help: "focus"},
-		{Keys: []string{"esc"}, Help: "quit"},
+	return flatui.KeyGroups{
+		{Title: "nav", Bindings: flatui.KeyMap{
+			{Keys: []string{"tab"}, Help: "focus"},
+		}},
+		{Title: "app", Bindings: flatui.KeyMap{
+			{Keys: []string{"esc"}, Help: "quit"},
+		}},
 	}
 }
 

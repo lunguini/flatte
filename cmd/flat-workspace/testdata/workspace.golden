@@ -21,4 +21,4 @@ Flat Workspace                                          focus tree | 6 visible
 
 
 
-tab focus  enter toggle  left/right open/close  up/down move  esc quit
+nav: tab focus  enter toggle  left/right open/close  up/down move  app: esc quit
