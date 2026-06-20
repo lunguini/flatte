@@ -139,6 +139,8 @@ flatui
   method Progress.View
   method Progress.ViewWithStyle
   method Progress.Width
+  method Rect.Contains
+  method Rect.Local
   method Spinner.Frame
   method Spinner.Tick
   method Spinner.View
@@ -248,6 +250,12 @@ flatui
   method Viewport.TotalLines
   method Viewport.View
   method Viewport.VisibleLines
+  method ZoneMap.At
+  method ZoneMap.Clear
+  method ZoneMap.In
+  method ZoneMap.Local
+  method ZoneMap.Rect
+  method ZoneMap.Set
   type CardStyle
   type Column
   type FocusRing
@@ -261,6 +269,7 @@ flatui
   type Paginator
   type Progress
   type ProgressStyle
+  type Rect
   type Spinner
   type Stopwatch
   type Table
@@ -274,6 +283,7 @@ flatui
   type TreeNode
   type TreeRow
   type Viewport
+  type ZoneMap
   var SpinnerDots
   var SpinnerLine
 flatest

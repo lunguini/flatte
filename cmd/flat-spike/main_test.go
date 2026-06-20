@@ -97,6 +97,18 @@ func TestClickOutsideListIsIgnored(t *testing.T) {
 	}
 }
 
+func TestClickOutsideListColumnIsIgnored(t *testing.T) {
+	state := State{models: []string{"haiku", "sonnet"}, cursor: 1, selectedModel: "sonnet"}
+
+	Handle(&state, flat.MouseEvent{
+		X: 40, Y: 4, Button: flat.MouseLeft, Action: flat.MousePress,
+	}, flat.Effects[State]{})
+
+	if state.cursor != 1 || state.selectedModel != "sonnet" {
+		t.Fatalf("cursor=%d selected=%q, want unchanged 1/sonnet", state.cursor, state.selectedModel)
+	}
+}
+
 func TestClickReleaseDoesNotSelect(t *testing.T) {
 	state := State{models: []string{"haiku", "sonnet", "opus"}}
 

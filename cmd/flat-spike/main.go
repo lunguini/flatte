@@ -30,6 +30,7 @@ func NewState() *State {
 // listTopLine is the content-line index of the first model row: the
 // title, subtitle, and a blank line precede it.
 const listTopLine = 3
+const modelListZoneID = "models"
 
 func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	switch ev := ev.(type) {
@@ -72,16 +73,36 @@ func handleMouse(s *State, m flat.MouseEvent) {
 		if m.Action != flat.MousePress {
 			return
 		}
-		// Map the click row back to a model index through the same layout
-		// arithmetic the cursor uses: card top border + the lines above
-		// the list.
-		_, cardTop := flatui.CardOrigin()
-		row := m.Y - cardTop - listTopLine
-		if row >= 0 && row < len(s.models) {
+		var zones flatui.ZoneMap
+		zones.Set(modelListZoneID, modelListZone(s))
+		_, row, ok := zones.Local(modelListZoneID, m.X, m.Y)
+		if ok {
 			s.cursor = row
-			s.selectedModel = s.models[row]
+			s.selectedModel = s.models[s.cursor]
 		}
 	}
+}
+
+func modelListZone(s *State) flatui.Rect {
+	x, y := flatui.CardOrigin()
+	return flatui.Rect{
+		X:      x,
+		Y:      y + listTopLine,
+		Width:  modelListWidth(s),
+		Height: len(s.models),
+	}
+}
+
+func modelListWidth(s *State) int {
+	width := 1
+	for _, model := range s.models {
+		row := "  " + model
+		if model == s.selectedModel {
+			row += " (selected)"
+		}
+		width = max(width, lipgloss.Width(row))
+	}
+	return width
 }
 
 func moveDown(s *State) {

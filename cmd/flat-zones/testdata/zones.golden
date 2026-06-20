@@ -1,0 +1,12 @@
+┌──────────────────────────────────────────────────────────────────────┐
+│   Flat Zones                                                         │
+│  explicit hit regions                                                │
+│                                                                      │
+│   LOGS                              METRICS                          │
+│   event stream                      dashboards                       │
+│   idle                              idle                             │
+│                                                                      │
+│  selected: none                                                      │
+│  last: no clicks yet                                                 │
+│  click a panel | q/esc quit                                          │
+└──────────────────────────────────────────────────────────────────────┘
