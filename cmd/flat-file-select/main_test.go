@@ -31,6 +31,8 @@ func TestSelectorCommandUsesConfiguredShellCommand(t *testing.T) {
 
 func TestSelectorCommandFallsBackToFDAndFZFOnlyWhenPresent(t *testing.T) {
 	t.Setenv("FLAT_FILE_SELECTOR", "")
+	restoreOS := stubGOOS("freebsd")
+	defer restoreOS()
 	restore := stubLookPath(func(name string) (string, error) {
 		if name == "fd" || name == "fzf" {
 			return "/bin/" + name, nil
@@ -48,8 +50,82 @@ func TestSelectorCommandFallsBackToFDAndFZFOnlyWhenPresent(t *testing.T) {
 	}
 }
 
+func TestSelectorCommandPrefersMacOSNativePicker(t *testing.T) {
+	t.Setenv("FLAT_FILE_SELECTOR", "")
+	restoreOS := stubGOOS("darwin")
+	defer restoreOS()
+	restore := stubLookPath(func(name string) (string, error) {
+		if name == "osascript" || name == "fd" || name == "fzf" {
+			return "/bin/" + name, nil
+		}
+		return "", errors.New("missing")
+	})
+	defer restore()
+
+	cmd, label, ok := selectorCommand()
+	if !ok {
+		t.Fatal("selectorCommand() ok = false, want native picker")
+	}
+	if label != "macOS file dialog" {
+		t.Fatalf("label = %q, want macOS file dialog", label)
+	}
+	if got := strings.Join(cmd.Args, " "); !strings.Contains(got, "choose file") {
+		t.Fatalf("cmd args = %q, want osascript choose file", got)
+	}
+}
+
+func TestSelectorCommandPrefersWindowsNativePicker(t *testing.T) {
+	t.Setenv("FLAT_FILE_SELECTOR", "")
+	restoreOS := stubGOOS("windows")
+	defer restoreOS()
+	restore := stubLookPath(func(name string) (string, error) {
+		if name == "powershell" || name == "fd" || name == "fzf" {
+			return "/bin/" + name, nil
+		}
+		return "", errors.New("missing")
+	})
+	defer restore()
+
+	cmd, label, ok := selectorCommand()
+	if !ok {
+		t.Fatal("selectorCommand() ok = false, want native picker")
+	}
+	if label != "Windows file dialog" {
+		t.Fatalf("label = %q, want Windows file dialog", label)
+	}
+	if got := strings.Join(cmd.Args, " "); !strings.Contains(got, "OpenFileDialog") {
+		t.Fatalf("cmd args = %q, want PowerShell OpenFileDialog", got)
+	}
+}
+
+func TestSelectorCommandPrefersLinuxDesktopPicker(t *testing.T) {
+	t.Setenv("FLAT_FILE_SELECTOR", "")
+	restoreOS := stubGOOS("linux")
+	defer restoreOS()
+	restore := stubLookPath(func(name string) (string, error) {
+		if name == "zenity" || name == "fd" || name == "fzf" {
+			return "/bin/" + name, nil
+		}
+		return "", errors.New("missing")
+	})
+	defer restore()
+
+	cmd, label, ok := selectorCommand()
+	if !ok {
+		t.Fatal("selectorCommand() ok = false, want desktop picker")
+	}
+	if label != "zenity file dialog" {
+		t.Fatalf("label = %q, want zenity file dialog", label)
+	}
+	if got := strings.Join(cmd.Args, " "); !strings.Contains(got, "--file-selection") {
+		t.Fatalf("cmd args = %q, want zenity file selection", got)
+	}
+}
+
 func TestSelectorCommandFallsBackToBuiltInSelectorWithoutFZF(t *testing.T) {
 	t.Setenv("FLAT_FILE_SELECTOR", "")
+	restoreOS := stubGOOS("freebsd")
+	defer restoreOS()
 	restore := stubLookPath(func(string) (string, error) {
 		return "", errors.New("missing")
 	})
@@ -73,6 +149,8 @@ func TestSelectorCommandFallsBackToBuiltInSelectorWithoutFZF(t *testing.T) {
 
 func TestOpenSelectorReportsMissingSelfSelector(t *testing.T) {
 	t.Setenv("FLAT_FILE_SELECTOR", "")
+	restoreOS := stubGOOS("freebsd")
+	defer restoreOS()
 	restore := stubLookPath(func(string) (string, error) {
 		return "", errors.New("missing")
 	})
@@ -196,4 +274,10 @@ func stubExecutable(fn func() (string, error)) func() {
 	previous := executable
 	executable = fn
 	return func() { executable = previous }
+}
+
+func stubGOOS(value string) func() {
+	previous := goos
+	goos = value
+	return func() { goos = previous }
 }

@@ -73,6 +73,9 @@ func selectorCommand() (*exec.Cmd, string, bool) {
 	if configured := os.Getenv("FLAT_FILE_SELECTOR"); configured != "" {
 		return shellCommand(configured), configured, true
 	}
+	if cmd, label, ok := nativeSelectorCommand(); ok {
+		return cmd, label, true
+	}
 	if _, err := lookPath("fd"); err != nil {
 		return selfSelectorCommand()
 	}
@@ -80,6 +83,31 @@ func selectorCommand() (*exec.Cmd, string, bool) {
 		return selfSelectorCommand()
 	}
 	return shellCommand("fd . | fzf"), "fd . | fzf", true
+}
+
+func nativeSelectorCommand() (*exec.Cmd, string, bool) {
+	switch goos {
+	case "darwin":
+		if _, err := lookPath("osascript"); err == nil {
+			return exec.Command("osascript", "-e", `POSIX path of (choose file)`), "macOS file dialog", true
+		}
+	case "windows":
+		if _, err := lookPath("powershell"); err == nil {
+			script := `Add-Type -AssemblyName System.Windows.Forms; $dialog = New-Object System.Windows.Forms.OpenFileDialog; if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $dialog.FileName }`
+			return exec.Command("powershell", "-NoProfile", "-STA", "-Command", script), "Windows file dialog", true
+		}
+	default:
+		if _, err := lookPath("zenity"); err == nil {
+			return exec.Command("zenity", "--file-selection"), "zenity file dialog", true
+		}
+		if _, err := lookPath("kdialog"); err == nil {
+			return exec.Command("kdialog", "--getopenfilename", "."), "kdialog file dialog", true
+		}
+		if _, err := lookPath("yad"); err == nil {
+			return exec.Command("yad", "--file-selection"), "yad file dialog", true
+		}
+	}
+	return nil, "", false
 }
 
 func selfSelectorCommand() (*exec.Cmd, string, bool) {
@@ -99,6 +127,7 @@ func shellCommand(command string) *exec.Cmd {
 
 var lookPath = exec.LookPath
 var executable = os.Executable
+var goos = runtime.GOOS
 
 func runBasicSelector(root string, input io.Reader, selected io.Writer, screen io.Writer) error {
 	files, err := listSelectableFiles(root)
