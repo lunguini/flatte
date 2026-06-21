@@ -1,0 +1,11 @@
+┌───────────────────────┐
+│   Flat Stream         │
+│  flat.Stream dogfood  │
+│                       │
+│    status: complete   │
+│                       │
+│    [info] queued      │
+│    [ok] deployed      │
+│                       │
+│  c clear | q quit     │
+└───────────────────────┘

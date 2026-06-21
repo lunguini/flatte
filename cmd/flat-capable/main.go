@@ -121,13 +121,20 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
+func runOptions() []flat.Option {
+	if os.Getenv("FLAT_CAPABLE_INLINE") == "" {
+		return nil
+	}
+	return []flat.Option{flat.WithInline()}
+}
+
 func main() {
 	state := NewState()
 	err := flat.Run(context.Background(), flat.App[State]{
 		State:  state,
 		Handle: Handle,
 		View:   View,
-	})
+	}, runOptions()...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

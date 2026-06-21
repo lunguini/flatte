@@ -88,6 +88,14 @@ func TestQuitKeyRequestsQuit(t *testing.T) {
 	}
 }
 
+func TestRunOptionsEnableInlineFromEnvironment(t *testing.T) {
+	t.Setenv("FLAT_CAPABLE_INLINE", "1")
+
+	if got := len(runOptions()); got != 1 {
+		t.Fatalf("runOptions() len = %d, want WithInline option", got)
+	}
+}
+
 func TestViewMatchesSnapshot(t *testing.T) {
 	state := &State{
 		status:     "clipboard read",
