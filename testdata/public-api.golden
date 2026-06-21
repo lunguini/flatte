@@ -8,8 +8,10 @@ flat
   const KeyCtrlC
   const KeyDelete
   const KeyDown
+  const KeyEnd
   const KeyEnter
   const KeyEscape
+  const KeyHome
   const KeyLeft
   const KeyRight
   const KeyTab
@@ -200,6 +202,10 @@ flatui
   method Textarea.MoveDownSelecting
   method Textarea.MoveLeft
   method Textarea.MoveLeftSelecting
+  method Textarea.MoveLineEnd
+  method Textarea.MoveLineEndSelecting
+  method Textarea.MoveLineStart
+  method Textarea.MoveLineStartSelecting
   method Textarea.MoveRight
   method Textarea.MoveRightSelecting
   method Textarea.MoveUp

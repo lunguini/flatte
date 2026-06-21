@@ -102,6 +102,22 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 			s.lastAction = "move-right"
 			s.ta.MoveRight()
 		}
+	case flat.KeyHome:
+		if key.Mod.Contains(flat.ModShift) {
+			s.lastAction = "select-line-start"
+			s.ta.MoveLineStartSelecting()
+		} else {
+			s.lastAction = "move-line-start"
+			s.ta.MoveLineStart()
+		}
+	case flat.KeyEnd:
+		if key.Mod.Contains(flat.ModShift) {
+			s.lastAction = "select-line-end"
+			s.ta.MoveLineEndSelecting()
+		} else {
+			s.lastAction = "move-line-end"
+			s.ta.MoveLineEnd()
+		}
 	case flat.KeyUp:
 		if key.Mod.Contains(flat.ModShift) {
 			s.lastAction = "select-up"
@@ -217,6 +233,10 @@ func keyName(key flat.Key) string {
 		return "right"
 	case flat.KeyDelete:
 		return "delete"
+	case flat.KeyHome:
+		return "home"
+	case flat.KeyEnd:
+		return "end"
 	default:
 		return "unknown"
 	}

@@ -214,6 +214,26 @@ func (t *Textarea) MoveRightSelecting() {
 	t.moveRight()
 }
 
+func (t *Textarea) MoveLineStart() {
+	t.moveLineStart()
+	t.ClearSelection()
+}
+
+func (t *Textarea) MoveLineEnd() {
+	t.moveLineEnd()
+	t.ClearSelection()
+}
+
+func (t *Textarea) MoveLineStartSelecting() {
+	t.startSelection()
+	t.moveLineStart()
+}
+
+func (t *Textarea) MoveLineEndSelecting() {
+	t.startSelection()
+	t.moveLineEnd()
+}
+
 func (t *Textarea) moveLeft() {
 	t.ensure()
 	if t.col > 0 {
@@ -234,6 +254,20 @@ func (t *Textarea) moveRight() {
 		t.row++
 		t.col = 0
 	}
+	t.syncGoal()
+	t.keepVisible()
+}
+
+func (t *Textarea) moveLineStart() {
+	t.ensure()
+	t.col = 0
+	t.syncGoal()
+	t.keepVisible()
+}
+
+func (t *Textarea) moveLineEnd() {
+	t.ensure()
+	t.col = len(t.lines[t.row])
 	t.syncGoal()
 	t.keepVisible()
 }

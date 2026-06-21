@@ -118,6 +118,20 @@ func TestTextareaMovesByWordWithinAndAcrossLines(t *testing.T) {
 	}
 }
 
+func TestTextareaMoveLineStartEnd(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("alpha\nbé world")
+	ta.MoveDown()
+	ta.MoveLineEnd()
+	if ta.Row() != 1 || ta.Col() != len("bé world") {
+		t.Fatalf("MoveLineEnd cursor = (%d,%d), want end of second line", ta.Row(), ta.Col())
+	}
+	ta.MoveLineStart()
+	if ta.Row() != 1 || ta.Col() != 0 {
+		t.Fatalf("MoveLineStart cursor = (%d,%d), want start of second line", ta.Row(), ta.Col())
+	}
+}
+
 func TestTextareaBackspaceRemovesWholeGraphemeCluster(t *testing.T) {
 	var ta Textarea
 	ta.SetValue("ábc") // a + combining acute = one cluster (3 bytes)

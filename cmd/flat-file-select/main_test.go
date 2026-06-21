@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -47,18 +48,84 @@ func TestSelectorCommandFallsBackToFDAndFZFOnlyWhenPresent(t *testing.T) {
 	}
 }
 
-func TestOpenSelectorReportsMissingSelector(t *testing.T) {
+func TestSelectorCommandFallsBackToBuiltInSelectorWithoutFZF(t *testing.T) {
 	t.Setenv("FLAT_FILE_SELECTOR", "")
 	restore := stubLookPath(func(string) (string, error) {
 		return "", errors.New("missing")
 	})
 	defer restore()
+	restoreExecutable := stubExecutable(func() (string, error) {
+		return "/tmp/flat-file-select", nil
+	})
+	defer restoreExecutable()
+
+	cmd, label, ok := selectorCommand()
+	if !ok {
+		t.Fatal("selectorCommand() ok = false, want built-in fallback")
+	}
+	if label != "built-in selector" {
+		t.Fatalf("label = %q, want built-in selector", label)
+	}
+	if got := strings.Join(cmd.Args, " "); !strings.Contains(got, "--basic-selector") {
+		t.Fatalf("cmd args = %q, want self selector flag", got)
+	}
+}
+
+func TestOpenSelectorReportsMissingSelfSelector(t *testing.T) {
+	t.Setenv("FLAT_FILE_SELECTOR", "")
+	restore := stubLookPath(func(string) (string, error) {
+		return "", errors.New("missing")
+	})
+	defer restore()
+	restoreExecutable := stubExecutable(func() (string, error) {
+		return "", errors.New("no executable")
+	})
+	defer restoreExecutable()
 
 	s := NewState()
 	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'o'}, flat.Effects[State]{})
 
-	if s.status != "file selector unavailable" {
+	if s.status != "file selector unavailable: no executable" {
 		t.Fatalf("status = %q, want unavailable", s.status)
+	}
+}
+
+func TestBasicSelectorPrintsChosenPathOnlyOnStdout(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var selected, screen bytes.Buffer
+	if err := runBasicSelector(dir, strings.NewReader("2\n"), &selected, &screen); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := strings.TrimSpace(selected.String()); got != "b.txt" {
+		t.Fatalf("selected stdout = %q, want b.txt", got)
+	}
+	for _, want := range []string{"Select a file", "1) a.txt", "2) b.txt"} {
+		if !strings.Contains(screen.String(), want) {
+			t.Fatalf("screen missing %q:\n%s", want, screen.String())
+		}
+	}
+}
+
+func TestBasicSelectorBlankInputCancels(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var selected, screen bytes.Buffer
+	if err := runBasicSelector(dir, strings.NewReader("\n"), &selected, &screen); err != nil {
+		t.Fatal(err)
+	}
+	if selected.String() != "" {
+		t.Fatalf("selected stdout = %q, want empty cancel", selected.String())
 	}
 }
 
@@ -123,4 +190,10 @@ func stubLookPath(fn func(string) (string, error)) func() {
 	previous := lookPath
 	lookPath = fn
 	return func() { lookPath = previous }
+}
+
+func stubExecutable(fn func() (string, error)) func() {
+	previous := executable
+	executable = fn
+	return func() { executable = previous }
 }

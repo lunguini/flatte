@@ -21,6 +21,8 @@ const (
 	KeyLeft
 	KeyRight
 	KeyDelete
+	KeyHome
+	KeyEnd
 )
 
 // Mod is a bitmask of key modifiers.

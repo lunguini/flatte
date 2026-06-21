@@ -83,6 +83,37 @@ func TestAltBFMoveByWord(t *testing.T) {
 	}
 }
 
+func TestHomeEndMoveToLineBoundaries(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello world")
+
+	Handle(s, flat.KeyEvent{Key: flat.KeyHome}, flat.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != 0 {
+		t.Fatalf("home cursor = (%d,%d), want line start", s.ta.Row(), s.ta.Col())
+	}
+	Handle(s, flat.KeyEvent{Key: flat.KeyEnd}, flat.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != len("hello world") {
+		t.Fatalf("end cursor = (%d,%d), want line end", s.ta.Row(), s.ta.Col())
+	}
+}
+
+func TestShiftHomeEndSelectLineRanges(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello world")
+
+	Handle(s, flat.KeyEvent{Key: flat.KeyHome, Mod: flat.ModShift}, flat.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "hello world" {
+		t.Fatalf("shift-home selection = %q, want full line", got)
+	}
+
+	typeRunes(s, "abc")
+	Handle(s, flat.KeyEvent{Key: flat.KeyHome}, flat.Effects[State]{})
+	Handle(s, flat.KeyEvent{Key: flat.KeyEnd, Mod: flat.ModShift}, flat.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "abc" {
+		t.Fatalf("shift-end selection = %q, want full line", got)
+	}
+}
+
 func TestModifiedBackspaceAndDeleteRemoveWords(t *testing.T) {
 	s := emptyState()
 	s.ta.SetValue("hello world\nnext line")

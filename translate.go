@@ -61,6 +61,10 @@ func translateKey(key uv.Key) (Event, bool) {
 		return KeyEvent{Key: KeyBackspace, Mod: mod}, true
 	case uv.KeyDelete:
 		return KeyEvent{Key: KeyDelete, Mod: mod}, true
+	case uv.KeyHome, uv.KeyKpHome:
+		return KeyEvent{Key: KeyHome, Mod: mod}, true
+	case uv.KeyEnd, uv.KeyKpEnd:
+		return KeyEvent{Key: KeyEnd, Mod: mod}, true
 	}
 	if key.Text != "" {
 		// Multi-rune Text (IME composites) is truncated to its first rune

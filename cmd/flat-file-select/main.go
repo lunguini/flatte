@@ -1,12 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/lunguini/flat"
 	"github.com/lunguini/flat/flatui"
@@ -39,6 +46,9 @@ func openSelector(s *State, fx flat.Effects[State]) {
 	cmd, label, ok := selectorCommand()
 	if !ok {
 		s.status = "file selector unavailable"
+		if label != "" {
+			s.status += ": " + label
+		}
 		return
 	}
 	s.status = "running " + label + "..."
@@ -64,12 +74,20 @@ func selectorCommand() (*exec.Cmd, string, bool) {
 		return shellCommand(configured), configured, true
 	}
 	if _, err := lookPath("fd"); err != nil {
-		return nil, "", false
+		return selfSelectorCommand()
 	}
 	if _, err := lookPath("fzf"); err != nil {
-		return nil, "", false
+		return selfSelectorCommand()
 	}
 	return shellCommand("fd . | fzf"), "fd . | fzf", true
+}
+
+func selfSelectorCommand() (*exec.Cmd, string, bool) {
+	exe, err := executable()
+	if err != nil {
+		return nil, err.Error(), false
+	}
+	return exec.Command(exe, "--basic-selector"), "built-in selector", true
 }
 
 func shellCommand(command string) *exec.Cmd {
@@ -80,6 +98,68 @@ func shellCommand(command string) *exec.Cmd {
 }
 
 var lookPath = exec.LookPath
+var executable = os.Executable
+
+func runBasicSelector(root string, input io.Reader, selected io.Writer, screen io.Writer) error {
+	files, err := listSelectableFiles(root)
+	if err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		fmt.Fprintln(screen, "No files found.")
+		return nil
+	}
+
+	fmt.Fprintln(screen, "Select a file:")
+	for i, file := range files {
+		fmt.Fprintf(screen, "%d) %s\n", i+1, file)
+	}
+	fmt.Fprint(screen, "> ")
+
+	line, err := bufio.NewReader(input).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil
+	}
+	choice, err := strconv.Atoi(line)
+	if err != nil || choice < 1 || choice > len(files) {
+		return fmt.Errorf("invalid selection %q", line)
+	}
+	fmt.Fprintln(selected, files[choice-1])
+	return nil
+}
+
+func listSelectableFiles(root string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if entry.Name() == ".git" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	return files, nil
+}
 
 func View(s *State, ctx flat.RenderContext) flat.Frame {
 	path := s.path
@@ -99,6 +179,13 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--basic-selector" {
+		if err := runBasicSelector(".", os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := flat.Run(context.Background(), flat.App[State]{
 		State:  NewState(),
 		Handle: Handle,
