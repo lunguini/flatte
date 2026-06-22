@@ -27,7 +27,7 @@ What that means in practice, on every increment:
   snapshots for views, `-race` on touched packages, `go vet` on darwin **and**
   `GOOS=windows`, `gofmt` clean, and a real-terminal (TTY) pass wherever
   behavior is terminal-conditional. Benchmark goldens stay byte-identical.
-- **Honesty over advocacy stays** — `.docs/evaluation.md` still records what got
+- **Honesty over advocacy stays** — the evaluation log still records what got
   worse. Honest evidence is a *quality control*, not a sign of tentativeness.
 - **Keep momentum.** Drive each well-scoped unit to done and continue to the
   next; don't stop to ask "should I proceed?" between them. Stop only when
@@ -36,12 +36,16 @@ What that means in practice, on every increment:
 
 ## Document map (read in this order for context)
 
+Internal docs live under `.docs/` with **opaque filenames** (`d01.md`,
+`d02.md`, …) so the public repo can't infer topics from names;
+`.docs/index.md` (encrypted) maps each opaque name to its role — read it first.
+
 | Document | Role |
 |---|---|
-| `.docs/design.md` | The design: thesis, principles, architecture, phased roadmap. Direction lives here. |
-| `.docs/STATUS.md` | **Living implementation tracker** — what exists, known bugs, what's next per phase. Truth lives here. |
-| `.docs/evaluation.md` | Evidence log from dogfooding — what extracted cleanly, what's worse or unproven. Append-only in spirit. |
-| `.docs/plans/` | Implementation plans for individual pieces of work. |
+| The design doc | Thesis, principles, architecture, phased roadmap. Direction lives here. |
+| The status tracker | **Living implementation tracker** — what exists, known bugs, what's next per phase. Truth lives here. |
+| The evaluation log | Evidence log from dogfooding — what extracted cleanly, what's worse or unproven. Append-only in spirit. |
+| Plans | Implementation plans for individual pieces of work. |
 | `README.md` | Public project introduction and minimal app. |
 | `quick-reference.md` | Public API map for humans and AI agents building Flatte apps. |
 | `examples.md` | Public sample catalog and what each sample demonstrates. |
@@ -50,25 +54,28 @@ What that means in practice, on every increment:
 ## The `.docs/` folder (internal project docs; sensitive, git-crypt)
 
 **All internal project documents live in `.docs/`** — design, status tracker,
-evaluation log, plans, and any specs or design/brainstorm notes (kept as dated
-files under `.docs/plans/`). There is no `.specs/` folder; use `.docs/`
-exclusively. Public user-facing docs live at the repository root. Rules:
+evaluation log, plans, and any specs or design/brainstorm notes. Files use
+**opaque names** (`dNN.md`); `.docs/index.md` (encrypted) maps them. There is
+no `.specs/` folder and no `.docs/plans/` subfolder; use `.docs/` exclusively.
+Public user-facing docs live at the repository root. Rules:
 
 - **Rely on it.** Before designing, implementing, or claiming anything
-  about project state, read the relevant `.docs` file first. `.docs/STATUS.md`
-  is the authoritative answer to "what's implemented and what's left" —
-  trust it over assumptions, and verify it against code when in doubt.
+  about project state, read the relevant `.docs` file first (use
+  `.docs/index.md` to find it). The status tracker is the authoritative answer
+  to "what's implemented and what's left" — trust it over assumptions, and
+  verify it against code when in doubt.
 - **Update it.** Any change that affects what these documents say (new
   feature, fixed bug, design decision, new finding) updates the matching
-  `.docs` file in the same commit. New plans go to `.docs/plans/`,
-  dated like `2026-06-09-line-diff-renderer.md`.
+  `.docs` file in the same commit. A new internal doc takes the next free
+  opaque name (`dNN.md`) and a row in `.docs/index.md` — never put the topic
+  in the filename.
 - `.docs/**` is encrypted with **git-crypt** (see `.gitattributes`). All
   sensitive or internal material goes under `.docs/`, never in public files or
   code comments. (`.specs/**` stays git-crypt-encrypted purely as a safety
   guard against accidental plaintext — it is not a place to put files.)
-  Note: git-crypt encrypts file *contents*, not *names* — `.docs/` filenames
-  are visible in the public repo, so keep them non-revealing if topics are
-  sensitive.
+  git-crypt encrypts file *contents*, not *names*, which is why `.docs/` uses
+  opaque `dNN.md` names mapped only in the encrypted `.docs/index.md` — keep it
+  that way so the public repo leaks no topics.
 - Do not copy `.docs` content into public files, commit messages, or
   README-style docs.
 - If `.docs/` files look like binary garbage, the repo is **locked** — stop
@@ -122,8 +129,8 @@ deterministic (no wall-clock, no randomness in `View`).
   sends one named update back. No mutexes on state, no
   goroutine-per-component.
 - **Abstraction is found, not designed.** Extract a helper only after the
-  pattern repeats across samples; record the evidence in
-  `.docs/evaluation.md`. Every roadmap phase is a decision gate.
+  pattern repeats across samples; record the evidence in the evaluation log.
+  Every roadmap phase is a decision gate.
 - **Agent-tractability is a design constraint.** A feature must be a
   local, compiler-visible edit. If adding something requires tracking
   non-local coupling, redesign it.
@@ -135,14 +142,14 @@ deterministic (no wall-clock, no randomness in `View`).
   `type: subject`. Use standard release-driving types such as `feat`, `fix`,
   `docs`, `test`, `refactor`, `perf`, `build`, `ci`, and `chore`; mark breaking
   changes with `!` and/or a `BREAKING CHANGE:` footer.
-- **Update `.docs/STATUS.md` in the same commit** as any change that adds,
+- **Update the status tracker in the same commit** as any change that adds,
   fixes, or removes something it lists. It is the answer to "what's done
   and what's left" — keep it honest, including the *Known bugs / debt*
   section.
-- New findings from dogfooding (good or bad) get appended to
-  `.docs/evaluation.md`, including what got worse. Honesty over advocacy.
+- New findings from dogfooding (good or bad) get appended to the evaluation
+  log, including what got worse. Honesty over advocacy.
 - Tests are the verification path: `Handle` + field asserts, `StateUpdate`
   applies, golden views. Don't build a TTY harness to test logic.
 - The Bubble Tea comparison apps exist to keep the claims honest — when a
-  Flatte API changes shape, check whether the comparison table in
-  `.docs/evaluation.md` is still true.
+  Flatte API changes shape, check whether the comparison table in the
+  evaluation log is still true.
