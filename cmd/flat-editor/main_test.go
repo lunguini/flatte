@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func emptyState() *State {
@@ -21,14 +21,14 @@ func emptyState() *State {
 
 func typeRunes(s *State, text string) {
 	for _, r := range text {
-		Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: r}, flat.Effects[State]{})
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}, flatte.Effects[State]{})
 	}
 }
 
 func TestEditingInsertsAcrossNewlines(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "hi")
-	Handle(s, flat.KeyEvent{Key: flat.KeyEnter}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 	typeRunes(s, "yo")
 	if s.ta.Value() != "hi\nyo" {
 		t.Fatalf("Value() = %q, want \"hi\\nyo\"", s.ta.Value())
@@ -41,8 +41,8 @@ func TestEditingInsertsAcrossNewlines(t *testing.T) {
 func TestArrowsAndBackspaceEdit(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "abc")
-	Handle(s, flat.KeyEvent{Key: flat.KeyLeft}, flat.Effects[State]{})
-	Handle(s, flat.KeyEvent{Key: flat.KeyBackspace}, flat.Effects[State]{}) // remove 'b'
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyBackspace}, flatte.Effects[State]{}) // remove 'b'
 	if s.ta.Value() != "ac" {
 		t.Fatalf("Value() = %q, want ac", s.ta.Value())
 	}
@@ -52,15 +52,15 @@ func TestModifiedArrowsMoveByWord(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "hello world")
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyLeft, Mod: flat.ModAlt}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if s.ta.Row() != 0 || s.ta.Col() != len("hello ") {
 		t.Fatalf("alt-left cursor = (%d,%d), want start of world", s.ta.Row(), s.ta.Col())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyLeft, Mod: flat.ModCtrl}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModCtrl}, flatte.Effects[State]{})
 	if s.ta.Row() != 0 || s.ta.Col() != 0 {
 		t.Fatalf("ctrl-left cursor = (%d,%d), want start", s.ta.Row(), s.ta.Col())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyRight, Mod: flat.ModCtrl}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModCtrl}, flatte.Effects[State]{})
 	if s.ta.Row() != 0 || s.ta.Col() != len("hello") {
 		t.Fatalf("ctrl-right cursor = (%d,%d), want end of hello", s.ta.Row(), s.ta.Col())
 	}
@@ -70,14 +70,14 @@ func TestAltBFMoveByWord(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "hello world")
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'b', Mod: flat.ModAlt}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'b', Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if s.ta.Row() != 0 || s.ta.Col() != len("hello ") {
 		t.Fatalf("alt-b cursor = (%d,%d), want start of world", s.ta.Row(), s.ta.Col())
 	}
 	if s.ta.Value() != "hello world" {
 		t.Fatalf("alt-b inserted text: %q", s.ta.Value())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'f', Mod: flat.ModAlt}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'f', Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if s.ta.Row() != 0 || s.ta.Col() != len("hello world") {
 		t.Fatalf("alt-f cursor = (%d,%d), want end", s.ta.Row(), s.ta.Col())
 	}
@@ -87,11 +87,11 @@ func TestHomeEndMoveToLineBoundaries(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "hello world")
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyHome}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyHome}, flatte.Effects[State]{})
 	if s.ta.Row() != 0 || s.ta.Col() != 0 {
 		t.Fatalf("home cursor = (%d,%d), want line start", s.ta.Row(), s.ta.Col())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyEnd}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
 	if s.ta.Row() != 0 || s.ta.Col() != len("hello world") {
 		t.Fatalf("end cursor = (%d,%d), want line end", s.ta.Row(), s.ta.Col())
 	}
@@ -101,14 +101,14 @@ func TestShiftHomeEndSelectLineRanges(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "hello world")
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyHome, Mod: flat.ModShift}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyHome, Mod: flatte.ModShift}, flatte.Effects[State]{})
 	if got := s.ta.SelectedText(); got != "hello world" {
 		t.Fatalf("shift-home selection = %q, want full line", got)
 	}
 
 	typeRunes(s, "abc")
-	Handle(s, flat.KeyEvent{Key: flat.KeyHome}, flat.Effects[State]{})
-	Handle(s, flat.KeyEvent{Key: flat.KeyEnd, Mod: flat.ModShift}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyHome}, flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnd, Mod: flatte.ModShift}, flatte.Effects[State]{})
 	if got := s.ta.SelectedText(); got != "abc" {
 		t.Fatalf("shift-end selection = %q, want full line", got)
 	}
@@ -118,9 +118,9 @@ func TestModifiedBackspaceAndDeleteRemoveWords(t *testing.T) {
 	s := emptyState()
 	s.ta.SetValue("hello world\nnext line")
 	s.ta.SetSize(80, 4)
-	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyBackspace, Mod: flat.ModCtrl}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyBackspace, Mod: flatte.ModCtrl}, flatte.Effects[State]{})
 	if s.ta.Value() != "hello next line" {
 		t.Fatalf("ctrl-backspace value = %q, want %q", s.ta.Value(), "hello next line")
 	}
@@ -130,9 +130,9 @@ func TestModifiedBackspaceAndDeleteRemoveWords(t *testing.T) {
 
 	s.ta.SetValue("hello\nnext line")
 	for range len("hello") {
-		Handle(s, flat.KeyEvent{Key: flat.KeyRight}, flat.Effects[State]{})
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyDelete, Mod: flat.ModAlt}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDelete, Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if s.ta.Value() != "hello line" {
 		t.Fatalf("alt-delete value = %q, want %q", s.ta.Value(), "hello line")
 	}
@@ -145,8 +145,8 @@ func TestShiftArrowsSelectAndTypingReplacesSelection(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "abcd")
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyLeft, Mod: flat.ModShift}, flat.Effects[State]{})
-	Handle(s, flat.KeyEvent{Key: flat.KeyLeft, Mod: flat.ModShift}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModShift}, flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModShift}, flatte.Effects[State]{})
 	if got := s.ta.SelectedText(); got != "cd" {
 		t.Fatalf("SelectedText() = %q, want %q", got, "cd")
 	}
@@ -164,9 +164,9 @@ func TestReadlineWordDeleteAliases(t *testing.T) {
 	s := emptyState()
 	s.ta.SetValue("hello world\nnext line")
 	s.ta.SetSize(80, 4)
-	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'w', Mod: flat.ModCtrl}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'w', Mod: flatte.ModCtrl}, flatte.Effects[State]{})
 	if s.ta.Value() != "hello next line" {
 		t.Fatalf("ctrl-w value = %q, want %q", s.ta.Value(), "hello next line")
 	}
@@ -176,9 +176,9 @@ func TestReadlineWordDeleteAliases(t *testing.T) {
 
 	s.ta.SetValue("hello\nnext line")
 	for range len("hello") {
-		Handle(s, flat.KeyEvent{Key: flat.KeyRight}, flat.Effects[State]{})
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'd', Mod: flat.ModAlt}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'd', Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if s.ta.Value() != "hello line" {
 		t.Fatalf("alt-d value = %q, want %q", s.ta.Value(), "hello line")
 	}
@@ -191,9 +191,9 @@ func TestCtrlAltHDWordDeleteAliases(t *testing.T) {
 	s := emptyState()
 	s.ta.SetValue("hello world\nnext line")
 	s.ta.SetSize(80, 4)
-	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'h', Mod: flat.ModCtrl | flat.ModAlt}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'h', Mod: flatte.ModCtrl | flatte.ModAlt}, flatte.Effects[State]{})
 	if s.ta.Value() != "hello next line" {
 		t.Fatalf("ctrl-alt-h value = %q, want %q", s.ta.Value(), "hello next line")
 	}
@@ -203,9 +203,9 @@ func TestCtrlAltHDWordDeleteAliases(t *testing.T) {
 
 	s.ta.SetValue("hello\nnext line")
 	for range len("hello") {
-		Handle(s, flat.KeyEvent{Key: flat.KeyRight}, flat.Effects[State]{})
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'd', Mod: flat.ModCtrl | flat.ModAlt}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'd', Mod: flatte.ModCtrl | flatte.ModAlt}, flatte.Effects[State]{})
 	if s.ta.Value() != "hello line" {
 		t.Fatalf("ctrl-alt-d value = %q, want %q", s.ta.Value(), "hello line")
 	}
@@ -218,9 +218,9 @@ func TestCtrlHDeletesWordBackward(t *testing.T) {
 	s := emptyState()
 	s.ta.SetValue("hello world\nnext line")
 	s.ta.SetSize(80, 4)
-	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'h', Mod: flat.ModCtrl}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'h', Mod: flatte.ModCtrl}, flatte.Effects[State]{})
 	if s.ta.Value() != "hello next line" {
 		t.Fatalf("ctrl-h value = %q, want %q", s.ta.Value(), "hello next line")
 	}
@@ -241,11 +241,11 @@ func TestRawCtrlWDeletesWordThroughRun(t *testing.T) {
 	var out bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		done <- flat.Run(context.Background(), flat.App[State]{
+		done <- flatte.Run(context.Background(), flatte.App[State]{
 			State:  state,
 			Handle: Handle,
 			View:   View,
-		}, flat.WithInput(reader), flat.WithOutput(&out))
+		}, flatte.WithInput(reader), flatte.WithOutput(&out))
 	}()
 
 	_, _ = writer.Write([]byte("hello world\x17\x1b"))
@@ -271,8 +271,8 @@ func TestRawCtrlWDeletesWordThroughRun(t *testing.T) {
 func TestEscQuits(t *testing.T) {
 	s := emptyState()
 	var quit bool
-	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
-	Handle(s, flat.KeyEvent{Key: flat.KeyEscape}, fx)
+	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, fx)
 	if !quit {
 		t.Fatal("esc did not quit")
 	}
@@ -281,7 +281,7 @@ func TestEscQuits(t *testing.T) {
 func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	s := NewState()
 	s.layout(72, 24)
-	frame := View(s, flat.RenderContext{Width: 72})
+	frame := View(s, flatte.RenderContext{Width: 72})
 	if frame.Cursor == nil {
 		t.Fatal("editor view has no cursor")
 	}
@@ -289,7 +289,7 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	if frame.Cursor.X != 3 || frame.Cursor.Y != 4 {
 		t.Fatalf("cursor = %+v, want (3,4)", *frame.Cursor)
 	}
-	if frame.Cursor.Style == nil || frame.Cursor.Style.Shape != flat.CursorShapeBar || frame.Cursor.Style.Blink {
+	if frame.Cursor.Style == nil || frame.Cursor.Style.Shape != flatte.CursorShapeBar || frame.Cursor.Style.Blink {
 		t.Fatalf("cursor style = %+v, want steady bar", frame.Cursor.Style)
 	}
 }
@@ -302,7 +302,7 @@ func TestViewSoftWrapsLongLineAndKeepsCursorInsideTextareaBody(t *testing.T) {
 	if got := s.ta.View(); got != "abcdefghijkl\nmnopqrstuvwx\nyz" {
 		t.Fatalf("textarea view = %q, want wrapped rows", got)
 	}
-	frame := View(s, flat.RenderContext{Width: 18})
+	frame := View(s, flatte.RenderContext{Width: 18})
 	if frame.Cursor == nil {
 		t.Fatal("editor view has no cursor")
 	}
@@ -316,9 +316,9 @@ func TestDebugViewShowsLastDecodedKeyAndAction(t *testing.T) {
 	s.debugKeys = true
 	s.layout(72, 24)
 	typeRunes(s, "hello world")
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'w', Mod: flat.ModCtrl}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'w', Mod: flatte.ModCtrl}, flatte.Effects[State]{})
 
-	frame := View(s, flat.RenderContext{Width: 72})
+	frame := View(s, flatte.RenderContext{Width: 72})
 	if !strings.Contains(frame.Content, "last: character 'w' ctrl -> delete-word-left") {
 		t.Fatalf("debug footer missing last key/action:\n%s", frame.Content)
 	}
@@ -327,5 +327,5 @@ func TestDebugViewShowsLastDecodedKeyAndAction(t *testing.T) {
 func TestInitialSnapshot(t *testing.T) {
 	s := NewState()
 	s.layout(72, 24)
-	flatest.AssertGoldenFrame(t, "testdata/editor.golden", View(s, flat.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/editor.golden", View(s, flatte.RenderContext{Width: 72}))
 }

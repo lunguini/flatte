@@ -1,12 +1,12 @@
 # Flatte Development Guide
 
-Flatte (working name; package `flat`, directory rename pending) is a
+Flatte (package `flatte`, module path `github.com/lunguini/flatte`) is a
 full-frame functional TUI foundation for Go: single mutable state struct,
 `View` as a pure function of state, direct mutation instead of TEA message
 dispatch, async funneled through named `StateUpdate`s onto a single-writer
 loop. It is the deliberate inverse of Bubble Tea while reusing Charm's MIT
-substrate (lipgloss for styling; ultraviolet for input parsing and
-cell-buffer rendering, wrapped entirely behind `internal/`).
+substrate (Lip Gloss v2 for styling; ultraviolet for input parsing and
+cell-buffer rendering, wrapped behind Flatte APIs).
 
 ## Mission and quality bar (read this first)
 
@@ -15,7 +15,8 @@ alternative** — software teams ship on and depend on, not a research spike.
 **This is not experimentation.** The phased roadmap and the "abstraction is
 found, not designed" rule are about *engineering rigor* (don't add surface
 ahead of evidence), **not** about hedging on whether to deliver. We are
-committed to carrying the roadmap to a 1.0 that production TUIs can be built on.
+committed to carrying the roadmap through a 0.1 release, then to a 1.0 once
+community feedback and API stabilization justify it.
 
 What that means in practice, on every increment:
 
@@ -41,11 +42,16 @@ What that means in practice, on every increment:
 | `.docs/STATUS.md` | **Living implementation tracker** — what exists, known bugs, what's next per phase. Truth lives here. |
 | `.docs/evaluation.md` | Evidence log from dogfooding — what extracted cleanly, what's worse or unproven. Append-only in spirit. |
 | `.docs/plans/` | Implementation plans for individual pieces of work. |
+| `README.md` | Public project introduction and minimal app. |
+| `quick-reference.md` | Public API map for humans and AI agents building Flatte apps. |
+| `examples.md` | Public sample catalog and what each sample demonstrates. |
+| `AGENTS.md` | Contributor and agent workflow rules. |
 
-## The `.docs/` folder (single home for project docs; sensitive, git-crypt)
+## The `.docs/` folder (internal project docs; sensitive, git-crypt)
 
-**All project documents live in `.docs/`** — design, status tracker,
-evaluation log, plans. There is no other docs location. Rules:
+**Internal project documents live in `.docs/`** — design, status tracker,
+evaluation log, plans. Public user-facing docs live at the repository root.
+Rules:
 
 - **Rely on it.** Before designing, implementing, or claiming anything
   about project state, read the relevant `.docs` file first. `.docs/STATUS.md`
@@ -69,7 +75,7 @@ evaluation log, plans. There is no other docs location. Rules:
 ```bash
 go test ./...        # full test suite, includes golden snapshots
 go vet ./...
-go run ./cmd/flat-modal        # run a sample app (needs a real TTY)
+cd cmd && go run ./flat-modal        # run a sample app (needs a real TTY)
 ```
 
 Golden snapshots have **no auto-update flag**: when a view change is
@@ -80,14 +86,16 @@ deterministic (no wall-clock, no randomness in `View`).
 
 ## Architecture
 
-- `internal/flatcore` — the runtime: `App[S]`, `Run`, the closed event set
+- root package `flatte` — the runtime: `App[S]`, `Run`, the closed event set
   + substrate event translation, `StateUpdate[S]`/`Async`, `Tracer`,
   cell-buffer rendering via ultraviolet. No app policy here, and no
-  ultraviolet types in any exported signature.
-- `internal/flatui` — opt-in widget state structs and layout helpers
-  (`TextField`, `Card`, `Title`, `Subtle`, `Overlay`). Widgets own no
-  goroutines, no hidden focus policy; apps store them in their own state.
-- `internal/flatuitest` — golden-test helpers.
+  ultraviolet types in exported signatures.
+- `flatui` — opt-in widget state structs and layout helpers (`TextField`,
+  `Textarea`, `Viewport`, `List`, `Table`, `Tree`, `FocusRing`, `KeyMap`,
+  `Progress`, `Spinner`, `Timer`, `Stopwatch`, `Card`, `Overlay`). Widgets own
+  no goroutines, no hidden focus policy; apps store them in their own state.
+- `flatest` — deterministic driver, fake-clock async harness, replay, and
+  golden-test helpers.
 - `cmd/flat-*` — dogfood sample apps; each has tests + goldens.
 - `cmd/bubble-modal`, `cmd/bubble-v2-modal`, `cmd/bubble-v2-search` —
   Bubble Tea v1/v2 comparison apps. They are the benchmark; keep them

@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func driver() *flatest.Driver[State] {
-	return flatest.Start(flat.App[State]{
+	return flatest.Start(flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,
@@ -30,7 +30,7 @@ func TestTimerAndStopwatchAdvanceFromFakeClock(t *testing.T) {
 		t.Fatalf("stopped stopwatch elapsed = %s, want 0", got)
 	}
 
-	d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: ' '})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: ' '})
 	d.Advance(3 * tickInterval)
 	if got := d.State().timer.Remaining(); got != 5*time.Second {
 		t.Fatalf("timer remaining after more ticks = %s, want 5s", got)
@@ -42,10 +42,10 @@ func TestTimerAndStopwatchAdvanceFromFakeClock(t *testing.T) {
 
 func TestTimerControlsResetAndRestart(t *testing.T) {
 	d := driver()
-	d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: ' '})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: ' '})
 	d.Advance(4 * tickInterval)
 
-	d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: 't'})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 't'})
 	if got := d.State().timer.Remaining(); got != countdownLength {
 		t.Fatalf("timer remaining after restart = %s, want %s", got, countdownLength)
 	}
@@ -53,7 +53,7 @@ func TestTimerControlsResetAndRestart(t *testing.T) {
 		t.Fatalf("stopwatch after timer restart = %s, want 4s", got)
 	}
 
-	d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'r'})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'r'})
 	if got := d.State().timer.Remaining(); got != countdownLength {
 		t.Fatalf("timer remaining after reset = %s, want %s", got, countdownLength)
 	}
@@ -66,7 +66,7 @@ func TestTimerControlsResetAndRestart(t *testing.T) {
 }
 
 func TestTimerViewShowsState(t *testing.T) {
-	frame := View(NewState(), flat.RenderContext{Width: 72}).Content
+	frame := View(NewState(), flatte.RenderContext{Width: 72}).Content
 	for _, want := range []string{"Flat Timer", "timer:", "stopwatch:", "space start/stop"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -75,12 +75,12 @@ func TestTimerViewShowsState(t *testing.T) {
 }
 
 func TestTimerQuit(t *testing.T) {
-	for _, key := range []flat.KeyEvent{
-		{Key: flat.KeyCharacter, Rune: 'q'},
-		{Key: flat.KeyEscape},
+	for _, key := range []flatte.KeyEvent{
+		{Key: flatte.KeyCharacter, Rune: 'q'},
+		{Key: flatte.KeyEscape},
 	} {
 		var quit bool
-		fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
+		fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
 		Handle(NewState(), key, fx)
 		if !quit {
 			t.Fatalf("%+v did not request quit", key)

@@ -9,8 +9,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 type delivery struct {
@@ -44,22 +44,22 @@ func (s *State) layout(width, height int) {
 	s.progress.SetWidth(max(width/4, 8))
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(ev.Width, ev.Height)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		s.list.MoveDown()
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		s.list.MoveUp()
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'j', 'J':
 			s.list.MoveDown()
@@ -141,7 +141,7 @@ func newStyles(p palette) styles {
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	st := newStyles(defaultPalette())
 	width := max(ctx.Width, 40)
 	bodyWidth := max(width-4, 36)
@@ -162,7 +162,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 
 	footer := st.subtle.Render("j/k move  h/l progress  q quit")
 	content := lipgloss.JoinVertical(lipgloss.Left, header, "", body, "", footer)
-	return flat.Frame{Content: trimRightLines(content)}
+	return flatte.Frame{Content: trimRightLines(content)}
 }
 
 func deliveryPanel(s *State, st styles, width int) string {
@@ -238,7 +238,7 @@ func trimRightLines(s string) string {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,

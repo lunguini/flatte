@@ -8,8 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 type State struct {
@@ -55,29 +55,29 @@ func (s *State) layout(height int) {
 	s.tb.SetHeight(max(flatui.CardBodyHeight(height, pinnedRows), 1))
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(e.Height)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, e, fx)
-	case flat.MouseEvent:
+	case flatte.MouseEvent:
 		switch e.Button {
-		case flat.MouseWheelUp:
+		case flatte.MouseWheelUp:
 			s.tb.MoveUp()
-		case flat.MouseWheelDown:
+		case flatte.MouseWheelDown:
 			s.tb.MoveDown()
 		}
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		s.tb.MoveDown()
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		s.tb.MoveUp()
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'j':
 			s.tb.MoveDown()
@@ -93,7 +93,7 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	selLabel := "none"
 	if sel := s.tb.SelectedRow(); len(sel) >= 2 {
 		selLabel = sel[1]
@@ -118,7 +118,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	lines = append(lines, strings.Split(body, "\n")...)
 	lines = append(lines, "", footer)
 
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func headerStyle() lipgloss.Style {
@@ -130,11 +130,11 @@ func activeStyle() lipgloss.Style {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flat.WithMouse(flat.MouseModeCellMotion)); err != nil {
+	}, flatte.WithMouse(flatte.MouseModeCellMotion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

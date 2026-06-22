@@ -1,4 +1,4 @@
-package flat
+package flatte
 
 type Tracer interface {
 	Event(Event)

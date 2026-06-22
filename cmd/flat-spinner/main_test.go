@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func driver() *flatest.Driver[State] {
-	return flatest.Start(flat.App[State]{
+	return flatest.Start(flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,
@@ -29,7 +29,7 @@ func TestSpinnerFrameChangesOnTick(t *testing.T) {
 }
 
 func TestViewShowsLabel(t *testing.T) {
-	frame := View(NewState(), flat.RenderContext{Width: 72}).Content
+	frame := View(NewState(), flatte.RenderContext{Width: 72}).Content
 	for _, want := range []string{"Flat Spinner", "working...", "q quit"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -39,8 +39,8 @@ func TestViewShowsLabel(t *testing.T) {
 
 func TestQuitOnQ(t *testing.T) {
 	var quit bool
-	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
-	Handle(NewState(), flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
+	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	Handle(NewState(), flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")
 	}

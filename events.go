@@ -1,4 +1,4 @@
-package flat
+package flatte
 
 // Event is the closed set of terminal inputs the loop delivers to Handle.
 // It is sealed: the framework defines every implementation, apps only

@@ -3,7 +3,7 @@ package flatui
 import "time"
 
 // Timer is app-owned countdown state. It owns no goroutine and no key policy;
-// apps advance it from flat.Every, tests, or any other loop-owned tick source.
+// apps advance it from flatte.Every, tests, or any other loop-owned tick source.
 type Timer struct {
 	duration time.Duration
 	elapsed  time.Duration

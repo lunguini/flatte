@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func ready() *State {
@@ -22,9 +22,9 @@ func TestClickSelectsPanelThroughZoneMap(t *testing.T) {
 		t.Fatal("logs zone missing")
 	}
 
-	Handle(s, flat.MouseEvent{
-		X: rect.X + 2, Y: rect.Y + 1, Button: flat.MouseLeft, Action: flat.MousePress,
-	}, flat.Effects[State]{})
+	Handle(s, flatte.MouseEvent{
+		X: rect.X + 2, Y: rect.Y + 1, Button: flatte.MouseLeft, Action: flatte.MousePress,
+	}, flatte.Effects[State]{})
 
 	if s.selected != logsZone {
 		t.Fatalf("selected = %q, want %q", s.selected, logsZone)
@@ -38,9 +38,9 @@ func TestClickOutsidePanelDoesNotChangeSelection(t *testing.T) {
 	s := ready()
 	s.selected = metricsZone
 
-	Handle(s, flat.MouseEvent{
-		X: 0, Y: 0, Button: flat.MouseLeft, Action: flat.MousePress,
-	}, flat.Effects[State]{})
+	Handle(s, flatte.MouseEvent{
+		X: 0, Y: 0, Button: flatte.MouseLeft, Action: flatte.MousePress,
+	}, flatte.Effects[State]{})
 
 	if s.selected != metricsZone {
 		t.Fatalf("selected = %q, want unchanged metrics", s.selected)
@@ -53,7 +53,7 @@ func TestClickOutsidePanelDoesNotChangeSelection(t *testing.T) {
 func TestResizeDistributesPanelZones(t *testing.T) {
 	s := NewState()
 
-	Handle(s, flat.ResizeEvent{Width: 80, Height: 24}, flat.Effects[State]{})
+	Handle(s, flatte.ResizeEvent{Width: 80, Height: 24}, flatte.Effects[State]{})
 
 	left, _ := s.zones.Rect(logsZone)
 	right, _ := s.zones.Rect(metricsZone)
@@ -68,9 +68,9 @@ func TestResizeDistributesPanelZones(t *testing.T) {
 func TestQuitKeys(t *testing.T) {
 	s := ready()
 	var quit bool
-	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
 		t.Fatal("q did not request quit")
@@ -82,7 +82,7 @@ func TestViewShowsZonesAndSelection(t *testing.T) {
 	s.selected = metricsZone
 	s.last = "metrics local 1,2"
 
-	frame := View(s, flat.RenderContext{Width: 72}).Content
+	frame := View(s, flatte.RenderContext{Width: 72}).Content
 	for _, want := range []string{"Flat Zones", "LOGS", "METRICS", "selected: metrics", "last: metrics local 1,2"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -93,5 +93,5 @@ func TestViewShowsZonesAndSelection(t *testing.T) {
 func TestViewSnapshot(t *testing.T) {
 	s := ready()
 
-	flatest.AssertGoldenFrame(t, "testdata/zones.golden", View(s, flat.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/zones.golden", View(s, flatte.RenderContext{Width: 72}))
 }

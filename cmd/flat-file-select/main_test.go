@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func TestSelectorCommandUsesConfiguredShellCommand(t *testing.T) {
@@ -161,7 +161,7 @@ func TestOpenSelectorReportsMissingSelfSelector(t *testing.T) {
 	defer restoreExecutable()
 
 	s := NewState()
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'o'}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'o'}, flatte.Effects[State]{})
 
 	if s.status != "file selector unavailable: no executable" {
 		t.Fatalf("status = %q, want unavailable", s.status)
@@ -222,11 +222,11 @@ func TestOpenSelectorCapturesSelectedPathThroughRun(t *testing.T) {
 	var out bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		done <- flat.Run(context.Background(), flat.App[State]{
+		done <- flatte.Run(context.Background(), flatte.App[State]{
 			State:  state,
 			Handle: Handle,
 			View:   View,
-		}, flat.WithInput(reader), flat.WithOutput(&out))
+		}, flatte.WithInput(reader), flatte.WithOutput(&out))
 	}()
 
 	if _, err := writer.Write([]byte("o")); err != nil {
@@ -255,7 +255,7 @@ func TestOpenSelectorCapturesSelectedPathThroughRun(t *testing.T) {
 }
 
 func TestInitialFrame(t *testing.T) {
-	frame := View(NewState(), flat.RenderContext{Width: 72})
+	frame := View(NewState(), flatte.RenderContext{Width: 72})
 	clean := flatest.CleanFrame(frame.Content)
 	for _, want := range []string{"Flat File Select", "status: ready", "selected: (none)", "o open selector"} {
 		if !strings.Contains(clean, want) {

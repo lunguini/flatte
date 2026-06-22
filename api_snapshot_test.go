@@ -1,4 +1,4 @@
-package flat
+package flatte
 
 import (
 	"bytes"
@@ -29,7 +29,7 @@ func collectPublicAPI(t *testing.T) []string {
 		label string
 		dir   string
 	}{
-		{"flat", "."},
+		{"flatte", "."},
 		{"flatui", "flatui"},
 		{"flatest", "flatest"},
 	}

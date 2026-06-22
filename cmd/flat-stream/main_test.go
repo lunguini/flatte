@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func TestApplyStreamEventAppendsAndCompletes(t *testing.T) {
@@ -44,7 +44,7 @@ func TestStreamSourceStopsWhenCancelled(t *testing.T) {
 func TestInitStreamsEventsThroughDriverSettle(t *testing.T) {
 	t.Setenv("FLAT_STREAM_INTERVAL", "0s")
 
-	d := flatest.Start(flat.App[State]{
+	d := flatest.Start(flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,
@@ -64,14 +64,14 @@ func TestInitStreamsEventsThroughDriverSettle(t *testing.T) {
 func TestHandleClearsAndQuits(t *testing.T) {
 	state := State{events: []StreamEvent{{Message: "old"}}, done: true}
 
-	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'c'}, flat.Effects[State]{})
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'c'}, flatte.Effects[State]{})
 	if len(state.events) != 0 || state.done {
 		t.Fatalf("state after clear = %#v, want empty streaming state", state)
 	}
 
 	var quit bool
-	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
-	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
+	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")
 	}
@@ -91,7 +91,7 @@ func TestViewRendersStreamState(t *testing.T) {
 		done:   true,
 	}
 
-	frame := View(&state, flat.RenderContext{Width: 72}).Content
+	frame := View(&state, flatte.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Stream", "status: complete", "[info] queued"} {
 		if !strings.Contains(frame, want) {
@@ -109,5 +109,5 @@ func TestViewMatchesSnapshot(t *testing.T) {
 		done: true,
 	}
 
-	flatest.AssertGolden(t, "testdata/stream.golden", View(&state, flat.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/stream.golden", View(&state, flatte.RenderContext{Width: 72}).Content)
 }

@@ -12,8 +12,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const prompt = "› "
@@ -25,45 +25,45 @@ type State struct {
 
 func NewState() *State { return &State{} }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
-	key, ok := ev.(flat.KeyEvent)
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	key, ok := ev.(flatte.KeyEvent)
 	if !ok {
 		return
 	}
 	switch key.Key {
-	case flat.KeyEscape:
+	case flatte.KeyEscape:
 		fx.Quit()
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		if s.input.Value != "" {
 			fx.Printf("you: %s", s.input.Value) // into scrollback, above the frame
 			s.input = flatui.TextField{}
 			s.sent++
 		}
-	case flat.KeyBackspace:
+	case flatte.KeyBackspace:
 		if wordMove(key.Mod) {
 			s.input.DeleteWordLeft()
 		} else {
 			s.input.Backspace()
 		}
-	case flat.KeyDelete:
+	case flatte.KeyDelete:
 		if wordMove(key.Mod) {
 			s.input.DeleteWordRight()
 		} else {
 			s.input.Delete()
 		}
-	case flat.KeyLeft:
+	case flatte.KeyLeft:
 		if wordMove(key.Mod) {
 			s.input.MoveWordLeft()
 		} else {
 			s.input.MoveLeft()
 		}
-	case flat.KeyRight:
+	case flatte.KeyRight:
 		if wordMove(key.Mod) {
 			s.input.MoveWordRight()
 		} else {
 			s.input.MoveRight()
 		}
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		if handleWordDeleteKey(key, s.input.DeleteWordLeft, s.input.DeleteWordRight) {
 			return
 		}
@@ -74,12 +74,12 @@ func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	}
 }
 
-func wordMove(mod flat.Mod) bool {
-	return mod.Contains(flat.ModAlt) || mod.Contains(flat.ModCtrl)
+func wordMove(mod flatte.Mod) bool {
+	return mod.Contains(flatte.ModAlt) || mod.Contains(flatte.ModCtrl)
 }
 
-func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flat.ModAlt) {
+func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flatte.ModAlt) {
 		return false
 	}
 	switch key.Rune {
@@ -93,26 +93,26 @@ func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-func handleWordDeleteKey(key flat.KeyEvent, deleteLeft, deleteRight func()) bool {
-	if key.Mod.Contains(flat.ModCtrl) && (key.Rune == 'w' || key.Rune == 'W' || key.Rune == 'h' || key.Rune == 'H') {
+func handleWordDeleteKey(key flatte.KeyEvent, deleteLeft, deleteRight func()) bool {
+	if key.Mod.Contains(flatte.ModCtrl) && (key.Rune == 'w' || key.Rune == 'W' || key.Rune == 'h' || key.Rune == 'H') {
 		deleteLeft()
 		return true
 	}
-	if key.Mod.Contains(flat.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
+	if key.Mod.Contains(flatte.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
 		deleteRight()
 		return true
 	}
 	return false
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	lines := []string{
 		flatui.Subtle(fmt.Sprintf("flat-chat — %d sent | enter send · esc quit", s.sent)),
 		prompt + s.input.Value,
 	}
-	frame := flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 	ox, oy := flatui.CardOrigin()
-	frame.Cursor = &flat.Cursor{
+	frame.Cursor = &flatte.Cursor{
 		X: ox + lipgloss.Width(prompt) + s.input.CursorColumn(),
 		Y: oy + 1, // the subtle status line precedes the input line
 	}
@@ -120,11 +120,11 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flat.WithInline()); err != nil {
+	}, flatte.WithInline()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

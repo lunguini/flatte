@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunguini/flat"
+	"github.com/lunguini/flatte"
 )
 
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
@@ -30,7 +30,7 @@ func AssertGolden(t *testing.T, path string, frame string) {
 // AssertGoldenFrame compares a Frame against a golden: cleaned content,
 // then metadata footer lines — only when metadata is set, so frames
 // without cursor or title keep their existing goldens byte-identical.
-func AssertGoldenFrame(t *testing.T, path string, frame flat.Frame) {
+func AssertGoldenFrame(t *testing.T, path string, frame flatte.Frame) {
 	t.Helper()
 	AssertGolden(t, path, RenderFrame(frame))
 }
@@ -41,7 +41,7 @@ const frameSeparator = "\n───\n"
 // AssertFrames compares a frame sequence against a golden: each frame
 // RenderFrame'd, joined by a separator line, so an interaction can be
 // regression-tested as an ordered series of frames.
-func AssertFrames(t *testing.T, path string, frames []flat.Frame) {
+func AssertFrames(t *testing.T, path string, frames []flatte.Frame) {
 	t.Helper()
 	parts := make([]string, len(frames))
 	for i, frame := range frames {
@@ -51,7 +51,7 @@ func AssertFrames(t *testing.T, path string, frames []flat.Frame) {
 }
 
 // RenderFrame serializes a frame for golden comparison.
-func RenderFrame(frame flat.Frame) string {
+func RenderFrame(frame flatte.Frame) string {
 	out := CleanFrame(frame.Content)
 	if frame.Cursor != nil {
 		out += fmt.Sprintf("\n[cursor %d,%d]", frame.Cursor.X, frame.Cursor.Y)

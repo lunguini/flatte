@@ -8,8 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const defaultTickInterval = 300 * time.Millisecond
@@ -29,8 +29,8 @@ func NewState() *State {
 	return &State{}
 }
 
-func Init(s *State, fx flat.Effects[State]) {
-	flat.Every(fx, "modal.background.tick", tickInterval(), applyTick)
+func Init(s *State, fx flatte.Effects[State]) {
+	flatte.Every(fx, "modal.background.tick", tickInterval(), applyTick)
 }
 
 func applyTick(s *State, _ time.Time) {
@@ -40,8 +40,8 @@ func applyTick(s *State, _ time.Time) {
 	}
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
-	key, ok := ev.(flat.KeyEvent)
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	key, ok := ev.(flatte.KeyEvent)
 	if !ok {
 		return
 	}
@@ -51,45 +51,45 @@ func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	}
 
 	switch key.Key {
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		s.waiting = true
 		s.modalOpen = true
 		s.modalInput = flatui.TextField{}
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		if key.Rune == 'q' || key.Rune == 'Q' {
 			fx.Quit()
 		}
 	}
 }
 
-func handleModal(s *State, key flat.KeyEvent) {
+func handleModal(s *State, key flatte.KeyEvent) {
 	switch key.Key {
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		if handleAltWordKey(key, s.modalInput.MoveWordLeft, s.modalInput.MoveWordRight) {
 			return
 		}
 		s.modalInput.Insert(key.Rune)
-	case flat.KeyBackspace:
+	case flatte.KeyBackspace:
 		s.modalInput.Backspace()
-	case flat.KeyDelete:
+	case flatte.KeyDelete:
 		s.modalInput.Delete()
-	case flat.KeyLeft:
+	case flatte.KeyLeft:
 		s.modalInput.MoveLeft()
-	case flat.KeyRight:
+	case flatte.KeyRight:
 		s.modalInput.MoveRight()
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		s.modalOpen = false
 		s.waiting = false
 		s.modalResult = "accepted: " + s.modalInput.Value
-	case flat.KeyEscape:
+	case flatte.KeyEscape:
 		s.modalOpen = false
 		s.waiting = false
 		s.modalResult = "cancelled"
 	}
 }
 
-func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flat.ModAlt) {
+func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flatte.ModAlt) {
 		return false
 	}
 	switch key.Rune {
@@ -103,23 +103,23 @@ func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	base := viewMain(s, ctx)
 	if !s.modalOpen {
-		return flat.Frame{Content: base}
+		return flatte.Frame{Content: base}
 	}
 	modal := viewModal(s, ctx)
-	frame := flat.Frame{Content: flatui.Overlay(base, modal)}
+	frame := flatte.Frame{Content: flatui.Overlay(base, modal)}
 	overlayX, overlayY := flatui.OverlayOrigin(base, modal)
 	cardX, cardY := flatui.CardOrigin()
-	frame.Cursor = &flat.Cursor{
+	frame.Cursor = &flatte.Cursor{
 		X: overlayX + cardX + lipgloss.Width("  name: ") + s.modalInput.CursorColumn(),
 		Y: overlayY + cardY + 3, // title, subtle, blank precede the name row
 	}
 	return frame
 }
 
-func viewMain(s *State, ctx flat.RenderContext) string {
+func viewMain(s *State, ctx flatte.RenderContext) string {
 	loader := "idle"
 	if s.waiting {
 		loader = "waiting " + spinnerFrames[s.spinner%len(spinnerFrames)]
@@ -160,7 +160,7 @@ func viewMain(s *State, ctx flat.RenderContext) string {
 	return flatui.Card(lines, ctx.Width)
 }
 
-func viewModal(s *State, ctx flat.RenderContext) string {
+func viewModal(s *State, ctx flatte.RenderContext) string {
 	lines := []string{
 		flatui.Title("Confirm Work"),
 		flatui.Subtle("modal captures input"),
@@ -186,7 +186,7 @@ func tickInterval() time.Duration {
 
 func main() {
 	state := NewState()
-	err := flat.Run(context.Background(), flat.App[State]{
+	err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  state,
 		Init:   Init,
 		Handle: Handle,

@@ -8,8 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const (
@@ -54,21 +54,21 @@ func (s *State) layout(width int) {
 	})
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(e.Width)
-	case flat.KeyEvent:
-		if e.Key == flat.KeyEscape || (e.Key == flat.KeyCharacter && (e.Rune == 'q' || e.Rune == 'Q')) {
+	case flatte.KeyEvent:
+		if e.Key == flatte.KeyEscape || (e.Key == flatte.KeyCharacter && (e.Rune == 'q' || e.Rune == 'Q')) {
 			fx.Quit()
 		}
-	case flat.MouseEvent:
+	case flatte.MouseEvent:
 		handleMouse(s, e)
 	}
 }
 
-func handleMouse(s *State, m flat.MouseEvent) {
-	if m.Button != flat.MouseLeft || m.Action != flat.MousePress {
+func handleMouse(s *State, m flatte.MouseEvent) {
+	if m.Button != flatte.MouseLeft || m.Action != flatte.MousePress {
 		return
 	}
 	id, ok := s.zones.At(m.X, m.Y)
@@ -81,7 +81,7 @@ func handleMouse(s *State, m flat.MouseEvent) {
 	s.last = fmt.Sprintf("%s local %d,%d", id, localX, localY)
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	left, _ := s.zones.Rect(logsZone)
 	right, _ := s.zones.Rect(metricsZone)
 	leftRows := panel(logsZone, "event stream", left.Width, s.selected == logsZone)
@@ -102,7 +102,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		flatui.Subtle("click a panel | q/esc quit"),
 	)
 
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func panel(title, body string, width int, active bool) []string {
@@ -140,11 +140,11 @@ func panelStyle(active bool) lipgloss.Style {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flat.WithMouse(flat.MouseModeCellMotion)); err != nil {
+	}, flatte.WithMouse(flatte.MouseModeCellMotion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

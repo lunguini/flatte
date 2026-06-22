@@ -8,36 +8,36 @@ import (
 	"context"
 	"time"
 
-	"github.com/lunguini/flat"
+	"github.com/lunguini/flatte"
 )
 
-// Driver runs a flat.App synchronously for tests. App-triggered async
+// Driver runs a flatte.App synchronously for tests. App-triggered async
 // (Go/Latest/Stream) is deferred to a pending queue and only runs on
 // Settle; time-based effects (Every) are driven by a fake clock advanced
 // with Advance. The width is fixed so frames are deterministic.
 type Driver[S any] struct {
-	app     flat.App[S]
+	app     flatte.App[S]
 	width   int
-	updates chan flat.StateUpdate[S]
+	updates chan flatte.StateUpdate[S]
 	clock   *fakeClock
 	pending []func()
 	quit    bool
-	fx      flat.Effects[S]
+	fx      flatte.Effects[S]
 }
 
 // Start builds a Driver, runs Init, delivers the initial ResizeEvent, and
 // renders the first frame.
-func Start[S any](app flat.App[S], width int) *Driver[S] {
+func Start[S any](app flatte.App[S], width int) *Driver[S] {
 	d := &Driver[S]{
 		app:     app,
 		width:   width,
-		updates: make(chan flat.StateUpdate[S], 1024),
+		updates: make(chan flatte.StateUpdate[S], 1024),
 		clock:   newFakeClock(),
 	}
 	// One Effects for the whole session: the latest registry (and thus
 	// Latest's cross-event supersede) must persist across events, exactly
 	// like Run's single long-lived Effects.
-	d.fx = flat.NewHarnessEffects(
+	d.fx = flatte.NewHarnessEffects(
 		context.Background(), d.updates,
 		func() { d.quit = true },
 		func(f func()) { d.pending = append(d.pending, f) },
@@ -46,19 +46,19 @@ func Start[S any](app flat.App[S], width int) *Driver[S] {
 	if app.Init != nil {
 		app.Init(app.State, d.fx)
 	}
-	d.deliver(flat.ResizeEvent{Width: width, Height: 24})
+	d.deliver(flatte.ResizeEvent{Width: width, Height: 24})
 	return d
 }
 
 // Send delivers one event, drains the synchronous updates it produced,
 // and returns the rendered frame. Async results triggered by the event
 // are NOT applied here — call Settle.
-func (d *Driver[S]) Send(ev flat.Event) flat.Frame {
+func (d *Driver[S]) Send(ev flatte.Event) flatte.Frame {
 	d.deliver(ev)
 	return d.Frame()
 }
 
-func (d *Driver[S]) deliver(ev flat.Event) {
+func (d *Driver[S]) deliver(ev flatte.Event) {
 	if d.app.Tracer != nil {
 		d.app.Tracer.Event(ev)
 	}
@@ -74,7 +74,7 @@ func (d *Driver[S]) drain() {
 	for {
 		select {
 		case u := <-d.updates:
-			flat.ApplyUpdate(d.app.State, d.app.Tracer, u)
+			flatte.ApplyUpdate(d.app.State, d.app.Tracer, u)
 		default:
 			return
 		}
@@ -86,7 +86,7 @@ func (d *Driver[S]) drain() {
 // Go/Latest/Stream results land, under test control. drain runs after each
 // body so Latest's apply-time guard sees a superseded ctx and drops the
 // stale result.
-func (d *Driver[S]) Settle() flat.Frame {
+func (d *Driver[S]) Settle() flatte.Frame {
 	for len(d.pending) > 0 {
 		batch := d.pending
 		d.pending = nil
@@ -100,21 +100,21 @@ func (d *Driver[S]) Settle() flat.Frame {
 
 // Advance moves the fake clock, firing due Every ticks (which queue
 // updates), then settles any async those ticks triggered.
-func (d *Driver[S]) Advance(by time.Duration) flat.Frame {
+func (d *Driver[S]) Advance(by time.Duration) flatte.Frame {
 	d.clock.advance(by)
 	d.drain()
 	return d.Settle()
 }
 
 // Frame renders the current state without changing it.
-func (d *Driver[S]) Frame() flat.Frame {
-	return d.app.View(d.app.State, flat.RenderContext{Width: d.width})
+func (d *Driver[S]) Frame() flatte.Frame {
+	return d.app.View(d.app.State, flatte.RenderContext{Width: d.width})
 }
 
 // Frames runs the driver through a sequence of steps and returns the
 // frame after each, for sequence goldens (see AssertFrames).
-func Frames[S any](d *Driver[S], steps ...func(*Driver[S])) []flat.Frame {
-	frames := make([]flat.Frame, 0, len(steps))
+func Frames[S any](d *Driver[S], steps ...func(*Driver[S])) []flatte.Frame {
+	frames := make([]flatte.Frame, 0, len(steps))
 	for _, step := range steps {
 		step(d)
 		frames = append(frames, d.Frame())

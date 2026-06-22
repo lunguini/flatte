@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func ready() *State {
@@ -15,13 +15,13 @@ func ready() *State {
 	return s
 }
 
-func key(r rune) flat.KeyEvent {
-	return flat.KeyEvent{Key: flat.KeyCharacter, Rune: r}
+func key(r rune) flatte.KeyEvent {
+	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}
 }
 
 func typeQuery(s *State, text string) {
 	for _, r := range text {
-		Handle(s, key(r), flat.Effects[State]{})
+		Handle(s, key(r), flatte.Effects[State]{})
 	}
 }
 
@@ -41,7 +41,7 @@ func TestTypingFiltersVisibleList(t *testing.T) {
 func TestSelectionClampsWhenFilterShrinks(t *testing.T) {
 	s := ready()
 	for range 4 {
-		Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 	}
 	if s.list.Cursor() != 4 {
 		t.Fatalf("setup cursor = %d, want 4", s.list.Cursor())
@@ -61,7 +61,7 @@ func TestClearingQueryRestoresAllItems(t *testing.T) {
 	s := ready()
 	typeQuery(s, "api")
 	for range 3 {
-		Handle(s, flat.KeyEvent{Key: flat.KeyBackspace}, flat.Effects[State]{})
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyBackspace}, flatte.Effects[State]{})
 	}
 
 	if len(s.filteredIndexes) != len(s.items) {
@@ -75,7 +75,7 @@ func TestClearingQueryRestoresAllItems(t *testing.T) {
 func TestPrintableQEditsAndEscapeQuits(t *testing.T) {
 	s := ready()
 	var quit bool
-	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
 
 	Handle(s, key('q'), fx)
 	if quit {
@@ -85,7 +85,7 @@ func TestPrintableQEditsAndEscapeQuits(t *testing.T) {
 		t.Fatalf("query = %q, want q", s.query.Value)
 	}
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyEscape}, fx)
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, fx)
 	if !quit {
 		t.Fatal("escape should request quit")
 	}
@@ -101,7 +101,7 @@ func TestPaginationLimitsVisibleRows(t *testing.T) {
 		t.Fatalf("page 1 labels = %v, want first five items", got)
 	}
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyRight}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
 
 	if s.pages.Page() != 1 {
 		t.Fatalf("Page() = %d, want 1", s.pages.Page())
@@ -118,7 +118,7 @@ func TestViewSnapshot(t *testing.T) {
 	s := ready()
 	typeQuery(s, "api")
 
-	flatest.AssertGoldenFrame(t, "testdata/filter.golden", View(s, flat.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/filter.golden", View(s, flatte.RenderContext{Width: 72}))
 }
 
 func labels(indexes []int) []string {

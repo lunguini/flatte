@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const (
@@ -28,8 +28,8 @@ func NewState() *State {
 	}
 }
 
-func Init(s *State, fx flat.Effects[State]) {
-	flat.Every(fx, "timer.tick", tickInterval, applyTick)
+func Init(s *State, fx flatte.Effects[State]) {
+	flatte.Every(fx, "timer.tick", tickInterval, applyTick)
 }
 
 func applyTick(s *State, _ time.Time) {
@@ -38,11 +38,11 @@ func applyTick(s *State, _ time.Time) {
 	s.progress.SetPercent(s.timer.Percent())
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(ev.Width)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	}
 }
@@ -51,12 +51,12 @@ func (s *State) layout(width int) {
 	s.progress.SetWidth(max(flatui.CardBodyWidth(width)-20, 0))
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
-	if key.Key == flat.KeyEscape {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
+	if key.Key == flatte.KeyEscape {
 		fx.Quit()
 		return
 	}
-	if key.Key != flat.KeyCharacter {
+	if key.Key != flatte.KeyCharacter {
 		return
 	}
 	switch key.Rune {
@@ -74,7 +74,7 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	stopState := "stopped"
 	if s.stopwatch.Running() {
 		stopState = "running"
@@ -93,7 +93,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		"",
 		flatui.Subtle("space start/stop | r reset all | t restart timer | q/esc quit"),
 	}
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func formatDuration(d time.Duration) string {
@@ -107,7 +107,7 @@ func formatDuration(d time.Duration) string {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,

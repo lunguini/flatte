@@ -8,8 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 type focusArea int
@@ -71,18 +71,18 @@ func paneSizes(width int) (left, right, detailsWidth int) {
 	return left, right, max(right-4, 1)
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(ev.Width, ev.Height)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
-	if key.Key == flat.KeyTab {
-		if key.Mod.Contains(flat.ModShift) {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
+	if key.Key == flatte.KeyTab {
+		if key.Mod.Contains(flatte.ModShift) {
 			s.focus.Prev()
 		} else {
 			s.focus.Next()
@@ -100,15 +100,15 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func handleTreeKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleTreeKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		s.tree.MoveDown()
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		s.tree.MoveUp()
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		s.tree.Toggle(s.tree.CursorID())
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'j':
 			s.tree.MoveDown()
@@ -123,29 +123,29 @@ func handleTreeKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	s.syncDetails()
 }
 
-func handleSearchKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleSearchKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyLeft:
+	case flatte.KeyLeft:
 		s.search.MoveLeft()
-	case flat.KeyRight:
+	case flatte.KeyRight:
 		s.search.MoveRight()
-	case flat.KeyBackspace:
+	case flatte.KeyBackspace:
 		s.search.Backspace()
-	case flat.KeyDelete:
+	case flatte.KeyDelete:
 		s.search.Delete()
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		s.search.Insert(key.Rune)
 	}
 	s.syncDetails()
 }
 
-func handleDetailsKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleDetailsKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		s.details.LineDown(1)
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		s.details.LineUp(1)
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'j':
 			s.details.LineDown(1)
@@ -189,7 +189,7 @@ func searchValue(value string) string {
 	return value
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	leftWidth, rightWidth, _ := paneSizes(ctx.Width)
 	treePanel := panelStyle().Width(leftWidth).Render(strings.Join([]string{
 		sectionTitle("tree", s.focus.Focused(int(focusTree))),
@@ -212,10 +212,10 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		"",
 		footer,
 	}
-	frame := flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 	if s.focus.Focused(int(focusSearch)) {
 		x, y := flatui.CardOrigin()
-		frame.Cursor = &flat.Cursor{
+		frame.Cursor = &flatte.Cursor{
 			X: x + lipgloss.Width(sectionTitle("search", true)+": ") + s.search.CursorColumn(),
 			Y: y + 1,
 		}
@@ -269,7 +269,7 @@ func mutedStyle() lipgloss.Style {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,

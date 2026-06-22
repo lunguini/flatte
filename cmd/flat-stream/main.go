@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const (
@@ -37,8 +37,8 @@ var defaultEvents = []StreamEvent{
 
 func NewState() *State { return &State{} }
 
-func Init(s *State, fx flat.Effects[State]) {
-	flat.Stream(fx, "stream.event", streamSource(defaultEvents, streamInterval()), applyStreamEvent)
+func Init(s *State, fx flatte.Effects[State]) {
+	flatte.Stream(fx, "stream.event", streamSource(defaultEvents, streamInterval()), applyStreamEvent)
 }
 
 func streamSource(events []StreamEvent, interval time.Duration) func(context.Context, func(StreamEvent)) {
@@ -75,9 +75,9 @@ func applyStreamEvent(s *State, ev StreamEvent) {
 	}
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
-	key, ok := ev.(flat.KeyEvent)
-	if !ok || key.Key != flat.KeyCharacter {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	key, ok := ev.(flatte.KeyEvent)
+	if !ok || key.Key != flatte.KeyCharacter {
 		return
 	}
 	switch key.Rune {
@@ -89,14 +89,14 @@ func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	status := "streaming"
 	if s.done {
 		status = "complete"
 	}
 	lines := []string{
 		flatui.Title("Flat Stream"),
-		flatui.Subtle("flat.Stream dogfood"),
+		flatui.Subtle("flatte.Stream dogfood"),
 		"",
 		"  status: " + status,
 		"",
@@ -109,7 +109,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		}
 	}
 	lines = append(lines, "", flatui.Subtle("c clear | q quit"))
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func streamInterval() time.Duration {
@@ -125,7 +125,7 @@ func streamInterval() time.Duration {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,

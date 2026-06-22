@@ -6,9 +6,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui"
 )
 
 func ready() *State {
@@ -17,8 +17,8 @@ func ready() *State {
 	return s
 }
 
-func key(r rune) flat.KeyEvent {
-	return flat.KeyEvent{Key: flat.KeyCharacter, Rune: r}
+func key(r rune) flatte.KeyEvent {
+	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}
 }
 
 func TestFocusCyclesBetweenWorkspaceSections(t *testing.T) {
@@ -26,15 +26,15 @@ func TestFocusCyclesBetweenWorkspaceSections(t *testing.T) {
 	if !s.focus.Focused(int(focusTree)) {
 		t.Fatalf("initial focus = %d, want tree", s.focus.Index())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
 	if !s.focus.Focused(int(focusSearch)) {
 		t.Fatalf("after tab focus = %d, want search", s.focus.Index())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
 	if !s.focus.Focused(int(focusDetails)) {
 		t.Fatalf("second tab focus = %d, want details", s.focus.Index())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab, Mod: flat.ModShift}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab, Mod: flatte.ModShift}, flatte.Effects[State]{})
 	if !s.focus.Focused(int(focusSearch)) {
 		t.Fatalf("shift-tab focus = %d, want search", s.focus.Index())
 	}
@@ -42,7 +42,7 @@ func TestFocusCyclesBetweenWorkspaceSections(t *testing.T) {
 
 func TestFocusTabsSpanFullWidth(t *testing.T) {
 	s := ready()
-	frame := flatest.CleanFrame(View(s, flat.RenderContext{Width: 86}).Content)
+	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 86}).Content)
 	line, _ := cleanLineContaining(frame, "Tree")
 	for _, want := range []string{"Tree", "Search", "Details"} {
 		if !strings.Contains(line, want) {
@@ -59,7 +59,7 @@ func TestFocusTabsSpanFullWidth(t *testing.T) {
 
 func TestHelpLinePinnedToBottom(t *testing.T) {
 	s := ready()
-	frame := flatest.CleanFrame(View(s, flat.RenderContext{Width: 86}).Content)
+	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 86}).Content)
 	lines := strings.Split(frame, "\n")
 	if len(lines) != 24 {
 		t.Fatalf("frame line count = %d, want terminal height 24:\n%s", len(lines), frame)
@@ -86,7 +86,7 @@ func TestTreeExpansionChangesVisibleRows(t *testing.T) {
 	s := ready()
 	before := len(s.tree.VisibleRows())
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyEnter}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
 	if after := len(s.tree.VisibleRows()); after >= before {
 		t.Fatalf("visible rows after collapsing root = %d, want less than %d", after, before)
@@ -95,17 +95,17 @@ func TestTreeExpansionChangesVisibleRows(t *testing.T) {
 
 func TestTreeLeftRightExpandAndCollapseSelectedBranch(t *testing.T) {
 	s := ready()
-	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 	if got := s.tree.CursorID(); got != "services" {
 		t.Fatalf("selected tree node = %q, want services", got)
 	}
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyRight}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
 	if got := treeLabels(s.tree.VisibleRows()); strings.Join(got, ",") != "workspace,services,API,Billing,Schema,ops" {
 		t.Fatalf("right expanded labels = %v, want services children visible", got)
 	}
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyLeft}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
 	if got := treeLabels(s.tree.VisibleRows()); strings.Join(got, ",") != "workspace,services,ops" {
 		t.Fatalf("left collapsed labels = %v, want services children hidden", got)
 	}
@@ -113,15 +113,15 @@ func TestTreeLeftRightExpandAndCollapseSelectedBranch(t *testing.T) {
 
 func TestSearchFiltersTableOnlyWhenFocused(t *testing.T) {
 	s := ready()
-	Handle(s, key('a'), flat.Effects[State]{})
+	Handle(s, key('a'), flatte.Effects[State]{})
 	if s.search.Value != "" {
 		t.Fatalf("tree-focused character edited search: %q", s.search.Value)
 	}
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
-	Handle(s, key('a'), flat.Effects[State]{})
-	Handle(s, key('p'), flat.Effects[State]{})
-	Handle(s, key('i'), flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
+	Handle(s, key('a'), flatte.Effects[State]{})
+	Handle(s, key('p'), flatte.Effects[State]{})
+	Handle(s, key('i'), flatte.Effects[State]{})
 
 	if s.search.Value != "api" {
 		t.Fatalf("search = %q, want api", s.search.Value)
@@ -133,9 +133,9 @@ func TestSearchFiltersTableOnlyWhenFocused(t *testing.T) {
 
 func TestSearchFocusCanMoveWorkRowsAndKeepEditing(t *testing.T) {
 	s := ready()
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
 
-	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 	if s.table.Cursor() != 1 {
 		t.Fatalf("table cursor after search-down = %d, want 1", s.table.Cursor())
 	}
@@ -146,7 +146,7 @@ func TestSearchFocusCanMoveWorkRowsAndKeepEditing(t *testing.T) {
 		t.Fatalf("details missing selected title:\n%s", s.details.View())
 	}
 
-	Handle(s, key('a'), flat.Effects[State]{})
+	Handle(s, key('a'), flatte.Effects[State]{})
 	if s.search.Value != "a" {
 		t.Fatalf("search after row move = %q, want a", s.search.Value)
 	}
@@ -157,8 +157,8 @@ func TestSearchFocusCanMoveWorkRowsAndKeepEditing(t *testing.T) {
 
 func TestSearchSelectionUpdatesDetailsAndProgress(t *testing.T) {
 	s := ready()
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
-	Handle(s, flat.KeyEvent{Key: flat.KeyDown}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 
 	if s.table.Cursor() != 1 {
 		t.Fatalf("table cursor = %d, want 1", s.table.Cursor())
@@ -176,12 +176,12 @@ func TestSearchSelectionUpdatesDetailsAndProgress(t *testing.T) {
 
 func TestSearchCursorTracksTypedText(t *testing.T) {
 	s := ready()
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
-	Handle(s, key('a'), flat.Effects[State]{})
-	Handle(s, key('p'), flat.Effects[State]{})
-	Handle(s, key('i'), flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
+	Handle(s, key('a'), flatte.Effects[State]{})
+	Handle(s, key('p'), flatte.Effects[State]{})
+	Handle(s, key('i'), flatte.Effects[State]{})
 
-	frame := View(s, flat.RenderContext{Width: 86})
+	frame := View(s, flatte.RenderContext{Width: 86})
 	if frame.Cursor == nil {
 		t.Fatal("search-focused frame has no cursor")
 	}
@@ -196,10 +196,10 @@ func TestSearchCursorTracksTypedText(t *testing.T) {
 func TestFocusDetailsIsVisibleAndDescribesScroll(t *testing.T) {
 	s := ready()
 	for range 2 {
-		Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
 	}
 
-	frame := flatest.CleanFrame(View(s, flat.RenderContext{Width: 86}).Content)
+	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 86}).Content)
 	for _, want := range []string{"focus details", "[details scroll]", "j/k scroll"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("details-focused frame missing %q:\n%s", want, frame)
@@ -209,7 +209,7 @@ func TestFocusDetailsIsVisibleAndDescribesScroll(t *testing.T) {
 
 func TestTreeRowsShowExpansionMarkers(t *testing.T) {
 	s := ready()
-	frame := flatest.CleanFrame(View(s, flat.RenderContext{Width: 86}).Content)
+	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 86}).Content)
 	for _, want := range []string{"▾ workspace", " ▸ services", " ▸ ops"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("tree frame missing %q:\n%s", want, frame)
@@ -219,7 +219,7 @@ func TestTreeRowsShowExpansionMarkers(t *testing.T) {
 
 func TestStyledProgressRendersANSI(t *testing.T) {
 	s := ready()
-	frame := View(s, flat.RenderContext{Width: 86}).Content
+	frame := View(s, flatte.RenderContext{Width: 86}).Content
 	if !strings.Contains(frame, "\x1b[") {
 		t.Fatalf("view has no ANSI styling:\n%s", frame)
 	}
@@ -231,7 +231,7 @@ func TestStyledProgressRendersANSI(t *testing.T) {
 func TestNarrowFrameFitsWidth(t *testing.T) {
 	s := NewState()
 	s.layout(70, 22)
-	frame := flatest.CleanFrame(View(s, flat.RenderContext{Width: 70}).Content)
+	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 70}).Content)
 	for i, line := range strings.Split(frame, "\n") {
 		if width := lipgloss.Width(line); width > 70 {
 			t.Fatalf("line %d width = %d, want <= 70:\n%s", i+1, width, frame)
@@ -241,7 +241,7 @@ func TestNarrowFrameFitsWidth(t *testing.T) {
 
 func TestWorkspaceSnapshot(t *testing.T) {
 	s := ready()
-	flatest.AssertGoldenFrame(t, "testdata/workspace.golden", View(s, flat.RenderContext{Width: 86}))
+	flatest.AssertGoldenFrame(t, "testdata/workspace.golden", View(s, flatte.RenderContext{Width: 86}))
 }
 
 func resultTitles(results []WorkItem) []string {

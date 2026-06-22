@@ -1,4 +1,4 @@
-module github.com/lunguini/flat/cmd
+module github.com/lunguini/flatte/cmd
 
 go 1.25.0
 
@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/ultraviolet v0.0.0-20260525132238-948f4557a654
 	github.com/charmbracelet/x/ansi v0.11.7
-	github.com/lunguini/flat v0.0.0
+	github.com/lunguini/flatte v0.0.0
 	golang.org/x/term v0.44.0
 )
 
@@ -37,4 +37,4 @@ require (
 	golang.org/x/text v0.3.8 // indirect
 )
 
-replace github.com/lunguini/flat => ..
+replace github.com/lunguini/flatte => ..

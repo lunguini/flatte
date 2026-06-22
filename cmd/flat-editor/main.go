@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 type State struct {
@@ -39,26 +39,26 @@ func (s *State) layout(width, height int) {
 	s.ta.SetSoftWrap(true)
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(e.Width, e.Height)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	s.lastKey = describeKey(key)
 	s.lastAction = "ignored"
 	switch key.Key {
-	case flat.KeyEscape:
+	case flatte.KeyEscape:
 		s.lastAction = "quit"
 		fx.Quit()
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		s.lastAction = "newline"
 		s.ta.InsertNewline()
-	case flat.KeyBackspace:
+	case flatte.KeyBackspace:
 		if wordMove(key.Mod) {
 			s.lastAction = "delete-word-left"
 			s.ta.DeleteWordLeft()
@@ -66,7 +66,7 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 			s.lastAction = "backspace"
 			s.ta.Backspace()
 		}
-	case flat.KeyDelete:
+	case flatte.KeyDelete:
 		if wordMove(key.Mod) {
 			s.lastAction = "delete-word-right"
 			s.ta.DeleteWordRight()
@@ -74,11 +74,11 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 			s.lastAction = "delete"
 			s.ta.Delete()
 		}
-	case flat.KeyLeft:
-		if key.Mod.Contains(flat.ModShift) && wordMove(key.Mod) {
+	case flatte.KeyLeft:
+		if key.Mod.Contains(flatte.ModShift) && wordMove(key.Mod) {
 			s.lastAction = "select-word-left"
 			s.ta.MoveWordLeftSelecting()
-		} else if key.Mod.Contains(flat.ModShift) {
+		} else if key.Mod.Contains(flatte.ModShift) {
 			s.lastAction = "select-left"
 			s.ta.MoveLeftSelecting()
 		} else if wordMove(key.Mod) {
@@ -88,11 +88,11 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 			s.lastAction = "move-left"
 			s.ta.MoveLeft()
 		}
-	case flat.KeyRight:
-		if key.Mod.Contains(flat.ModShift) && wordMove(key.Mod) {
+	case flatte.KeyRight:
+		if key.Mod.Contains(flatte.ModShift) && wordMove(key.Mod) {
 			s.lastAction = "select-word-right"
 			s.ta.MoveWordRightSelecting()
-		} else if key.Mod.Contains(flat.ModShift) {
+		} else if key.Mod.Contains(flatte.ModShift) {
 			s.lastAction = "select-right"
 			s.ta.MoveRightSelecting()
 		} else if wordMove(key.Mod) {
@@ -102,41 +102,41 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 			s.lastAction = "move-right"
 			s.ta.MoveRight()
 		}
-	case flat.KeyHome:
-		if key.Mod.Contains(flat.ModShift) {
+	case flatte.KeyHome:
+		if key.Mod.Contains(flatte.ModShift) {
 			s.lastAction = "select-line-start"
 			s.ta.MoveLineStartSelecting()
 		} else {
 			s.lastAction = "move-line-start"
 			s.ta.MoveLineStart()
 		}
-	case flat.KeyEnd:
-		if key.Mod.Contains(flat.ModShift) {
+	case flatte.KeyEnd:
+		if key.Mod.Contains(flatte.ModShift) {
 			s.lastAction = "select-line-end"
 			s.ta.MoveLineEndSelecting()
 		} else {
 			s.lastAction = "move-line-end"
 			s.ta.MoveLineEnd()
 		}
-	case flat.KeyUp:
-		if key.Mod.Contains(flat.ModShift) {
+	case flatte.KeyUp:
+		if key.Mod.Contains(flatte.ModShift) {
 			s.lastAction = "select-up"
 			s.ta.MoveUpSelecting()
 		} else {
 			s.lastAction = "move-up"
 			s.ta.MoveUp()
 		}
-	case flat.KeyDown:
-		if key.Mod.Contains(flat.ModShift) {
+	case flatte.KeyDown:
+		if key.Mod.Contains(flatte.ModShift) {
 			s.lastAction = "select-down"
 			s.ta.MoveDownSelecting()
 		} else {
 			s.lastAction = "move-down"
 			s.ta.MoveDown()
 		}
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		if handleWordDeleteKey(key, s.ta.DeleteWordLeft, s.ta.DeleteWordRight) {
-			if key.Mod.Contains(flat.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
+			if key.Mod.Contains(flatte.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
 				s.lastAction = "delete-word-right"
 			} else {
 				s.lastAction = "delete-word-left"
@@ -156,12 +156,12 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func wordMove(mod flat.Mod) bool {
-	return mod.Contains(flat.ModAlt) || mod.Contains(flat.ModCtrl)
+func wordMove(mod flatte.Mod) bool {
+	return mod.Contains(flatte.ModAlt) || mod.Contains(flatte.ModCtrl)
 }
 
-func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flat.ModAlt) {
+func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
+	if !key.Mod.Contains(flatte.ModAlt) {
 		return false
 	}
 	switch key.Rune {
@@ -175,34 +175,34 @@ func handleAltWordKey(key flat.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-func handleWordDeleteKey(key flat.KeyEvent, deleteLeft, deleteRight func()) bool {
-	if key.Mod.Contains(flat.ModCtrl) && (key.Rune == 'w' || key.Rune == 'W' || key.Rune == 'h' || key.Rune == 'H') {
+func handleWordDeleteKey(key flatte.KeyEvent, deleteLeft, deleteRight func()) bool {
+	if key.Mod.Contains(flatte.ModCtrl) && (key.Rune == 'w' || key.Rune == 'W' || key.Rune == 'h' || key.Rune == 'H') {
 		deleteLeft()
 		return true
 	}
-	if key.Mod.Contains(flat.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
+	if key.Mod.Contains(flatte.ModAlt) && (key.Rune == 'd' || key.Rune == 'D') {
 		deleteRight()
 		return true
 	}
 	return false
 }
 
-func describeKey(key flat.KeyEvent) string {
-	if key.Key == flat.KeyCharacter {
+func describeKey(key flatte.KeyEvent) string {
+	if key.Key == flatte.KeyCharacter {
 		return fmt.Sprintf("character %q %s", key.Rune, describeMod(key.Mod))
 	}
 	return fmt.Sprintf("%s %s", keyName(key.Key), describeMod(key.Mod))
 }
 
-func describeMod(mod flat.Mod) string {
+func describeMod(mod flatte.Mod) string {
 	var parts []string
-	if mod.Contains(flat.ModCtrl) {
+	if mod.Contains(flatte.ModCtrl) {
 		parts = append(parts, "ctrl")
 	}
-	if mod.Contains(flat.ModAlt) {
+	if mod.Contains(flatte.ModAlt) {
 		parts = append(parts, "alt")
 	}
-	if mod.Contains(flat.ModShift) {
+	if mod.Contains(flatte.ModShift) {
 		parts = append(parts, "shift")
 	}
 	if len(parts) == 0 {
@@ -211,38 +211,38 @@ func describeMod(mod flat.Mod) string {
 	return strings.Join(parts, "+")
 }
 
-func keyName(key flat.Key) string {
+func keyName(key flatte.Key) string {
 	switch key {
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		return "up"
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		return "down"
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		return "enter"
-	case flat.KeyCtrlC:
+	case flatte.KeyCtrlC:
 		return "ctrl-c"
-	case flat.KeyBackspace:
+	case flatte.KeyBackspace:
 		return "backspace"
-	case flat.KeyTab:
+	case flatte.KeyTab:
 		return "tab"
-	case flat.KeyEscape:
+	case flatte.KeyEscape:
 		return "escape"
-	case flat.KeyLeft:
+	case flatte.KeyLeft:
 		return "left"
-	case flat.KeyRight:
+	case flatte.KeyRight:
 		return "right"
-	case flat.KeyDelete:
+	case flatte.KeyDelete:
 		return "delete"
-	case flat.KeyHome:
+	case flatte.KeyHome:
 		return "home"
-	case flat.KeyEnd:
+	case flatte.KeyEnd:
 		return "end"
 	default:
 		return "unknown"
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	lines := []string{
 		flatui.Title("Flat Editor"),
 		flatui.Subtle("multi-line textarea sample"),
@@ -254,16 +254,16 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		lines = append(lines, flatui.Subtle(fmt.Sprintf("last: %s -> %s", s.lastKey, s.lastAction)))
 	}
 
-	frame := flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 	// Place the hardware cursor: card origin + the three pinned lines (title,
 	// subtitle, blank) that precede the textarea body + the cell within it.
 	ox, oy := flatui.CardOrigin()
 	cx, cy := s.ta.CursorCell()
-	frame.Cursor = &flat.Cursor{
+	frame.Cursor = &flatte.Cursor{
 		X: ox + cx,
 		Y: oy + 3 + cy,
-		Style: &flat.CursorStyle{
-			Shape: flat.CursorShapeBar,
+		Style: &flatte.CursorStyle{
+			Shape: flatte.CursorShapeBar,
 			Blink: false,
 		},
 	}
@@ -281,7 +281,7 @@ func renderSelection(text string, selected bool) string {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,

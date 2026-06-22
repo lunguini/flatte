@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const defaultLoadDelay = 250 * time.Millisecond
@@ -32,26 +32,26 @@ func NewState() *State {
 const listTopLine = 3
 const modelListZoneID = "models"
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
-	case flat.MouseEvent:
+	case flatte.MouseEvent:
 		handleMouse(s, ev)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		moveDown(s)
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		moveUp(s)
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		if len(s.models) > 0 {
 			s.selectedModel = s.models[s.cursor]
 		}
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'j', 'J':
 			moveDown(s)
@@ -63,14 +63,14 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func handleMouse(s *State, m flat.MouseEvent) {
+func handleMouse(s *State, m flatte.MouseEvent) {
 	switch m.Button {
-	case flat.MouseWheelUp:
+	case flatte.MouseWheelUp:
 		moveUp(s)
-	case flat.MouseWheelDown:
+	case flatte.MouseWheelDown:
 		moveDown(s)
-	case flat.MouseLeft:
-		if m.Action != flat.MousePress {
+	case flatte.MouseLeft:
+		if m.Action != flatte.MousePress {
 			return
 		}
 		var zones flatui.ZoneMap
@@ -117,7 +117,7 @@ func moveUp(s *State) {
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	rows := make([]string, 0, len(s.models))
 	if s.loading {
 		rows = append(rows, flatui.Subtle("  loading models..."))
@@ -154,7 +154,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		flatui.Subtle("j/k or click/wheel | enter select | q quit"),
 	}
 
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func itemStyle() lipgloss.Style {
@@ -178,8 +178,8 @@ func errorStyle() lipgloss.Style {
 		Foreground(lipgloss.Color("203"))
 }
 
-func loadModels(s *State, fx flat.Effects[State]) {
-	flat.Go(fx, "models.load", fetchModels, func(s *State, models []string, err error) {
+func loadModels(s *State, fx flatte.Effects[State]) {
+	flatte.Go(fx, "models.load", fetchModels, func(s *State, models []string, err error) {
 		s.loading = false
 		if err != nil {
 			s.err = err
@@ -215,12 +215,12 @@ func loadDelay() time.Duration {
 
 func main() {
 	state := NewState()
-	err := flat.Run(context.Background(), flat.App[State]{
+	err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  state,
 		Init:   loadModels,
 		Handle: Handle,
 		View:   View,
-	}, flat.WithMouse(flat.MouseModeCellMotion))
+	}, flatte.WithMouse(flatte.MouseModeCellMotion))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

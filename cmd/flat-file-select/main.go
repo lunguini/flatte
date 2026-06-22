@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 type State struct {
@@ -29,9 +29,9 @@ func NewState() *State {
 	return &State{status: "ready"}
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
-	key, ok := ev.(flat.KeyEvent)
-	if !ok || key.Key != flat.KeyCharacter {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	key, ok := ev.(flatte.KeyEvent)
+	if !ok || key.Key != flatte.KeyCharacter {
 		return
 	}
 	switch key.Rune {
@@ -42,7 +42,7 @@ func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
 	}
 }
 
-func openSelector(s *State, fx flat.Effects[State]) {
+func openSelector(s *State, fx flatte.Effects[State]) {
 	cmd, label, ok := selectorCommand()
 	if !ok {
 		s.status = "file selector unavailable"
@@ -52,12 +52,12 @@ func openSelector(s *State, fx flat.Effects[State]) {
 		return
 	}
 	s.status = "running " + label + "..."
-	flat.SelectFile(fx, "file.select", cmd, func(s *State, selection flat.FileSelection) {
+	flatte.SelectFile(fx, "file.select", cmd, func(s *State, selection flatte.FileSelection) {
 		switch {
 		case selection.Err == nil:
 			s.path = selection.Path
 			s.status = "selected"
-		case errors.Is(selection.Err, flat.ErrNoSelection):
+		case errors.Is(selection.Err, flatte.ErrNoSelection):
 			s.status = "no selection"
 		default:
 			s.status = "selector: " + selection.Err.Error()
@@ -190,7 +190,7 @@ func listSelectableFiles(root string) ([]string, error) {
 	return files, nil
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	path := s.path
 	if path == "" {
 		path = "(none)"
@@ -204,7 +204,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		"",
 		flatui.Subtle("o open selector | q quit"),
 	}
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func main() {
@@ -215,7 +215,7 @@ func main() {
 		}
 		return
 	}
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,

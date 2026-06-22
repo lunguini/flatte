@@ -10,8 +10,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 type focusArea int
@@ -113,56 +113,56 @@ func (s *State) setTableColumns(contentWidth int) {
 	})
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(e.Width, e.Height)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyEscape:
+	case flatte.KeyEscape:
 		fx.Quit()
-	case flat.KeyTab:
-		if key.Mod.Contains(flat.ModShift) {
+	case flatte.KeyTab:
+		if key.Mod.Contains(flatte.ModShift) {
 			s.focus.Prev()
 		} else {
 			s.focus.Next()
 		}
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		handleVertical(s, -1)
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		handleVertical(s, 1)
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		if s.focus.Focused(int(focusTree)) {
 			s.tree.Toggle(s.tree.CursorID())
 		}
-	case flat.KeyBackspace:
+	case flatte.KeyBackspace:
 		if s.focus.Focused(int(focusSearch)) {
 			s.search.Backspace()
 			s.syncResults()
 		}
-	case flat.KeyDelete:
+	case flatte.KeyDelete:
 		if s.focus.Focused(int(focusSearch)) {
 			s.search.Delete()
 			s.syncResults()
 		}
-	case flat.KeyLeft:
+	case flatte.KeyLeft:
 		if s.focus.Focused(int(focusTree)) {
 			collapseSelectedTreeRow(s)
 		} else if s.focus.Focused(int(focusSearch)) {
 			s.search.MoveLeft()
 		}
-	case flat.KeyRight:
+	case flatte.KeyRight:
 		if s.focus.Focused(int(focusTree)) {
 			expandSelectedTreeRow(s)
 		} else if s.focus.Focused(int(focusSearch)) {
 			s.search.MoveRight()
 		}
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		handleCharacter(s, key)
 	}
 }
@@ -215,7 +215,7 @@ func handleVertical(s *State, delta int) {
 	}
 }
 
-func handleCharacter(s *State, key flat.KeyEvent) {
+func handleCharacter(s *State, key flatte.KeyEvent) {
 	if s.focus.Focused(int(focusSearch)) {
 		s.search.Insert(key.Rune)
 		s.syncResults()
@@ -335,7 +335,7 @@ func newStyles(p palette) styles {
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	st := newStyles(defaultPalette())
 	width := max(ctx.Width, 64)
 	leftOuter, centerOuter, rightOuter := layoutWidths(width)
@@ -357,7 +357,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	}
 	sections = append(sections, footer)
 	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
-	frame := flat.Frame{Content: trimRightLines(content)}
+	frame := flatte.Frame{Content: trimRightLines(content)}
 	if s.focus.Focused(int(focusSearch)) {
 		frame.Cursor = searchCursor(frame.Content, s.search.CursorColumn())
 	}
@@ -409,14 +409,14 @@ func focusName(s *State) string {
 	}
 }
 
-func searchCursor(content string, cursorColumn int) *flat.Cursor {
+func searchCursor(content string, cursorColumn int) *flatte.Cursor {
 	const prefix = "search: "
 	for y, line := range strings.Split(ansi.Strip(content), "\n") {
 		idx := strings.Index(line, prefix)
 		if idx < 0 {
 			continue
 		}
-		return &flat.Cursor{
+		return &flatte.Cursor{
 			X: lipgloss.Width(line[:idx+len(prefix)]) + cursorColumn,
 			Y: y,
 		}
@@ -593,7 +593,7 @@ func lineCount(s string) int {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,

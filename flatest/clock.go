@@ -14,7 +14,7 @@ type fakeTicker struct {
 	acc      time.Duration
 }
 
-// fakeClock implements flat.Clock for deterministic Every ticks: no
+// fakeClock implements flatte.Clock for deterministic Every ticks: no
 // goroutine, no real time — advance fires due callbacks synchronously.
 type fakeClock struct {
 	now     time.Time

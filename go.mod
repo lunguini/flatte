@@ -1,4 +1,4 @@
-module github.com/lunguini/flat
+module github.com/lunguini/flatte
 
 go 1.25.0
 

@@ -1,6 +1,6 @@
 //go:build !unix
 
-package flat
+package flatte
 
 import "os"
 

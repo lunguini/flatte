@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui"
 )
 
 func TestEnterOpensModalAndStartsWaiting(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flat.KeyEvent{Key: flat.KeyEnter}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
 	if !state.modalOpen {
 		t.Fatal("expected modal to open")
@@ -26,16 +26,16 @@ func TestEnterOpensModalAndStartsWaiting(t *testing.T) {
 
 func TestModalCapturesInputAndConfirmCompletesWaiting(t *testing.T) {
 	state := NewState()
-	Handle(state, flat.KeyEvent{Key: flat.KeyEnter}, flat.Effects[State]{})
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'A'}, flat.Effects[State]{})
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'd'}, flat.Effects[State]{})
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'a'}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'A'}, flatte.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'd'}, flatte.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'a'}, flatte.Effects[State]{})
 
 	if state.modalInput.Value != "Ada" {
 		t.Fatalf("modal input = %q, want Ada", state.modalInput.Value)
 	}
 
-	Handle(state, flat.KeyEvent{Key: flat.KeyEnter}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
 	if state.modalOpen {
 		t.Fatal("expected modal to close after confirm")
@@ -51,9 +51,9 @@ func TestModalCapturesInputAndConfirmCompletesWaiting(t *testing.T) {
 func TestModalCapturesQInsteadOfQuitting(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
-	Handle(state, flat.KeyEvent{Key: flat.KeyEnter}, fx)
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
+	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnter}, fx)
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if quit {
 		t.Fatal("q should not quit while modal is open")
@@ -69,14 +69,14 @@ func TestModalUsesAltBFForWordMovement(t *testing.T) {
 	state.modalInput.Value = "hello world"
 	state.modalInput.Cursor = len("hello world")
 
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'b', Mod: flat.ModAlt}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'b', Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if state.modalInput.Cursor != len("hello ") {
 		t.Fatalf("alt-b cursor = %d, want start of world", state.modalInput.Cursor)
 	}
 	if state.modalInput.Value != "hello world" {
 		t.Fatalf("alt-b inserted text: %q", state.modalInput.Value)
 	}
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'f', Mod: flat.ModAlt}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'f', Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if state.modalInput.Cursor != len("hello world") {
 		t.Fatalf("alt-f cursor = %d, want end", state.modalInput.Cursor)
 	}
@@ -84,9 +84,9 @@ func TestModalUsesAltBFForWordMovement(t *testing.T) {
 
 func TestEscapeCancelsModal(t *testing.T) {
 	state := NewState()
-	Handle(state, flat.KeyEvent{Key: flat.KeyEnter}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
-	Handle(state, flat.KeyEvent{Key: flat.KeyEscape}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
 
 	if state.modalOpen {
 		t.Fatal("expected modal to close after escape")
@@ -101,7 +101,7 @@ func TestEscapeCancelsModal(t *testing.T) {
 
 func TestBackgroundTickContinuesWhileModalIsOpen(t *testing.T) {
 	state := NewState()
-	Handle(state, flat.KeyEvent{Key: flat.KeyEnter}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
 	applyTick(state, time.Time{})
 	applyTick(state, time.Time{})
@@ -120,9 +120,9 @@ func TestBackgroundTickContinuesWhileModalIsOpen(t *testing.T) {
 func TestQQuitsOnlyWhenModalIsClosed(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
 
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
 		t.Fatal("q should quit when modal is closed")
@@ -138,7 +138,7 @@ func TestViewRendersMainAndModalState(t *testing.T) {
 	state.modalInput.Value = "Ada"
 	state.modalInput.Cursor = 1
 
-	frame := View(state, flat.RenderContext{Width: 72}).Content
+	frame := View(state, flatte.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Modal", "background ticks: 4", "waiting \\", "Confirm Work", "Ada"} {
 		if !strings.Contains(frame, want) {
@@ -156,19 +156,19 @@ func TestViewMatchesModalSnapshot(t *testing.T) {
 	state.modalInput.Value = "Ada"
 	state.modalInput.Cursor = 1
 
-	flatest.AssertGoldenFrame(t, "testdata/modal-open.golden", View(state, flat.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/modal-open.golden", View(state, flatte.RenderContext{Width: 72}))
 }
 
 func TestViewPlacesCursorInsideModal(t *testing.T) {
 	state := NewState()
-	if closed := View(state, flat.RenderContext{Width: 72}); closed.Cursor != nil {
+	if closed := View(state, flatte.RenderContext{Width: 72}); closed.Cursor != nil {
 		t.Fatalf("closed-modal view has a cursor: %+v", *closed.Cursor)
 	}
 
 	state.modalOpen = true
 	state.modalInput.Value = "Ada"
 	state.modalInput.Cursor = 1
-	ctx := flat.RenderContext{Width: 72}
+	ctx := flatte.RenderContext{Width: 72}
 	frame := View(state, ctx)
 	if frame.Cursor == nil {
 		t.Fatal("open-modal view has no cursor")

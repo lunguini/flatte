@@ -4,24 +4,24 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lunguini/flat"
+	"github.com/lunguini/flatte"
 )
 
 type adder struct{ n int }
 
 // adderApp folds an async increment named "inc" on each '+'.
-func adderApp() flat.App[adder] {
-	return flat.App[adder]{
+func adderApp() flatte.App[adder] {
+	return flatte.App[adder]{
 		State: &adder{},
-		Handle: func(s *adder, ev flat.Event, fx flat.Effects[adder]) {
-			if k, ok := ev.(flat.KeyEvent); ok && k.Rune == '+' {
-				flat.Go(fx, "inc",
+		Handle: func(s *adder, ev flatte.Event, fx flatte.Effects[adder]) {
+			if k, ok := ev.(flatte.KeyEvent); ok && k.Rune == '+' {
+				flatte.Go(fx, "inc",
 					func(context.Context) (int, error) { return 1, nil },
 					func(s *adder, v int, _ error) { s.n += v })
 			}
 		},
-		View: func(s *adder, ctx flat.RenderContext) flat.Frame {
-			return flat.Frame{Content: "n"}
+		View: func(s *adder, ctx flatte.RenderContext) flatte.Frame {
+			return flatte.Frame{Content: "n"}
 		},
 	}
 }
@@ -32,7 +32,7 @@ func TestRecorderCapturesEventAndUpdateStream(t *testing.T) {
 	app.Tracer = rec
 
 	d := Start(app, 40)
-	d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: '+'})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '+'})
 	d.Settle()
 
 	// Expect: an initial ResizeEvent, the KeyEvent, then the "inc" update.
@@ -41,7 +41,7 @@ func TestRecorderCapturesEventAndUpdateStream(t *testing.T) {
 	}
 	var sawKey bool
 	for _, s := range rec.Steps {
-		if k, ok := s.Event.(flat.KeyEvent); ok && k.Rune == '+' {
+		if k, ok := s.Event.(flatte.KeyEvent); ok && k.Rune == '+' {
 			sawKey = true
 		}
 	}
@@ -56,9 +56,9 @@ func TestReplayReproducesUpdateStream(t *testing.T) {
 	app.Tracer = rec
 
 	d := Start(app, 40)
-	d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: '+'})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '+'})
 	d.Settle()
-	d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: '+'})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '+'})
 	d.Settle()
 
 	replayed := Replay(adderApp(), 40, rec)

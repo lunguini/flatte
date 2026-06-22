@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const (

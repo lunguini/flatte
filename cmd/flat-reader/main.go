@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 // document is fixed so goldens stay deterministic. The long line near the top
@@ -65,28 +65,28 @@ func (s *State) layout(width, height int) {
 // wheelLines is how many lines one mouse-wheel notch scrolls.
 const wheelLines = 3
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(e.Width, e.Height)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, e, fx)
-	case flat.MouseEvent:
+	case flatte.MouseEvent:
 		handleMouse(s, e)
 	}
 }
 
-func handleMouse(s *State, m flat.MouseEvent) {
+func handleMouse(s *State, m flatte.MouseEvent) {
 	switch m.Button {
-	case flat.MouseWheelUp:
+	case flatte.MouseWheelUp:
 		s.vp.LineUp(wheelLines)
-	case flat.MouseWheelDown:
+	case flatte.MouseWheelDown:
 		s.vp.LineDown(wheelLines)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
-	if key.Key != flat.KeyCharacter {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
+	if key.Key != flatte.KeyCharacter {
 		return
 	}
 	switch key.Rune {
@@ -111,7 +111,7 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	footer := flatui.Subtle(fmt.Sprintf(
 		"j/k line  d/u half  f/b page  g/G ends  q quit   %3.0f%%",
 		s.vp.ScrollPercent()*100))
@@ -124,15 +124,15 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	lines = append(lines, strings.Split(s.vp.View(), "\n")...)
 	lines = append(lines, "", footer)
 
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flat.WithMouse(flat.MouseModeCellMotion)); err != nil {
+	}, flatte.WithMouse(flatte.MouseModeCellMotion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

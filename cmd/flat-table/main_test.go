@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func ready() *State {
@@ -15,14 +15,14 @@ func ready() *State {
 	return s
 }
 
-func key(r rune) flat.KeyEvent {
-	return flat.KeyEvent{Key: flat.KeyCharacter, Rune: r}
+func key(r rune) flatte.KeyEvent {
+	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}
 }
 
 func TestNavigationSelectsRows(t *testing.T) {
 	s := ready()
 	for range 3 {
-		Handle(s, key('j'), flat.Effects[State]{})
+		Handle(s, key('j'), flatte.Effects[State]{})
 	}
 	if s.tb.Cursor() != 3 {
 		t.Fatalf("Cursor() = %d, want 3", s.tb.Cursor())
@@ -34,7 +34,7 @@ func TestNavigationSelectsRows(t *testing.T) {
 
 func TestViewHasHeaderAndMarksSelection(t *testing.T) {
 	s := ready()
-	frame := View(s, flat.RenderContext{Width: 72}).Content
+	frame := View(s, flatte.RenderContext{Width: 72}).Content
 	for _, want := range []string{"Flat Table", "ID", "Name", "Status", "service-01", "[1/20]"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -48,12 +48,12 @@ func TestViewHasHeaderAndMarksSelection(t *testing.T) {
 
 func TestGotoEndAndQuit(t *testing.T) {
 	s := ready()
-	Handle(s, key('G'), flat.Effects[State]{})
+	Handle(s, key('G'), flatte.Effects[State]{})
 	if s.tb.Cursor() != 19 {
 		t.Fatalf("G: Cursor() = %d, want 19", s.tb.Cursor())
 	}
 	var quit bool
-	fx := flat.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
 	Handle(s, key('q'), fx)
 	if !quit {
 		t.Fatal("q did not quit")
@@ -61,7 +61,7 @@ func TestGotoEndAndQuit(t *testing.T) {
 }
 
 func TestScrollSequenceSnapshot(t *testing.T) {
-	d := flatest.Start(flat.App[State]{
+	d := flatest.Start(flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,

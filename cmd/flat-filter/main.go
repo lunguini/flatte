@@ -8,8 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 type Item struct {
@@ -60,38 +60,38 @@ func (s *State) layout(height int) {
 	s.syncFiltered()
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(e.Height)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyEscape:
+	case flatte.KeyEscape:
 		fx.Quit()
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		s.list.MoveUp()
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		s.list.MoveDown()
-	case flat.KeyLeft:
+	case flatte.KeyLeft:
 		s.pages.PrevPage()
 		s.list.Select(0)
 		s.syncCurrentPage()
-	case flat.KeyRight:
+	case flatte.KeyRight:
 		s.pages.NextPage()
 		s.list.Select(0)
 		s.syncCurrentPage()
-	case flat.KeyBackspace:
+	case flatte.KeyBackspace:
 		s.query.Backspace()
 		s.syncFiltered()
-	case flat.KeyDelete:
+	case flatte.KeyDelete:
 		s.query.Delete()
 		s.syncFiltered()
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		s.query.Insert(key.Rune)
 		s.syncFiltered()
 	}
@@ -147,7 +147,7 @@ func (s *State) renderRow(i int, selected bool) string {
 	return style.Render(fmt.Sprintf("%s%-18s %s", marker, item.Title, subtleStyle().Render(item.Kind)))
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	query := s.query.Value
 	if query == "" {
 		query = "(empty)"
@@ -169,9 +169,9 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	}
 	lines = append(lines, "", flatui.Subtle("  "+pageLine), flatui.Subtle(keyMap(s).View()))
 
-	frame := flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 	originX, originY := flatui.CardOrigin()
-	frame.Cursor = &flat.Cursor{
+	frame.Cursor = &flatte.Cursor{
 		X: originX + lipgloss.Width("  query: ") + s.query.CursorColumn(),
 		Y: originY + 1,
 	}
@@ -201,7 +201,7 @@ func subtleStyle() lipgloss.Style {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,

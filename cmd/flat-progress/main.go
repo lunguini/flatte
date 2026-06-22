@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const defaultProgressInterval = 120 * time.Millisecond
@@ -21,8 +21,8 @@ func NewState() *State {
 	return &State{progress: flatui.NewProgress(24)}
 }
 
-func Init(s *State, fx flat.Effects[State]) {
-	flat.Every(fx, "progress.tick", progressInterval(), applyTick)
+func Init(s *State, fx flatte.Effects[State]) {
+	flatte.Every(fx, "progress.tick", progressInterval(), applyTick)
 }
 
 func applyTick(s *State, _ time.Time) {
@@ -32,11 +32,11 @@ func applyTick(s *State, _ time.Time) {
 	s.progress.SetPercent(s.progress.Percent() + 10)
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(ev.Width)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	}
 }
@@ -45,8 +45,8 @@ func (s *State) layout(width int) {
 	s.progress.SetWidth(max(flatui.CardBodyWidth(width)-8, 0))
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
-	if key.Key != flat.KeyCharacter {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
+	if key.Key != flatte.KeyCharacter {
 		return
 	}
 	switch key.Rune {
@@ -59,7 +59,7 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	status := "running"
 	if s.paused {
 		status = "paused"
@@ -73,7 +73,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		"",
 		flatui.Subtle("space pause | r reset | q quit"),
 	}
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func progressInterval() time.Duration {
@@ -89,7 +89,7 @@ func progressInterval() time.Duration {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,

@@ -10,8 +10,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 const clipboardLine = "flatte: copied from the capability demo"
@@ -28,23 +28,23 @@ func NewState() *State {
 	return &State{status: "ready"}
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flat.ClipboardEvent:
+	case flatte.ClipboardEvent:
 		s.clipboard = ev.Text
 		s.status = "clipboard read"
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
-	if key.Key != flat.KeyCharacter {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
+	if key.Key != flatte.KeyCharacter {
 		return
 	}
-	mod := key.Mod &^ flat.ModShift
+	mod := key.Mod &^ flatte.ModShift
 	if mod != 0 {
-		if mod == flat.ModCtrl && (key.Rune == 'z' || key.Rune == 'Z') {
+		if mod == flatte.ModCtrl && (key.Rune == 'z' || key.Rune == 'Z') {
 			s.status = "suspended; resumed"
 			fx.Suspend()
 		}
@@ -67,7 +67,7 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func openEditor(s *State, fx flat.Effects[State]) {
+func openEditor(s *State, fx flatte.Effects[State]) {
 	file, err := os.CreateTemp("", "flat-capable-*.txt")
 	if err != nil {
 		s.status = "temp file: " + err.Error()
@@ -82,7 +82,7 @@ func openEditor(s *State, fx flat.Effects[State]) {
 		editor = "vi"
 	}
 	s.status = "running " + editor + "…"
-	flat.Exec(fx, "editor", exec.Command(editor, name), func(s *State, err error) {
+	flatte.Exec(fx, "editor", exec.Command(editor, name), func(s *State, err error) {
 		defer func() { _ = os.Remove(name) }()
 		if err != nil {
 			s.status = "editor: " + err.Error()
@@ -98,7 +98,7 @@ func openEditor(s *State, fx flat.Effects[State]) {
 	})
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	clip := s.clipboard
 	if clip == "" {
 		clip = "(none read yet)"
@@ -118,19 +118,19 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 		"",
 		flatui.Subtle("y copy | p paste | z/Ctrl-Z suspend | e edit | q quit"),
 	}
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
-func runOptions() []flat.Option {
+func runOptions() []flatte.Option {
 	if os.Getenv("FLAT_CAPABLE_INLINE") == "" {
 		return nil
 	}
-	return []flat.Option{flat.WithInline()}
+	return []flatte.Option{flatte.WithInline()}
 }
 
 func main() {
 	state := NewState()
-	err := flat.Run(context.Background(), flat.App[State]{
+	err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  state,
 		Handle: Handle,
 		View:   View,

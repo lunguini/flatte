@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui"
 )
 
 func TestProgressTickAdvancesUntilComplete(t *testing.T) {
@@ -37,19 +37,19 @@ func TestHandleTogglesPauseResetsAndQuits(t *testing.T) {
 	state := NewState()
 	state.progress.SetPercent(40)
 
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: ' '}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: ' '}, flatte.Effects[State]{})
 	if !state.paused {
 		t.Fatal("space should pause")
 	}
 
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'r'}, flat.Effects[State]{})
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'r'}, flatte.Effects[State]{})
 	if got := state.progress.Percent(); got != 0 {
 		t.Fatalf("percent after reset = %.1f, want 0", got)
 	}
 
 	var quit bool
-	fx := flat.NewEffects[State](t.Context(), nil, func() { quit = true })
-	Handle(state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'q'}, fx)
+	fx := flatte.NewEffects[State](t.Context(), nil, func() { quit = true })
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q should request quit")
 	}
@@ -58,7 +58,7 @@ func TestHandleTogglesPauseResetsAndQuits(t *testing.T) {
 func TestResizeSetsProgressWidth(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flat.ResizeEvent{Width: 72, Height: 24}, flat.Effects[State]{})
+	Handle(state, flatte.ResizeEvent{Width: 72, Height: 24}, flatte.Effects[State]{})
 
 	if got, want := state.progress.Width(), flatui.CardBodyWidth(72)-8; got != want {
 		t.Fatalf("progress width = %d, want %d", got, want)
@@ -69,7 +69,7 @@ func TestViewRendersProgressState(t *testing.T) {
 	state := NewState()
 	state.progress.SetPercent(30)
 
-	frame := View(state, flat.RenderContext{Width: 72}).Content
+	frame := View(state, flatte.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Progress", "30%", "space pause", "r reset"} {
 		if !strings.Contains(frame, want) {
@@ -81,7 +81,7 @@ func TestViewRendersProgressState(t *testing.T) {
 func TestProgressSequenceSnapshot(t *testing.T) {
 	t.Setenv("FLAT_PROGRESS_INTERVAL", "10ms")
 
-	d := flatest.Start(flat.App[State]{
+	d := flatest.Start(flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,
@@ -93,11 +93,11 @@ func TestProgressSequenceSnapshot(t *testing.T) {
 		func(d *flatest.Driver[State]) { d.Advance(10 * time.Millisecond) }, // 10%
 		func(d *flatest.Driver[State]) { d.Advance(30 * time.Millisecond) }, // 40%
 		func(d *flatest.Driver[State]) {
-			d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: ' '})
+			d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: ' '})
 			d.Advance(30 * time.Millisecond)
 		}, // paused: still 40%
 		func(d *flatest.Driver[State]) {
-			d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'r'})
+			d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'r'})
 		}, // reset: 0%
 	)
 

@@ -8,8 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatui"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 )
 
 // items is fixed so goldens stay deterministic; long enough that the list
@@ -45,26 +45,26 @@ func (s *State) layout(height int) {
 	s.list.SetHeight(max(flatui.CardBodyHeight(height, pinnedRows), 1))
 }
 
-func Handle(s *State, ev flat.Event, fx flat.Effects[State]) {
+func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flat.ResizeEvent:
+	case flatte.ResizeEvent:
 		s.layout(e.Height)
-	case flat.KeyEvent:
+	case flatte.KeyEvent:
 		handleKey(s, e, fx)
-	case flat.MouseEvent:
+	case flatte.MouseEvent:
 		handleMouse(s, e)
 	}
 }
 
-func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
-	case flat.KeyDown:
+	case flatte.KeyDown:
 		s.list.MoveDown()
-	case flat.KeyUp:
+	case flatte.KeyUp:
 		s.list.MoveUp()
-	case flat.KeyEnter:
+	case flatte.KeyEnter:
 		s.chosen = s.list.Cursor()
-	case flat.KeyCharacter:
+	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'j':
 			s.list.MoveDown()
@@ -80,14 +80,14 @@ func handleKey(s *State, key flat.KeyEvent, fx flat.Effects[State]) {
 	}
 }
 
-func handleMouse(s *State, m flat.MouseEvent) {
+func handleMouse(s *State, m flatte.MouseEvent) {
 	switch m.Button {
-	case flat.MouseWheelUp:
+	case flatte.MouseWheelUp:
 		s.list.MoveUp()
-	case flat.MouseWheelDown:
+	case flatte.MouseWheelDown:
 		s.list.MoveDown()
-	case flat.MouseLeft:
-		if m.Action != flat.MousePress {
+	case flatte.MouseLeft:
+		if m.Action != flatte.MousePress {
 			return
 		}
 		// Click row -> item index: the visible row plus the scroll offset,
@@ -114,7 +114,7 @@ func (s *State) renderRow(i int, selected bool) string {
 	return style.Render(marker + label)
 }
 
-func View(s *State, ctx flat.RenderContext) flat.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	footer := flatui.Subtle(fmt.Sprintf(
 		"j/k move  g/G ends  enter select  q quit    [%d/%d]",
 		s.list.Cursor()+1, s.list.Count()))
@@ -127,7 +127,7 @@ func View(s *State, ctx flat.RenderContext) flat.Frame {
 	lines = append(lines, strings.Split(s.list.View(s.renderRow), "\n")...)
 	lines = append(lines, "", footer)
 
-	return flat.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
 }
 
 func itemStyle() lipgloss.Style {
@@ -143,11 +143,11 @@ func chosenStyle() lipgloss.Style {
 }
 
 func main() {
-	if err := flat.Run(context.Background(), flat.App[State]{
+	if err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flat.WithMouse(flat.MouseModeCellMotion)); err != nil {
+	}, flatte.WithMouse(flatte.MouseModeCellMotion)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

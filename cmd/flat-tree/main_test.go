@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func TestTabMovesFocusBetweenSections(t *testing.T) {
@@ -13,11 +13,11 @@ func TestTabMovesFocusBetweenSections(t *testing.T) {
 	if !s.focus.Focused(int(focusTree)) {
 		t.Fatalf("initial focus index = %d, want tree", s.focus.Index())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
 	if !s.focus.Focused(int(focusSearch)) {
 		t.Fatalf("after tab focus index = %d, want search", s.focus.Index())
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab, Mod: flat.ModShift}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab, Mod: flatte.ModShift}, flatte.Effects[State]{})
 	if !s.focus.Focused(int(focusTree)) {
 		t.Fatalf("after shift-tab focus index = %d, want tree", s.focus.Index())
 	}
@@ -26,7 +26,7 @@ func TestTabMovesFocusBetweenSections(t *testing.T) {
 func TestTreeToggleChangesVisibleRows(t *testing.T) {
 	s := NewState()
 	before := len(s.tree.VisibleRows())
-	Handle(s, flat.KeyEvent{Key: flat.KeyEnter}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 	after := len(s.tree.VisibleRows())
 	if after >= before {
 		t.Fatalf("visible rows after collapsing root = %d, want less than %d", after, before)
@@ -38,13 +38,13 @@ func TestTreeToggleChangesVisibleRows(t *testing.T) {
 
 func TestSearchInputOnlyWhenFocused(t *testing.T) {
 	s := NewState()
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'h'}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'h'}, flatte.Effects[State]{})
 	if s.search.Value != "" {
 		t.Fatalf("tree-focused character edited search: %q", s.search.Value)
 	}
-	Handle(s, flat.KeyEvent{Key: flat.KeyTab}, flat.Effects[State]{})
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'h'}, flat.Effects[State]{})
-	Handle(s, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'i'}, flat.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'h'}, flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'i'}, flatte.Effects[State]{})
 	if s.search.Value != "hi" {
 		t.Fatalf("search Value = %q, want hi", s.search.Value)
 	}
@@ -55,5 +55,5 @@ func TestSearchInputOnlyWhenFocused(t *testing.T) {
 
 func TestTreeViewMatchesSnapshot(t *testing.T) {
 	s := NewState()
-	flatest.AssertGoldenFrame(t, "testdata/tree.golden", View(s, flat.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/tree.golden", View(s, flatte.RenderContext{Width: 72}))
 }

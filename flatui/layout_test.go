@@ -7,7 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func TestCardUsesCompactWidthAndBorders(t *testing.T) {

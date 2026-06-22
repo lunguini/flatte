@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lunguini/flat"
-	"github.com/lunguini/flat/flatest"
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatest"
 )
 
 func TestTickUpdateIncrementsOnlyWhenRunning(t *testing.T) {
@@ -27,12 +27,12 @@ func TestTickUpdateIncrementsOnlyWhenRunning(t *testing.T) {
 func TestHandleTogglesPauseAndResets(t *testing.T) {
 	state := State{ticks: 5}
 
-	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'p'}, flat.Effects[State]{})
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'p'}, flatte.Effects[State]{})
 	if !state.paused {
 		t.Fatal("expected paused state after p")
 	}
 
-	Handle(&state, flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'r'}, flat.Effects[State]{})
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'r'}, flatte.Effects[State]{})
 	if state.ticks != 0 {
 		t.Fatalf("ticks = %d, want reset to 0", state.ticks)
 	}
@@ -41,7 +41,7 @@ func TestHandleTogglesPauseAndResets(t *testing.T) {
 func TestViewRendersTickerState(t *testing.T) {
 	state := State{ticks: 3, paused: true}
 
-	frame := View(&state, flat.RenderContext{Width: 72}).Content
+	frame := View(&state, flatte.RenderContext{Width: 72}).Content
 
 	for _, want := range []string{"Flat Ticker", "ticks: 3", "state: paused"} {
 		if !strings.Contains(frame, want) {
@@ -53,7 +53,7 @@ func TestViewRendersTickerState(t *testing.T) {
 func TestViewMatchesPausedSnapshot(t *testing.T) {
 	state := State{ticks: 3, paused: true}
 
-	flatest.AssertGolden(t, "testdata/paused.golden", View(&state, flat.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/paused.golden", View(&state, flatte.RenderContext{Width: 72}).Content)
 }
 
 func TestTickIntervalEnvironmentOverride(t *testing.T) {
@@ -67,7 +67,7 @@ func TestTickIntervalEnvironmentOverride(t *testing.T) {
 func TestTicksAreDeterministicUnderFakeClock(t *testing.T) {
 	t.Setenv("FLAT_TICKER_INTERVAL", "10ms")
 
-	d := flatest.Start(flat.App[State]{
+	d := flatest.Start(flatte.App[State]{
 		State:  &State{},
 		Init:   Init,
 		Handle: Handle,
@@ -78,11 +78,11 @@ func TestTicksAreDeterministicUnderFakeClock(t *testing.T) {
 		func(d *flatest.Driver[State]) {},                                   // ticks: 0
 		func(d *flatest.Driver[State]) { d.Advance(10 * time.Millisecond) }, // ticks: 1
 		func(d *flatest.Driver[State]) {
-			d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'p'})
+			d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'p'})
 			d.Advance(30 * time.Millisecond)
 		}, // paused: still 1
 		func(d *flatest.Driver[State]) {
-			d.Send(flat.KeyEvent{Key: flat.KeyCharacter, Rune: 'p'})
+			d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'p'})
 			d.Advance(20 * time.Millisecond)
 		}, // resumed: 3
 	)

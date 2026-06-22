@@ -1,7 +1,7 @@
 package flatui
 
 // Spinner is a frame-cycling activity indicator. The app advances it — via
-// flat.Every or any other tick source on the loop goroutine — so the widget
+// flatte.Every or any other tick source on the loop goroutine — so the widget
 // owns no goroutine and no timer, consistent with the rest of flatui. View
 // returns the current frame.
 type Spinner struct {
