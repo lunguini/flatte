@@ -49,9 +49,10 @@ What that means in practice, on every increment:
 
 ## The `.docs/` folder (internal project docs; sensitive, git-crypt)
 
-**Internal project documents live in `.docs/`** — design, status tracker,
-evaluation log, plans. Public user-facing docs live at the repository root.
-Rules:
+**All internal project documents live in `.docs/`** — design, status tracker,
+evaluation log, plans, and any specs or design/brainstorm notes (kept as dated
+files under `.docs/plans/`). There is no `.specs/` folder; use `.docs/`
+exclusively. Public user-facing docs live at the repository root. Rules:
 
 - **Rely on it.** Before designing, implementing, or claiming anything
   about project state, read the relevant `.docs` file first. `.docs/STATUS.md`
@@ -61,9 +62,13 @@ Rules:
   feature, fixed bug, design decision, new finding) updates the matching
   `.docs` file in the same commit. New plans go to `.docs/plans/`,
   dated like `2026-06-09-line-diff-renderer.md`.
-- `.docs/**` and `.specs/**` are encrypted with **git-crypt** (see
-  `.gitattributes`). Sensitive or internal material goes here, never in
-  public files or code comments.
+- `.docs/**` is encrypted with **git-crypt** (see `.gitattributes`). All
+  sensitive or internal material goes under `.docs/`, never in public files or
+  code comments. (`.specs/**` stays git-crypt-encrypted purely as a safety
+  guard against accidental plaintext — it is not a place to put files.)
+  Note: git-crypt encrypts file *contents*, not *names* — `.docs/` filenames
+  are visible in the public repo, so keep them non-revealing if topics are
+  sensitive.
 - Do not copy `.docs` content into public files, commit messages, or
   README-style docs.
 - If `.docs/` files look like binary garbage, the repo is **locked** — stop
