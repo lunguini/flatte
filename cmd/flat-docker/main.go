@@ -160,6 +160,45 @@ const (
 	chromeRowsBottom = 2 // separator + footer (help line) — both anchored to bottom
 )
 
+type palette struct {
+	accent color.Color
+	panel  color.Color
+	muted  color.Color
+	text   color.Color
+	good   color.Color
+	bad    color.Color
+	bg     color.Color
+}
+
+func defaultPalette() palette {
+	return palette{
+		accent: lipgloss.Color("117"),
+		panel:  lipgloss.Color("240"),
+		muted:  lipgloss.Color("245"),
+		text:   lipgloss.Color("252"),
+		good:   lipgloss.Color("114"),
+		bad:    lipgloss.Color("203"),
+		bg:     lipgloss.Color("236"),
+	}
+}
+
+var pal = defaultPalette()
+
+const paneBorderRows = 2 // top + bottom border
+const paneBorderCols = 2 // left + right border
+
+func paneStyle(width, height int, focused bool) lipgloss.Style {
+	borderFg := pal.panel
+	if focused {
+		borderFg = pal.accent
+	}
+	return lipgloss.NewStyle().
+		Width(width).
+		Height(height).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderFg)
+}
+
 func (s *State) resize(width, height int) {
 	s.width, s.height = width, height
 	bodyWidth := width
@@ -402,23 +441,25 @@ const statusLineRows = 1
 func (c *containersScreen) layout(width, height int) {
 	c.width, c.height = width, height
 	c.focus.SetCount(3)
-	c.listPaneWidth = min(26, max(width/5, 14))
-	c.activityPaneWidth = 22
+	c.listPaneWidth = min(28, max(width/5, 18))
+	c.activityPaneWidth = 24
 	c.detailPaneWidth = max(width-c.listPaneWidth-2-c.activityPaneWidth-2, 0)
 
 	c.bodyContentHeight = max(height-statusLineRows, 0)
 
-	const listChromeRows = 3
-	c.listHeight = max(c.bodyContentHeight-listChromeRows, 0)
+	listInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
+	const listChromeRows = 2 // filter line + blank
+	c.listHeight = max(listInnerHeight-listChromeRows, 0)
 	c.list.SetHeight(c.listHeight)
 
-	const detailChromeRows = 3
-	contentWidth := max(c.detailPaneWidth-2, 1)
-	contentHeight := max(c.bodyContentHeight-detailChromeRows, 0)
-	c.logs.SetSize(contentWidth, contentHeight)
-	c.inspect.SetSize(contentWidth, contentHeight)
-	c.cpu.SetWidth(max(contentWidth-16, 4))
-	c.mem.SetWidth(max(contentWidth-16, 4))
+	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1) // -1 for scrollbar
+	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
+	const detailChromeRows = 3 // title + tab bar + blank
+	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
+	c.logs.SetSize(detailInnerWidth, contentHeight)
+	c.inspect.SetSize(detailInnerWidth, contentHeight)
+	c.cpu.SetWidth(max(detailInnerWidth-16, 4))
+	c.mem.SetWidth(max(detailInnerWidth-16, 4))
 
 	if len(c.filtered) == 0 && len(c.containers) > 0 {
 		c.refreshFilter()
@@ -935,25 +976,27 @@ func (c *containersScreen) renderStatusLine() string {
 }
 
 func (c *containersScreen) renderActivityPane() string {
-	style := lipgloss.NewStyle().Width(c.activityPaneWidth).Height(c.bodyContentHeight)
-	title := "activity"
-	title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("117")).Render(title)
+	activityInnerWidth := max(c.activityPaneWidth-paneBorderCols, 1)
+	activityInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
+	contentStyle := lipgloss.NewStyle().Width(activityInnerWidth).Height(activityInnerHeight)
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("activity")
 
-	bodyHeight := max(c.bodyContentHeight-2, 0)
+	bodyHeight := max(activityInnerHeight-2, 0)
 	start := len(c.activity) - bodyHeight
 	if start < 0 {
 		start = 0
 	}
 	visible := c.activity[start:]
 	if len(visible) == 0 {
-		visible = []string{lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no events yet)")}
+		visible = []string{lipgloss.NewStyle().Foreground(pal.muted).Render("(no events yet)")}
 	}
 	truncated := make([]string, len(visible))
 	for i, line := range visible {
-		truncated[i] = truncateToWidth(line, c.activityPaneWidth-2)
+		truncated[i] = truncateToWidth(line, activityInnerWidth)
 	}
 	content := title + "\n\n" + strings.Join(truncated, "\n")
-	return style.Render(content)
+	inner := contentStyle.Render(content)
+	return paneStyle(c.activityPaneWidth, c.bodyContentHeight, false).Render(inner)
 }
 
 func truncateToWidth(s string, width int) string {
@@ -990,15 +1033,16 @@ func (c *containersScreen) keyHints() string {
 }
 
 func (c *containersScreen) renderListPane() string {
-	contentStyle := lipgloss.NewStyle().Width(c.listPaneWidth - 1).Height(c.bodyContentHeight)
-	outerStyle := lipgloss.NewStyle().Width(c.listPaneWidth).Height(c.bodyContentHeight)
+	listInnerWidth := max(c.listPaneWidth-paneBorderCols-1, 1) // -1 for scrollbar
+	listInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
+	contentStyle := lipgloss.NewStyle().Width(listInnerWidth).Height(listInnerHeight)
 
 	filterLine := "filter: " + c.filter.Value
 	if c.filter.Value == "" {
 		filterLine = "filter: (all)"
 	}
 	if c.focus.Focused(focusFilter) {
-		filterLine = lipgloss.NewStyle().Bold(true).Render(filterLine)
+		filterLine = lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(filterLine)
 	}
 
 	listContent := c.list.View(func(idx int, selected bool) string {
@@ -1010,54 +1054,65 @@ func (c *containersScreen) renderListPane() string {
 		if selected {
 			marker = "> "
 		}
-		statusIcon := "●"
+		statusColor := pal.good
 		if ct.Status != "running" {
-			statusIcon = "○"
+			statusColor = pal.bad
 		}
-		row := fmt.Sprintf("%s%s%s", statusIcon, marker, ct.Name)
+		statusIcon := lipgloss.NewStyle().Foreground(statusColor).Render("●")
+		if ct.Status != "running" {
+			statusIcon = lipgloss.NewStyle().Foreground(pal.muted).Render("○")
+		}
+		name := ct.Name
+		if selected {
+			name = lipgloss.NewStyle().Bold(true).Foreground(pal.text).Render(name)
+		}
+		row := statusIcon + marker + name
 		return flatui.Mark("list:"+strconv.Itoa(idx), row)
 	})
 	if listContent == "" {
-		listContent = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("  (no matches)")
+		listContent = lipgloss.NewStyle().Foreground(pal.muted).Render("  (no matches)")
 	}
 
 	inner := contentStyle.Render(filterLine + "\n\n" + listContent)
-	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), c.bodyContentHeight)
-	barStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(bar)
-	return outerStyle.Render(withScrollbar(inner, barStyled))
+	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), listInnerHeight)
+	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
+	combined := withScrollbar(inner, barStyled)
+	return paneStyle(c.listPaneWidth, c.bodyContentHeight, c.focus.Focused(focusList) || c.focus.Focused(focusFilter)).Render(combined)
 }
 
 func (c *containersScreen) renderDetailPane() string {
-	contentStyle := lipgloss.NewStyle().Width(c.detailPaneWidth - 1).Height(c.bodyContentHeight)
-	outerStyle := lipgloss.NewStyle().Width(c.detailPaneWidth).Height(c.bodyContentHeight)
+	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
+	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
+	contentStyle := lipgloss.NewStyle().Width(detailInnerWidth).Height(detailInnerHeight)
 
 	selected := c.selected()
 	if selected == nil {
-		return outerStyle.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no container selected)"))
+		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no container selected)")
+		return paneStyle(c.detailPaneWidth, c.bodyContentHeight, c.focus.Focused(focusDetail)).Render(empty)
 	}
 
-	titleLine := selected.Name
-	if c.focus.Focused(focusDetail) {
-		titleLine = lipgloss.NewStyle().Bold(true).Render(titleLine)
-	}
+	titleLine := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(selected.Name)
 
 	tabLine := c.renderTabBar()
 	body := c.renderActiveTab(selected)
 
 	inner := contentStyle.Render(strings.Join([]string{titleLine, tabLine, "", body}, "\n"))
 	bar := c.detailScrollbar()
-	barStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(bar)
-	return outerStyle.Render(withScrollbar(inner, barStyled))
+	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
+	combined := withScrollbar(inner, barStyled)
+	focused := c.focus.Focused(focusDetail)
+	return paneStyle(c.detailPaneWidth, c.bodyContentHeight, focused).Render(combined)
 }
 
 func (c *containersScreen) detailScrollbar() string {
+	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
 	switch c.tab {
 	case tabLogs:
-		return scrollbarLines(c.logs.Offset(), c.logs.VisibleLines(), c.logs.TotalLines(), c.bodyContentHeight)
+		return scrollbarLines(c.logs.Offset(), c.logs.VisibleLines(), c.logs.TotalLines(), detailInnerHeight)
 	case tabInspect:
-		return scrollbarLines(c.inspect.Offset(), c.inspect.VisibleLines(), c.inspect.TotalLines(), c.bodyContentHeight)
+		return scrollbarLines(c.inspect.Offset(), c.inspect.VisibleLines(), c.inspect.TotalLines(), detailInnerHeight)
 	default:
-		return strings.Repeat(" ", c.bodyContentHeight)
+		return strings.Repeat(" ", detailInnerHeight)
 	}
 }
 
@@ -1167,6 +1222,7 @@ type imagesScreen struct {
 	listPaneWidth     int
 	detailPaneWidth   int
 	bodyContentHeight int
+	listHeight        int
 	focus             flatui.FocusRing
 	list              flatui.List
 	images            []Image
@@ -1188,11 +1244,12 @@ func newImagesScreen() imagesScreen {
 func (i *imagesScreen) layout(width, height int) {
 	i.width, i.height = width, height
 	i.focus.SetCount(2)
-	i.listPaneWidth = min(30, max(width/3, 16))
+	i.listPaneWidth = min(32, max(width/3, 18))
 	i.detailPaneWidth = max(width-i.listPaneWidth-2, 0)
 	i.bodyContentHeight = height
 	const listChromeRows = 2 // title line + blank
-	i.list.SetHeight(max(i.bodyContentHeight-listChromeRows, 0))
+	i.listHeight = max(i.bodyContentHeight-paneBorderRows-listChromeRows, 0)
+	i.list.SetHeight(i.listHeight)
 }
 
 func (i *imagesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
@@ -1248,31 +1305,41 @@ func (i *imagesScreen) selected() *Image {
 }
 
 func (i *imagesScreen) renderListPane() string {
-	style := lipgloss.NewStyle().Width(i.listPaneWidth).Height(i.bodyContentHeight)
-	title := "images"
-	if i.focus.Focused(imgFocusList) {
-		title = lipgloss.NewStyle().Bold(true).Render(title)
-	}
+	innerWidth := max(i.listPaneWidth-paneBorderCols-1, 1)
+	innerHeight := max(i.bodyContentHeight-paneBorderRows, 0)
+	contentStyle := lipgloss.NewStyle().Width(innerWidth).Height(innerHeight)
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("images")
 	content := i.list.View(func(idx int, selected bool) string {
 		marker := "  "
 		if selected {
 			marker = "> "
 		}
-		return marker + i.images[idx].RepoTag
+		name := i.images[idx].RepoTag
+		if selected {
+			name = lipgloss.NewStyle().Bold(true).Render(name)
+		}
+		return marker + name
 	})
-	return style.Render(title + "\n\n" + content)
+	inner := contentStyle.Render(title + "\n\n" + content)
+	bar := strings.Repeat(" ", innerHeight)
+	if i.list.Count() > i.listHeight {
+		bar = scrollbarLines(i.list.Offset(), i.listHeight, i.list.Count(), innerHeight)
+	}
+	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
+	combined := withScrollbar(inner, barStyled)
+	return paneStyle(i.listPaneWidth, i.bodyContentHeight, i.focus.Focused(imgFocusList)).Render(combined)
 }
 
 func (i *imagesScreen) renderDetailPane() string {
-	style := lipgloss.NewStyle().Width(i.detailPaneWidth).Height(i.bodyContentHeight)
+	innerWidth := max(i.detailPaneWidth-paneBorderCols, 1)
+	innerHeight := max(i.bodyContentHeight-paneBorderRows, 0)
+	contentStyle := lipgloss.NewStyle().Width(innerWidth).Height(innerHeight)
 	sel := i.selected()
 	if sel == nil {
-		return style.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no image selected)"))
+		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no image selected)")
+		return paneStyle(i.detailPaneWidth, i.bodyContentHeight, i.focus.Focused(imgFocusDetail)).Render(empty)
 	}
-	title := sel.RepoTag
-	if i.focus.Focused(imgFocusDetail) {
-		title = lipgloss.NewStyle().Bold(true).Render(title)
-	}
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(sel.RepoTag)
 	rows := []string{
 		title,
 		"",
@@ -1281,7 +1348,8 @@ func (i *imagesScreen) renderDetailPane() string {
 		"  created:    " + sel.Created,
 		"  containers: " + strconv.Itoa(sel.Containers),
 	}
-	return style.Render(strings.Join(rows, "\n"))
+	inner := contentStyle.Render(strings.Join(rows, "\n"))
+	return paneStyle(i.detailPaneWidth, i.bodyContentHeight, i.focus.Focused(imgFocusDetail)).Render(inner)
 }
 
 type Volume struct {
@@ -1301,6 +1369,7 @@ type volumesScreen struct {
 	listPaneWidth     int
 	detailPaneWidth   int
 	bodyContentHeight int
+	listHeight        int
 	focus             flatui.FocusRing
 	list              flatui.List
 	volumes           []Volume
@@ -1322,11 +1391,12 @@ func newVolumesScreen() volumesScreen {
 func (v *volumesScreen) layout(width, height int) {
 	v.width, v.height = width, height
 	v.focus.SetCount(2)
-	v.listPaneWidth = min(30, max(width/3, 16))
+	v.listPaneWidth = min(32, max(width/3, 18))
 	v.detailPaneWidth = max(width-v.listPaneWidth-2, 0)
 	v.bodyContentHeight = height
 	const listChromeRows = 2
-	v.list.SetHeight(max(v.bodyContentHeight-listChromeRows, 0))
+	v.listHeight = max(v.bodyContentHeight-paneBorderRows-listChromeRows, 0)
+	v.list.SetHeight(v.listHeight)
 }
 
 func (v *volumesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
@@ -1382,31 +1452,41 @@ func (v *volumesScreen) selected() *Volume {
 }
 
 func (v *volumesScreen) renderListPane() string {
-	style := lipgloss.NewStyle().Width(v.listPaneWidth).Height(v.bodyContentHeight)
-	title := "volumes"
-	if v.focus.Focused(volFocusList) {
-		title = lipgloss.NewStyle().Bold(true).Render(title)
-	}
+	innerWidth := max(v.listPaneWidth-paneBorderCols-1, 1)
+	innerHeight := max(v.bodyContentHeight-paneBorderRows, 0)
+	contentStyle := lipgloss.NewStyle().Width(innerWidth).Height(innerHeight)
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("volumes")
 	content := v.list.View(func(idx int, selected bool) string {
 		marker := "  "
 		if selected {
 			marker = "> "
 		}
-		return marker + v.volumes[idx].Name
+		name := v.volumes[idx].Name
+		if selected {
+			name = lipgloss.NewStyle().Bold(true).Render(name)
+		}
+		return marker + name
 	})
-	return style.Render(title + "\n\n" + content)
+	inner := contentStyle.Render(title + "\n\n" + content)
+	bar := strings.Repeat(" ", innerHeight)
+	if v.list.Count() > v.listHeight {
+		bar = scrollbarLines(v.list.Offset(), v.listHeight, v.list.Count(), innerHeight)
+	}
+	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
+	combined := withScrollbar(inner, barStyled)
+	return paneStyle(v.listPaneWidth, v.bodyContentHeight, v.focus.Focused(volFocusList)).Render(combined)
 }
 
 func (v *volumesScreen) renderDetailPane() string {
-	style := lipgloss.NewStyle().Width(v.detailPaneWidth).Height(v.bodyContentHeight)
+	innerWidth := max(v.detailPaneWidth-paneBorderCols, 1)
+	innerHeight := max(v.bodyContentHeight-paneBorderRows, 0)
+	contentStyle := lipgloss.NewStyle().Width(innerWidth).Height(innerHeight)
 	sel := v.selected()
 	if sel == nil {
-		return style.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no volume selected)"))
+		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no volume selected)")
+		return paneStyle(v.detailPaneWidth, v.bodyContentHeight, v.focus.Focused(volFocusDetail)).Render(empty)
 	}
-	title := sel.Name
-	if v.focus.Focused(volFocusDetail) {
-		title = lipgloss.NewStyle().Bold(true).Render(title)
-	}
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(sel.Name)
 	rows := []string{
 		title,
 		"",
@@ -1414,7 +1494,8 @@ func (v *volumesScreen) renderDetailPane() string {
 		"  mountpoint: " + sel.Mountpoint,
 		"  size:       " + sel.Size,
 	}
-	return style.Render(strings.Join(rows, "\n"))
+	inner := contentStyle.Render(strings.Join(rows, "\n"))
+	return paneStyle(v.detailPaneWidth, v.bodyContentHeight, v.focus.Focused(volFocusDetail)).Render(inner)
 }
 
 func main() {

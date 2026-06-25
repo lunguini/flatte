@@ -771,13 +771,16 @@ func TestModalRendersAsOverlayOverBase(t *testing.T) {
 
 func TestMouseClickListRowSelectsIt(t *testing.T) {
 	s := resizedState(80, 24)
-	// Production flow: View populates zones (via Scan) before any mouse event
-	// is dispatched. Tests must mirror that.
-	View(s, flatte.RenderContext{Width: 80})
+	View(s, flatte.RenderContext{Width: 80}) // populate zones
+
+	rowRect, ok := s.containers.zones.Rect("list:1")
+	if !ok {
+		t.Fatal("list:1 zone not registered after View")
+	}
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
-		X:      2, Y: 5,
+		X:      rowRect.X + 2, Y: rowRect.Y,
 	}, flatte.Effects[State]{})
 
 	if sel := s.containers.selected(); sel == nil || sel.Name != "api-server" {
@@ -785,22 +788,28 @@ func TestMouseClickListRowSelectsIt(t *testing.T) {
 		if sel != nil {
 			got = sel.Name
 		}
-		t.Fatalf("after click on row 1, selected = %s, want api-server", got)
+		t.Fatalf("after click on list:1 zone, selected = %s, want api-server", got)
 	}
 }
 
 func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
-	// tab:logs is at X=26-31 per the scanner; click X=28
+	View(s, flatte.RenderContext{Width: 80}) // populate zones from rendered output
+
+	logsRect, ok := s.containers.zones.Rect("tab:logs")
+	if !ok {
+		t.Fatal("tab:logs zone not registered after View")
+	}
+	clickX := logsRect.X + 1
+	clickY := logsRect.Y
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
-		X:      28, Y: 3,
+		X:      clickX, Y: clickY,
 	}, flatte.Effects[State]{})
 
 	if s.containers.tab != tabLogs {
-		t.Fatalf("after click on logs tab header, tab = %v, want logs", s.containers.tab)
+		t.Fatalf("after click on logs tab header at (%d,%d), tab = %v, want logs", clickX, clickY, s.containers.tab)
 	}
 }
 
