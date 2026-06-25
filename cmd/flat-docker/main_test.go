@@ -1124,6 +1124,53 @@ func TestVolumesScreenDragDividerResizes(t *testing.T) {
 	}
 }
 
+// --- Header tab mouse clicks (via tabBar component) ---
+
+func TestHeaderTabMouseClickSwitchesScreen(t *testing.T) {
+	s := resizedState(80, 24)
+	if s.screen != screenContainers {
+		t.Fatal("should start on containers")
+	}
+
+	// Click the "2 images" tab in the header (Y=0).
+	// The images tab starts after the containers tab's width.
+	imagesTabStart := tabLabelWidth("1 containers")
+	clickX := imagesTabStart + 1 // inside the tab
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: clickX, Y: 0,
+	}, flatte.Effects[State]{})
+
+	if s.screen != screenImages {
+		t.Fatalf("after header click on images tab: screen = %v, want images", s.screen)
+	}
+}
+
+func TestHeaderTabMouseClickOnThirdTab(t *testing.T) {
+	s := resizedState(80, 24)
+
+	volumesTabStart := tabLabelWidth("1 containers") + tabLabelWidth("2 images")
+	clickX := volumesTabStart + 1
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: clickX, Y: 0,
+	}, flatte.Effects[State]{})
+
+	if s.screen != screenVolumes {
+		t.Fatalf("after header click on volumes tab: screen = %v, want volumes", s.screen)
+	}
+}
+
+func TestHeaderTabKeyboardSyncsBarActive(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('2'), flatte.Effects[State]{})
+	if s.headerTabs.Active() != 1 {
+		t.Fatalf("after pressing 2: headerTabs.Active() = %d, want 1", s.headerTabs.Active())
+	}
+}
+
 func TestTabSwitchKeysOnlyWorkWhenDetailFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	// focus starts on list
@@ -1449,21 +1496,22 @@ func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
 	View(s, flatte.RenderContext{Width: 80})
 
-	// Tabs use a manual ZoneMap (positions deterministic from label widths),
-	// NOT auto-zones — the OSC9 markers confused lipgloss's width calculation
-	// inside the width-constrained pane. Verify the manual zones work.
-	logsRect, ok := s.containers.tabZones.Rect("tab:logs")
-	if !ok {
-		t.Fatal("tab:logs manual zone not registered")
-	}
+	// Tab clicks now go through the tabBar component (HandleMouseAt).
+	// Detail tabs start at listPaneWidth + dividerWidth + 1 (inside border).
+	// The "logs" tab is the second tab; its X offset = tabLabelWidth("stats").
+	detailTabsStartX := s.containers.listPaneWidth + dividerWidth + 1
+	logsOffset := tabLabelWidth("stats")
+	clickX := detailTabsStartX + logsOffset + 1
+	clickY := chromeRowsTop + 2
+
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
-		X:      logsRect.X + 2, Y: logsRect.Y, // middle of the tab
+		X:      clickX, Y: clickY,
 	}, flatte.Effects[State]{})
 
 	if s.containers.tab != tabLogs {
-		t.Fatalf("after click on tab:logs zone at %+v, tab = %v, want logs", logsRect, s.containers.tab)
+		t.Fatalf("after click on logs tab at (%d,%d), tab = %v, want logs", clickX, clickY, s.containers.tab)
 	}
 }
 

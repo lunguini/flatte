@@ -44,9 +44,10 @@ type State struct {
 	images     *imagesScreen
 	volumes    *volumesScreen
 
-	modal     *confirmModel
-	command   *commandModel
+	modal      *confirmModel
+	command    *commandModel
 	cmdHistory []string
+	headerTabs *tabBar
 }
 
 type confirmModel struct {
@@ -291,6 +292,11 @@ func NewState() *State {
 	s.containers = newContainersScreen()
 	s.images = newImagesScreen()
 	s.volumes = newVolumesScreen()
+	s.headerTabs = newTabBar(
+		tabItem{id: "containers", label: "1 containers"},
+		tabItem{id: "images", label: "2 images"},
+		tabItem{id: "volumes", label: "3 volumes"},
+	)
 	return s
 }
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
@@ -302,12 +308,22 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		s.command.Handle(s, ev, fx)
 		return
 	}
+
+	// Header tab mouse clicks — root-level, above screen dispatch
+	if m, ok := ev.(flatte.MouseEvent); ok && m.Action == flatte.MousePress && m.Y == 0 {
+		if s.headerTabs.HandleMouseAt(m.X) {
+			s.screen = screen(s.headerTabs.Active())
+			return
+		}
+	}
+
 	switch e := ev.(type) {
 	case flatte.ResizeEvent:
 		s.resize(e.Width, e.Height)
 		return
 	case flatte.KeyEvent:
 		if handleGlobalKey(s, e, fx) {
+			s.headerTabs.SetActive(int(s.screen))
 			return
 		}
 	}
@@ -533,21 +549,8 @@ func renderModal(m *confirmModel) string {
 }
 
 func renderTabBar(s *State, width int) string {
-	labels := []struct {
-		key, name string
-		active    bool
-	}{
-		{"1", "containers", s.screen == screenContainers},
-		{"2", "images", s.screen == screenImages},
-		{"3", "volumes", s.screen == screenVolumes},
-	}
-	var b strings.Builder
-	for _, l := range labels {
-		rendered, _ := powerlineTab(l.key+" "+l.name, l.active)
-		b.WriteString(rendered)
-		b.WriteString(" ") // 1-char gap between tabs (bar bg shows through)
-	}
-	content := b.String()
+	s.headerTabs.SetActive(int(s.screen))
+	content := s.headerTabs.Render()
 	return lipgloss.NewStyle().
 		Width(width).
 		Background(pal.bg).
@@ -697,7 +700,7 @@ type containersScreen struct {
 	logTarget  string
 	logCancel  context.CancelFunc
 	zones      *flatui.ZoneScanner // auto-zones for list rows
-	tabZones   flatui.ZoneMap      // manual zones for tabs (positions deterministic)
+	detailTabs *tabBar             // stats/logs/inspect tab strip with mouse support
 	listHeight int
 
 	activity   []string
@@ -775,6 +778,11 @@ func newContainersScreen() containersScreen {
 		mem:        flatui.NewProgress(18),
 		zones:      flatui.NewZoneScanner(),
 		followTail: true,
+		detailTabs: newTabBar(
+			tabItem{id: "stats", label: "stats"},
+			tabItem{id: "logs", label: "logs"},
+			tabItem{id: "inspect", label: "inspect"},
+		),
 	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
@@ -818,7 +826,7 @@ func (c *containersScreen) layout(width, height int) {
 	}
 	c.syncDetail()
 	c.recomputeStatusLine()
-	c.registerTabZones()
+	c.detailTabs.SetActive(int(c.tab))
 }
 
 // clampPaneWidths enforces minimums on list and activity widths given the
@@ -870,30 +878,12 @@ func (c *containersScreen) applyDrag(currentX int) {
 	c.inspect.SetSize(detailInnerWidth, contentHeight)
 	c.cpu.SetWidth(max(detailInnerWidth-16, 4))
 	c.mem.SetWidth(max(detailInnerWidth-16, 4))
-	c.registerTabZones()
+	c.detailTabs.SetActive(int(c.tab))
 }
 
-// registerTabZones records clickable rectangles for the in-pane detail
-// tabs. Positions are deterministic from label widths + the cached
-// listPaneWidth, so they don't drift from rendering. Used because the
-// auto-zone OSC9 markers confuse lipgloss's width calculation inside the
-// width-constrained pane (TTY-found bug 2026-06-25).
-func (c *containersScreen) registerTabZones() {
-	c.tabZones.Clear()
-	// listPaneWidth + dividerWidth = left edge of detail pane; +1 = inside its border
-	tabsX := c.listPaneWidth + dividerWidth + 1
-	tabsY := chromeRowsTop + 2
-	x := tabsX
-	for _, t := range []struct{ id, label string }{
-		{"tab:stats", "stats"},
-		{"tab:logs", "logs"},
-		{"tab:inspect", "inspect"},
-	} {
-		width := lipgloss.Width(t.label) + 6
-		c.tabZones.Set(t.id, flatui.Rect{X: x, Y: tabsY, Width: width, Height: 1})
-		x += width
-	}
-}
+// registerTabZones was removed — detail tabs now use the tabBar component
+// with built-in mouse support. Hit-testing is via HandleMouseAt, not
+// manual ZoneMap rectangles. See handleMouse for the click routing.
 
 // dividerAt reports which divider (0 or 1) is at the given frame
 // coordinates, if any. Returns -1 if no divider is hit.
@@ -1000,17 +990,13 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		return
 	}
 
-	// Manual tab zones
-	if id, ok := c.tabZones.At(m.X, m.Y); ok {
-		switch id {
-		case "tab:stats":
-			c.tab = tabStats
-			return
-		case "tab:logs":
-			c.tab = tabLogs
-			return
-		case "tab:inspect":
-			c.tab = tabInspect
+	// Detail tab clicks via tabBar component
+	detailTabsStartX := c.listPaneWidth + dividerWidth + 1 // inside detail pane left border
+	detailTabsY := chromeRowsTop + 2
+	if m.Y == detailTabsY && m.X >= detailTabsStartX {
+		localX := m.X - detailTabsStartX
+		if c.detailTabs.HandleMouseAt(localX) {
+			c.tab = detailTab(c.detailTabs.Active())
 			return
 		}
 	}
@@ -1676,24 +1662,12 @@ func (c *containersScreen) detailScrollbar() string {
 }
 
 func (c *containersScreen) renderTabBar() string {
-	tabs := []struct {
-		name   string
-		active bool
-	}{
-		{"stats", c.tab == tabStats},
-		{"logs", c.tab == tabLogs},
-		{"inspect", c.tab == tabInspect},
-	}
-	var b strings.Builder
-	for _, t := range tabs {
-		rendered, _ := powerlineTab(t.name, t.active)
-		b.WriteString(rendered)
-	}
+	c.detailTabs.SetActive(int(c.tab))
+	bar := c.detailTabs.Render()
 	if indicator := c.renderFollowIndicator(); indicator != "" {
-		b.WriteString(" ")
-		b.WriteString(indicator)
+		bar += " " + indicator
 	}
-	return lipgloss.NewStyle().Background(pal.bg).Render(b.String())
+	return lipgloss.NewStyle().Background(pal.bg).Render(bar)
 }
 
 func (c *containersScreen) renderActiveTab(selected *Container) string {
