@@ -476,6 +476,150 @@ func TestPageKeysDoNothingWhenFilterFocused(t *testing.T) {
 	}
 }
 
+func TestColonOpensCommandBarFromListFocus(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	if s.command == nil {
+		t.Fatal("command bar not opened after :")
+	}
+}
+
+func TestColonDoesNotOpenWhenFilterFocused(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusFilter)
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	if s.command != nil {
+		t.Fatal("command bar opened from filter focus — should have typed into filter instead")
+	}
+	if s.containers.filter.Value != ":" {
+		t.Fatalf("filter = %q, want :", s.containers.filter.Value)
+	}
+}
+
+func TestCommandBarCapturesKeysUntilClosed(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+
+	// j during command bar should NOT move the list
+	listCursorBefore := s.containers.list.Cursor()
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	if s.containers.list.Cursor() != listCursorBefore {
+		t.Fatalf("j leaked through to list during command: %d -> %d", listCursorBefore, s.containers.list.Cursor())
+	}
+	if s.command.input.Value != "j" {
+		t.Fatalf("command input = %q, want j", s.command.input.Value)
+	}
+}
+
+func TestEscClosesCommandBar(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
+	if s.command != nil {
+		t.Fatal("command bar not closed after Esc")
+	}
+}
+
+func TestEnterExecutesFilterCommand(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	for _, r := range "filter nginx" {
+		Handle(s, keyChar(r), flatte.Effects[State]{})
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+
+	if s.command != nil {
+		t.Fatal("command bar should auto-close after Enter (lazydocker convention)")
+	}
+	if s.containers.filter.Value != "nginx" {
+		t.Fatalf("filter = %q, want nginx", s.containers.filter.Value)
+	}
+	if len(s.containers.filtered) != 2 {
+		t.Fatalf("filtered len = %d, want 2 (nginx-proxy, nginx-web)", len(s.containers.filtered))
+	}
+}
+
+func TestEnterGotoCommandClosesBar(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	for _, r := range "goto images" {
+		Handle(s, keyChar(r), flatte.Effects[State]{})
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+
+	if s.command != nil {
+		t.Fatal("command bar should close after :goto")
+	}
+	if s.screen != screenImages {
+		t.Fatalf("screen = %v, want images", s.screen)
+	}
+}
+
+func TestCommandHistoryNavigation(t *testing.T) {
+	s := resizedState(80, 24)
+	// Execute three commands
+	for _, cmd := range []string{"filter a", "filter b", "filter c"} {
+		Handle(s, keyChar(':'), flatte.Effects[State]{})
+		for _, r := range cmd {
+			Handle(s, keyChar(r), flatte.Effects[State]{})
+		}
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	}
+
+	// Open fresh, press Up — should recall "filter c"
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
+	if s.command.input.Value != "filter c" {
+		t.Fatalf("after one Up, input = %q, want 'filter c'", s.command.input.Value)
+	}
+
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
+	if s.command.input.Value != "filter b" {
+		t.Fatalf("after two Up, input = %q, want 'filter b'", s.command.input.Value)
+	}
+
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
+	if s.command.input.Value != "filter c" {
+		t.Fatalf("after Up Up Down, input = %q, want 'filter c'", s.command.input.Value)
+	}
+}
+
+func TestCommandOutputRoutesToActivityFeed(t *testing.T) {
+	s := resizedState(80, 24)
+	before := len(s.containers.activity)
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	for _, r := range "help" {
+		Handle(s, keyChar(r), flatte.Effects[State]{})
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+
+	after := len(s.containers.activity)
+	if after < before+2 {
+		t.Fatalf("activity feed should have >=2 new entries (cmd + output); got %d -> %d", before, after)
+	}
+	last := s.containers.activity[after-1]
+	if !strings.Contains(last, "filter") || !strings.Contains(last, "goto") {
+		t.Fatalf("help output missing expected commands: %q", last)
+	}
+}
+
+func TestCommandBarReplacesStatusLineWhenOpen(t *testing.T) {
+	s := resizedState(80, 24)
+	closedContent := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(closedContent, "avg CPU") {
+		t.Fatalf("status line should show when command closed:\n%s", closedContent)
+	}
+
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	openContent := View(s, flatte.RenderContext{Width: 80}).Content
+	if strings.Contains(openContent, "avg CPU") {
+		t.Fatalf("status line should hide when command open:\n%s", openContent)
+	}
+	if !strings.Contains(openContent, "type a command") {
+		t.Fatalf("command bar placeholder missing:\n%s", openContent)
+	}
+}
+
 func TestTabSwitchKeysOnlyWorkWhenDetailFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	// focus starts on list

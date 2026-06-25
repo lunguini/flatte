@@ -21,5 +21,5 @@
 ╰────────────────╯  ╰────────────────────────────────╯  ╰──────────────────────╯
  8 containers (6 running)  avg CPU  0%  avg MEM  0%  filter: (all)              
 ────────────────────────────────────────────────────────────────────────────────
- j/k move  s stop  x remove  tab next  1/2/3 switch  q quit 
+ j/k move  s stop  x remove  : command  tab next  1/2/3 switch  q quit 
 [title flat-docker — containers]

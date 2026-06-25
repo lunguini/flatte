@@ -44,13 +44,169 @@ type State struct {
 	images     imagesScreen
 	volumes    volumesScreen
 
-	modal *confirmModel
+	modal     *confirmModel
+	command   *commandModel
+	cmdHistory []string
 }
 
 type confirmModel struct {
 	action     string
 	targetID   string
 	targetName string
+}
+
+type commandModel struct {
+	input   flatui.TextField
+	histIdx int // -1 = editing fresh; >=0 = browsing history
+}
+
+func newCommand() *commandModel {
+	return &commandModel{histIdx: -1}
+}
+
+func (m *commandModel) Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	key, ok := ev.(flatte.KeyEvent)
+	if !ok {
+		return
+	}
+	switch key.Key {
+	case flatte.KeyEscape:
+		s.command = nil
+	case flatte.KeyEnter:
+		line := strings.TrimSpace(m.input.Value)
+		if line != "" {
+			s.cmdHistory = append(s.cmdHistory, line)
+		}
+		m.execute(s, fx, line)
+		s.command = nil
+	case flatte.KeyBackspace:
+		m.input.Backspace()
+	case flatte.KeyDelete:
+		m.input.Delete()
+	case flatte.KeyLeft:
+		m.input.MoveLeft()
+	case flatte.KeyRight:
+		m.input.MoveRight()
+	case flatte.KeyUp:
+		m.browseHistory(s, -1)
+	case flatte.KeyDown:
+		m.browseHistory(s, 1)
+	case flatte.KeyCharacter:
+		m.input.Insert(key.Rune)
+	}
+}
+
+func (m *commandModel) browseHistory(s *State, dir int) {
+	if len(s.cmdHistory) == 0 {
+		return
+	}
+	if dir < 0 {
+		if m.histIdx == -1 {
+			m.histIdx = len(s.cmdHistory) - 1
+		} else if m.histIdx > 0 {
+			m.histIdx--
+		}
+	} else {
+		if m.histIdx == -1 {
+			return
+		}
+		m.histIdx++
+		if m.histIdx >= len(s.cmdHistory) {
+			m.histIdx = -1
+			m.input.Value = ""
+			m.input.SetCursor(0)
+			return
+		}
+	}
+	m.input.Value = s.cmdHistory[m.histIdx]
+	m.input.SetCursor(len(m.input.Value))
+}
+
+func (m *commandModel) execute(s *State, _ flatte.Effects[State], line string) {
+	if line == "" {
+		s.containers.pushActivity("cmd  (empty)")
+		return
+	}
+	s.containers.pushActivity("cmd  " + line)
+	parts := strings.Fields(line)
+	cmd, args := parts[0], parts[1:]
+	switch cmd {
+	case "filter":
+		if len(args) > 0 {
+			s.containers.filter.Value = strings.Join(args, " ")
+			s.containers.filter.SetCursor(len(s.containers.filter.Value))
+			s.containers.refreshFilter()
+			s.containers.onSelectionChange(s, flatte.Effects[State]{})
+			s.containers.pushActivity("→   filter applied: " + s.containers.filter.Value)
+		} else {
+			s.containers.filter.Value = ""
+			s.containers.refreshFilter()
+			s.containers.pushActivity("→   filter cleared")
+		}
+	case "stop":
+		ct := s.containers.selected()
+		if ct == nil {
+			s.containers.pushActivity("→   no container selected")
+			return
+		}
+		ct.Status = "exited"
+		s.containers.recomputeDetailWidgets()
+		s.containers.pushActivity("→   stopped " + ct.Name)
+	case "remove":
+		ct := s.containers.selected()
+		if ct == nil {
+			s.containers.pushActivity("→   no container selected")
+			return
+		}
+		ct.Status = "removed"
+		s.containers.recomputeDetailWidgets()
+		s.containers.pushActivity("→   removed " + ct.Name)
+	case "goto":
+		if len(args) == 0 {
+			s.containers.pushActivity("→   usage: goto <containers|images|volumes>")
+			return
+		}
+		switch args[0] {
+		case "containers", "1":
+			s.screen = screenContainers
+		case "images", "2":
+			s.screen = screenImages
+		case "volumes", "3":
+			s.screen = screenVolumes
+		default:
+			s.containers.pushActivity("→   unknown screen: " + args[0])
+			return
+		}
+	case "help":
+		s.containers.pushActivity("→   filter <text> | stop | remove | goto <screen> | help")
+	case "q", "quit", "exit":
+		s.containers.pushActivity("→   press q (lowercase, no colon) to quit")
+	default:
+		s.containers.pushActivity("→   unknown command: " + cmd + " (try :help)")
+	}
+}
+
+func (m *commandModel) View(width int) string {
+	prompt := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(":")
+	input := m.input.Value
+	if input == "" {
+		placeholder := lipgloss.NewStyle().Foreground(pal.muted).Render("type a command (try :help)")
+		return lipgloss.NewStyle().
+			Width(width).
+			Background(pal.bg).
+			Foreground(pal.text).
+			Render(prompt + " " + placeholder)
+	}
+	return lipgloss.NewStyle().
+		Width(width).
+		Background(pal.bg).
+		Foreground(pal.text).
+		Render(prompt + " " + input)
+}
+
+func (m *commandModel) cursorFrameX() int {
+	// ": " prompt = 2 cells, plus the input's cursor column
+	return 2 + m.input.CursorColumn()
 }
 
 func (m *confirmModel) Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
@@ -112,6 +268,10 @@ func NewState() *State {
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	if s.modal != nil {
 		s.modal.Handle(s, ev, fx)
+		return
+	}
+	if s.command != nil {
+		s.command.Handle(s, ev, fx)
 		return
 	}
 	switch e := ev.(type) {
@@ -234,10 +394,44 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	if s.screen == screenContainers {
 		s.containers.zones.Scan(content)
 	}
-	return flatte.Frame{
+	frame := flatte.Frame{
 		Content: content,
 		Title:   "flat-docker — " + s.screen.Name(),
 	}
+	if s.command != nil {
+		frame.Cursor = commandCursor(content, s.command)
+	}
+	return frame
+}
+
+func commandCursor(content string, m *commandModel) *flatte.Cursor {
+	const marker = "\x1b[1m\x1b[38;5;117m:\x1b[0m "
+	stripped := flatestStripAnsi(content)
+	for y, line := range strings.Split(stripped, "\n") {
+		idx := strings.Index(line, ":")
+		if idx < 0 {
+			continue
+		}
+		if !looksLikeCommandBar(line) {
+			continue
+		}
+		return &flatte.Cursor{
+			X: idx + 2 + m.input.CursorColumn(),
+			Y: y,
+		}
+	}
+	return nil
+}
+
+func flatestStripAnsi(s string) string {
+	return lipgloss.NewStyle().Render(s)
+}
+
+func looksLikeCommandBar(line string) bool {
+	// The command bar always sits on the dark bg (status line area).
+	// After ANSI strip, an empty command bar is ": type a command (try :help)"
+	// and a populated one is ": <input>".
+	return strings.HasPrefix(strings.TrimLeft(line, " "), ":")
 }
 
 func renderModal(m *confirmModel) string {
@@ -283,16 +477,20 @@ func renderTabBar(s *State, width int) string {
 
 func renderFooter(s *State, width int) string {
 	hints := ""
-	switch s.screen {
-	case screenContainers:
-		hints = s.containers.keyHints()
-	case screenImages:
-		hints = s.images.keyHints()
-	case screenVolumes:
-		hints = s.volumes.keyHints()
+	if s.command != nil {
+		hints = s.command.keyHints()
+	} else {
+		switch s.screen {
+		case screenContainers:
+			hints = s.containers.keyHints()
+		case screenImages:
+			hints = s.images.keyHints()
+		case screenVolumes:
+			hints = s.volumes.keyHints()
+		}
 	}
 	help := " " + hints + " "
-	styled := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(help)
+	styled := lipgloss.NewStyle().Foreground(pal.muted).Render(help)
 	return styled
 }
 
@@ -864,6 +1062,10 @@ func (c *containersScreen) Handle(root *State, ev flatte.Event, fx flatte.Effect
 }
 
 func (c *containersScreen) handleChar(root *State, fx flatte.Effects[State], r rune) {
+	if r == ':' && !c.focus.Focused(focusFilter) {
+		root.command = newCommand()
+		return
+	}
 	switch c.focus.Index() {
 	case focusFilter:
 		c.filter.Insert(r)
@@ -955,13 +1157,18 @@ func (c *containersScreen) scrollActiveTab(delta int) {
 	}
 }
 
-func (c *containersScreen) View(_ *State) string {
+func (c *containersScreen) View(root *State) string {
 	listPane := c.renderListPane()
 	detailPane := c.renderDetailPane()
 	activityPane := c.renderActivityPane()
 	mainRow := lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", detailPane, "  ", activityPane)
-	statusLine := c.renderStatusLine()
-	return strings.Join([]string{mainRow, statusLine}, "\n")
+	var statusRow string
+	if root.command != nil {
+		statusRow = root.command.View(c.width)
+	} else {
+		statusRow = c.renderStatusLine()
+	}
+	return strings.Join([]string{mainRow, statusRow}, "\n")
 }
 
 func (c *containersScreen) renderStatusLine() string {
@@ -1018,18 +1225,22 @@ func (c *containersScreen) keyHints() string {
 	case focusFilter:
 		return "type filter  tab next  1/2/3 switch  q quit"
 	case focusList:
-		return "j/k move  s stop  x remove  tab next  1/2/3 switch  q quit"
+		return "j/k move  s stop  x remove  : command  tab next  1/2/3 switch  q quit"
 	case focusDetail:
 		switch c.tab {
 		case tabStats:
-			return "←/→ or ]/[ switch tab  tab next  1/2/3 switch  q quit"
+			return "←/→ or ]/[ switch tab  : command  tab next  1/2/3 switch  q quit"
 		case tabLogs:
-			return "j/k scroll  ←/→ or ]/[ switch tab  tab next  q quit"
+			return "j/k scroll  f/b page  ←/→ or ]/[ switch tab  : command  tab next  q quit"
 		case tabInspect:
-			return "j/k scroll  ←/→ or ]/[ switch tab  tab next  q quit"
+			return "j/k scroll  f/b page  ←/→ or ]/[ switch tab  : command  tab next  q quit"
 		}
 	}
 	return "1/2/3 switch  q quit"
+}
+
+func (m *commandModel) keyHints() string {
+	return "enter execute  ↑↓ history  esc cancel"
 }
 
 func (c *containersScreen) renderListPane() string {
