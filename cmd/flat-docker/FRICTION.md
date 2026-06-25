@@ -1011,6 +1011,91 @@ pattern (Scrollbar) added to the post-0.1 candidate list. The pass took
 ~1 hour and produced proportionally more evidence per unit of work than
 the earlier pain-focused tasks, validating the user's instinct that
 building for beauty is the right methodology going forward.
+
+---
+
+## TTY-found bug: lipgloss `Height(N)` does NOT truncate (2026-06-25)
+
+**This is the most important finding of the entire dogfood.** It would
+not have surfaced in any unit test — it requires a real terminal to
+visible-check.
+
+### Symptom (user-reported)
+
+User scrolled in stats/logs/inspect tabs. Header tabs (top) and footer
+help (bottom) got "cleaned off" the view. Pressing 1/2/3 (screen switch
+→ forceRepaint) brought them back. Static chrome vanished while
+frequently-updated content (status line, streaming logs) stayed
+visible.
+
+### Root cause
+
+`lipgloss.NewStyle().Height(N)` is a *minimum*, not a maximum — content
+longer than N lines **overflows past N** instead of being truncated.
+Only `MaxHeight(N)` truncates. (Confirmed empirically:
+`Height(2).Render("a\nb\nc")` returns 3 lines.)
+
+flat-docker's follow-indicator was rendered as a conditional extra line
+*inside* the detail pane body. When the indicator appeared (content
+overflowed the viewport), the pane content became N+1 lines. Despite
+`.Height(N)` on the pane style, lipgloss rendered N+1 lines. The pane
+became taller than its target. The horizontal join made the body row
+taller. The body exceeded its target height. The frame exceeded
+terminal height. The renderer wrote cells past the visible terminal
+area, which clobbered the static chrome on the way through.
+
+### Why unit tests missed it
+
+`flatest.CleanFrame` strips ANSI and joins lines; it does not validate
+frame dimensions. A frame with 25 lines in a 24-row terminal produces
+a 25-line golden that the test happily compares byte-for-byte. The
+test harness has no concept of "terminal height" — it just renders to
+a string. **Only a real terminal can catch this class of bug.**
+
+### Fix
+
+1. Moved the follow-indicator out of the body content into the tab-bar
+   row (where it belongs visually — it's metadata, not data).
+2. Added `MaxHeight(N)` alongside `Height(N)` on every pane style as a
+   defensive net. If any future content overflows, lipgloss now
+   truncates instead of letting the frame exceed terminal height.
+
+### Framework-level implications
+
+This is **not just a flat-docker bug**. Every Flatte app using
+`lipgloss.Height()` to bound a region has the same latent risk. Two
+candidate framework responses:
+
+- **Documentation**: note prominently in `quick-reference.md` that
+  `Height` is a minimum, not a max, and apps should pair it with
+  `MaxHeight` when bounding a region. Cheap, easy to forget.
+- **Helper**: add a `flatui.BoundedStyle(width, height)` (or similar)
+  that sets both Width/MaxWidth and Height/MaxHeight. Centralizes the
+  pattern.
+- **Renderer hardening**: ultraviolet's `StyledString.Height()` is
+  what flatte's draw loop uses (line 434: `height := styled.Height()`)
+  to size the screen buffer. If the app's content overflows, the
+  screen buffer grows to fit, and the terminal can't show all of it.
+  The renderer could clip to the terminal size before sizing the
+  buffer, with a tracing event when it happens.
+
+**Recommended priority: high.** This will hit every Flatte app that
+builds dynamic content. The MaxHeight fix is local to flat-docker; the
+documentation/helper/renderer-hardening is post-0.1 work that should
+land before 1.0.
+
+### Methodology validation
+
+This single bug justified the entire TTY-verification step. **No
+amount of additional unit testing would have caught it.** Real
+terminals catch what synthetic test harnesses cannot. The dogfood's
+"craft pass" + TTY verification is now demonstrably the right
+methodology — not just for finding flatte's missing APIs but for
+finding bugs in the existing renderer contract.
+
+---
+
+## Craft pass — scroll affordances + visual polish (2026-06-25)
 (Updated each task. Predictions vs. observed.)
 
 | Area | Prediction | Task 1 | Task 2 | Task 3 | Task 4 |

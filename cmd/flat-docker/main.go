@@ -384,6 +384,7 @@ func paneStyle(width, height int, focused bool) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Width(width).
 		Height(height).
+		MaxHeight(height).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderFg)
 }
@@ -1478,7 +1479,11 @@ func (c *containersScreen) renderTabBar() string {
 		}
 		parts[i] = text
 	}
-	return strings.Join(parts, "")
+	bar := strings.Join(parts, "")
+	if indicator := c.renderFollowIndicator(); indicator != "" {
+		bar += " " + indicator
+	}
+	return bar
 }
 
 func (c *containersScreen) renderActiveTab(selected *Container) string {
@@ -1507,10 +1512,6 @@ func (c *containersScreen) renderActiveTab(selected *Container) string {
 		if view == "" {
 			view = lipgloss.NewStyle().Foreground(pal.muted).Render("(no logs)")
 		}
-		indicator := c.renderFollowIndicator()
-		if indicator != "" {
-			view += "\n" + indicator
-		}
 		return view
 	case tabInspect:
 		view := c.inspect.View()
@@ -1522,18 +1523,18 @@ func (c *containersScreen) renderActiveTab(selected *Container) string {
 	return ""
 }
 
+// renderFollowIndicator returns the follow/paused indicator for the logs
+// tab. Rendered inside the tab-bar row (NOT as an extra body line, which
+// would overflow the pane's Height and corrupt the frame — see TTY-found
+// bug 2026-06-25).
 func (c *containersScreen) renderFollowIndicator() string {
 	if c.logs.TotalLines() == 0 || c.logs.TotalLines() <= c.logs.VisibleLines() {
 		return ""
 	}
-	maxOffset := c.logs.TotalLines() - c.logs.VisibleLines()
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
 	if c.followTail {
-		return lipgloss.NewStyle().Foreground(pal.good).Render("↓ following tail")
+		return lipgloss.NewStyle().Foreground(pal.good).Render("↓ tail")
 	}
-	return lipgloss.NewStyle().Foreground(pal.muted).Render("↑ paused at line " + strconv.Itoa(c.logs.Offset()) + "/" + strconv.Itoa(maxOffset) + " (G to resume)")
+	return lipgloss.NewStyle().Foreground(pal.muted).Render("↑ paused (G)")
 }
 
 var sparkBlocks = []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}

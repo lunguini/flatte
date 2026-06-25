@@ -742,7 +742,9 @@ func TestFollowIndicatorShowsWhenContentOverflows(t *testing.T) {
 	}
 
 	content := View(s, flatte.RenderContext{Width: 80}).Content
-	if !strings.Contains(content, "following tail") {
+	// Indicator is now rendered inside the tab bar row (right of "inspect"),
+	// not as an extra body line. Look for either "↓ tail" or "↑ paused".
+	if !strings.Contains(content, "tail") && !strings.Contains(content, "paused") {
 		t.Fatalf("follow indicator missing after overflow:\n%s", content)
 	}
 }
