@@ -1,26 +1,15 @@
 [1 containers]  2 images   3 volumes 
 ────────────────────────────────────────────────────────────────────────────────
-
-  containers screen
-  body: 80 wide × 21 tall
-
-  placeholder — task 2 adds real content
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+filter: (all)               nginx-proxy                                         
+                                                                                
+●> nginx-proxy                image:  nginx:1.25                                
+●  api-server                 status: running                                   
+●  postgres                   ports:  0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp  
+●  redis-cache                id:     a1b2c3d4e5                                
+○  frontend                                                                     
+●  worker                                                                       
+●  nginx-web                                                                    
+○  migration                                                                    
 ────────────────────────────────────────────────────────────────────────────────
- 1/2/3 switch  q quit 
+ j/k move  tab next  1/2/3 switch  q quit 
 [title flat-docker — containers]

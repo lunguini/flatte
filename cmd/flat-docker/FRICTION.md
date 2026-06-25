@@ -83,25 +83,119 @@ once there are real panes inside the body.
 
 ---
 
+## Task 2 — Containers list + filter + static detail, focus routing
+
+This is where the layout friction the feedback predicted actually showed up.
+The state shape and routing from Task 1 held up cleanly; the geometry math
+is where the time went.
+
+### Layout (predicted high pain — confirmed)
+
+- **`cmd/flat-docker/main.go` `containersScreen.layout`** — every dimension
+  is hand-computed: `listPaneWidth = min(30, max(width/3, 16))`,
+  `detailPaneWidth = width - listPaneWidth - 2`, and `list.SetHeight(height -
+  listChromeRows)` where `listChromeRows = 3` is a magic constant for
+  "filter line + blank + blank". This is **exactly the pattern the feedback
+  flagged** and exactly the pattern `flat-workspace:90` uses. It works. It
+  also takes a non-trivial fraction of the screen code and will be **re-done
+  for every screen that has multi-pane layout** (Tasks 5, 7). **annoying**,
+  predicted to cross to **blocked** if a fourth nested pane is added.
+- **`containersScreen.renderListPane` / `renderDetailPane`** — each pane is
+  padded to its width via `lipgloss.NewStyle().Width(w).Render(content)`.
+  Without that, `lipgloss.JoinHorizontal` aligns to the longest line in each
+  pane and the columns drift. The pattern works but the application author
+  has to know to do it — there is no "render this content into this Rect"
+  helper. **annoying**.
+- **The two-pane horizontal join itself is fine** — `lipgloss.JoinHorizontal(
+  lipgloss.Top, listPane, "  ", detailPane)` reads cleanly. The pain is
+  everything *around* it (sizing the widgets, padding the panes).
+- **No `Rect` plumbing.** Each pane's width is a separate cached field on the
+  struct (`listPaneWidth`, `detailPaneWidth`), recomputed in `layout`. If I
+  added a third nested pane, I'd add another cached width field. The feedback
+  was right that a `SplitHorizontal` / `SplitVertical` returning two `Rect`s
+  would centralize this. **annoying** — single concrete extraction candidate
+  now visible from this dogfood (logged for Task 8).
+
+What would have helped: `body, _ := flatui.SplitVertical(bounds, footerH)`,
+`list, detail := flatui.SplitHorizontal(body, 0.35)`, then `c.list.Resize(
+list)` and `renderInto(detail, content)`. None of that exists today. This is
+the post-0.1 layout vocabulary, now evidenced by a second sample.
+
+### Focus routing (predicted low–medium — confirmed low)
+
+- **`containersScreen.Handle`** switches on `key.Key` and dispatches by
+  `c.focus.Focused(focusXxx)`. Clean and local. Tab/Shift-Tab/up/down/
+  editing keys all routed correctly the first time. **fine**.
+- **Key collision avoidance is the app's job** — `j` on list-focus moves the
+  cursor, `j` on filter-focus edits the filter. Both branches live in the
+  same `Handle`, which is correct but means the binding table is implicit in
+  a switch statement, not declarative. **fine** at this scale; would become
+  **annoying** with mode-specific bindings (vim insert/normal style).
+
+### Feature-module shape (continued positive evidence)
+
+- **`containersScreen.Handle(root, ev, fx)` + `View(root)`** continued to
+  scale well even as the screen grew real widget state (FocusRing,
+  TextField, List, filtered slice). The screen file/section is self-
+  contained — root code did not need to change to add Task 2 features. The
+  only root change was the footer pulling hints via a new `keyHints()`
+  method. **No friction.**
+- **`(c *containersScreen) keyHints() string`** is the cleanest example yet
+  of the feature-module shape paying off: context-help for the whole screen
+  lives next to the screen's input handling, not in a global help registry.
+
+### Test ergonomics
+
+- **`keyTab` vs `keyChar('\t')`** — Tab has to be sent as
+  `flatte.KeyEvent{Key: flatte.KeyTab}`, not as a KeyCharacter with rune
+  `\t`. This bit me in the first test pass (six tests failed with one root
+  cause). The closed event set's distinction between `KeyTab` and
+  `KeyCharacter` is correct, but there is no test helper that makes the
+  common key spells terse. **annoying** (mild — `keyTab(shift bool)` is a
+  4-line helper, but every new sample will rewrite it).
+- **Focus order vs Tab direction.** I declared `focusFilter=0,
+  focusList=1, focusDetail=2`, then in tests assumed Tab from list goes to
+  filter — actually it goes to detail. Not Flatte's fault; just a reminder
+  that focus-ring order is a UX decision the app owns, and getting it wrong
+  silently is easy. A `FocusRing.Debug()` or some kind of order assertion
+  might help, but is probably overkill. **fine**.
+
+### What this task did not yet exercise
+
+- Tabs within a pane (Task 3) — predicted medium pain.
+- Scoped async cancellation (Task 4) — predicted high pain.
+- Modal over a complex base (Task 5).
+- Mouse zones (Task 6).
+
+### Task 2 verdict
+
+The layout friction the feedback predicted is real and **now sample-driven**
+— three concrete sites (`layout`'s width math, per-pane padding via
+`lipgloss.Width`, separate cached width fields per pane). The feature-module
+shape continues to scale well; nothing in root code had to change to add
+real widget state to one screen. Focus routing is clean. **Net: Task 2 took
+more layout code than interaction code, which is the signal the feedback was
+sending.**
+
 ## Cumulative summary
 
 (Updated each task. Predictions vs. observed.)
 
-| Area | Prediction | Task 1 observed |
-|---|---|---|
-| Layout math | High pain | Mild — single site per pattern. Will grow in Task 2. |
-| Scoped cancellation | High pain | Not yet hit — Task 4. |
-| Tabs within pane | Medium | Not yet hit — Task 3. |
-| Mouse zones | Medium | Not yet hit — Task 6. |
-| View composition | Medium | Mild — root `View` is a clean switch; screen bodies are tiny. |
-| Feature-module shape | Untested | **Positive** — works as the feedback predicted. |
-| Keyboard routing | Low–medium | Low — globals + screen switch is clean at 3 screens. |
-| Polling (`Every`) | Low | Not yet hit — Task 4. |
-| Streaming (`Stream`) | Low | Not yet hit — Task 4. |
-| Modal routing | Low–medium | Not yet hit — Task 5. |
+| Area | Prediction | Task 1 | Task 2 |
+|---|---|---|---|
+| Layout math | High pain | Mild — single site per pattern. | **Confirmed** — three concrete sites (width split, pane padding, cached width fields). |
+| Scoped cancellation | High pain | Not yet hit. | Not yet hit — Task 4. |
+| Tabs within pane | Medium | Not yet hit. | Not yet hit — Task 3. |
+| Mouse zones | Medium | Not yet hit. | Not yet hit — Task 6. |
+| View composition | Medium | Mild — root `View` is a clean switch. | Mild — `JoinHorizontal` is fine; pain is the sizing around it. |
+| Feature-module shape | Untested | Positive. | **Strong positive** — added widget state without touching root code. |
+| Keyboard routing | Low–medium | Low. | Low — `switch key.Key` + `focus.Focused` reads cleanly. |
+| Polling (`Every`) | Low | Not yet hit. | Not yet hit — Task 4. |
+| Streaming (`Stream`) | Low | Not yet hit. | Not yet hit — Task 4. |
+| Modal routing | Low–medium | Not yet hit. | Not yet hit — Task 5. |
 
-**Task 1 verdict:** the scaffold was easy. The architecture friction the
-feedback worried about is not visible at this scale — but the *patterns that
-will recur* (manual height math, per-screen sized-state duplication, body
-padding loops) are already present and identical to `flat-workspace`. Whether
-they cross from "fine" to "annoying" depends on Tasks 2–4.
+**Running verdict:** the layout friction the feedback predicted is now
+sample-driven and concrete (three sites after Task 2). The feature-module
+shape scaled cleanly to a real screen with widget state. **Net so far: more
+layout code than interaction code, which is the signal the feedback was
+sending.** Task 3 (tabs within the detail pane) is the next unknown.
