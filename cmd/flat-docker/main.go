@@ -263,6 +263,56 @@ const (
 	focusDetail
 )
 
+func scrollbarLines(offset, visible, total, height int) string {
+	if total <= visible || height <= 0 || visible <= 0 {
+		return strings.Repeat(" ", height)
+	}
+	maxOffset := total - visible
+	thumbSize := max(1, height*visible/total)
+	if thumbSize > height {
+		thumbSize = height
+	}
+	thumbPos := int(float64(offset) / float64(maxOffset) * float64(height - thumbSize))
+	if thumbPos < 0 {
+		thumbPos = 0
+	}
+	if thumbPos+thumbSize > height {
+		thumbPos = height - thumbSize
+	}
+	rows := make([]string, height)
+	for i := 0; i < height; i++ {
+		if i >= thumbPos && i < thumbPos+thumbSize {
+			rows[i] = "█"
+		} else {
+			rows[i] = "░"
+		}
+	}
+	return strings.Join(rows, "\n")
+}
+
+func withScrollbar(content, bar string) string {
+	if bar == "" {
+		return content
+	}
+	contentLines := strings.Split(content, "\n")
+	barLines := strings.Split(bar, "\n")
+	n := max(len(contentLines), len(barLines))
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		var line, barChar string
+		if i < len(contentLines) {
+			line = contentLines[i]
+		}
+		if i < len(barLines) {
+			barChar = barLines[i]
+		} else {
+			barChar = " "
+		}
+		out[i] = line + barChar
+	}
+	return strings.Join(out, "\n")
+}
+
 type detailTab int
 
 const (
@@ -404,9 +454,19 @@ func (c *containersScreen) recomputeStatusLine() {
 }
 
 func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m flatte.MouseEvent) {
-	if m.Action != flatte.MousePress {
+	if m.Action != flatte.MousePress && m.Button != flatte.MouseWheelUp && m.Button != flatte.MouseWheelDown {
 		return
 	}
+
+	if m.Button == flatte.MouseWheelUp || m.Button == flatte.MouseWheelDown {
+		delta := 3
+		if m.Button == flatte.MouseWheelUp {
+			delta = -3
+		}
+		c.scrollAt(m.X, m.Y, delta)
+		return
+	}
+
 	id, ok := c.zones.At(m.X, m.Y)
 	if !ok {
 		return
@@ -430,6 +490,23 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		}
 		c.list.Select(idx)
 		c.onSelectionChange(root, fx)
+	}
+}
+
+func (c *containersScreen) scrollAt(x, _, delta int) {
+	listPaneEnd := c.listPaneWidth
+	detailPaneStart := listPaneEnd + 2
+	detailPaneEnd := detailPaneStart + c.detailPaneWidth
+
+	switch {
+	case x < listPaneEnd:
+		if delta > 0 {
+			c.list.MoveDown()
+		} else {
+			c.list.MoveUp()
+		}
+	case x >= detailPaneStart && x < detailPaneEnd:
+		c.scrollActiveTab(delta)
 	}
 }
 
@@ -774,6 +851,48 @@ func (c *containersScreen) handleChar(root *State, fx flatte.Effects[State], r r
 			c.prevTab()
 		case ']', 'l', 'L':
 			c.nextTab()
+		case 'f':
+			c.pageActiveTab(1)
+		case 'b':
+			c.pageActiveTab(-1)
+		case 'd':
+			c.halfPageActiveTab(1)
+		case 'u':
+			c.halfPageActiveTab(-1)
+		}
+	}
+}
+
+func (c *containersScreen) pageActiveTab(dir int) {
+	switch c.tab {
+	case tabLogs:
+		if dir > 0 {
+			c.logs.PageDown()
+		} else {
+			c.logs.PageUp()
+		}
+	case tabInspect:
+		if dir > 0 {
+			c.inspect.PageDown()
+		} else {
+			c.inspect.PageUp()
+		}
+	}
+}
+
+func (c *containersScreen) halfPageActiveTab(dir int) {
+	switch c.tab {
+	case tabLogs:
+		if dir > 0 {
+			c.logs.HalfPageDown()
+		} else {
+			c.logs.HalfPageUp()
+		}
+	case tabInspect:
+		if dir > 0 {
+			c.inspect.HalfPageDown()
+		} else {
+			c.inspect.HalfPageUp()
 		}
 	}
 }
@@ -871,7 +990,8 @@ func (c *containersScreen) keyHints() string {
 }
 
 func (c *containersScreen) renderListPane() string {
-	style := lipgloss.NewStyle().Width(c.listPaneWidth).Height(c.bodyContentHeight)
+	contentStyle := lipgloss.NewStyle().Width(c.listPaneWidth - 1).Height(c.bodyContentHeight)
+	outerStyle := lipgloss.NewStyle().Width(c.listPaneWidth).Height(c.bodyContentHeight)
 
 	filterLine := "filter: " + c.filter.Value
 	if c.filter.Value == "" {
@@ -901,15 +1021,19 @@ func (c *containersScreen) renderListPane() string {
 		listContent = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("  (no matches)")
 	}
 
-	return style.Render(filterLine + "\n\n" + listContent)
+	inner := contentStyle.Render(filterLine + "\n\n" + listContent)
+	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), c.bodyContentHeight)
+	barStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(bar)
+	return outerStyle.Render(withScrollbar(inner, barStyled))
 }
 
 func (c *containersScreen) renderDetailPane() string {
-	style := lipgloss.NewStyle().Width(c.detailPaneWidth).Height(c.bodyContentHeight)
+	contentStyle := lipgloss.NewStyle().Width(c.detailPaneWidth - 1).Height(c.bodyContentHeight)
+	outerStyle := lipgloss.NewStyle().Width(c.detailPaneWidth).Height(c.bodyContentHeight)
 
 	selected := c.selected()
 	if selected == nil {
-		return style.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no container selected)"))
+		return outerStyle.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no container selected)"))
 	}
 
 	titleLine := selected.Name
@@ -920,7 +1044,21 @@ func (c *containersScreen) renderDetailPane() string {
 	tabLine := c.renderTabBar()
 	body := c.renderActiveTab(selected)
 
-	return style.Render(strings.Join([]string{titleLine, tabLine, "", body}, "\n"))
+	inner := contentStyle.Render(strings.Join([]string{titleLine, tabLine, "", body}, "\n"))
+	bar := c.detailScrollbar()
+	barStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(bar)
+	return outerStyle.Render(withScrollbar(inner, barStyled))
+}
+
+func (c *containersScreen) detailScrollbar() string {
+	switch c.tab {
+	case tabLogs:
+		return scrollbarLines(c.logs.Offset(), c.logs.VisibleLines(), c.logs.TotalLines(), c.bodyContentHeight)
+	case tabInspect:
+		return scrollbarLines(c.inspect.Offset(), c.inspect.VisibleLines(), c.inspect.TotalLines(), c.bodyContentHeight)
+	default:
+		return strings.Repeat(" ", c.bodyContentHeight)
+	}
 }
 
 func (c *containersScreen) renderTabBar() string {

@@ -914,10 +914,103 @@ status line's summed MEM% was meaningless. All three addressed:
   tab bar. Removed the `[name]` bracket convention entirely.
 - **Status line now averages MEM and CPU across running containers**
   instead of summing. Summed percentages were meaningless (>100%);
-  averaged ones stay in 0–100%.
+  averaged ones stay in 0–100.
 
 Tests added for arrow-key tab navigation and to verify Left still moves
 the filter cursor when filter-focused.
+
+---
+
+## Craft pass — scroll affordances + visual polish (2026-06-25)
+
+User reframed the goal: not "find pain" but "build something beautiful,
+with pain as a side effect of genuine craft." Scroll was the first
+explicit gap: the underlying `flatui.List`/`Viewport` widgets have full
+scroll APIs, but flat-docker exposed none of them visually. This pass
+landed scrollbars, mouse wheel, page keys — and surfaced **one new
+flatte-level gap that the previous dogfood didn't reach**.
+
+### New finding: `KeyPageUp`/`KeyPageDown` missing from the closed event set
+
+- **`flatte/events.go`** defines `KeyUp/Down/Left/Right/Enter/.../Home/End`
+  but **no Page Up / Page Down**. Home/End were added 2026-06-22; PgUp/PgDn
+  were missed. Real terminals send them as standard escape sequences that
+  ultraviolet parses, but `translateEvent` has nowhere to map them.
+- **Severity: medium.** Workable via vim-style `f`/`b`/`d`/`u` (which is
+  what flat-reader already does and what I adopted here), but a real TUI
+  user expects PgUp/PgDn to "just work."
+- **Solution cost: TRIVIAL** — add `KeyPageUp`/`KeyPageDown` to the iota,
+  one entry each in `translateEvent`'s key map. **Logged as a new
+  post-0.1 candidate; should land before 1.0.**
+
+### Scrollbar rendering
+
+- **`scrollbarLines(offset, visible, total, height int) string`** is a
+  20-line helper returning a multi-line string of `█` (thumb) and `░`
+  (track) characters, one per row, sized to the visible height.
+- **Wired into list/logs/inspect via `withScrollbar(content, bar)`** —
+  appends one column to each line of pane content. Each pane's content
+  width drops by 1 to make room for the bar.
+- **Difficulty: LOW.** The math is straightforward (thumb position =
+  `offset / maxOffset * (height - thumbSize)`); the integration is one
+  helper per pane renderer.
+- **Friction: MEDIUM.** The pattern is repeated three times (list/logs/
+  inspect). Each call site has to know the pane's `Offset`/`Visible`/
+  `Total`/`Height`. A `flatui.Scrollbar` widget that wraps a `Viewport`
+  (or a generic `Scrollable` interface) would close this — candidate
+  for the same post-0.1 widget sweep that adds sparklines/charts.
+
+### Mouse-wheel routing
+
+- **`handleMouse` extended** to recognize `MouseWheelUp`/`MouseWheelDown`
+  in addition to `MousePress`. `scrollAt(x, y, delta)` routes by X
+  coordinate: list pane → `list.MoveUp/Down`; detail pane →
+  `scrollActiveTab(delta)`. 3-line scroll per wheel notch (matches
+  flat-reader).
+- **Difficulty: LOW.** The routing logic is 8 lines.
+- **Friction: MEDIUM.** The "which pane does this X live in?" check is
+  hand-rolled and uses the same cached pane widths from `layout()`.
+  The same drift class as Task 6 — if layout changes, the routing
+  boundaries go stale. **Auto-zones would close this too**: register
+  wheel zones the same way as click zones, route by zone id.
+
+### Page/half-page keys
+
+- **`f`/`b`/`d`/`u` adopted from flat-reader** for detail-focused viewports
+  (PageDown/PageUp/HalfPageDown/HalfPageUp on the active tab). Gated on
+  `focusDetail` so they don't conflict with filter text editing.
+- **Difficulty: TRIVIAL** — direct method calls on the Viewport.
+- **Friction: NONE** once the keys are picked; the only question is
+  whether vim conventions are acceptable UX, which is app policy.
+
+### What this pass added to the difficulty summary
+
+Two new pain points:
+- **PageUp/PageDown gap** (#16): MEDIUM severity, TRIVIAL solution.
+  Pure framework oversight; should ship before 1.0.
+- **Scrollbar widget repetition** (#17): LOW severity per site,
+  MEDIUM cumulative. Same shape as the layout-vocabulary finding —
+  repeated widget-rendering pattern, candidate for a `flatui.Scrollbar`
+  helper in the post-0.1 widget sweep.
+
+### What this pass validated
+
+- **The user's reframe was correct.** Building for beauty surfaced a
+  finding (PageUp/PageDown gap) that the previous pain-focused dogfood
+  missed. **Craft-driven dogfooding finds different things than
+  pain-driven dogfooding** — both belong in the methodology.
+- **The auto-zones prototype continues to look prescient.** The wheel-
+  routing friction (hand-rolled `scrollAt` checking cached pane widths)
+  is exactly the drift class that output-scanning would eliminate.
+
+### Task 9 verdict
+
+Scroll is now first-class: visual scrollbar, wheel routing, page keys.
+One new framework-level gap (PageUp/PageDown) and one new widget-level
+pattern (Scrollbar) added to the post-0.1 candidate list. The pass took
+~1 hour and produced proportionally more evidence per unit of work than
+the earlier pain-focused tasks, validating the user's instinct that
+building for beauty is the right methodology going forward.
 (Updated each task. Predictions vs. observed.)
 
 | Area | Prediction | Task 1 | Task 2 | Task 3 | Task 4 |

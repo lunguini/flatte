@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -337,6 +338,141 @@ func TestLeftArrowInFilterMovesCursor(t *testing.T) {
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
 	if s.containers.filter.Cursor != 2 {
 		t.Fatalf("after Left in filter, cursor = %d, want 2", s.containers.filter.Cursor)
+	}
+}
+
+func TestScrollbarLinesShowsThumbInMiddle(t *testing.T) {
+	bar := scrollbarLines(5, 4, 14, 10)
+	if !strings.Contains(bar, "█") {
+		t.Fatalf("scrollbar missing thumb char: %q", bar)
+	}
+	if !strings.Contains(bar, "░") {
+		t.Fatalf("scrollbar missing track char: %q", bar)
+	}
+}
+
+func TestScrollbarLinesEmptyWhenContentFits(t *testing.T) {
+	bar := scrollbarLines(0, 10, 5, 10)
+	if strings.Contains(bar, "█") || strings.Contains(bar, "░") {
+		t.Fatalf("scrollbar should be blank when content fits: %q", bar)
+	}
+}
+
+func TestInspectTabShowsScrollbarWhenContentOverflows(t *testing.T) {
+	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80}) // populate zones
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabInspect
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "█") {
+		t.Fatalf("inspect scrollbar (thumb) not rendered:\n%s", content)
+	}
+	if !strings.Contains(content, "░") {
+		t.Fatalf("inspect scrollbar (track) not rendered:\n%s", content)
+	}
+}
+
+func TestMouseWheelScrollsListWhenOverListPane(t *testing.T) {
+	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80})
+	startCursor := s.containers.list.Cursor()
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseWheelDown,
+		X:      2, Y: 6,
+	}, flatte.Effects[State]{})
+
+	if s.containers.list.Cursor() != startCursor+1 {
+		t.Fatalf("wheel down over list: cursor %d -> %d, want %d",
+			startCursor, s.containers.list.Cursor(), startCursor+1)
+	}
+}
+
+func TestMouseWheelScrollsDetailViewportWhenOverDetailPane(t *testing.T) {
+	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80})
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabInspect
+	startOffset := s.containers.inspect.Offset()
+
+	detailX := s.containers.listPaneWidth + 4
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseWheelDown,
+		X:      detailX, Y: 6,
+	}, flatte.Effects[State]{})
+
+	if s.containers.inspect.Offset() == startOffset && s.containers.inspect.TotalLines() > s.containers.inspect.VisibleLines() {
+		t.Fatalf("wheel down over detail inspect did not scroll (offset stayed %d)", s.containers.inspect.Offset())
+	}
+}
+
+func TestFKeyPagesDownInLogsTab(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+	startOffset := s.containers.logs.Offset()
+
+	Handle(s, keyChar('f'), flatte.Effects[State]{})
+
+	if s.containers.logs.Offset() == startOffset && s.containers.logs.TotalLines() > s.containers.logs.VisibleLines() {
+		t.Fatalf("f did not page-down logs (offset stayed %d)", s.containers.logs.Offset())
+	}
+}
+
+func TestBKeyPagesUpInLogsTab(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+	// Push enough live log content to make scrolling meaningful
+	for i := 0; i < 30; i++ {
+		s.containers.appendLiveLog("a1b2c3d4e5", fmt.Sprintf("test log line %d for scrolling", i))
+	}
+	s.containers.logs.GotoBottom()
+	startOffset := s.containers.logs.Offset()
+	if startOffset == 0 {
+		t.Fatalf("setup: logs did not scroll after appending content (total=%d visible=%d)",
+			s.containers.logs.TotalLines(), s.containers.logs.VisibleLines())
+	}
+
+	Handle(s, keyChar('b'), flatte.Effects[State]{})
+
+	if s.containers.logs.Offset() >= startOffset {
+		t.Fatalf("b did not page-up logs (offset %d -> %d)", startOffset, s.containers.logs.Offset())
+	}
+}
+
+func TestDAndUHalfPageInspect(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabInspect
+	s.containers.inspect.GotoBottom()
+	startOffset := s.containers.inspect.Offset()
+
+	Handle(s, keyChar('u'), flatte.Effects[State]{})
+	if s.containers.inspect.Offset() >= startOffset {
+		t.Fatalf("u did not half-page-up inspect (offset %d -> %d)", startOffset, s.containers.inspect.Offset())
+	}
+
+	midOffset := s.containers.inspect.Offset()
+	Handle(s, keyChar('d'), flatte.Effects[State]{})
+	if s.containers.inspect.Offset() <= midOffset {
+		t.Fatalf("d did not half-page-down inspect (offset %d -> %d)", midOffset, s.containers.inspect.Offset())
+	}
+}
+
+func TestPageKeysDoNothingWhenFilterFocused(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusFilter)
+	startValue := s.containers.filter.Value
+
+	Handle(s, keyChar('f'), flatte.Effects[State]{})
+	Handle(s, keyChar('b'), flatte.Effects[State]{})
+
+	if s.containers.filter.Value != startValue+"fb" {
+		t.Fatalf("f/b should edit filter when filter-focused; got %q want %q", s.containers.filter.Value, startValue+"fb")
 	}
 }
 
