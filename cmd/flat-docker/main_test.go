@@ -246,9 +246,11 @@ func TestDetailShowsEmptyStateWhenNoMatches(t *testing.T) {
 func TestContainersLayoutSplitsBodyWidthBetweenPanes(t *testing.T) {
 	s := resizedState(80, 24)
 	c := &s.containers
-	// Panes touch (no gaps) — widths sum to body width
-	if c.listPaneWidth+c.detailPaneWidth+c.activityPaneWidth != 80 {
-		t.Fatalf("panes %d + %d + %d != 80 (no gaps; panes touch)", c.listPaneWidth, c.detailPaneWidth, c.activityPaneWidth)
+	// Panes + 2 divider columns = body width
+	total := c.listPaneWidth + dividerWidth + c.detailPaneWidth + dividerWidth + c.activityPaneWidth
+	if total != 80 {
+		t.Fatalf("list(%d) + div(%d) + detail(%d) + div(%d) + activity(%d) = %d, want 80",
+			c.listPaneWidth, dividerWidth, c.detailPaneWidth, dividerWidth, c.activityPaneWidth, total)
 	}
 	if c.activityPaneWidth == 0 {
 		t.Fatalf("activity pane width is 0 — anchor-right pane missing")
@@ -821,16 +823,182 @@ func TestTipForGlyphSetMentionsUpgradeForSafe(t *testing.T) {
 
 func TestPowerlineTabWidthMatchesContent(t *testing.T) {
 	rendered, width := powerlineTab("stats", true)
-	// Width is auto-derived from the rendered string. Whatever lipgloss
-	// reports, the rendered string's visible width should match.
 	if width != lipgloss.Width(rendered) {
 		t.Fatalf("returned width %d != lipgloss.Width(rendered) %d", width, lipgloss.Width(rendered))
 	}
-	// When using safe glyphs, the brackets add 2 chars vs the inner label width.
-	// When using powerline, the slants add 2 chars. Either way, the result is
-	// len(label) + 6 (2 glyphs + 2*2 padding). Sanity check.
 	if width < lipgloss.Width("stats")+2 {
 		t.Fatalf("width %d looks too small for label 'stats'", width)
+	}
+}
+
+func TestDividerHitDetection(t *testing.T) {
+	s := resizedState(80, 24)
+	c := &s.containers
+	div0X := c.listPaneWidth       // list|detail divider
+	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth + dividerWidth
+
+	if got := c.dividerAt(div0X, 5); got != 0 {
+		t.Fatalf("dividerAt(%d, 5) = %d, want 0", div0X, got)
+	}
+	if got := c.dividerAt(div1X, 5); got != 1 {
+		t.Fatalf("dividerAt(%d, 5) = %d, want 1", div1X, got)
+	}
+	if got := c.dividerAt(2, 5); got != -1 {
+		t.Fatalf("dividerAt(2, 5) = %d, want -1 (not on a divider)", got)
+	}
+}
+
+func TestDividerMissesWhenOutsideBodyHeight(t *testing.T) {
+	s := resizedState(80, 24)
+	c := &s.containers
+	div0X := c.listPaneWidth
+	// Y above the body area
+	if got := c.dividerAt(div0X, 0); got != -1 {
+		t.Fatalf("dividerAt above body should miss: got %d", got)
+	}
+}
+
+func TestDragDivider0WidensList(t *testing.T) {
+	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80}) // populate state
+	c := &s.containers
+	div0X := c.listPaneWidth
+	startList := c.listPaneWidth
+	startDetail := c.detailPaneWidth
+
+	// Press on divider 0
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: div0X, Y: 5,
+	}, flatte.Effects[State]{})
+	if c.drag == nil || c.drag.divider != 0 {
+		t.Fatal("drag not started on divider 0")
+	}
+
+	// Drag right by 5
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
+		X: div0X + 5, Y: 5,
+	}, flatte.Effects[State]{})
+	if c.listPaneWidth != startList+5 {
+		t.Fatalf("after drag right 5: listWidth %d, want %d", c.listPaneWidth, startList+5)
+	}
+	if c.detailPaneWidth != startDetail-5 {
+		t.Fatalf("after drag right 5: detailWidth %d, want %d (should shrink)", c.detailPaneWidth, startDetail-5)
+	}
+
+	// Release
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseRelease, Button: flatte.MouseLeft,
+		X: div0X + 5, Y: 5,
+	}, flatte.Effects[State]{})
+	if c.drag != nil {
+		t.Fatal("drag not cleared on release")
+	}
+}
+
+func TestDragDivider1ShrinksActivity(t *testing.T) {
+	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80})
+	c := &s.containers
+	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth + dividerWidth
+	startActivity := c.activityPaneWidth
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: div1X, Y: 5,
+	}, flatte.Effects[State]{})
+	if c.drag == nil || c.drag.divider != 1 {
+		t.Fatal("drag not started on divider 1")
+	}
+
+	// Drag right by 4 — activity should shrink
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
+		X: div1X + 4, Y: 5,
+	}, flatte.Effects[State]{})
+	if c.activityPaneWidth != startActivity-4 {
+		t.Fatalf("after drag right 4: activityWidth %d, want %d", c.activityPaneWidth, startActivity-4)
+	}
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseRelease, Button: flatte.MouseLeft,
+		X: div1X + 4, Y: 5,
+	}, flatte.Effects[State]{})
+}
+
+func TestDragRespectsMinimumWidths(t *testing.T) {
+	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80})
+	c := &s.containers
+	div0X := c.listPaneWidth
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: div0X, Y: 5,
+	}, flatte.Effects[State]{})
+
+	// Drag WAY left — list should clamp at minListWidth
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
+		X: 0, Y: 5,
+	}, flatte.Effects[State]{})
+	if c.listPaneWidth < minListWidth {
+		t.Fatalf("list width %d below min %d", c.listPaneWidth, minListWidth)
+	}
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseRelease, Button: flatte.MouseLeft,
+		X: 0, Y: 5,
+	}, flatte.Effects[State]{})
+}
+
+func TestDividerDragPersistsAfterResize(t *testing.T) {
+	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80})
+	c := &s.containers
+	div0X := c.listPaneWidth
+
+	// Drag list to be 5 wider
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft, X: div0X, Y: 5,
+	}, flatte.Effects[State]{})
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseMotion, Button: flatte.MouseLeft, X: div0X + 5, Y: 5,
+	}, flatte.Effects[State]{})
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseRelease, Button: flatte.MouseLeft, X: div0X + 5, Y: 5,
+	}, flatte.Effects[State]{})
+	adjustedList := c.listPaneWidth
+
+	// Resize
+	Handle(s, flatte.ResizeEvent{Width: 100, Height: 30}, flatte.Effects[State]{})
+
+	// List width should be preserved (user-adjusted, not reset to default)
+	if c.listPaneWidth != adjustedList {
+		t.Fatalf("after resize, listWidth = %d, want preserved %d", c.listPaneWidth, adjustedList)
+	}
+}
+
+func TestClickInsidePaneStillWorksDuringNonDrag(t *testing.T) {
+	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80}) // populate auto-zones
+	// Click a list row via zone-derived position — should still work
+	// (not confused by divider code)
+	rowRect, ok := s.containers.zones.Rect("list:1")
+	if !ok {
+		t.Fatal("list:1 zone not registered")
+	}
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: rowRect.X + 2, Y: rowRect.Y,
+	}, flatte.Effects[State]{})
+	if sel := s.containers.selected(); sel == nil || sel.Name != "api-server" {
+		got := "nil"
+		if sel != nil {
+			got = sel.Name
+		}
+		t.Fatalf("list click broken by divider code: selected=%s", got)
 	}
 }
 

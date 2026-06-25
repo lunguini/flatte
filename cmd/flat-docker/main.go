@@ -704,7 +704,22 @@ type containersScreen struct {
 	activity   []string
 	statusLine string
 	followTail bool
+	drag       *dragState // non-nil while a divider is being dragged
 }
+
+type dragState struct {
+	divider             int // 0 = list|detail, 1 = detail|activity
+	startX              int
+	startListWidth      int
+	startActivityWidth  int
+}
+
+const (
+	dividerWidth     = 1
+	minListWidth     = 14
+	minDetailWidth   = 20
+	minActivityWidth = 12
+)
 
 type logLevel int
 
@@ -772,20 +787,27 @@ const statusLineRows = 1
 func (c *containersScreen) layout(width, height int) {
 	c.width, c.height = width, height
 	c.focus.SetCount(3)
-	c.listPaneWidth = min(28, max(width/5, 18))
-	c.activityPaneWidth = 24
-	c.detailPaneWidth = max(width-c.listPaneWidth-c.activityPaneWidth, 0) // panes touch — no gaps
+
+	// Initialize default pane widths on first layout; thereafter the user owns them
+	if c.listPaneWidth == 0 {
+		c.listPaneWidth = min(28, max(width/5, minListWidth))
+	}
+	if c.activityPaneWidth == 0 {
+		c.activityPaneWidth = 24
+	}
+	c.clampPaneWidths(width)
+	c.detailPaneWidth = max(width-c.listPaneWidth-c.activityPaneWidth-2*dividerWidth, minDetailWidth)
 
 	c.bodyContentHeight = max(height-statusLineRows, 0)
 
 	listInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
-	const listChromeRows = 2 // filter line + blank
+	const listChromeRows = 2
 	c.listHeight = max(listInnerHeight-listChromeRows, 0)
 	c.list.SetHeight(c.listHeight)
 
-	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1) // -1 for scrollbar
+	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
 	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
-	const detailChromeRows = 3 // title + tab bar + blank
+	const detailChromeRows = 3
 	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
 	c.logs.SetSize(detailInnerWidth, contentHeight)
 	c.inspect.SetSize(detailInnerWidth, contentHeight)
@@ -800,6 +822,58 @@ func (c *containersScreen) layout(width, height int) {
 	c.registerTabZones()
 }
 
+// clampPaneWidths enforces minimums on list and activity widths given the
+// total body width. Detail is derived after this runs; its minimum is
+// enforced by shrinking list or activity here first.
+func (c *containersScreen) clampPaneWidths(totalWidth int) {
+	available := totalWidth - 2*dividerWidth
+	// List and activity must leave room for minDetailWidth
+	maxListActivity := available - minDetailWidth
+	if c.listPaneWidth+c.activityPaneWidth > maxListActivity {
+		overflow := c.listPaneWidth + c.activityPaneWidth - maxListActivity
+		// Take half from each, respecting minimums
+		fromList := min(overflow/2, c.listPaneWidth-minListWidth)
+		fromActivity := min(overflow-fromList, c.activityPaneWidth-minActivityWidth)
+		c.listPaneWidth -= fromList
+		c.activityPaneWidth -= fromActivity
+		// If still overflowing (both at minimum), force list down
+		if c.listPaneWidth+c.activityPaneWidth > maxListActivity {
+			c.listPaneWidth = minListWidth
+			c.activityPaneWidth = max(maxListActivity-minListWidth, minActivityWidth)
+		}
+	}
+	c.listPaneWidth = max(c.listPaneWidth, minListWidth)
+	c.activityPaneWidth = max(c.activityPaneWidth, minActivityWidth)
+}
+
+func (c *containersScreen) applyDrag(currentX int) {
+	if c.drag == nil {
+		return
+	}
+	delta := currentX - c.drag.startX
+	switch c.drag.divider {
+	case 0: // list|detail: dragging right widens list
+		newList := c.drag.startListWidth + delta
+		maxList := c.width - minDetailWidth - c.activityPaneWidth - 2*dividerWidth
+		c.listPaneWidth = max(minListWidth, min(newList, maxList))
+	case 1: // detail|activity: dragging right narrows activity
+		newActivity := c.drag.startActivityWidth - delta
+		maxActivity := c.width - c.listPaneWidth - minDetailWidth - 2*dividerWidth
+		c.activityPaneWidth = max(minActivityWidth, min(newActivity, maxActivity))
+	}
+	c.detailPaneWidth = max(c.width-c.listPaneWidth-c.activityPaneWidth-2*dividerWidth, minDetailWidth)
+	// Re-size dependent widgets
+	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
+	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
+	const detailChromeRows = 3
+	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
+	c.logs.SetSize(detailInnerWidth, contentHeight)
+	c.inspect.SetSize(detailInnerWidth, contentHeight)
+	c.cpu.SetWidth(max(detailInnerWidth-16, 4))
+	c.mem.SetWidth(max(detailInnerWidth-16, 4))
+	c.registerTabZones()
+}
+
 // registerTabZones records clickable rectangles for the in-pane detail
 // tabs. Positions are deterministic from label widths + the cached
 // listPaneWidth, so they don't drift from rendering. Used because the
@@ -807,18 +881,56 @@ func (c *containersScreen) layout(width, height int) {
 // width-constrained pane (TTY-found bug 2026-06-25).
 func (c *containersScreen) registerTabZones() {
 	c.tabZones.Clear()
-	tabsX := c.listPaneWidth + 1 // inside detail pane's left border (panes touch)
-	tabsY := chromeRowsTop + 2   // pane top border (chromeRowsTop) + title row (1) = tab bar row
+	// listPaneWidth + dividerWidth = left edge of detail pane; +1 = inside its border
+	tabsX := c.listPaneWidth + dividerWidth + 1
+	tabsY := chromeRowsTop + 2
 	x := tabsX
 	for _, t := range []struct{ id, label string }{
 		{"tab:stats", "stats"},
 		{"tab:logs", "logs"},
 		{"tab:inspect", "inspect"},
 	} {
-		width := lipgloss.Width(t.label) + 6 // slant(1) + pad(2) + label + pad(2) + slant(1)
+		width := lipgloss.Width(t.label) + 6
 		c.tabZones.Set(t.id, flatui.Rect{X: x, Y: tabsY, Width: width, Height: 1})
 		x += width
 	}
+}
+
+// dividerAt reports which divider (0 or 1) is at the given frame
+// coordinates, if any. Returns -1 if no divider is hit.
+func (c *containersScreen) dividerAt(x, y int) int {
+	bodyTop := chromeRowsTop
+	bodyBottom := chromeRowsTop + c.bodyContentHeight
+	if y < bodyTop || y >= bodyBottom {
+		return -1
+	}
+	div0X := c.listPaneWidth
+	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth + dividerWidth
+	if x == div0X || x == div0X+dividerWidth-1 {
+		return 0
+	}
+	if x == div1X || x == div1X+dividerWidth-1 {
+		return 1
+	}
+	return -1
+}
+
+func (c *containersScreen) renderDivider(idx int) string {
+	color := pal.panel
+	if c.drag != nil && c.drag.divider == idx {
+		color = pal.accent
+	}
+	rows := make([]string, c.bodyContentHeight)
+	for i := range rows {
+		rows[i] = "│"
+	}
+	content := strings.Join(rows, "\n")
+	return lipgloss.NewStyle().
+		Width(dividerWidth).
+		Height(c.bodyContentHeight).
+		MaxHeight(c.bodyContentHeight).
+		Foreground(color).
+		Render(content)
 }
 
 func (c *containersScreen) recomputeStatusLine() {
@@ -848,10 +960,33 @@ func (c *containersScreen) recomputeStatusLine() {
 }
 
 func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m flatte.MouseEvent) {
-	if m.Action != flatte.MousePress && m.Button != flatte.MouseWheelUp && m.Button != flatte.MouseWheelDown {
+	// Ongoing drag — track motion and release
+	if c.drag != nil {
+		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
+			c.drag = nil
+			return
+		}
+		if m.Action == flatte.MouseMotion {
+			c.applyDrag(m.X)
+			return
+		}
 		return
 	}
 
+	// Start drag on press over a divider
+	if m.Action == flatte.MousePress {
+		if div := c.dividerAt(m.X, m.Y); div >= 0 {
+			c.drag = &dragState{
+				divider:             div,
+				startX:              m.X,
+				startListWidth:      c.listPaneWidth,
+				startActivityWidth:  c.activityPaneWidth,
+			}
+			return
+		}
+	}
+
+	// Wheel routing (even when not pressing a divider)
 	if m.Button == flatte.MouseWheelUp || m.Button == flatte.MouseWheelDown {
 		delta := 3
 		if m.Button == flatte.MouseWheelUp {
@@ -861,7 +996,11 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		return
 	}
 
-	// Manual tab zones first (positions deterministic, not from rendered output)
+	if m.Action != flatte.MousePress {
+		return
+	}
+
+	// Manual tab zones
 	if id, ok := c.tabZones.At(m.X, m.Y); ok {
 		switch id {
 		case "tab:stats":
@@ -876,7 +1015,7 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		}
 	}
 
-	// Auto-zones for list rows (derived from rendered output via ZoneScanner)
+	// Auto-zones for list rows
 	id, ok := c.zones.At(m.X, m.Y)
 	if !ok {
 		return
@@ -893,8 +1032,8 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 
 func (c *containersScreen) scrollAt(x, _, delta int) {
 	listPaneEnd := c.listPaneWidth
-	detailPaneStart := listPaneEnd + 2
-	detailPaneEnd := detailPaneStart + c.detailPaneWidth
+	detailPaneStart := listPaneEnd + dividerWidth
+	detailPaneEnd := detailPaneStart + c.detailPaneWidth + dividerWidth
 
 	switch {
 	case x < listPaneEnd:
@@ -1368,7 +1507,9 @@ func (c *containersScreen) View(root *State) string {
 	listPane := c.renderListPane()
 	detailPane := c.renderDetailPane()
 	activityPane := c.renderActivityPane()
-	mainRow := lipgloss.JoinHorizontal(lipgloss.Top, listPane, "", detailPane, "", activityPane)
+	div0 := c.renderDivider(0)
+	div1 := c.renderDivider(1)
+	mainRow := lipgloss.JoinHorizontal(lipgloss.Top, listPane, div0, detailPane, div1, activityPane)
 	var statusRow string
 	if root.command != nil {
 		statusRow = root.command.View(c.width)
