@@ -445,6 +445,69 @@ grows by one.
 
 ---
 
+## Task 6 — Mouse: click rows + tab headers via ZoneMap
+
+Predicted medium pain; **confirmed medium, in exactly the way the feedback
+predicted**. ZoneMap works, but the application author measures rectangles
+by hand and keeps them in sync with rendering by hand. This is the same
+kind of friction as Task 2 layout math: not blocking, but every resize
+re-touches it.
+
+### Mouse zones (predicted medium — confirmed, in the predicted way)
+
+- **`cmd/flat-docker/main.go` `registerMouseZones`** — runs on every
+  `layout()` call. Walks the list's visible window registering one Rect
+  per row at the *frame coordinates* the row will actually render at:
+  `X: 0, Y: chromeRowsTop + 2 + i, Width: listPaneWidth, Height: 1`. Then
+  registers three fixed Rects for the tab headers at
+  `X: listPaneWidth + 2, Y: chromeRowsTop + 1`. ~15 lines. **This is
+  exactly the friction the feedback and the post-0.1 roadmap flag**: the
+  app computes its layout in `layout()`, then computes the *same layout
+  again* as rectangles in `registerMouseZones`, then renders from cached
+  state in `View`. Two sources of truth, kept in sync manually.
+  **annoying** — and a third concrete site for the layout-vocabulary
+  extraction candidate (Task 2 finding reinforced again): if `layout`
+  returned a `Rect` per region, mouse zones would derive from it for free.
+- **`List.height` is unexported.** To compute zone rectangles I needed
+  the visible-window height; the public `List` API exposes `Cursor`,
+  `Count`, `Offset`, `View`, but not `Height`. I added a `listHeight int`
+  field to `containersScreen` and tracked it in `layout()`. **annoying**
+  (mild — workaround is one line, but it's the second time an unexported
+  widget field has required a shadow field on the screen struct, after
+  Task 4's `Viewport.height`).
+- **Threading `fx` through mouse handling.** `handleMouse` needs `fx` to
+  call `onSelectionChange` (which restarts the scoped log streamer). Not
+  hard — root passes `fx` along — but it means the mouse path cannot be a
+  pure state mutation. **fine**.
+
+### Better (positive)
+
+- **`ZoneMap.At(x, y)`** is a clean lookup; once zones are registered,
+  hit testing is one method call. **fine**.
+- **Mouse mode opt-in via `flatte.WithMouse(MouseModeCellMotion)`** is a
+  one-line change in `main()`. **fine**.
+- **Mouse events route through the same `Handle` dispatch** as keys — no
+  separate mouse pipeline. Type-switching on `flatte.MouseEvent` in
+  `containersScreen.Handle` is clean. **fine**.
+- **Mouse motion vs press distinction** is on the event (`m.Action`), so
+  filtering presses-only is one line. **fine**.
+
+### What this task did not yet exercise
+
+- Cross-screen structure reuse (Task 7).
+
+### Task 6 verdict
+
+Mouse handling works, but the rectangle-bookkeeping friction is real and
+exactly as predicted. This is the **third independent reinforcement** of
+the layout-vocabulary extraction candidate: Tasks 2, 3, and 6 all do
+version of the same "compute pane rectangles from arithmetic" pattern,
+each in a different idiom (cached fields, widget sizing, mouse zones).
+A `Rect`-returning `Split*` would close all three at once. Logged as
+evidence for Task 8.
+
+---
+
 
 (Updated each task. Predictions vs. observed.)
 
@@ -453,7 +516,7 @@ grows by one.
 | Layout math | High pain | Mild. | **Confirmed** — 3 sites. | Reinforced — 6 widgets. | (unchanged) |
 | Scoped cancellation | High pain | Not yet hit. | Not yet hit. | Not yet hit. | **Confirmed and sharper than predicted — `Every`/`Stream` not cancellable; only `Latest`/`Cancel`. Feedback's `flatte.Scope` now justified.** |
 | Tabs within pane | Medium | Not yet hit. | Not yet hit. | **Resolved cleanly.** | (unchanged) |
-| Mouse zones | Medium | Not yet hit. | Not yet hit. | Not yet hit. | Not yet hit — Task 6. |
+| Mouse zones | Medium | Not yet hit. | Not yet hit. | Not yet hit. | **Confirmed medium** — manual Rect measurement per resize; third reinforcement of layout-vocabulary candidate. |
 | View composition | Medium | Mild. | Mild. | Fine. | Fine. |
 | Feature-module shape | Untested | Positive. | Strong positive. | Strong positive. | Strong positive — fold logic lives next to its state. |
 | Keyboard routing | Low–medium | Low. | Low. | Low. | Low. |

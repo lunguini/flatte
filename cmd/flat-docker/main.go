@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -307,6 +308,8 @@ type containersScreen struct {
 	liveLogs   map[string][]string
 	logTarget  string
 	logCancel  context.CancelFunc
+	zones      flatui.ZoneMap
+	listHeight int
 }
 
 type containerStats struct {
@@ -331,9 +334,10 @@ func (c *containersScreen) layout(width, height int) {
 	c.listPaneWidth = min(30, max(width/3, 16))
 	c.detailPaneWidth = max(width-c.listPaneWidth-2, 0)
 	const listChromeRows = 3
-	c.list.SetHeight(max(height-listChromeRows, 0))
+	c.listHeight = max(height-listChromeRows, 0)
+	c.list.SetHeight(c.listHeight)
 
-	const detailChromeRows = 3 // title + tab bar + blank
+	const detailChromeRows = 3
 	contentWidth := max(c.detailPaneWidth-2, 1)
 	contentHeight := max(height-detailChromeRows, 0)
 	c.logs.SetSize(contentWidth, contentHeight)
@@ -345,6 +349,56 @@ func (c *containersScreen) layout(width, height int) {
 		c.refreshFilter()
 	}
 	c.syncDetail()
+	c.registerMouseZones()
+}
+
+func (c *containersScreen) registerMouseZones() {
+	c.zones.Clear()
+	listStartY := chromeRowsTop + 2
+	end := min(c.list.Offset()+c.listHeight, c.list.Count())
+	for row := c.list.Offset(); row < end; row++ {
+		i := row - c.list.Offset()
+		c.zones.Set("list:"+strconv.Itoa(row), flatui.Rect{
+			X: 0, Y: listStartY + i,
+			Width: c.listPaneWidth, Height: 1,
+		})
+	}
+
+	tabsY := chromeRowsTop + 1
+	tabsX := c.listPaneWidth + 2
+	c.zones.Set("tab:stats", flatui.Rect{X: tabsX, Y: tabsY, Width: 7, Height: 1})
+	c.zones.Set("tab:logs", flatui.Rect{X: tabsX + 8, Y: tabsY, Width: 6, Height: 1})
+	c.zones.Set("tab:inspect", flatui.Rect{X: tabsX + 15, Y: tabsY, Width: 9, Height: 1})
+}
+
+func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m flatte.MouseEvent) {
+	if m.Action != flatte.MousePress {
+		return
+	}
+	id, ok := c.zones.At(m.X, m.Y)
+	if !ok {
+		return
+	}
+	if id == "tab:stats" {
+		c.tab = tabStats
+		return
+	}
+	if id == "tab:logs" {
+		c.tab = tabLogs
+		return
+	}
+	if id == "tab:inspect" {
+		c.tab = tabInspect
+		return
+	}
+	if len(id) > 5 && id[:5] == "list:" {
+		idx, err := strconv.Atoi(id[5:])
+		if err != nil || idx < 0 || idx >= c.list.Count() {
+			return
+		}
+		c.list.Select(idx)
+		c.onSelectionChange(root, fx)
+	}
 }
 
 func (c *containersScreen) refreshFilter() {
@@ -561,6 +615,10 @@ func (c *containersScreen) selected() *Container {
 }
 
 func (c *containersScreen) Handle(root *State, ev flatte.Event, fx flatte.Effects[State]) {
+	if m, ok := ev.(flatte.MouseEvent); ok {
+		c.handleMouse(root, fx, m)
+		return
+	}
 	key, ok := ev.(flatte.KeyEvent)
 	if !ok {
 		return
@@ -845,7 +903,7 @@ func main() {
 		Init:   initAsync,
 		Handle: Handle,
 		View:   View,
-	})
+	}, flatte.WithMouse(flatte.MouseModeCellMotion))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

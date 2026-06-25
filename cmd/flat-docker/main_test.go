@@ -593,6 +593,101 @@ func TestModalRendersAsOverlayOverBase(t *testing.T) {
 	}
 }
 
+func TestMouseClickListRowSelectsIt(t *testing.T) {
+	s := resizedState(80, 24)
+	// First list row is at frame Y=4 (chrome top + filter line + blank)
+	// Second list row at Y=5
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseLeft,
+		X:      2, Y: 5,
+	}, flatte.Effects[State]{})
+
+	if sel := s.containers.selected(); sel == nil || sel.Name != "api-server" {
+		got := "nil"
+		if sel != nil {
+			got = sel.Name
+		}
+		t.Fatalf("after click on row 1, selected = %s, want api-server", got)
+	}
+}
+
+func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
+	s := resizedState(80, 24)
+	// Tab headers at Y=chromeRowsTop+1=3, X starts at listPaneWidth+2=28
+	// logs tab at X=28+8=36
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseLeft,
+		X:      36, Y: 3,
+	}, flatte.Effects[State]{})
+
+	if s.containers.tab != tabLogs {
+		t.Fatalf("after click on logs tab header, tab = %v, want logs", s.containers.tab)
+	}
+}
+
+func TestMouseClickOutsideZonesIsNoOp(t *testing.T) {
+	s := resizedState(80, 24)
+	originalTab := s.containers.tab
+	originalSelected := s.containers.selected()
+
+	// Click in the gap between panes
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseLeft,
+		X:      27, Y: 10,
+	}, flatte.Effects[State]{})
+
+	if s.containers.tab != originalTab {
+		t.Fatalf("click in gap changed tab")
+	}
+	newSelected := s.containers.selected()
+	if (originalSelected == nil) != (newSelected == nil) ||
+		(originalSelected != nil && newSelected != nil && originalSelected.ID != newSelected.ID) {
+		t.Fatalf("click in gap changed selection")
+	}
+}
+
+func TestMouseMotionDoesNotTrigger(t *testing.T) {
+	s := resizedState(80, 24)
+	originalTab := s.containers.tab
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseMotion,
+		Button: flatte.MouseLeft,
+		X:      36, Y: 3, // over logs tab
+	}, flatte.Effects[State]{})
+
+	if s.containers.tab != originalTab {
+		t.Fatalf("mouse motion triggered tab change")
+	}
+}
+
+func TestMouseZonesRecomputeOnResize(t *testing.T) {
+	s := resizedState(80, 24)
+	// First row at Y=4
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseLeft,
+		X:      2, Y: 4,
+	}, flatte.Effects[State]{})
+	if s.containers.list.Cursor() != 0 {
+		t.Fatalf("click Y=4 should select row 0, got cursor %d", s.containers.list.Cursor())
+	}
+
+	// Resize to taller; rows should still align
+	Handle(s, flatte.ResizeEvent{Width: 80, Height: 30}, flatte.Effects[State]{})
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseLeft,
+		X:      2, Y: 4,
+	}, flatte.Effects[State]{})
+	if s.containers.list.Cursor() != 0 {
+		t.Fatalf("after resize, click Y=4 should still select row 0, got cursor %d", s.containers.list.Cursor())
+	}
+}
+
 func keyChar(r rune) flatte.KeyEvent {
 	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}
 }
