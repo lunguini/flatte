@@ -41,8 +41,8 @@ type State struct {
 	screen        screen
 
 	containers containersScreen
-	images     imagesScreen
-	volumes    volumesScreen
+	images     *imagesScreen
+	volumes    *volumesScreen
 
 	modal     *confirmModel
 	command   *commandModel
@@ -293,7 +293,6 @@ func NewState() *State {
 	s.volumes = newVolumesScreen()
 	return s
 }
-
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	if s.modal != nil {
 		s.modal.Handle(s, ev, fx)
@@ -452,8 +451,8 @@ func (s *State) resize(width, height int) {
 	bodyWidth := width
 	bodyHeight := max(height-chromeRowsTop-chromeRowsBottom, 0)
 	s.containers.layout(bodyWidth, bodyHeight)
-	s.images.layout(bodyWidth, bodyHeight)
-	s.volumes.layout(bodyWidth, bodyHeight)
+	s.images.layout_(bodyWidth, bodyHeight)
+	s.volumes.layout_(bodyWidth, bodyHeight)
 }
 func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	width := ctx.Width
@@ -1781,14 +1780,12 @@ var sampleImages = []Image{
 }
 
 type imagesScreen struct {
-	width, height     int
-	listPaneWidth     int
-	detailPaneWidth   int
-	bodyContentHeight int
-	listHeight        int
-	focus             flatui.FocusRing
-	list              flatui.List
-	images            []Image
+	width   int
+	height  int
+	focus   flatui.FocusRing
+	list    flatui.List
+	images  []Image
+	layout  *paneLayout
 }
 
 const (
@@ -1796,26 +1793,39 @@ const (
 	imgFocusDetail
 )
 
-func newImagesScreen() imagesScreen {
-	c := imagesScreen{images: sampleImages}
-	c.focus.SetCount(2)
-	c.focus.Select(imgFocusList)
-	c.list.SetCount(len(sampleImages))
-	return c
+func newImagesScreen() *imagesScreen {
+	s := &imagesScreen{images: sampleImages}
+	s.focus.SetCount(2)
+	s.focus.Select(imgFocusList)
+	s.list.SetCount(len(sampleImages))
+	s.layout = newPaneLayout(
+		paneEntry{
+			id:       "list",
+			minWidth: minListWidth,
+			render:   s.renderImageListContent,
+			onMouse:  s.handleImageListMouse,
+		},
+		paneEntry{
+			id:       "detail",
+			minWidth: minDetailWidth,
+			render:   s.renderImageDetailContent,
+		},
+	)
+	return s
 }
 
-func (i *imagesScreen) layout(width, height int) {
+func (i *imagesScreen) layout_(width, height int) {
 	i.width, i.height = width, height
 	i.focus.SetCount(2)
-	i.listPaneWidth = min(32, max(width/3, 18))
-	i.detailPaneWidth = max(width-i.listPaneWidth-2, 0)
-	i.bodyContentHeight = height
-	const listChromeRows = 2 // title line + blank
-	i.listHeight = max(i.bodyContentHeight-paneBorderRows-listChromeRows, 0)
-	i.list.SetHeight(i.listHeight)
+	i.layout.Layout(width, height, chromeRowsTop)
+	i.list.SetHeight(max(height-paneBorderRows-2, 0))
 }
 
 func (i *imagesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
+	if m, ok := ev.(flatte.MouseEvent); ok {
+		i.layout.HandleMouse(m)
+		return
+	}
 	key, ok := ev.(flatte.KeyEvent)
 	if !ok {
 		return
@@ -1848,9 +1858,7 @@ func (i *imagesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]
 }
 
 func (i *imagesScreen) View(_ *State) string {
-	listPane := i.renderListPane()
-	detailPane := i.renderDetailPane()
-	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", detailPane)
+	return i.layout.View()
 }
 
 func (i *imagesScreen) keyHints() string {
@@ -1867,10 +1875,9 @@ func (i *imagesScreen) selected() *Image {
 	return &i.images[i.list.Cursor()]
 }
 
-func (i *imagesScreen) renderListPane() string {
-	innerWidth := max(i.listPaneWidth-paneBorderCols-1, 1)
-	innerHeight := max(i.bodyContentHeight-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(innerWidth).Height(innerHeight)
+func (i *imagesScreen) renderImageListContent(contentWidth, contentHeight int) string {
+	style := lipgloss.NewStyle().Width(contentWidth - 1).Height(contentHeight)
+	scrollStyle := lipgloss.NewStyle().Height(contentHeight)
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("images")
 	content := i.list.View(func(idx int, selected bool) string {
 		marker := "  "
@@ -1883,36 +1890,44 @@ func (i *imagesScreen) renderListPane() string {
 		}
 		return marker + name
 	})
-	inner := contentStyle.Render(title + "\n\n" + content)
-	bar := strings.Repeat(" ", innerHeight)
-	if i.list.Count() > i.listHeight {
-		bar = scrollbarLines(i.list.Offset(), i.listHeight, i.list.Count(), innerHeight)
+	inner := style.Render(title + "\n\n" + content)
+	visible := contentHeight - 2
+	bar := strings.Repeat(" ", contentHeight)
+	if i.list.Count() > visible {
+		bar = scrollbarLines(i.list.Offset(), visible, i.list.Count(), contentHeight)
 	}
-	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
-	combined := withScrollbar(inner, barStyled)
-	return paneStyle(i.listPaneWidth, i.bodyContentHeight, i.focus.Focused(imgFocusList)).Render(combined)
+	return withScrollbar(inner, scrollStyle.Foreground(pal.panel).Render(bar))
 }
 
-func (i *imagesScreen) renderDetailPane() string {
-	innerWidth := max(i.detailPaneWidth-paneBorderCols, 1)
-	innerHeight := max(i.bodyContentHeight-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(innerWidth).Height(innerHeight)
+func (i *imagesScreen) renderImageDetailContent(contentWidth, contentHeight int) string {
+	style := lipgloss.NewStyle().Width(contentWidth).Height(contentHeight)
 	sel := i.selected()
 	if sel == nil {
-		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no image selected)")
-		return paneStyle(i.detailPaneWidth, i.bodyContentHeight, i.focus.Focused(imgFocusDetail)).Render(empty)
+		return style.Render(lipgloss.NewStyle().Foreground(pal.muted).Render("(no image selected)"))
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(sel.RepoTag)
 	rows := []string{
-		title,
-		"",
+		title, "",
 		"  id:         " + sel.ID,
 		"  size:       " + sel.Size,
 		"  created:    " + sel.Created,
 		"  containers: " + strconv.Itoa(sel.Containers),
 	}
-	inner := contentStyle.Render(strings.Join(rows, "\n"))
-	return paneStyle(i.detailPaneWidth, i.bodyContentHeight, i.focus.Focused(imgFocusDetail)).Render(inner)
+	return style.Render(strings.Join(rows, "\n"))
+}
+
+func (i *imagesScreen) handleImageListMouse(m flatte.MouseEvent, localX, localY int) {
+	switch {
+	case m.Action == flatte.MousePress && m.Button == flatte.MouseLeft:
+		row := localY - 2
+		if row >= 0 && row < i.list.Count() {
+			i.list.Select(row)
+		}
+	case m.Button == flatte.MouseWheelDown:
+		i.list.MoveDown()
+	case m.Button == flatte.MouseWheelUp:
+		i.list.MoveUp()
+	}
 }
 
 type Volume struct {
@@ -1928,14 +1943,12 @@ var sampleVolumes = []Volume{
 }
 
 type volumesScreen struct {
-	width, height     int
-	listPaneWidth     int
-	detailPaneWidth   int
-	bodyContentHeight int
-	listHeight        int
-	focus             flatui.FocusRing
-	list              flatui.List
-	volumes           []Volume
+	width   int
+	height  int
+	focus   flatui.FocusRing
+	list    flatui.List
+	volumes []Volume
+	layout  *paneLayout
 }
 
 const (
@@ -1943,26 +1956,39 @@ const (
 	volFocusDetail
 )
 
-func newVolumesScreen() volumesScreen {
-	c := volumesScreen{volumes: sampleVolumes}
-	c.focus.SetCount(2)
-	c.focus.Select(volFocusList)
-	c.list.SetCount(len(sampleVolumes))
-	return c
+func newVolumesScreen() *volumesScreen {
+	s := &volumesScreen{volumes: sampleVolumes}
+	s.focus.SetCount(2)
+	s.focus.Select(volFocusList)
+	s.list.SetCount(len(sampleVolumes))
+	s.layout = newPaneLayout(
+		paneEntry{
+			id:       "list",
+			minWidth: minListWidth,
+			render:   s.renderVolumeListContent,
+			onMouse:  s.handleVolumeListMouse,
+		},
+		paneEntry{
+			id:       "detail",
+			minWidth: minDetailWidth,
+			render:   s.renderVolumeDetailContent,
+		},
+	)
+	return s
 }
 
-func (v *volumesScreen) layout(width, height int) {
+func (v *volumesScreen) layout_(width, height int) {
 	v.width, v.height = width, height
 	v.focus.SetCount(2)
-	v.listPaneWidth = min(32, max(width/3, 18))
-	v.detailPaneWidth = max(width-v.listPaneWidth-2, 0)
-	v.bodyContentHeight = height
-	const listChromeRows = 2
-	v.listHeight = max(v.bodyContentHeight-paneBorderRows-listChromeRows, 0)
-	v.list.SetHeight(v.listHeight)
+	v.layout.Layout(width, height, chromeRowsTop)
+	v.list.SetHeight(max(height-paneBorderRows-2, 0))
 }
 
 func (v *volumesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
+	if m, ok := ev.(flatte.MouseEvent); ok {
+		v.layout.HandleMouse(m)
+		return
+	}
 	key, ok := ev.(flatte.KeyEvent)
 	if !ok {
 		return
@@ -1995,9 +2021,7 @@ func (v *volumesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State
 }
 
 func (v *volumesScreen) View(_ *State) string {
-	listPane := v.renderListPane()
-	detailPane := v.renderDetailPane()
-	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", detailPane)
+	return v.layout.View()
 }
 
 func (v *volumesScreen) keyHints() string {
@@ -2014,10 +2038,9 @@ func (v *volumesScreen) selected() *Volume {
 	return &v.volumes[v.list.Cursor()]
 }
 
-func (v *volumesScreen) renderListPane() string {
-	innerWidth := max(v.listPaneWidth-paneBorderCols-1, 1)
-	innerHeight := max(v.bodyContentHeight-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(innerWidth).Height(innerHeight)
+func (v *volumesScreen) renderVolumeListContent(contentWidth, contentHeight int) string {
+	style := lipgloss.NewStyle().Width(contentWidth - 1).Height(contentHeight)
+	scrollStyle := lipgloss.NewStyle().Height(contentHeight)
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("volumes")
 	content := v.list.View(func(idx int, selected bool) string {
 		marker := "  "
@@ -2030,35 +2053,43 @@ func (v *volumesScreen) renderListPane() string {
 		}
 		return marker + name
 	})
-	inner := contentStyle.Render(title + "\n\n" + content)
-	bar := strings.Repeat(" ", innerHeight)
-	if v.list.Count() > v.listHeight {
-		bar = scrollbarLines(v.list.Offset(), v.listHeight, v.list.Count(), innerHeight)
+	inner := style.Render(title + "\n\n" + content)
+	visible := contentHeight - 2
+	bar := strings.Repeat(" ", contentHeight)
+	if v.list.Count() > visible {
+		bar = scrollbarLines(v.list.Offset(), visible, v.list.Count(), contentHeight)
 	}
-	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
-	combined := withScrollbar(inner, barStyled)
-	return paneStyle(v.listPaneWidth, v.bodyContentHeight, v.focus.Focused(volFocusList)).Render(combined)
+	return withScrollbar(inner, scrollStyle.Foreground(pal.panel).Render(bar))
 }
 
-func (v *volumesScreen) renderDetailPane() string {
-	innerWidth := max(v.detailPaneWidth-paneBorderCols, 1)
-	innerHeight := max(v.bodyContentHeight-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(innerWidth).Height(innerHeight)
+func (v *volumesScreen) renderVolumeDetailContent(contentWidth, contentHeight int) string {
+	style := lipgloss.NewStyle().Width(contentWidth).Height(contentHeight)
 	sel := v.selected()
 	if sel == nil {
-		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no volume selected)")
-		return paneStyle(v.detailPaneWidth, v.bodyContentHeight, v.focus.Focused(volFocusDetail)).Render(empty)
+		return style.Render(lipgloss.NewStyle().Foreground(pal.muted).Render("(no volume selected)"))
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(sel.Name)
 	rows := []string{
-		title,
-		"",
+		title, "",
 		"  driver:     " + sel.Driver,
 		"  mountpoint: " + sel.Mountpoint,
 		"  size:       " + sel.Size,
 	}
-	inner := contentStyle.Render(strings.Join(rows, "\n"))
-	return paneStyle(v.detailPaneWidth, v.bodyContentHeight, v.focus.Focused(volFocusDetail)).Render(inner)
+	return style.Render(strings.Join(rows, "\n"))
+}
+
+func (v *volumesScreen) handleVolumeListMouse(m flatte.MouseEvent, localX, localY int) {
+	switch {
+	case m.Action == flatte.MousePress && m.Button == flatte.MouseLeft:
+		row := localY - 2
+		if row >= 0 && row < v.list.Count() {
+			v.list.Select(row)
+		}
+	case m.Button == flatte.MouseWheelDown:
+		v.list.MoveDown()
+	case m.Button == flatte.MouseWheelUp:
+		v.list.MoveUp()
+	}
 }
 
 func main() {

@@ -1025,6 +1025,105 @@ func TestClickInsidePaneStillWorksDuringNonDrag(t *testing.T) {
 	}
 }
 
+// --- Images screen mouse/resize (via paneLayout abstraction) ---
+
+func TestImagesScreenMouseClickSelectsRow(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenImages
+	// Click on the second row of the images list pane.
+	// List pane starts at X=0, content starts at X=1 (inside left border).
+	// Row 0 is at content Y=2 (after title + blank); row 1 at Y=3.
+	// Frame Y = chromeRowsTop + 1 (border) + 3 (content Y) = 6.
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: 3, Y: 6,
+	}, flatte.Effects[State]{})
+	if s.images.list.Cursor() != 1 {
+		t.Fatalf("images click: cursor = %d, want 1", s.images.list.Cursor())
+	}
+}
+
+func TestImagesScreenMouseWheelScrollsList(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenImages
+	start := s.images.list.Cursor()
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseWheelDown,
+		X: 3, Y: 6,
+	}, flatte.Effects[State]{})
+	if s.images.list.Cursor() != start+1 {
+		t.Fatalf("images wheel: cursor %d -> %d, want %d", start, s.images.list.Cursor(), start+1)
+	}
+}
+
+func TestImagesScreenDragDividerResizes(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenImages
+	View(s, flatte.RenderContext{Width: 80})
+
+	// Divider is at X = left pane width
+	divX := s.images.layout.PaneWidth(0)
+	startLeft := s.images.layout.PaneWidth(0)
+	startRight := s.images.layout.PaneWidth(1)
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: divX, Y: 5,
+	}, flatte.Effects[State]{})
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
+		X: divX + 5, Y: 5,
+	}, flatte.Effects[State]{})
+
+	if s.images.layout.PaneWidth(0) != startLeft+5 {
+		t.Fatalf("after drag: left pane %d, want %d", s.images.layout.PaneWidth(0), startLeft+5)
+	}
+	if s.images.layout.PaneWidth(1) != startRight-5 {
+		t.Fatalf("after drag: right pane %d, want %d", s.images.layout.PaneWidth(1), startRight-5)
+	}
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseRelease, Button: flatte.MouseLeft,
+		X: divX + 5, Y: 5,
+	}, flatte.Effects[State]{})
+}
+
+// --- Volumes screen mouse/resize (same paneLayout, proves generality) ---
+
+func TestVolumesScreenMouseClickSelectsRow(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenVolumes
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: 3, Y: 6,
+	}, flatte.Effects[State]{})
+	if s.volumes.list.Cursor() != 1 {
+		t.Fatalf("volumes click: cursor = %d, want 1", s.volumes.list.Cursor())
+	}
+}
+
+func TestVolumesScreenDragDividerResizes(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenVolumes
+	View(s, flatte.RenderContext{Width: 80})
+
+	divX := s.volumes.layout.PaneWidth(0)
+	startLeft := s.volumes.layout.PaneWidth(0)
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: divX, Y: 5,
+	}, flatte.Effects[State]{})
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
+		X: divX - 4, Y: 5,
+	}, flatte.Effects[State]{})
+
+	if s.volumes.layout.PaneWidth(0) != startLeft-4 {
+		t.Fatalf("after drag left: left pane %d, want %d", s.volumes.layout.PaneWidth(0), startLeft-4)
+	}
+}
+
 func TestTabSwitchKeysOnlyWorkWhenDetailFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	// focus starts on list
