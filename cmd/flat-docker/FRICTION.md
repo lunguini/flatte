@@ -177,25 +177,112 @@ real widget state to one screen. Focus routing is clean. **Net: Task 2 took
 more layout code than interaction code, which is the signal the feedback was
 sending.**
 
+---
+
+## Task 3 — Detail tabs (Stats / Logs / Inspect)
+
+This was the green-field case: no existing sample demonstrates tabs *within*
+a pane. The feedback listed it as a "medium" pain point and an unknown. The
+dogfood verdict: **it resolved in Flatte's favor — plain state plus a
+two-line render is enough, and no tab helper is justified.**
+
+### Tabs within a pane (predicted medium — turned out fine)
+
+- **`cmd/flat-docker/main.go` `detailTab` enum + `tab detailTab` field** —
+  modeling tabs as a small iota enum stored on the screen struct is exactly
+  the same pattern as the screen enum at root. Two `prevTab`/`nextTab`
+  methods (each one line of modular arithmetic) handle wraparound. **No
+  framework help wanted or needed.** fine.
+- **`renderTabBar`** — 14 lines that look identical in structure to root's
+  `renderTabBar` (which renders the screen tabs). The repetition is real but
+  tiny: it's the cost of owning your own appearance, which Flatte
+  guarantees. **fine** (mild "I'm rewriting the same loop again" feeling,
+  but extracting a `flatui.RenderTabBar(labels, active)` helper would
+  require defining a label struct, ordering rules, style hooks — more
+  abstraction than the 14 lines it saves). Logged as a Task 8 maybe-candidate
+  if it appears a third time.
+- **Key routing for tab switching** — `]/[/h/l` routed only when
+  `focus.Focused(focusDetail)`, dispatched in `handleChar`. Same shape as
+  the list-movement routing added in Task 2. Cleanly composes with the
+  existing focus ring. **fine**.
+- **Per-tab scrolling** — `scrollActiveTab(delta)` switches on the active
+  tab to call `LineUp/LineDown` on the right Viewport (`logs` or `inspect`;
+  stats is not scrollable). Manual but obvious. **fine**.
+
+### Layout (continued from Task 2)
+
+- **Detail pane now has `detailChromeRows = 3`** (title + tab bar + blank)
+  and the content area is sized as `c.detailPaneWidth-2` × `height-3`. The
+  `logs` and `inspect` viewports and the `cpu`/`mem` Progress bars are all
+  sized to this content rect. **This is now 6 sized widgets per screen**,
+  all hand-aligned to one logical rect. Same arithmetic, multiplied. If I
+  add a third scrollable tab the math reappears. **annoying** — reinforces
+  the Task 2 layout finding.
+- **No body-fill.** When a screen's content is shorter than the body height,
+  nothing pads it to fill the terminal. Task 1's `placeholderBody` did this
+  by hand; Tasks 2–3 don't, so the bottom separator moves up. Visually
+  noticeable in a real terminal; logged for a future decision (root-level
+  padding vs per-screen padding).
+
+### View composition
+
+- **`renderActiveTab(selected) string`** is a 3-way switch returning a
+  string. Composes cleanly with the rest of `renderDetailPane`. The
+  feedback's worry about a "giant View function" does not materialize at
+  this size: per-screen methods + per-pane methods + per-tab methods
+  decompose naturally. **fine**.
+
+### Test ergonomics
+
+- **`s.containers.logs.height` is unexported.** My first test draft reached
+  into `Viewport.height` to gate a scroll assertion; replaced with
+  `VisibleLines()` (the public accessor). The exported surface is right; the
+  friction was me reaching past it. **fine**.
+- **`TestScrollOnlyAffectsActiveTab` required long-enough inspect content.**
+  The first cut had 5 inspect lines in an 18-row viewport, so scrolling
+  couldn't engage and the test falsely failed. Expanded to ~25 lines of
+  realistic-looking inspect data. Not Flatte's fault — just a test-data
+  realism issue. **fine**.
+
+### What this task did not yet exercise
+
+- Scoped async cancellation (Task 4) — predicted high pain.
+- Modal over complex base (Task 5).
+- Mouse zones (Task 6).
+
+### Task 3 verdict
+
+**The green-field case the feedback was uncertain about resolved cleanly.**
+Plain state + small renderers handle tabs-within-pane without framework
+support. This is direct evidence *against* extracting a `flatui.Tabs` widget
+at this scale: the cost is higher than the savings. The layout friction
+continues to accumulate (now 6 sized widgets per screen) but is not yet
+blocking. The next real test is Task 4 (scoped async cancellation), which
+is the second predicted high-pain area.
+
+---
+
+
 ## Cumulative summary
 
 (Updated each task. Predictions vs. observed.)
 
-| Area | Prediction | Task 1 | Task 2 |
-|---|---|---|---|
-| Layout math | High pain | Mild — single site per pattern. | **Confirmed** — three concrete sites (width split, pane padding, cached width fields). |
-| Scoped cancellation | High pain | Not yet hit. | Not yet hit — Task 4. |
-| Tabs within pane | Medium | Not yet hit. | Not yet hit — Task 3. |
-| Mouse zones | Medium | Not yet hit. | Not yet hit — Task 6. |
-| View composition | Medium | Mild — root `View` is a clean switch. | Mild — `JoinHorizontal` is fine; pain is the sizing around it. |
-| Feature-module shape | Untested | Positive. | **Strong positive** — added widget state without touching root code. |
-| Keyboard routing | Low–medium | Low. | Low — `switch key.Key` + `focus.Focused` reads cleanly. |
-| Polling (`Every`) | Low | Not yet hit. | Not yet hit — Task 4. |
-| Streaming (`Stream`) | Low | Not yet hit. | Not yet hit — Task 4. |
-| Modal routing | Low–medium | Not yet hit. | Not yet hit — Task 5. |
+| Area | Prediction | Task 1 | Task 2 | Task 3 |
+|---|---|---|---|---|
+| Layout math | High pain | Mild — single site per pattern. | **Confirmed** — three concrete sites. | Reinforced — 6 sized widgets per screen. |
+| Scoped cancellation | High pain | Not yet hit. | Not yet hit. | Not yet hit — Task 4. |
+| Tabs within pane | Medium | Not yet hit. | Not yet hit. | **Resolved cleanly** — plain state, no framework help wanted. |
+| Mouse zones | Medium | Not yet hit. | Not yet hit. | Not yet hit — Task 6. |
+| View composition | Medium | Mild. | Mild. | Fine — per-screen/per-pane/per-tab decomposition scales. |
+| Feature-module shape | Untested | Positive. | Strong positive. | Strong positive. |
+| Keyboard routing | Low–medium | Low. | Low. | Low — focus-aware switch is clean. |
+| Polling (`Every`) | Low | Not yet hit. | Not yet hit. | Not yet hit — Task 4. |
+| Streaming (`Stream`) | Low | Not yet hit. | Not yet hit. | Not yet hit — Task 4. |
+| Modal routing | Low–medium | Not yet hit. | Not yet hit. | Not yet hit — Task 5. |
 
 **Running verdict:** the layout friction the feedback predicted is now
-sample-driven and concrete (three sites after Task 2). The feature-module
-shape scaled cleanly to a real screen with widget state. **Net so far: more
-layout code than interaction code, which is the signal the feedback was
-sending.** Task 3 (tabs within the detail pane) is the next unknown.
+sample-driven, concrete, and reinforced at every layout-bearing task. The
+green-field case (tabs within a pane) **resolved in Flatte's favor** —
+plain state and small renderers are enough; extracting a `flatui.Tabs`
+widget would be premature. The next real question is Task 4: scoped async
+cancellation, the second predicted high-pain area.

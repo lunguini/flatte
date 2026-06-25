@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -175,6 +176,26 @@ const (
 	focusDetail
 )
 
+type detailTab int
+
+const (
+	tabStats detailTab = iota
+	tabLogs
+	tabInspect
+)
+
+func (t detailTab) Name() string {
+	switch t {
+	case tabStats:
+		return "stats"
+	case tabLogs:
+		return "logs"
+	case tabInspect:
+		return "inspect"
+	}
+	return "?"
+}
+
 type Container struct {
 	ID, Name, Image, Status, Ports string
 }
@@ -191,19 +212,29 @@ var sampleContainers = []Container{
 }
 
 type containersScreen struct {
-	width, height      int
-	listPaneWidth      int
-	detailPaneWidth    int
+	width, height   int
+	listPaneWidth   int
+	detailPaneWidth int
 
 	focus      flatui.FocusRing
 	filter     flatui.TextField
 	list       flatui.List
 	containers []Container
 	filtered   []int
+
+	tab      detailTab
+	cpu      flatui.Progress
+	mem      flatui.Progress
+	logs     flatui.Viewport
+	inspect  flatui.Viewport
 }
 
 func newContainersScreen() containersScreen {
-	c := containersScreen{containers: sampleContainers}
+	c := containersScreen{
+		containers: sampleContainers,
+		cpu:        flatui.NewProgress(18),
+		mem:        flatui.NewProgress(18),
+	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
 	return c
@@ -216,9 +247,19 @@ func (c *containersScreen) layout(width, height int) {
 	c.detailPaneWidth = max(width-c.listPaneWidth-2, 0)
 	const listChromeRows = 3
 	c.list.SetHeight(max(height-listChromeRows, 0))
+
+	const detailChromeRows = 3 // title + tab bar + blank
+	contentWidth := max(c.detailPaneWidth-2, 1)
+	contentHeight := max(height-detailChromeRows, 0)
+	c.logs.SetSize(contentWidth, contentHeight)
+	c.inspect.SetSize(contentWidth, contentHeight)
+	c.cpu.SetWidth(max(contentWidth-12, 4))
+	c.mem.SetWidth(max(contentWidth-12, 4))
+
 	if len(c.filtered) == 0 && len(c.containers) > 0 {
 		c.refreshFilter()
 	}
+	c.syncDetail()
 }
 
 func (c *containersScreen) refreshFilter() {
@@ -231,6 +272,60 @@ func (c *containersScreen) refreshFilter() {
 		}
 	}
 	c.list.SetCount(len(c.filtered))
+	c.syncDetail()
+}
+
+func (c *containersScreen) syncDetail() {
+	ct := c.selected()
+	if ct == nil {
+		c.inspect.SetContent("")
+		c.logs.SetContent("")
+		c.cpu.SetPercent(0)
+		c.mem.SetPercent(0)
+		return
+	}
+	c.inspect.SetContent(fmt.Sprintf(
+		"name:    %s\nimage:   %s\nstatus:  %s\nports:   %s\nid:      %s\n\n-- labels --\n%[2]s.app=%[1]s\n%[2]s.role=service\n%[2]s.managed-by=docker\n\n-- mounts --\n/var/lib/%[6]s:/data\n/etc/%[6]s:/conf:ro\n\n-- networks --\nbridge\n\n-- restart policy --\nunless-stopped\n\n-- created --\n2026-06-20T08:00:00Z\n\n-- health --\nhealthy (5/5)",
+		ct.Name, ct.Image, ct.Status, ct.Ports, ct.ID, strings.ReplaceAll(ct.Name, "-", "_"),
+	))
+	c.logs.SetContent(sampleLogs(*ct))
+	c.cpu.SetPercent(sampleCPU(ct))
+	c.mem.SetPercent(sampleMEM(ct))
+}
+
+func sampleCPU(ct *Container) float64 {
+	var sum float64
+	for _, r := range ct.ID {
+		sum += float64(r)
+	}
+	return math.Mod(sum/13.0, 95.0) + 5.0
+}
+
+func sampleMEM(ct *Container) float64 {
+	var sum float64
+	for _, r := range ct.Name {
+		sum += float64(r)
+	}
+	return math.Mod(sum/3.0, 90.0) + 5.0
+}
+
+func sampleLogs(ct Container) string {
+	const ts = "2026-06-25 10:00:01"
+	return strings.Join([]string{
+		ts + " starting " + ct.Name + " (" + ct.ID + ")",
+		ts + " image: " + ct.Image,
+		ts + " status: " + ct.Status,
+		ts + " ready",
+		ts + " accepting traffic",
+	}, "\n")
+}
+
+func (c *containersScreen) prevTab() {
+	c.tab = (c.tab - 1 + 3) % 3
+}
+
+func (c *containersScreen) nextTab() {
+	c.tab = (c.tab + 1) % 3
 }
 
 func (c *containersScreen) selected() *Container {
@@ -259,10 +354,16 @@ func (c *containersScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[St
 	case flatte.KeyUp:
 		if c.focus.Focused(focusList) {
 			c.list.MoveUp()
+			c.syncDetail()
+		} else if c.focus.Focused(focusDetail) {
+			c.scrollActiveTab(-1)
 		}
 	case flatte.KeyDown:
 		if c.focus.Focused(focusList) {
 			c.list.MoveDown()
+			c.syncDetail()
+		} else if c.focus.Focused(focusDetail) {
+			c.scrollActiveTab(1)
 		}
 	case flatte.KeyBackspace:
 		if c.focus.Focused(focusFilter) {
@@ -296,8 +397,38 @@ func (c *containersScreen) handleChar(r rune) {
 		switch r {
 		case 'j', 'J':
 			c.list.MoveDown()
+			c.syncDetail()
 		case 'k', 'K':
 			c.list.MoveUp()
+			c.syncDetail()
+		}
+	case focusDetail:
+		switch r {
+		case 'j', 'J':
+			c.scrollActiveTab(1)
+		case 'k', 'K':
+			c.scrollActiveTab(-1)
+		case '[', 'h', 'H':
+			c.prevTab()
+		case ']', 'l', 'L':
+			c.nextTab()
+		}
+	}
+}
+
+func (c *containersScreen) scrollActiveTab(delta int) {
+	switch c.tab {
+	case tabLogs:
+		if delta > 0 {
+			c.logs.LineDown(delta)
+		} else {
+			c.logs.LineUp(-delta)
+		}
+	case tabInspect:
+		if delta > 0 {
+			c.inspect.LineDown(delta)
+		} else {
+			c.inspect.LineUp(-delta)
 		}
 	}
 }
@@ -315,7 +446,14 @@ func (c *containersScreen) keyHints() string {
 	case focusList:
 		return "j/k move  tab next  1/2/3 switch  q quit"
 	case focusDetail:
-		return "tab next  1/2/3 switch  q quit"
+		switch c.tab {
+		case tabStats:
+			return "]/h/l switch tab  tab next  1/2/3 switch  q quit"
+		case tabLogs:
+			return "j/k scroll  ]/h/l switch tab  tab next  q quit"
+		case tabInspect:
+			return "j/k scroll  ]/h/l switch tab  tab next  q quit"
+		}
 	}
 	return "1/2/3 switch  q quit"
 }
@@ -361,27 +499,70 @@ func (c *containersScreen) renderDetailPane() string {
 		return style.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no container selected)"))
 	}
 
-	title := selected.Name
+	titleLine := selected.Name
 	if c.focus.Focused(focusDetail) {
-		title = lipgloss.NewStyle().Bold(true).Render(title)
+		titleLine = lipgloss.NewStyle().Bold(true).Render(titleLine)
 	}
 
-	statusLine := selected.Status
-	if selected.Status == "running" {
-		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render(selected.Status)
-	} else {
-		statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render(selected.Status)
-	}
+	tabLine := c.renderTabBar()
+	body := c.renderActiveTab(selected)
 
-	rows := []string{
-		title,
-		"",
-		"  image:  " + selected.Image,
-		"  status: " + statusLine,
-		"  ports:  " + selected.Ports,
-		"  id:     " + selected.ID,
+	return style.Render(strings.Join([]string{titleLine, tabLine, "", body}, "\n"))
+}
+
+func (c *containersScreen) renderTabBar() string {
+	tabs := []struct {
+		name   string
+		active bool
+	}{
+		{"stats", c.tab == tabStats},
+		{"logs", c.tab == tabLogs},
+		{"inspect", c.tab == tabInspect},
 	}
-	return style.Render(strings.Join(rows, "\n"))
+	parts := make([]string, len(tabs))
+	for i, t := range tabs {
+		text := " " + t.name + " "
+		if t.active {
+			text = "[" + t.name + "]"
+			text = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("117")).Render(text)
+		} else {
+			text = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(text)
+		}
+		parts[i] = text
+	}
+	return strings.Join(parts, " ")
+}
+
+func (c *containersScreen) renderActiveTab(selected *Container) string {
+	switch c.tab {
+	case tabStats:
+		statusLine := selected.Status
+		if selected.Status == "running" {
+			statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render(selected.Status)
+		} else {
+			statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render(selected.Status)
+		}
+		return strings.Join([]string{
+			"  status: " + statusLine,
+			"  image:  " + selected.Image,
+			"",
+			"  CPU " + c.cpu.View(),
+			"  MEM " + c.mem.View(),
+		}, "\n")
+	case tabLogs:
+		view := c.logs.View()
+		if view == "" {
+			view = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no logs)")
+		}
+		return view
+	case tabInspect:
+		view := c.inspect.View()
+		if view == "" {
+			view = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no inspect data)")
+		}
+		return view
+	}
+	return ""
 }
 
 type imagesScreen struct {

@@ -1,13 +1,13 @@
 [1 containers]  2 images   3 volumes 
 ────────────────────────────────────────────────────────────────────────────────
 filter: (all)               nginx-proxy                                         
-                                                                                
-●> nginx-proxy                image:  nginx:1.25                                
+                            [stats]  logs   inspect                             
+●> nginx-proxy                                                                  
 ●  api-server                 status: running                                   
-●  postgres                   ports:  0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp  
-●  redis-cache                id:     a1b2c3d4e5                                
-○  frontend                                                                     
-●  worker                                                                       
+●  postgres                   image:  nginx:1.25                                
+●  redis-cache                                                                  
+○  frontend                   CPU ████████████████████████░░░░░░░░░░░░░░   63%  
+●  worker                     MEM █████████████░░░░░░░░░░░░░░░░░░░░░░░░░   35%  
 ●  nginx-web                                                                    
 ○  migration                                                                    
 ────────────────────────────────────────────────────────────────────────────────

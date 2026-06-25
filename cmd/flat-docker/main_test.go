@@ -249,6 +249,162 @@ func TestContainersLayoutSplitsBodyWidthBetweenPanes(t *testing.T) {
 	}
 }
 
+func TestDetailStartsOnStatsTab(t *testing.T) {
+	s := resizedState(80, 24)
+	if s.containers.tab != tabStats {
+		t.Fatalf("initial tab = %v, want tabStats", s.containers.tab)
+	}
+}
+
+func TestRightBracketSwitchesToNextTab(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+
+	Handle(s, keyChar(']'), flatte.Effects[State]{})
+	if s.containers.tab != tabLogs {
+		t.Fatalf("after ] from stats, tab = %v, want logs", s.containers.tab)
+	}
+
+	Handle(s, keyChar(']'), flatte.Effects[State]{})
+	if s.containers.tab != tabInspect {
+		t.Fatalf("after ] from logs, tab = %v, want inspect", s.containers.tab)
+	}
+
+	Handle(s, keyChar(']'), flatte.Effects[State]{})
+	if s.containers.tab != tabStats {
+		t.Fatalf("after ] from inspect (wrap), tab = %v, want stats", s.containers.tab)
+	}
+}
+
+func TestLeftBracketSwitchesToPreviousTab(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+
+	Handle(s, keyChar('['), flatte.Effects[State]{})
+	if s.containers.tab != tabInspect {
+		t.Fatalf("after [ from stats (wrap), tab = %v, want inspect", s.containers.tab)
+	}
+}
+
+func TestHLAlsoSwitchTabs(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+
+	Handle(s, keyChar('l'), flatte.Effects[State]{})
+	if s.containers.tab != tabLogs {
+		t.Fatalf("after l, tab = %v, want logs", s.containers.tab)
+	}
+
+	Handle(s, keyChar('h'), flatte.Effects[State]{})
+	if s.containers.tab != tabStats {
+		t.Fatalf("after h, tab = %v, want stats", s.containers.tab)
+	}
+}
+
+func TestTabSwitchKeysOnlyWorkWhenDetailFocused(t *testing.T) {
+	s := resizedState(80, 24)
+	// focus starts on list
+	Handle(s, keyChar(']'), flatte.Effects[State]{})
+	if s.containers.tab != tabStats {
+		t.Fatalf("] on list focus changed tab to %v, want stats", s.containers.tab)
+	}
+}
+
+func TestScrollOnlyAffectsActiveTab(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+
+	// On stats tab: j does nothing (stats not scrollable)
+	startCPUOffset := s.containers.logs.Offset()
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	if s.containers.logs.Offset() != startCPUOffset {
+		t.Fatalf("j on stats tab moved logs offset: %d -> %d", startCPUOffset, s.containers.logs.Offset())
+	}
+
+	// Switch to logs, j scrolls logs
+	Handle(s, keyChar(']'), flatte.Effects[State]{}) // stats -> logs
+	logsBefore := s.containers.logs.Offset()
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	if s.containers.logs.Offset() == logsBefore && s.containers.logs.TotalLines() > s.containers.logs.VisibleLines() {
+		t.Fatalf("j on logs tab did not scroll logs (offset stayed %d)", s.containers.logs.Offset())
+	}
+
+	// Switch to inspect, j scrolls inspect (not logs)
+	Handle(s, keyChar(']'), flatte.Effects[State]{}) // logs -> inspect
+	logsAfter := s.containers.logs.Offset()
+	inspectBefore := s.containers.inspect.Offset()
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	if s.containers.logs.Offset() != logsAfter {
+		t.Fatalf("j on inspect tab moved logs: %d -> %d", logsAfter, s.containers.logs.Offset())
+	}
+	if s.containers.inspect.Offset() == inspectBefore {
+		t.Fatalf("j on inspect tab did not scroll inspect (offset stayed %d)", s.containers.inspect.Offset())
+	}
+}
+
+func TestStatsTabShowsCPUMemBars(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabStats
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "CPU") || !strings.Contains(content, "MEM") {
+		t.Fatalf("stats tab missing CPU/MEM in:\n%s", content)
+	}
+}
+
+func TestLogsTabShowsLogLines(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "starting nginx-proxy") {
+		t.Fatalf("logs tab missing log content in:\n%s", content)
+	}
+}
+
+func TestInspectTabShowsContainerFields(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabInspect
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "name:") || !strings.Contains(content, "image:") {
+		t.Fatalf("inspect tab missing container fields in:\n%s", content)
+	}
+	if !strings.Contains(content, "a1b2c3d4e5") {
+		t.Fatalf("inspect tab missing container id in:\n%s", content)
+	}
+}
+
+func TestTabBarShowsActiveTabBracketed(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "[logs]") {
+		t.Fatalf("active tab not bracketed in:\n%s", content)
+	}
+	if strings.Contains(content, "[stats]") || strings.Contains(content, "[inspect]") {
+		t.Fatalf("inactive tabs should not be bracketed in:\n%s", content)
+	}
+}
+
+func TestChangingSelectedContainerUpdatesDetailTabs(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusList)
+
+	Handle(s, keyChar('j'), flatte.Effects[State]{}) // move to api-server
+	s.containers.tab = tabInspect
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "myapp/api:2.1") {
+		t.Fatalf("inspect tab did not update after list move:\n%s", content)
+	}
+}
+
 func keyChar(r rune) flatte.KeyEvent {
 	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}
 }
