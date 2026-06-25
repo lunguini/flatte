@@ -101,11 +101,13 @@ flatui
   func CardWithStyle
   func ContentWidth
   func FrameWidth
+  func Mark
   func NewProgress
   func NewSpinner
   func NewStopwatch
   func NewTimer
   func NewTree
+  func NewZoneScanner
   func Overlay
   func OverlayOrigin
   func Subtle
@@ -268,6 +270,10 @@ flatui
   method ZoneMap.Local
   method ZoneMap.Rect
   method ZoneMap.Set
+  method ZoneScanner.At
+  method ZoneScanner.In
+  method ZoneScanner.Rect
+  method ZoneScanner.Scan
   type CardStyle
   type Column
   type FocusRing
@@ -296,6 +302,7 @@ flatui
   type TreeRow
   type Viewport
   type ZoneMap
+  type ZoneScanner
   var SpinnerDots
   var SpinnerLine
 flatest

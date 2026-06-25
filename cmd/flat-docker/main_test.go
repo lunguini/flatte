@@ -598,8 +598,9 @@ func TestModalRendersAsOverlayOverBase(t *testing.T) {
 
 func TestMouseClickListRowSelectsIt(t *testing.T) {
 	s := resizedState(80, 24)
-	// First list row is at frame Y=4 (chrome top + filter line + blank)
-	// Second list row at Y=5
+	// Production flow: View populates zones (via Scan) before any mouse event
+	// is dispatched. Tests must mirror that.
+	View(s, flatte.RenderContext{Width: 80})
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
@@ -617,27 +618,25 @@ func TestMouseClickListRowSelectsIt(t *testing.T) {
 
 func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
-	// Tab headers at Y=chromeRowsTop+1=3, X starts at listPaneWidth+2.
-	// logs tab sits at roughly tabsX+8; click somewhere in its range.
-	tabsX := s.containers.listPaneWidth + 2
-	logsX := tabsX + 9
+	View(s, flatte.RenderContext{Width: 80})
+	// tab:logs is at X=26-31 per the scanner; click X=28
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
-		X:      logsX, Y: 3,
+		X:      28, Y: 3,
 	}, flatte.Effects[State]{})
 
 	if s.containers.tab != tabLogs {
-		t.Fatalf("after click on logs tab header at X=%d, tab = %v, want logs", logsX, s.containers.tab)
+		t.Fatalf("after click on logs tab header, tab = %v, want logs", s.containers.tab)
 	}
 }
 
 func TestMouseClickOutsideZonesIsNoOp(t *testing.T) {
 	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80})
 	originalTab := s.containers.tab
 	originalSelected := s.containers.selected()
 
-	// Click in the gap between panes
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
@@ -656,12 +655,13 @@ func TestMouseClickOutsideZonesIsNoOp(t *testing.T) {
 
 func TestMouseMotionDoesNotTrigger(t *testing.T) {
 	s := resizedState(80, 24)
+	View(s, flatte.RenderContext{Width: 80})
 	originalTab := s.containers.tab
 
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MouseMotion,
 		Button: flatte.MouseLeft,
-		X:      36, Y: 3, // over logs tab
+		X:      28, Y: 3,
 	}, flatte.Effects[State]{})
 
 	if s.containers.tab != originalTab {
@@ -671,7 +671,7 @@ func TestMouseMotionDoesNotTrigger(t *testing.T) {
 
 func TestMouseZonesRecomputeOnResize(t *testing.T) {
 	s := resizedState(80, 24)
-	// First row at Y=4
+	View(s, flatte.RenderContext{Width: 80})
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
@@ -681,8 +681,8 @@ func TestMouseZonesRecomputeOnResize(t *testing.T) {
 		t.Fatalf("click Y=4 should select row 0, got cursor %d", s.containers.list.Cursor())
 	}
 
-	// Resize to taller; rows should still align
 	Handle(s, flatte.ResizeEvent{Width: 80, Height: 30}, flatte.Effects[State]{})
+	View(s, flatte.RenderContext{Width: 80})
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,

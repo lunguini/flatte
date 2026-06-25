@@ -14,6 +14,13 @@ import (
 
 func TestPublicAPISnapshot(t *testing.T) {
 	got := strings.Join(collectPublicAPI(t), "\n") + "\n"
+	if os.Getenv("FLAT_REGEN_API_SNAPSHOT") != "" {
+		if err := os.WriteFile(filepath.Join("testdata", "public-api.golden"), []byte(got), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Log("regenerated testdata/public-api.golden")
+		return
+	}
 	want, err := os.ReadFile(filepath.Join("testdata", "public-api.golden"))
 	if err != nil {
 		t.Fatal(err)

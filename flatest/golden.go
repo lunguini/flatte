@@ -10,7 +10,14 @@ import (
 	"github.com/lunguini/flatte"
 )
 
-var ansiPattern = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+var ansiPattern = regexp.MustCompile(
+	"\x1b(?:" +
+		"\\][^\x07\x1b]*(?:\x07|\x1b\\\\)" + // OSC: ESC ] ... BEL or ST (must precede 2-byte)
+		"|\\[[0-?]*[ -/]*[@-~]" + // CSI: ESC [ params final
+		"|P[^\x1b]*\x1b\\\\" + // DCS: ESC P ... ST
+		"|[X^_][^\x1b]*\x1b\\\\" + // SOS/PM/APC: ESC X/^/_ ... ST
+		"|[@-Z\\\\-_]" + // 2-byte: ESC + final byte (catches remaining Fe escapes)
+		")")
 
 func AssertGolden(t *testing.T, path string, frame string) {
 	t.Helper()

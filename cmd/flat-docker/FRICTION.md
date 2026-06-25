@@ -766,6 +766,90 @@ vocabulary is now urgent, not just important. Auto-zones via output-
 scanning is now the cleanest fix for a problem the user identified and
 the dogfood independently confirmed. Custom data viz and animation are
 new gaps worth tracking post-0.1 but not urgent.
+
+---
+
+## Auto-zones prototype — `flatui.ZoneScanner` (2026-06-25)
+
+User asked the right question after the glamour pass broke a mouse test:
+*"do we need to manually assign mouse zones? can't we build them into
+the components so they automatically register?"* Per the "Both — glamour
+then auto-zones" choice, I prototyped `flatui.ZoneScanner` (bubblezone-
+style output-scanning) in the framework itself, then refactored
+flat-docker to use it.
+
+### What landed
+
+- **`flatui/zonescan.go`** — new experimental package: `Mark(id, content)`
+  wraps content with OSC9 markers (zero display width, terminal strips
+  them); `(*ZoneScanner).Scan(frame)` walks the rendered string ANSI-aware
+  (handles CSI/OSC/DCS/SOS, multibyte UTF-8, wide runes — all without
+  advancing x); `At(x,y)` / `Rect(id)` / `In(id,x,y)` mirror the existing
+  `ZoneMap` API. 9 unit tests, including ANSI-inside-content and
+  multibyte-rune width.
+- **`flatest/golden.go`** — `ansiPattern` extended from CSI-only to also
+  strip OSC/DCS/SOS sequences. Existing goldens unaffected (no current
+  sample emits those sequences; flatte's runtime uses OSC 2 for window
+  title but that's emitted by the renderer, not View).
+- **`cmd/flat-docker`** — deleted `registerMouseZones` (17 lines of
+  hand-computed `Rect`s); added `flatui.Mark` wrapping in the list-row
+  render callback and the tab-bar renderer (4 added lines, inline);
+  added `s.containers.zones.Scan(content)` in root `View` (1 line).
+
+### Side-by-side friction comparison
+
+| Concern | Before (Task 6 / Task G — `ZoneMap`) | After (auto-zones — `ZoneScanner`) |
+|---|---|---|
+| Setup cost per clickable region | Compute `Rect{X, Y, Width, Height}` from cached layout fields (4 numbers per region) | Wrap content with `Mark(id, content)` inline at the render call site (1 call per region) |
+| Drift on layout change | **Real** — Task G broke a mouse test when `listPaneWidth` shrank; the cached rect was stale until `layout()` re-ran | **Impossible** — zones are recomputed from actual rendered bytes every `View`; whatever the layout math produces is what gets clicked |
+| Drift on data change | Real — if list rows change width (e.g. new container names), zones need re-registering | Impossible — content-derived |
+| Cross-screen sharing | Each screen owns its own `ZoneMap` and its own register helper | One `ZoneScanner` per screen; `Scan` is called by root `View` uniformly |
+| Wide-rune / multibyte correctness | Handled implicitly (you sized by 1 col per row) | Handled explicitly via `runeWidth` in `Scan` |
+| Per-frame cost | None — zones computed once per resize | O(frame bytes) per `View` — walks the rendered string |
+| Test ergonomics | Direct: `Handle(mouseEvent)` after `resizedState` | Must call `View` first (mirrors production flow where runtime calls View every frame) |
+| Lines of code (containers screen) | `registerMouseZones` 17 LOC + 4 cached width fields | 4 inline `Mark` calls + 1 `Scan` call in root View |
+
+### Verdict on the user's question
+
+**Yes, components could auto-register, and the cleanest fit for Flatte's
+pure-`View` contract is output-scanning.** The prototype is small (~150
+LOC in `zonescan.go`, mostly the ANSI/walk logic), the API is two
+functions (`Mark`, `Scan`) plus the existing `ZoneMap`-shaped accessors,
+and it **eliminates the drift class entirely**. The glamour-pass test
+that broke when layout changed would not have broken under `ZoneScanner`,
+because the zones would have been recomputed from the new rendered
+positions automatically.
+
+### Caveats / open questions for the prototype
+
+- **Per-frame scan cost.** `Scan` walks the whole frame string every
+  `View`. For flat-docker's ~2KB frames this is trivial; for an app
+  producing 100KB frames at 60fps it might matter. Production should
+  probably skip the scan when no mouse mode is active, or cache.
+- **Marker visibility in raw output.** OSC9 is application-defined; some
+  terminals might log it or treat it as a hyperlink or notification.
+  Production may want to use a more clearly-zero-width marker (DCS with
+  a private-use prefix, perhaps).
+- **The runtime should own the scanner, not the app.** Today the app
+  calls `Scan` in its `View`, which is mildly ugly (side effect in a
+  function that should be pure). The clean shape is for the runtime to
+  scan automatically after every `View` and expose the result via
+  `RenderContext` or `Effects`. **That's a post-0.1 API change worth
+  considering.**
+- **No nested zones.** Two `Mark` calls cannot enclose each other; the
+  scanner uses a single open/close pair. For the prototype this is fine;
+  real apps wanting nested hit regions (icon inside a button) would need
+  scanner changes.
+
+### Net change to the dogfood's findings
+
+This prototype **promoted auto-zones from "candidate" to "validated
+extraction"** — the third concrete post-0.1 candidate alongside layout
+vocabulary and `flatte.Scope`. The user's instinct that the manual-zone
+work is unnecessary is correct, and the prototype is small enough to
+ship. **The glamour pass breaking a mouse test was the trigger that
+produced this evidence — which is itself a validation of the dogfood's
+"build it, hurt, then extract" methodology.**
 (Updated each task. Predictions vs. observed.)
 
 | Area | Prediction | Task 1 | Task 2 | Task 3 | Task 4 |

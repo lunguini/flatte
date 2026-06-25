@@ -192,6 +192,9 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	if s.modal != nil {
 		content = flatui.Overlay(content, renderModal(s.modal))
 	}
+	if s.screen == screenContainers {
+		s.containers.zones.Scan(content)
+	}
 	return flatte.Frame{
 		Content: content,
 		Title:   "flat-docker — " + s.screen.Name(),
@@ -314,7 +317,7 @@ type containersScreen struct {
 	liveLogs   map[string][]string
 	logTarget  string
 	logCancel  context.CancelFunc
-	zones      flatui.ZoneMap
+	zones      *flatui.ZoneScanner
 	listHeight int
 
 	activity   []string
@@ -331,6 +334,7 @@ func newContainersScreen() containersScreen {
 		containers: sampleContainers,
 		cpu:        flatui.NewProgress(18),
 		mem:        flatui.NewProgress(18),
+		zones:      flatui.NewZoneScanner(),
 	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
@@ -365,7 +369,6 @@ func (c *containersScreen) layout(width, height int) {
 	}
 	c.syncDetail()
 	c.recomputeStatusLine()
-	c.registerMouseZones()
 }
 
 func (c *containersScreen) recomputeStatusLine() {
@@ -383,25 +386,6 @@ func (c *containersScreen) recomputeStatusLine() {
 	}
 	c.statusLine = fmt.Sprintf(" %d containers (%d running)  CPU %.0f%%  MEM %.0f%%  filter: %s ",
 		total, running, totalCPU, totalMEM, c.filter.Value)
-}
-
-func (c *containersScreen) registerMouseZones() {
-	c.zones.Clear()
-	listStartY := chromeRowsTop + 2
-	end := min(c.list.Offset()+c.listHeight, c.list.Count())
-	for row := c.list.Offset(); row < end; row++ {
-		i := row - c.list.Offset()
-		c.zones.Set("list:"+strconv.Itoa(row), flatui.Rect{
-			X: 0, Y: listStartY + i,
-			Width: c.listPaneWidth, Height: 1,
-		})
-	}
-
-	tabsY := chromeRowsTop + 1
-	tabsX := c.listPaneWidth + 2
-	c.zones.Set("tab:stats", flatui.Rect{X: tabsX, Y: tabsY, Width: 7, Height: 1})
-	c.zones.Set("tab:logs", flatui.Rect{X: tabsX + 8, Y: tabsY, Width: 6, Height: 1})
-	c.zones.Set("tab:inspect", flatui.Rect{X: tabsX + 15, Y: tabsY, Width: 9, Height: 1})
 }
 
 func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m flatte.MouseEvent) {
@@ -891,7 +875,8 @@ func (c *containersScreen) renderListPane() string {
 		if ct.Status != "running" {
 			statusIcon = "○"
 		}
-		return fmt.Sprintf("%s%s%s", statusIcon, marker, ct.Name)
+		row := fmt.Sprintf("%s%s%s", statusIcon, marker, ct.Name)
+		return flatui.Mark("list:"+strconv.Itoa(idx), row)
 	})
 	if listContent == "" {
 		listContent = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("  (no matches)")
@@ -937,7 +922,7 @@ func (c *containersScreen) renderTabBar() string {
 		} else {
 			text = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(text)
 		}
-		parts[i] = text
+		parts[i] = flatui.Mark("tab:"+t.name, text)
 	}
 	return strings.Join(parts, " ")
 }
