@@ -620,6 +620,149 @@ func TestCommandBarReplacesStatusLineWhenOpen(t *testing.T) {
 	}
 }
 
+func TestStreamCommandInjectsWrappedStyledContent(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+	before := s.containers.logs.TotalLines()
+
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	for _, r := range "stream" {
+		Handle(s, keyChar(r), flatte.Effects[State]{})
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+
+	after := s.containers.logs.TotalLines()
+	if after <= before {
+		t.Fatalf("logs did not grow after :stream: %d -> %d", before, after)
+	}
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "ERROR") {
+		t.Fatalf("streamed content missing ERROR level (color exercise):\n%s", content)
+	}
+	// Hardwrap is character-level, so words split across visual rows.
+	// Assert on short tokens that fit in any reasonable column width.
+	if !strings.Contains(content, "streaming") || !strings.Contains(content, "complete") {
+		t.Fatalf("streamed content missing body tokens (note: long lines hard-wrap char-level):\n%s", content)
+	}
+}
+
+func TestFollowTailDefaultsTrue(t *testing.T) {
+	s := resizedState(80, 24)
+	if !s.containers.followTail {
+		t.Fatal("followTail should default to true")
+	}
+}
+
+func TestScrollingUpAwayFromBottomPausesFollow(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+	// Push enough content to make scrolling meaningful
+	for i := 0; i < 30; i++ {
+		s.containers.appendLiveLog("a1b2c3d4e5", fmt.Sprintf("line %d for follow-tail test", i))
+	}
+	if !s.containers.followTail {
+		t.Fatal("followTail should still be true after auto-tail on append")
+	}
+
+	// Scroll up — should pause following
+	Handle(s, keyChar('k'), flatte.Effects[State]{})
+	if s.containers.followTail {
+		t.Fatal("followTail should be false after scrolling up")
+	}
+}
+
+func TestGKeyResumesFollowingAndJumpsToBottom(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+	for i := 0; i < 30; i++ {
+		s.containers.appendLiveLog("a1b2c3d4e5", fmt.Sprintf("line %d", i))
+	}
+	// Force pause
+	s.containers.logs.LineUp(5)
+	s.containers.syncFollowTail()
+	if s.containers.followTail {
+		t.Fatal("expected followTail=false after LineUp")
+	}
+	offsetBefore := s.containers.logs.Offset()
+
+	Handle(s, keyChar('G'), flatte.Effects[State]{})
+
+	if !s.containers.followTail {
+		t.Fatal("followTail should be true after G")
+	}
+	if s.containers.logs.Offset() <= offsetBefore {
+		t.Fatalf("G should jump to bottom; offset %d -> %d", offsetBefore, s.containers.logs.Offset())
+	}
+}
+
+func TestAppendLiveLogRespectsPausedFollow(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+	for i := 0; i < 20; i++ {
+		s.containers.appendLiveLog("a1b2c3d4e5", fmt.Sprintf("initial line %d", i))
+	}
+	// Pause and capture offset
+	s.containers.logs.LineUp(3)
+	s.containers.syncFollowTail()
+	pausedOffset := s.containers.logs.Offset()
+	if s.containers.followTail {
+		t.Fatal("expected paused state")
+	}
+
+	// Append more — should NOT auto-scroll because paused
+	s.containers.appendLiveLog("a1b2c3d4e5", "post-pause line")
+	if s.containers.logs.Offset() != pausedOffset {
+		t.Fatalf("paused append moved offset: %d -> %d", pausedOffset, s.containers.logs.Offset())
+	}
+}
+
+func TestAppendLiveLogAutoScrollsWhenFollowing(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+	for i := 0; i < 20; i++ {
+		s.containers.appendLiveLog("a1b2c3d4e5", fmt.Sprintf("initial line %d", i))
+	}
+	if !s.containers.logs.AtBottom() {
+		t.Fatal("expected at bottom after auto-follow appends")
+	}
+}
+
+func TestFollowIndicatorShowsWhenContentOverflows(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+	for i := 0; i < 30; i++ {
+		s.containers.appendLiveLog("a1b2c3d4e5", fmt.Sprintf("overflow line %d", i))
+	}
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "following tail") {
+		t.Fatalf("follow indicator missing after overflow:\n%s", content)
+	}
+}
+
+func TestLogsUseWrappedContentSoLongLinesWrap(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+	s.containers.tab = tabLogs
+
+	// Inject a clearly-too-long line
+	s.containers.appendLiveLog("a1b2c3d4e5",
+		styledLogLine("99:99:99", logInfo,
+			"this is a deliberately very long log line that absolutely cannot fit in the narrow detail pane and must wrap across multiple visual rows"))
+
+	totalWrapped := s.containers.logs.TotalLines()
+	if totalWrapped < 4 {
+		t.Fatalf("expected long line to wrap to >=4 visual rows; got %d", totalWrapped)
+	}
+}
+
 func TestTabSwitchKeysOnlyWorkWhenDetailFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	// focus starts on list
@@ -678,8 +821,13 @@ func TestLogsTabShowsLogLines(t *testing.T) {
 	s.containers.tab = tabLogs
 
 	content := View(s, flatte.RenderContext{Width: 80}).Content
-	if !strings.Contains(content, "starting nginx-proxy") {
-		t.Fatalf("logs tab missing log content in:\n%s", content)
+	// Long lines wrap inside the narrow detail pane, so check for parts
+	// rather than the contiguous substring.
+	if !strings.Contains(content, "starting") || !strings.Contains(content, "nginx-proxy") {
+		t.Fatalf("logs tab missing seed content in:\n%s", content)
+	}
+	if !strings.Contains(content, "INFO") {
+		t.Fatalf("logs tab missing INFO level marker (color styling):\n%s", content)
 	}
 }
 

@@ -178,11 +178,40 @@ func (m *commandModel) execute(s *State, _ flatte.Effects[State], line string) {
 			return
 		}
 	case "help":
-		s.containers.pushActivity("→   filter <text> | stop | remove | goto <screen> | help")
+		s.containers.pushActivity("→   filter <text> | stop | remove | goto <screen> | stream | help")
+	case "stream":
+		ct := s.containers.selected()
+		if ct == nil {
+			s.containers.pushActivity("→   no container selected")
+			return
+		}
+		s.containers.injectStreamDemo(ct.ID)
+		s.containers.pushActivity("→   streamed 8 demo log lines into " + ct.Name)
 	case "q", "quit", "exit":
 		s.containers.pushActivity("→   press q (lowercase, no colon) to quit")
 	default:
 		s.containers.pushActivity("→   unknown command: " + cmd + " (try :help)")
+	}
+}
+
+func (c *containersScreen) injectStreamDemo(id string) {
+	paragraphs := []struct {
+		level logLevel
+		msg   string
+	}{
+		{logInfo, "Begin streaming demonstration for " + id + " — this exercises soft-wrap on long ANSI-styled content, the auto-follow-tail behavior, and the level coloring (INFO green, WARN yellow, ERROR red, DEBUG muted)"},
+		{logInfo, "Initializing subsystems: configuration loader, connection pool (size 16, timeout 30s), metrics emitter tracing cpu/mem/goroutines, health probe interval=10s"},
+		{logDebug, "cache: warmed 248 entries from disk in 18ms; tier=hot size=248 evictions=0 hit_rate=94.2% (rolling 5m window)"},
+		{logWarn, "deprecated config key 'storage.driver' detected at /etc/app/config.yaml:42 — will be removed in next major release; migrate to 'storage.backend'"},
+		{logInfo, "listening on [::]:8080 (ipv6) and 0.0.0.0:8080 (ipv4); TLS not configured for this listener — proxy termination expected"},
+		{logError, "upstream timeout after 30s while fetching user:42 from primary store; retrying with exponential backoff (attempt 1 of 5, next delay=2s)"},
+		{logWarn, "retry succeeded but slow: request took 32.4s (threshold=10s); consider tightening the upstream timeout or scaling the primary store"},
+		{logInfo, "streaming demonstration complete — 8 paragraphs, mix of INFO/DEBUG/WARN/ERROR, several lines longer than the viewport width to exercise wrap"},
+	}
+	for i, p := range paragraphs {
+		ts := fmt.Sprintf("10:00:%02d", i)
+		line := styledLogLine(ts, p.level, p.msg)
+		c.appendLiveLog(id, line)
 	}
 }
 
@@ -615,6 +644,50 @@ type containersScreen struct {
 
 	activity   []string
 	statusLine string
+	followTail bool
+}
+
+type logLevel int
+
+const (
+	logInfo logLevel = iota
+	logWarn
+	logError
+	logDebug
+)
+
+func (l logLevel) Name() string {
+	switch l {
+	case logInfo:
+		return "INFO "
+	case logWarn:
+		return "WARN "
+	case logError:
+		return "ERROR"
+	case logDebug:
+		return "DEBUG"
+	}
+	return "?    "
+}
+
+func (l logLevel) Color() color.Color {
+	switch l {
+	case logInfo:
+		return pal.good
+	case logWarn:
+		return lipgloss.Color("221")
+	case logError:
+		return pal.bad
+	case logDebug:
+		return pal.muted
+	}
+	return pal.text
+}
+
+func styledLogLine(ts string, level logLevel, msg string) string {
+	tsStyled := lipgloss.NewStyle().Foreground(pal.muted).Render(ts)
+	levelStyled := lipgloss.NewStyle().Bold(true).Foreground(level.Color()).Render(level.Name())
+	return tsStyled + " " + levelStyled + " " + msg
 }
 
 type containerStats struct {
@@ -628,6 +701,7 @@ func newContainersScreen() containersScreen {
 		cpu:        flatui.NewProgress(18),
 		mem:        flatui.NewProgress(18),
 		zones:      flatui.NewZoneScanner(),
+		followTail: true,
 	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
@@ -775,7 +849,7 @@ func (c *containersScreen) recomputeDetailWidgets() {
 	ct := c.selected()
 	if ct == nil {
 		c.inspect.SetContent("")
-		c.logs.SetContent("")
+		c.logs.SetWrappedContent("")
 		c.cpu.SetPercent(0)
 		c.mem.SetPercent(0)
 		return
@@ -793,7 +867,7 @@ func (c *containersScreen) recomputeDetailWidgets() {
 		c.mem.SetPercent(sampleMEM(ct))
 	}
 
-	c.logs.SetContent(c.renderedLogsFor(ct.ID))
+	c.logs.SetWrappedContent(c.renderedLogsFor(ct.ID))
 }
 
 func (c *containersScreen) renderedLogsFor(id string) string {
@@ -928,7 +1002,19 @@ func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
 }
 
 func scopedLogLine(id string, seq int) string {
-	return fmt.Sprintf("2026-06-25 10:00:%02d req=%d src=%s msg=handling", seq%60, seq, id[:8])
+	ts := fmt.Sprintf("10:00:%02d", seq%60)
+	level := logLevel(seq % 4)
+	messages := []string{
+		fmt.Sprintf("req=%d src=%s msg=handling request, processing payload, dispatching to backend workers", seq, id[:8]),
+		fmt.Sprintf("req=%d src=%s msg=connection accepted from gateway, negotiating protocol, stream established", seq, id[:8]),
+		fmt.Sprintf("req=%d src=%s msg=cache miss for key user:%d, fetching from primary store, populating warm tier", seq, id[:8], seq*7),
+		fmt.Sprintf("req=%d src=%s msg=health check passed (cpu/memory/goroutine count within thresholds), reporting healthy", seq, id[:8]),
+	}
+	msg := messages[seq%len(messages)]
+	if level == logError {
+		msg = fmt.Sprintf("req=%d src=%s msg=upstream timeout after 30s — retrying with exponential backoff (attempt %d)", seq, id[:8], seq/4+1)
+	}
+	return styledLogLine(ts, level, msg)
 }
 
 func (c *containersScreen) appendLiveLog(id, line string) {
@@ -940,13 +1026,35 @@ func (c *containersScreen) appendLiveLog(id, line string) {
 		c.liveLogs[id] = c.liveLogs[id][len(c.liveLogs[id])-50:]
 	}
 	if sel := c.selected(); sel != nil && sel.ID == id {
-		c.logs.SetContent(c.renderedLogsFor(id))
+		c.logs.SetWrappedContent(c.renderedLogsFor(id))
+		if c.followTail {
+			c.logs.GotoBottom()
+		}
 	}
 	shortID := id
 	if len(shortID) > 8 {
 		shortID = shortID[:8]
 	}
-	c.pushActivity("log    " + shortID + "  " + truncateForActivity(line))
+	c.pushActivity("log    " + shortID + "  " + truncateForActivity(ansiStrip(line)))
+}
+
+func ansiStrip(s string) string {
+	out := make([]rune, 0, len(s))
+	inEscape := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if r == 'm' || (r >= '@' && r <= '~') {
+				inEscape = false
+			}
+			continue
+		}
+		out = append(out, r)
+	}
+	return string(out)
 }
 
 func truncateForActivity(s string) string {
@@ -975,11 +1083,11 @@ func sampleMEM(ct *Container) float64 {
 func sampleLogs(ct Container) string {
 	const ts = "10:00:01"
 	return strings.Join([]string{
-		ts + " starting " + ct.Name,
-		ts + " image=" + ct.Image,
-		ts + " status=" + ct.Status,
-		ts + " ready",
-		ts + " listening",
+		styledLogLine(ts, logInfo, "starting "+ct.Name),
+		styledLogLine(ts, logInfo, "image="+ct.Image),
+		styledLogLine(ts, logInfo, "status="+ct.Status),
+		styledLogLine(ts, logInfo, "listening on configured ports"),
+		styledLogLine(ts, logWarn, "deprecated config key 'storage.driver' — will be removed next release"),
 	}, "\n")
 }
 
@@ -1090,6 +1198,8 @@ func (c *containersScreen) handleChar(root *State, fx flatte.Effects[State], r r
 			c.scrollActiveTab(1)
 		case 'k', 'K':
 			c.scrollActiveTab(-1)
+		case 'G':
+			c.resumeFollow()
 		case '[', 'h', 'H':
 			c.prevTab()
 		case ']', 'l', 'L':
@@ -1114,6 +1224,7 @@ func (c *containersScreen) pageActiveTab(dir int) {
 		} else {
 			c.logs.PageUp()
 		}
+		c.syncFollowTail()
 	case tabInspect:
 		if dir > 0 {
 			c.inspect.PageDown()
@@ -1131,6 +1242,7 @@ func (c *containersScreen) halfPageActiveTab(dir int) {
 		} else {
 			c.logs.HalfPageUp()
 		}
+		c.syncFollowTail()
 	case tabInspect:
 		if dir > 0 {
 			c.inspect.HalfPageDown()
@@ -1148,6 +1260,7 @@ func (c *containersScreen) scrollActiveTab(delta int) {
 		} else {
 			c.logs.LineUp(-delta)
 		}
+		c.syncFollowTail()
 	case tabInspect:
 		if delta > 0 {
 			c.inspect.LineDown(delta)
@@ -1155,6 +1268,15 @@ func (c *containersScreen) scrollActiveTab(delta int) {
 			c.inspect.LineUp(-delta)
 		}
 	}
+}
+
+func (c *containersScreen) syncFollowTail() {
+	c.followTail = c.logs.AtBottom()
+}
+
+func (c *containersScreen) resumeFollow() {
+	c.followTail = true
+	c.logs.GotoBottom()
 }
 
 func (c *containersScreen) View(root *State) string {
@@ -1231,7 +1353,7 @@ func (c *containersScreen) keyHints() string {
 		case tabStats:
 			return "←/→ or ]/[ switch tab  : command  tab next  1/2/3 switch  q quit"
 		case tabLogs:
-			return "j/k scroll  f/b page  ←/→ or ]/[ switch tab  : command  tab next  q quit"
+			return "j/k scroll  f/b page  G follow  ←/→ or ]/[ switch tab  : command  tab next  q quit"
 		case tabInspect:
 			return "j/k scroll  f/b page  ←/→ or ]/[ switch tab  : command  tab next  q quit"
 		}
@@ -1383,17 +1505,35 @@ func (c *containersScreen) renderActiveTab(selected *Container) string {
 	case tabLogs:
 		view := c.logs.View()
 		if view == "" {
-			view = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no logs)")
+			view = lipgloss.NewStyle().Foreground(pal.muted).Render("(no logs)")
+		}
+		indicator := c.renderFollowIndicator()
+		if indicator != "" {
+			view += "\n" + indicator
 		}
 		return view
 	case tabInspect:
 		view := c.inspect.View()
 		if view == "" {
-			view = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no inspect data)")
+			view = lipgloss.NewStyle().Foreground(pal.muted).Render("(no inspect data)")
 		}
 		return view
 	}
 	return ""
+}
+
+func (c *containersScreen) renderFollowIndicator() string {
+	if c.logs.TotalLines() == 0 || c.logs.TotalLines() <= c.logs.VisibleLines() {
+		return ""
+	}
+	maxOffset := c.logs.TotalLines() - c.logs.VisibleLines()
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if c.followTail {
+		return lipgloss.NewStyle().Foreground(pal.good).Render("↓ following tail")
+	}
+	return lipgloss.NewStyle().Foreground(pal.muted).Render("↑ paused at line " + strconv.Itoa(c.logs.Offset()) + "/" + strconv.Itoa(maxOffset) + " (G to resume)")
 }
 
 var sparkBlocks = []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
