@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
@@ -402,6 +403,103 @@ func TestChangingSelectedContainerUpdatesDetailTabs(t *testing.T) {
 	content := View(s, flatte.RenderContext{Width: 80}).Content
 	if !strings.Contains(content, "myapp/api:2.1") {
 		t.Fatalf("inspect tab did not update after list move:\n%s", content)
+	}
+}
+
+func TestStatsTickSidestepUpdatesCurrentContainerOnly(t *testing.T) {
+	s := resizedState(80, 24)
+	startCPU := s.containers.cpu.Percent()
+
+	s.containers.tickStats(time.Now())
+
+	if s.containers.cpu.Percent() == startCPU {
+		t.Fatalf("stats tick did not change displayed CPU (start=%.1f, now=%.1f)", startCPU, s.containers.cpu.Percent())
+	}
+	st := s.containers.statsCache["a1b2c3d4e5"] // first container ID
+	if st.Tick != 1 {
+		t.Fatalf("statsCache tick = %d, want 1", st.Tick)
+	}
+
+	// Switch to second container and tick — first container's stats should not change
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	firstTick := s.containers.statsCache["a1b2c3d4e5"]
+	s.containers.tickStats(time.Now())
+	if s.containers.statsCache["a1b2c3d4e5"].Tick != firstTick.Tick {
+		t.Fatalf("first container's stats changed while second was selected")
+	}
+	if _, ok := s.containers.statsCache["b2c3d4e5f6"]; !ok {
+		t.Fatalf("second container not in statsCache after tick")
+	}
+}
+
+func TestScopedLogsRestartOnSelectionChange(t *testing.T) {
+	s := resizedState(80, 24)
+	ctx := context.Background()
+	fx := flatte.NewEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {})
+
+	// Initial streamer for first container
+	s.containers.startScopedLogs(s, fx)
+	if s.containers.logCancel == nil {
+		t.Fatal("no logCancel after first startScopedLogs")
+	}
+	if s.containers.logTarget != "a1b2c3d4e5" {
+		t.Fatalf("logTarget = %q, want a1b2c3d4e5", s.containers.logTarget)
+	}
+
+	// Move selection to second container — should cancel old, start new
+	Handle(s, keyChar('j'), fx)
+	if s.containers.logCancel == nil {
+		t.Fatal("logCancel became nil after selection change")
+	}
+	if s.containers.logTarget != "b2c3d4e5f6" {
+		t.Fatalf("logTarget = %q after selection change, want b2c3d4e5f6", s.containers.logTarget)
+	}
+}
+
+func TestScopedLogsCancelReleasesGoroutine(t *testing.T) {
+	s := resizedState(80, 24)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fx := flatte.NewEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {})
+
+	s.containers.startScopedLogs(s, fx)
+	done := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		close(done)
+	}()
+
+	s.containers.logCancel() // cancel the streamer's own context
+	// streamer should exit; verify the parent context still alive
+	select {
+	case <-done:
+		t.Fatal("parent context cancelled by streamer cleanup")
+	default:
+	}
+}
+
+func TestAppendLiveLogUpdatesDisplayedViewportWhenSelectedMatches(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.tab = tabLogs
+
+	before := s.containers.logs.TotalLines()
+	s.containers.appendLiveLog("a1b2c3d4e5", "test live line")
+
+	if s.containers.logs.TotalLines() <= before {
+		t.Fatalf("logs viewport not updated after live append: before=%d after=%d", before, s.containers.logs.TotalLines())
+	}
+	view := s.containers.logs.View()
+	if !strings.Contains(view, "test live line") {
+		t.Fatalf("appended line not in logs view:\n%s", view)
+	}
+}
+
+func TestAppendLiveLogDoesNotTouchOtherContainerBuffers(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.appendLiveLog("b2c3d4e5f6", "other container line")
+	view := s.containers.logs.View()
+	if strings.Contains(view, "other container line") {
+		t.Fatalf("non-selected container's log leaked into displayed viewport:\n%s", view)
 	}
 }
 

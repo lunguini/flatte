@@ -262,27 +262,157 @@ is the second predicted high-pain area.
 
 ---
 
+## Task 4 — Async: Stats polling + Logs streaming + scoped cancellation
 
+**This is the task that most changed my mind about the feedback.** I went
+in expecting to confirm that Flatte's async model was a strength; I came
+out confirming that **the feedback's `flatte.Scope` recommendation has real
+merit**, more than I credited in my initial review. The dogfood did the
+side-by-side comparison the user asked for (sidestep vs. force), and the
+contrast is sharp enough that this single task may justify a post-0.1
+extraction on its own.
+
+### Setup: two patterns, side by side
+
+Per the user's "both — sidestep then force" choice, Task 4 implements the
+two async paths differently and lets the contrast speak:
+
+- **Stats** uses the **sidestep pattern**: a single long-lived
+  `flatte.Every(fx, "stats-poll", 1*time.Second, fold)` started in
+  `App.Init`. The fold routes work to whichever container is currently
+  selected by looking up `s.containers.selected()` and writing into a
+  `statsCache map[string]containerStats`. No cancellation, no per-container
+  goroutines.
+- **Logs** uses the **forced-cancellation pattern**: a per-selection
+  streamer is started by `startScopedLogs` whenever the selection changes.
+  The previous streamer's `context.CancelFunc` is invoked before the new
+  one starts. Each streamer is a hand-rolled goroutine using
+  `flatte.Named` + `fx.Updates` because **`flatte.Stream` cannot be
+  cancelled by name**.
+
+### Better (positive evidence, mostly for the sidestep pattern)
+
+- **The sidestep pattern is genuinely pleasant.** Stats ended up as 11
+  lines of logic: `tickStats(_ time.Time)` reads `selected()`, updates the
+  per-container map entry with a deterministic walk, and pushes the value
+  to the visible `cpu`/`mem` widgets. The Every registration in `App.Init`
+  is one line. No locks, no cancellation, no goroutine management.
+  **fine** — and the per-container map was a natural place for the data to
+  live anyway.
+- **`App.Init` is the right place to start long-lived sources.** This is
+  exactly what the existing `flat-stream` and `flat-ticker` samples do.
+  No friction.
+- **`flatte.Named` + `fx.Updates` is a usable escape hatch.** When
+  `flatte.Stream` doesn't fit, an app can build the equivalent by hand and
+  it still routes through the same loop. The pattern is verbose but not
+  hidden.
+
+### Worse (the predicted high-pain, confirmed and sharper than expected)
+
+- **`flatte.Every` and `flatte.Stream` cannot be cancelled by name.**
+  Only `flatte.Latest`/`Cancel` has per-name cancellation today. Every and
+  Stream run for the **app's loop lifetime**, full stop. This is the
+  sharpest finding of the dogfood so far: the feedback's `flatte.Scope`
+  recommendation isn't a nice-to-have, it's a **real gap**, because the
+  only way to get scoped streaming today is the 30-line hand-rolled
+  goroutine I had to write for Logs. **blocked** (workable via the escape
+  hatch, but the cost is real).
+- **`Effects.context()` defaults to `context.Background()` internally but
+  is unexported.** App code that wants to derive a child context has to
+  defensively nil-check `fx.Context` because the zero `Effects` value
+  (used everywhere in tests) has a nil Context. This bit me on the first
+  test pass and required a `if parent == nil { parent = context.Background()
+  }` guard. Trivial code, but it's friction the framework could remove by
+  either exporting `context()` or by making the zero value default to
+  Background via a getter. **annoying**.
+- **The fold signature `func(*S, T)` (for Stream) and `func(*S, time.Time)`
+  (for Every) cannot start new async work.** This rules out "self-chaining"
+  patterns where a Latest fold kicks off the next poll. If I wanted to do
+  Stats with `Latest` (cancellable) instead of `Every` (not cancellable), I
+  would have to drive the polling from a long-lived goroutine anyway,
+  re-implementing what `Every` should provide. **annoying** — and concrete
+  evidence that the cancellation gap is not just missing API surface but a
+  constraint on the existing API's composability.
+- **Per-screen lifecycle isn't a concept.** `App.Init` starts app-lifetime
+  work. There's no `Screen.Enter`/`Screen.Exit` hook, so async work
+  specific to a screen has to be started from `Handle` when the user
+  navigates there, with manual cancellation when they leave. For this
+  dogfood (where async is containers-specific) the sidestep pattern
+  avoided the issue by keeping the work running app-wide. For a real app
+  where, say, the Images screen kicked off expensive scans, you'd want
+  screen-scoped lifecycle. **annoying** at this scale; would be
+  **blocked** in a larger app with expensive per-screen work.
+
+### What would have helped (concrete extraction candidate now)
+
+A `flatte.Scope` concept, exactly as the feedback proposed:
+
+```go
+type Scope struct {
+    name    string
+    parent  context.Context
+    cancel  context.CancelFunc
+}
+
+func (s *Scope) Go(fx Effects[State], name string, work func(context.Context) (T, error), fold func(*State, T, error)) { ... }
+func (s *Scope) Every(fx Effects[State], name string, interval time.Duration, fold func(*State, time.Time)) { ... }
+func (s *Scope) Stream(fx Effects[State], name string, source func(context.Context, func(T)), fold func(*S, T)) { ... }
+func (s *Scope) Cancel()  // cancels everything spawned through this scope
+```
+
+Then `startScopedLogs` becomes:
+```go
+s.containers.scope = flatte.NewScope(fx, "logs")
+s.containers.scope.Stream(...)  // inherits the scope's cancellable context
+// On selection change:
+s.containers.scope.Cancel()
+s.containers.scope = flatte.NewScope(fx, "logs")
+s.containers.scope.Stream(...)
+```
+
+The savings would be ~25 lines per scoped source. **Task 4 alone produces
+enough evidence to justify this extraction post-0.1.** Logged as the
+second concrete extraction candidate (after layout vocabulary).
+
+### What this task did not yet exercise
+
+- Modal over a complex base (Task 5).
+- Mouse zones (Task 6).
+
+### Task 4 verdict
+
+**This is the task that converts the feedback's `flatte.Scope` from a
+maybe to a yes.** The side-by-side was decisive: Stats (sidestep, 11
+lines, no friction) vs Logs (forced-cancellation, 30 lines, real
+friction). The dogfood verdict on scoped cancellation flipped from my
+initial review — the feedback was righter than I credited, and the
+extraction candidate is now concrete and sample-driven. The closed
+`Effects` struct (no public way to derive a child context from `fx`) is a
+related gap that would be cheap to fix.
 ## Cumulative summary
 
 (Updated each task. Predictions vs. observed.)
 
-| Area | Prediction | Task 1 | Task 2 | Task 3 |
-|---|---|---|---|---|
-| Layout math | High pain | Mild — single site per pattern. | **Confirmed** — three concrete sites. | Reinforced — 6 sized widgets per screen. |
-| Scoped cancellation | High pain | Not yet hit. | Not yet hit. | Not yet hit — Task 4. |
-| Tabs within pane | Medium | Not yet hit. | Not yet hit. | **Resolved cleanly** — plain state, no framework help wanted. |
-| Mouse zones | Medium | Not yet hit. | Not yet hit. | Not yet hit — Task 6. |
-| View composition | Medium | Mild. | Mild. | Fine — per-screen/per-pane/per-tab decomposition scales. |
-| Feature-module shape | Untested | Positive. | Strong positive. | Strong positive. |
-| Keyboard routing | Low–medium | Low. | Low. | Low — focus-aware switch is clean. |
-| Polling (`Every`) | Low | Not yet hit. | Not yet hit. | Not yet hit — Task 4. |
-| Streaming (`Stream`) | Low | Not yet hit. | Not yet hit. | Not yet hit — Task 4. |
-| Modal routing | Low–medium | Not yet hit. | Not yet hit. | Not yet hit — Task 5. |
+| Area | Prediction | Task 1 | Task 2 | Task 3 | Task 4 |
+|---|---|---|---|---|---|
+| Layout math | High pain | Mild. | **Confirmed** — 3 sites. | Reinforced — 6 widgets. | (unchanged) |
+| Scoped cancellation | High pain | Not yet hit. | Not yet hit. | Not yet hit. | **Confirmed and sharper than predicted — `Every`/`Stream` not cancellable; only `Latest`/`Cancel`. Feedback's `flatte.Scope` now justified.** |
+| Tabs within pane | Medium | Not yet hit. | Not yet hit. | **Resolved cleanly.** | (unchanged) |
+| Mouse zones | Medium | Not yet hit. | Not yet hit. | Not yet hit. | Not yet hit — Task 6. |
+| View composition | Medium | Mild. | Mild. | Fine. | Fine. |
+| Feature-module shape | Untested | Positive. | Strong positive. | Strong positive. | Strong positive — fold logic lives next to its state. |
+| Keyboard routing | Low–medium | Low. | Low. | Low. | Low. |
+| Polling (`Every`) | Low | Not yet hit. | Not yet hit. | Not yet hit. | **Low for sidestep pattern; high for cancellable pattern (not natively supported).** |
+| Streaming (`Stream`) | Low | Not yet hit. | Not yet hit. | Not yet hit. | **Low for sidestep pattern; high for cancellable pattern (not natively supported).** |
+| Modal routing | Low–medium | Not yet hit. | Not yet hit. | Not yet hit. | Not yet hit — Task 5. |
+| Per-screen lifecycle | (not predicted) | — | — | — | **Mild gap — `App.Init` is app-lifetime only; no screen enter/exit hooks.** |
+| Effects zero-value | (not predicted) | — | — | — | **Annoying — `fx.Context` is nil on zero Effects; `Effects.context()` default is unexported.** |
 
-**Running verdict:** the layout friction the feedback predicted is now
-sample-driven, concrete, and reinforced at every layout-bearing task. The
-green-field case (tabs within a pane) **resolved in Flatte's favor** —
-plain state and small renderers are enough; extracting a `flatui.Tabs`
-widget would be premature. The next real question is Task 4: scoped async
-cancellation, the second predicted high-pain area.
+**Running verdict:** the layout friction is confirmed and reinforced across
+all layout-bearing tasks. **Task 4 flipped my opinion on scoped
+cancellation** — the feedback was righter than I credited. Two concrete
+extraction candidates now have sample-driven evidence: (1) layout
+vocabulary, (2) `flatte.Scope` for cancellable async. Two related smaller
+gaps surfaced: per-screen lifecycle hooks, and the unexported
+`Effects.context()` default. Tabs-within-pane is settled in Flatte's favor.
+Tasks 5–7 remain, all predicted lower pain.

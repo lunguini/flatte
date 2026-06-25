@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -222,11 +223,21 @@ type containersScreen struct {
 	containers []Container
 	filtered   []int
 
-	tab      detailTab
-	cpu      flatui.Progress
-	mem      flatui.Progress
-	logs     flatui.Viewport
-	inspect  flatui.Viewport
+	tab     detailTab
+	cpu     flatui.Progress
+	mem     flatui.Progress
+	logs    flatui.Viewport
+	inspect flatui.Viewport
+
+	statsCache map[string]containerStats
+	liveLogs   map[string][]string
+	logTarget  string
+	logCancel  context.CancelFunc
+}
+
+type containerStats struct {
+	CPU, MEM float64
+	Tick     int
 }
 
 func newContainersScreen() containersScreen {
@@ -276,6 +287,15 @@ func (c *containersScreen) refreshFilter() {
 }
 
 func (c *containersScreen) syncDetail() {
+	c.recomputeDetailWidgets()
+}
+
+func (c *containersScreen) onSelectionChange(root *State, fx flatte.Effects[State]) {
+	c.recomputeDetailWidgets()
+	c.startScopedLogs(root, fx)
+}
+
+func (c *containersScreen) recomputeDetailWidgets() {
 	ct := c.selected()
 	if ct == nil {
 		c.inspect.SetContent("")
@@ -288,9 +308,136 @@ func (c *containersScreen) syncDetail() {
 		"name:    %s\nimage:   %s\nstatus:  %s\nports:   %s\nid:      %s\n\n-- labels --\n%[2]s.app=%[1]s\n%[2]s.role=service\n%[2]s.managed-by=docker\n\n-- mounts --\n/var/lib/%[6]s:/data\n/etc/%[6]s:/conf:ro\n\n-- networks --\nbridge\n\n-- restart policy --\nunless-stopped\n\n-- created --\n2026-06-20T08:00:00Z\n\n-- health --\nhealthy (5/5)",
 		ct.Name, ct.Image, ct.Status, ct.Ports, ct.ID, strings.ReplaceAll(ct.Name, "-", "_"),
 	))
-	c.logs.SetContent(sampleLogs(*ct))
-	c.cpu.SetPercent(sampleCPU(ct))
-	c.mem.SetPercent(sampleMEM(ct))
+
+	if st, ok := c.statsCache[ct.ID]; ok {
+		c.cpu.SetPercent(st.CPU)
+		c.mem.SetPercent(st.MEM)
+	} else {
+		c.cpu.SetPercent(sampleCPU(ct))
+		c.mem.SetPercent(sampleMEM(ct))
+	}
+
+	c.logs.SetContent(c.renderedLogsFor(ct.ID))
+}
+
+func (c *containersScreen) renderedLogsFor(id string) string {
+	history := sampleLogs(c.containers[c.indexOfID(id)])
+	live := c.liveLogs[id]
+	if len(live) == 0 {
+		return history
+	}
+	return history + "\n" + strings.Join(live, "\n")
+}
+
+func (c *containersScreen) indexOfID(id string) int {
+	for i, ct := range c.containers {
+		if ct.ID == id {
+			return i
+		}
+	}
+	return 0
+}
+
+func (c *containersScreen) tickStats(_ time.Time) {
+	ct := c.selected()
+	if ct == nil {
+		return
+	}
+	if c.statsCache == nil {
+		c.statsCache = make(map[string]containerStats)
+	}
+	st := c.statsCache[ct.ID]
+	if st.Tick == 0 {
+		st.CPU = sampleCPU(ct)
+		st.MEM = sampleMEM(ct)
+	}
+	st.Tick++
+	st.CPU = clampStat(st.CPU + stepFor(ct.ID, st.Tick, 7, 3))
+	st.MEM = clampStat(st.MEM + stepFor(ct.Name, st.Tick, 5, 2))
+	c.statsCache[ct.ID] = st
+	c.cpu.SetPercent(st.CPU)
+	c.mem.SetPercent(st.MEM)
+}
+
+func clampStat(v float64) float64 {
+	return math.Max(5, math.Min(95, v))
+}
+
+func stepFor(seed string, tick, mod, amp int) float64 {
+	var s float64
+	for i, r := range seed {
+		s += float64(r) * float64(i+1)
+	}
+	return math.Mod(s+float64(tick), float64(mod)) - float64(amp)
+}
+
+func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
+	if c.logCancel != nil {
+		c.logCancel()
+		c.logCancel = nil
+	}
+	ct := c.selected()
+	if ct == nil {
+		c.logTarget = ""
+		return
+	}
+	if ct.ID == c.logTarget {
+		return
+	}
+	c.logTarget = ct.ID
+	if c.liveLogs == nil {
+		c.liveLogs = make(map[string][]string)
+	}
+
+	parent := fx.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	c.logCancel = cancel
+	targetID := ct.ID
+	updates := fx.Updates
+
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				line := scopedLogLine(targetID, len(c.liveLogs[targetID]))
+				update := flatte.Named("scoped-log:"+targetID, func(s *State) {
+					s.containers.appendLiveLog(targetID, line)
+				})
+				if updates == nil {
+					return
+				}
+				select {
+				case updates <- update:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+}
+
+func scopedLogLine(id string, seq int) string {
+	return fmt.Sprintf("2026-06-25 10:00:%02d req=%d src=%s msg=handling", seq%60, seq, id[:8])
+}
+
+func (c *containersScreen) appendLiveLog(id, line string) {
+	if c.liveLogs == nil {
+		c.liveLogs = make(map[string][]string)
+	}
+	c.liveLogs[id] = append(c.liveLogs[id], line)
+	if len(c.liveLogs[id]) > 50 {
+		c.liveLogs[id] = c.liveLogs[id][len(c.liveLogs[id])-50:]
+	}
+	if sel := c.selected(); sel != nil && sel.ID == id {
+		c.logs.SetContent(c.renderedLogsFor(id))
+	}
 }
 
 func sampleCPU(ct *Container) float64 {
@@ -339,7 +486,7 @@ func (c *containersScreen) selected() *Container {
 	return &c.containers[c.filtered[idx]]
 }
 
-func (c *containersScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
+func (c *containersScreen) Handle(root *State, ev flatte.Event, fx flatte.Effects[State]) {
 	key, ok := ev.(flatte.KeyEvent)
 	if !ok {
 		return
@@ -354,14 +501,14 @@ func (c *containersScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[St
 	case flatte.KeyUp:
 		if c.focus.Focused(focusList) {
 			c.list.MoveUp()
-			c.syncDetail()
+			c.onSelectionChange(root, fx)
 		} else if c.focus.Focused(focusDetail) {
 			c.scrollActiveTab(-1)
 		}
 	case flatte.KeyDown:
 		if c.focus.Focused(focusList) {
 			c.list.MoveDown()
-			c.syncDetail()
+			c.onSelectionChange(root, fx)
 		} else if c.focus.Focused(focusDetail) {
 			c.scrollActiveTab(1)
 		}
@@ -369,11 +516,13 @@ func (c *containersScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[St
 		if c.focus.Focused(focusFilter) {
 			c.filter.Backspace()
 			c.refreshFilter()
+			c.onSelectionChange(root, fx)
 		}
 	case flatte.KeyDelete:
 		if c.focus.Focused(focusFilter) {
 			c.filter.Delete()
 			c.refreshFilter()
+			c.onSelectionChange(root, fx)
 		}
 	case flatte.KeyLeft:
 		if c.focus.Focused(focusFilter) {
@@ -384,23 +533,24 @@ func (c *containersScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[St
 			c.filter.MoveRight()
 		}
 	case flatte.KeyCharacter:
-		c.handleChar(key.Rune)
+		c.handleChar(root, fx, key.Rune)
 	}
 }
 
-func (c *containersScreen) handleChar(r rune) {
+func (c *containersScreen) handleChar(root *State, fx flatte.Effects[State], r rune) {
 	switch c.focus.Index() {
 	case focusFilter:
 		c.filter.Insert(r)
 		c.refreshFilter()
+		c.onSelectionChange(root, fx)
 	case focusList:
 		switch r {
 		case 'j', 'J':
 			c.list.MoveDown()
-			c.syncDetail()
+			c.onSelectionChange(root, fx)
 		case 'k', 'K':
 			c.list.MoveUp()
-			c.syncDetail()
+			c.onSelectionChange(root, fx)
 		}
 	case focusDetail:
 		switch r {
@@ -614,6 +764,7 @@ func main() {
 	state := NewState()
 	err := flatte.Run(context.Background(), flatte.App[State]{
 		State:  state,
+		Init:   initAsync,
 		Handle: Handle,
 		View:   View,
 	})
@@ -621,4 +772,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func initAsync(s *State, fx flatte.Effects[State]) {
+	flatte.Every(fx, "stats-poll", 1*time.Second, func(s *State, now time.Time) {
+		s.containers.tickStats(now)
+	})
+	s.containers.startScopedLogs(s, fx)
 }
