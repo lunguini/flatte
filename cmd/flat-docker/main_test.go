@@ -95,8 +95,8 @@ func TestViewRendersSharedChromeAndActiveScreenBody(t *testing.T) {
 
 	content := View(s, flatte.RenderContext{Width: 80}).Content
 
-	if !strings.Contains(content, "[1 containers]") {
-		t.Fatalf("active tab not bracketed in:\n%s", content)
+	if !strings.Contains(content, "1 containers") {
+		t.Fatalf("containers tab label missing in:\n%s", content)
 	}
 	if !strings.Contains(content, "filter:") || !strings.Contains(content, "nginx-proxy") {
 		t.Fatalf("containers list pane missing in:\n%s", content)
@@ -305,6 +305,41 @@ func TestHLAlsoSwitchTabs(t *testing.T) {
 	}
 }
 
+func TestLeftRightArrowsAlsoSwitchTabs(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusDetail)
+
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
+	if s.containers.tab != tabLogs {
+		t.Fatalf("after Right arrow, tab = %v, want logs", s.containers.tab)
+	}
+
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
+	if s.containers.tab != tabInspect {
+		t.Fatalf("after second Right, tab = %v, want inspect", s.containers.tab)
+	}
+
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
+	if s.containers.tab != tabLogs {
+		t.Fatalf("after Left from inspect, tab = %v, want logs", s.containers.tab)
+	}
+}
+
+func TestLeftArrowInFilterMovesCursor(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.focus.Select(focusFilter)
+	for _, r := range "abc" {
+		Handle(s, keyChar(r), flatte.Effects[State]{})
+	}
+	if s.containers.filter.Cursor != 3 {
+		t.Fatalf("filter cursor = %d, want 3", s.containers.filter.Cursor)
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
+	if s.containers.filter.Cursor != 2 {
+		t.Fatalf("after Left in filter, cursor = %d, want 2", s.containers.filter.Cursor)
+	}
+}
+
 func TestTabSwitchKeysOnlyWorkWhenDetailFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	// focus starts on list
@@ -382,17 +417,19 @@ func TestInspectTabShowsContainerFields(t *testing.T) {
 	}
 }
 
-func TestTabBarShowsActiveTabBracketed(t *testing.T) {
+func TestTabBarShowsActiveTabStyled(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusDetail)
 	s.containers.tab = tabLogs
 
 	content := View(s, flatte.RenderContext{Width: 80}).Content
-	if !strings.Contains(content, "[logs]") {
-		t.Fatalf("active tab not bracketed in:\n%s", content)
+	// After ANSI strip, both "stats" and "logs" should appear (no brackets
+	// anymore — visual distinction is via background color, which is stripped).
+	if !strings.Contains(content, "logs") {
+		t.Fatalf("active tab label missing in:\n%s", content)
 	}
-	if strings.Contains(content, "[stats]") || strings.Contains(content, "[inspect]") {
-		t.Fatalf("inactive tabs should not be bracketed in:\n%s", content)
+	if !strings.Contains(content, "stats") || !strings.Contains(content, "inspect") {
+		t.Fatalf("inactive tab labels missing in:\n%s", content)
 	}
 }
 
@@ -591,8 +628,8 @@ func TestModalRendersAsOverlayOverBase(t *testing.T) {
 		t.Fatalf("modal body missing target name in:\n%s", content)
 	}
 	// Base content still present underneath
-	if !strings.Contains(content, "[1 containers]") {
-		t.Fatalf("base tab bar missing under modal in:\n%s", content)
+	if !strings.Contains(content, "1 containers") {
+		t.Fatalf("base tab label missing under modal in:\n%s", content)
 	}
 }
 

@@ -850,6 +850,74 @@ work is unnecessary is correct, and the prototype is small enough to
 ship. **The glamour pass breaking a mouse test was the trigger that
 produced this evidence — which is itself a validation of the dogfood's
 "build it, hurt, then extract" methodology.**
+
+---
+
+## Difficulty-rated pain-points summary (for streamlining work)
+
+The user asked for an honest assessment of how hard each pain point was
+to work around, so we can prioritize streamlining. Scale:
+
+- **TRIVIAL** — one-liner or constant
+- **LOW** — 5–20 LOC per site, mechanical
+- **MEDIUM** — 20–50 LOC, requires thought but no architecture
+- **HIGH** — 50+ LOC OR forces a different architecture than the natural one
+- **BLOCKED** — could not be worked around cleanly
+
+| # | Pain point | Where hit | Severity | Difficulty today | Solution cost |
+|---|---|---|---|---|---|
+| 1 | Manual pane-width math (`SplitHorizontal` etc.) | Tasks 2,3,6,7,G | high | **MEDIUM** — 4 cached fields per screen, recomputed in `layout()` | LOW — `flatui.Split*` returning `Rect`s |
+| 2 | Pane-height padding for anchor-bottom | Task G | medium | **TRIVIAL** — one `.Height(h)` per pane | NONE — already solved |
+| 3 | Mouse zone drift (manual Rects) | Tasks 6, G | high | **HIGH** — 17 LOC per screen, breaks on layout change | LOW — `flatui.ZoneScanner` (already prototyped, ~150 LOC) |
+| 4 | Scoped async cancellation | Task 4 | high | **HIGH** — 30 LOC hand-rolled goroutine + manual context management | MEDIUM — `flatte.Scope` (sketched in d03.md) |
+| 5 | Custom data viz (sparkline, charts) | Task G | medium | **LOW** — 12 LOC for sparkline | LOW (per-widget) — add viz primitives to `flatui` incrementally |
+| 6 | Animation system (easing, transitions) | Task G | low (didn't need it) | **HIGH** when needed — no primitives; would need per-frame fractional state | HIGH — full animation system |
+| 7 | Per-screen lifecycle (Enter/Exit hooks) | Task 4 | low | **LOW** — sidestepped via app-lifetime async + per-container maps | MEDIUM — add hooks, but only if real apps need them |
+| 8 | `Effects.Context()` unexported | Task 4 | low | **TRIVIAL** — `if fx.Context == nil` guard | TRIVIAL — export `Context()` |
+| 9 | `List.Height` unexported | Task 6 | low | **TRIVIAL** — shadowed `listHeight` field | TRIVIAL — add `Height()` accessor |
+| 10 | `Viewport.Height` unexported | Task 3 | low | **TRIVIAL** — already worked around via `VisibleLines()` | TRIVIAL — already fixed in the API |
+| 11 | Tab navigation within a pane | Task 3 | none | **LOW** — 14 LOC enum + 2 method bodies | NONE — plain state suffices; no widget warranted |
+| 12 | Modal routing over a complex base | Task 5 | none | **TRIVIAL** — one-line guard | NONE — pattern is documented |
+| 13 | Screen routing (feature-module shape) | Tasks 1,2,7 | none | **LOW** — switch on screen enum | NONE — pattern is documented; should add to `quick-reference.md` |
+| 14 | Body-fill / chrome-row math | Task G | low | **TRIVIAL** — `chromeRowsTop` + `chromeRowsBottom` constants | NONE — already solved |
+| 15 | Per-container state maps (cache repetition) | Tasks 4, G | low | **LOW** — one map per async source | LOW — could grow a convention but not urgent |
+
+### What this tells us about streamlining priorities
+
+**Two pain points dominate (HIGH difficulty + high severity):**
+1. **Mouse zone drift (#3)** — already solved by the `ZoneScanner` prototype. Ship it.
+2. **Scoped async cancellation (#4)** — needs `flatte.Scope`. Sharp, isolated evidence.
+
+**One pain point is wide-but-shallow (MEDIUM difficulty + high severity):**
+3. **Layout math (#1)** — every screen does it, but each individual site is mechanical. The proposed `flatui.Split*` vocabulary closes it cleanly.
+
+**Everything else is either trivial-to-work-around or doesn't need a solution.** The dogfood validated that Flatte's "abstraction is found, not designed" rule correctly prevented premature extraction (tabs, modal, router) — most green-field cases turned out fine without framework help. The remaining smaller fixes (#8, #9, #10) are paper cuts that should be swept but don't drive roadmap.
+
+**Recommended post-0.1 priority order** (effort vs. impact):
+1. **`flatui.ZoneScanner` productionization** — HIGH impact, LOW cost (prototype exists).
+2. **`flatte.Scope` for cancellable async** — HIGH impact, MEDIUM cost.
+3. **`flatui` layout vocabulary** — HIGH impact (broad), LOW cost.
+4. **Smaller fixes** — export `Effects.Context`, add `List.Height`, document feature-module idiom.
+5. **Animation system** — defer until a real app needs it (not justified by this dogfood).
+
+### Task 9 (post-Glamour fixes) — UX polish
+
+User feedback after the glamour pass: `[`/`]` for tab switching was not
+discoverable, active tabs were not visually distinct enough, and the
+status line's summed MEM% was meaningless. All three addressed:
+
+- **Left/Right arrows now also switch tabs** (in addition to `[`/`]`/`h`/`l`).
+  KeyHints updated to mention ←/→.
+- **Active tabs are now background-highlighted** (light blue background,
+  dark text) instead of just colored foreground + brackets. Visually
+  unambiguous. Applied to both the root screen tab bar and the detail
+  tab bar. Removed the `[name]` bracket convention entirely.
+- **Status line now averages MEM and CPU across running containers**
+  instead of summing. Summed percentages were meaningless (>100%);
+  averaged ones stay in 0–100%.
+
+Tests added for arrow-key tab navigation and to verify Left still moves
+the filter cursor when filter-focused.
 (Updated each task. Predictions vs. observed.)
 
 | Area | Prediction | Task 1 | Task 2 | Task 3 | Task 4 |

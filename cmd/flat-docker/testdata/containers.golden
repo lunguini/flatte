@@ -1,7 +1,7 @@
-[1 containers]  2 images   3 volumes 
+ 1 containers   2 images   3 volumes 
 ────────────────────────────────────────────────────────────────────────────────
 filter: (all)     nginx-proxy                             activity              
-                  [stats]  logs   inspect                                       
+                   stats  logs  inspect                                         
 ●> nginx-proxy                                            (no events yet)       
 ●  api-server       status: running                                             
 ●  postgres         image:  nginx:1.25                                          
@@ -19,7 +19,7 @@ filter: (all)     nginx-proxy                             activity
                                                                                 
                                                                                 
                                                                                 
- 8 containers (6 running)  CPU 0%  MEM 0%  filter:                              
+ 8 containers (6 running)  avg CPU  0%  avg MEM  0%  filter: (all)              
 ────────────────────────────────────────────────────────────────────────────────
  j/k move  s stop  x remove  tab next  1/2/3 switch  q quit 
 [title flat-docker — containers]

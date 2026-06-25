@@ -223,14 +223,19 @@ func renderTabBar(s *State, width int) string {
 	}
 	parts := make([]string, len(labels))
 	for i, l := range labels {
-		text := " " + l.name + " "
+		text := l.name
 		if l.active {
-			text = "[" + l.name + "]"
-		}
-		if l.active {
-			text = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("117")).Render(text)
+			text = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("23")).
+				Background(lipgloss.Color("117")).
+				Padding(0, 1).
+				Render(text)
 		} else {
-			text = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(text)
+			text = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("245")).
+				Padding(0, 1).
+				Render(text)
 		}
 		parts[i] = text
 	}
@@ -385,8 +390,17 @@ func (c *containersScreen) recomputeStatusLine() {
 			totalMEM += st.MEM
 		}
 	}
-	c.statusLine = fmt.Sprintf(" %d containers (%d running)  CPU %.0f%%  MEM %.0f%%  filter: %s ",
-		total, running, totalCPU, totalMEM, c.filter.Value)
+	avgCPU, avgMEM := 0.0, 0.0
+	if running > 0 {
+		avgCPU = totalCPU / float64(running)
+		avgMEM = totalMEM / float64(running)
+	}
+	filterValue := c.filter.Value
+	if filterValue == "" {
+		filterValue = "(all)"
+	}
+	c.statusLine = fmt.Sprintf(" %d containers (%d running)  avg CPU %2.0f%%  avg MEM %2.0f%%  filter: %s ",
+		total, running, avgCPU, avgMEM, filterValue)
 }
 
 func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m flatte.MouseEvent) {
@@ -717,10 +731,14 @@ func (c *containersScreen) Handle(root *State, ev flatte.Event, fx flatte.Effect
 	case flatte.KeyLeft:
 		if c.focus.Focused(focusFilter) {
 			c.filter.MoveLeft()
+		} else if c.focus.Focused(focusDetail) {
+			c.prevTab()
 		}
 	case flatte.KeyRight:
 		if c.focus.Focused(focusFilter) {
 			c.filter.MoveRight()
+		} else if c.focus.Focused(focusDetail) {
+			c.nextTab()
 		}
 	case flatte.KeyCharacter:
 		c.handleChar(root, fx, key.Rune)
@@ -842,11 +860,11 @@ func (c *containersScreen) keyHints() string {
 	case focusDetail:
 		switch c.tab {
 		case tabStats:
-			return "]/h/l switch tab  tab next  1/2/3 switch  q quit"
+			return "←/→ or ]/[ switch tab  tab next  1/2/3 switch  q quit"
 		case tabLogs:
-			return "j/k scroll  ]/h/l switch tab  tab next  q quit"
+			return "j/k scroll  ←/→ or ]/[ switch tab  tab next  q quit"
 		case tabInspect:
-			return "j/k scroll  ]/h/l switch tab  tab next  q quit"
+			return "j/k scroll  ←/→ or ]/[ switch tab  tab next  q quit"
 		}
 	}
 	return "1/2/3 switch  q quit"
@@ -916,16 +934,25 @@ func (c *containersScreen) renderTabBar() string {
 	}
 	parts := make([]string, len(tabs))
 	for i, t := range tabs {
-		text := " " + t.name + " "
+		text := t.name
 		if t.active {
-			text = "[" + t.name + "]"
-			text = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("117")).Render(text)
+			text = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("23")).
+				Background(lipgloss.Color("117")).
+				Padding(0, 1).
+				Render(text)
+			text = flatui.Mark("tab:"+t.name, text)
 		} else {
-			text = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(text)
+			styled := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("245")).
+				Padding(0, 1).
+				Render(text)
+			text = flatui.Mark("tab:"+t.name, styled)
 		}
-		parts[i] = flatui.Mark("tab:"+t.name, text)
+		parts[i] = text
 	}
-	return strings.Join(parts, " ")
+	return strings.Join(parts, "")
 }
 
 func (c *containersScreen) renderActiveTab(selected *Container) string {
