@@ -309,11 +309,22 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		return
 	}
 
-	// Header tab mouse clicks — root-level, above screen dispatch
+	// Header tab mouse clicks — root-level, above screen dispatch.
+	// composeHeader right-aligns the tabs; compute their frame X start.
 	if m, ok := ev.(flatte.MouseEvent); ok && m.Action == flatte.MousePress && m.Y == 0 {
-		if s.headerTabs.HandleMouseAt(m.X) {
-			s.screen = screen(s.headerTabs.Active())
-			return
+		totalTabsW := 0
+		for _, item := range s.headerTabs.items {
+			totalTabsW += tabLabelWidth(item.label)
+		}
+		tabStripStart := s.width - totalTabsW
+		if tabStripStart < 0 {
+			tabStripStart = 0
+		}
+		if m.X >= tabStripStart {
+			if s.headerTabs.HandleMouseAt(m.X - tabStripStart) {
+				s.screen = screen(s.headerTabs.Active())
+				return
+			}
 		}
 	}
 
@@ -460,6 +471,41 @@ func paneStyle(width, height int, focused bool) lipgloss.Style {
 		MaxHeight(height).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderFg)
+}
+
+// makeTitledTopBorder constructs a rounded top border with a title
+// embedded: ╭─ title ────╮. The title sits inside the border line,
+// using the border's foreground color. This is the standard TUI
+// titled-border pattern — keeps the title visible even when the pane
+// content area is too narrow for an in-content title row.
+func makeTitledTopBorder(width int, title string, borderFg color.Color) string {
+	inner := width - 2 // left corner + right corner
+	titleText := ""
+	if title != "" {
+		titleText = " " + title + " "
+	}
+	titleW := lipgloss.Width(titleText)
+	remaining := max(inner-titleW, 0)
+	leftFill := min(1, remaining)
+	rightFill := remaining - leftFill
+	raw := "╭" + strings.Repeat("─", leftFill) + titleText + strings.Repeat("─", rightFill) + "╮"
+	return lipgloss.NewStyle().Foreground(borderFg).Render(raw)
+}
+
+// renderTitledPane renders content inside a bordered pane where the top
+// border carries a title. Works by rendering normally with paneStyle,
+// then replacing the first line with the titled version.
+func renderTitledPane(width, height int, focused bool, title string, content string) string {
+	pane := paneStyle(width, height, focused).Render(content)
+	borderFg := pal.panel
+	if focused {
+		borderFg = pal.accent
+	}
+	lines := strings.SplitN(pane, "\n", 2)
+	if len(lines) < 2 {
+		return pane
+	}
+	return makeTitledTopBorder(width, title, borderFg) + "\n" + lines[1]
 }
 
 func (s *State) resize(width, height int) {
@@ -1642,10 +1688,9 @@ func (c *containersScreen) renderDetailPane() string {
 	selected := c.selected()
 	if selected == nil {
 		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no container selected)")
-		return paneStyle(c.detailPaneWidth, c.bodyContentHeight, c.focus.Focused(focusDetail)).Render(empty)
+		return renderTitledPane(c.detailPaneWidth, c.bodyContentHeight, c.focus.Focused(focusDetail), "(no selection)", empty)
 	}
 
-	// Header row: title left, tabs right (via composeHeader in renderTabBar)
 	headerRow := c.renderTabBar()
 	body := c.renderActiveTab(selected)
 
@@ -1654,7 +1699,7 @@ func (c *containersScreen) renderDetailPane() string {
 	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
 	combined := withScrollbar(inner, barStyled)
 	focused := c.focus.Focused(focusDetail)
-	return paneStyle(c.detailPaneWidth, c.bodyContentHeight, focused).Render(combined)
+	return renderTitledPane(c.detailPaneWidth, c.bodyContentHeight, focused, selected.Name, combined)
 }
 
 func (c *containersScreen) detailScrollbar() string {
@@ -1671,19 +1716,11 @@ func (c *containersScreen) detailScrollbar() string {
 
 func (c *containersScreen) renderTabBar() string {
 	c.detailTabs.SetActive(int(c.tab))
-	tabs := c.detailTabs.Render()
-	sel := c.selected()
-	titleText := "(no selection)"
-	if sel != nil {
-		titleText = sel.Name
+	bar := c.detailTabs.Render()
+	if indicator := c.renderFollowIndicator(); indicator != "" {
+		bar += " " + indicator
 	}
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 1).Render(titleText)
-	indicator := c.renderFollowIndicator()
-	rightPart := tabs
-	if indicator != "" {
-		rightPart = tabs + " " + indicator
-	}
-	return composeHeader(title, rightPart, c.detailPaneWidth-paneBorderCols, pal.bg)
+	return lipgloss.NewStyle().Background(pal.bg).Render(bar)
 }
 
 func (c *containersScreen) renderActiveTab(selected *Container) string {

@@ -1132,10 +1132,12 @@ func TestHeaderTabMouseClickSwitchesScreen(t *testing.T) {
 		t.Fatal("should start on containers")
 	}
 
-	// Click the "2 images" tab in the header (Y=0).
-	// The images tab starts after the containers tab's width.
-	imagesTabStart := tabLabelWidth("1 containers")
-	clickX := imagesTabStart + 1 // inside the tab
+	// Tabs are right-aligned via composeHeader. Compute their frame X.
+	totalTabsW := tabLabelWidth("1 containers") + tabLabelWidth("2 images") + tabLabelWidth("3 volumes")
+	tabStripStart := 80 - totalTabsW
+	// "2 images" is the second tab; click inside it.
+	imagesTabStart := tabStripStart + tabLabelWidth("1 containers")
+	clickX := imagesTabStart + 1
 
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
@@ -1143,14 +1145,16 @@ func TestHeaderTabMouseClickSwitchesScreen(t *testing.T) {
 	}, flatte.Effects[State]{})
 
 	if s.screen != screenImages {
-		t.Fatalf("after header click on images tab: screen = %v, want images", s.screen)
+		t.Fatalf("after header click on images tab at X=%d: screen = %v, want images", clickX, s.screen)
 	}
 }
 
 func TestHeaderTabMouseClickOnThirdTab(t *testing.T) {
 	s := resizedState(80, 24)
 
-	volumesTabStart := tabLabelWidth("1 containers") + tabLabelWidth("2 images")
+	totalTabsW := tabLabelWidth("1 containers") + tabLabelWidth("2 images") + tabLabelWidth("3 volumes")
+	tabStripStart := 80 - totalTabsW
+	volumesTabStart := tabStripStart + tabLabelWidth("1 containers") + tabLabelWidth("2 images")
 	clickX := volumesTabStart + 1
 
 	Handle(s, flatte.MouseEvent{
@@ -1159,7 +1163,7 @@ func TestHeaderTabMouseClickOnThirdTab(t *testing.T) {
 	}, flatte.Effects[State]{})
 
 	if s.screen != screenVolumes {
-		t.Fatalf("after header click on volumes tab: screen = %v, want volumes", s.screen)
+		t.Fatalf("after header click on volumes tab at X=%d: screen = %v, want volumes", clickX, s.screen)
 	}
 }
 
