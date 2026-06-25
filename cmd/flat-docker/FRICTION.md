@@ -639,6 +639,133 @@ synthesis with concrete extraction proposals lives in `.docs/d03.md`.
 - Not evidence for *every* TUI pattern. No drag-and-drop, no animations,
   no scroll-region management, no IME input. The findings generalize to
   "multi-pane apps with async and modals"; beyond that is unknown.
+
+---
+
+## Glamour pass — anchor-right pane + status line + sparkline (2026-06-25)
+
+The user correctly noted the dogfood wasn't *glamorous* — no anchor-right
+pane, no anchor-bottom status line, no animations. Adding them exposed
+**more friction than Tasks 5–7 suggested had converged**, and reframes
+the layout-vocabulary candidate from "important" to "urgent."
+
+### Layout (the friction got worse, not better)
+
+- **Three-pane layout multiplies the arithmetic.** Going from 2 panes to
+  3 made the `layout()` method visibly hairier:
+  ```go
+  c.listPaneWidth = min(26, max(width/5, 14))
+  c.activityPaneWidth = 22
+  c.detailPaneWidth = max(width-c.listPaneWidth-2-c.activityPaneWidth-2, 0)
+  ```
+  Now four cached width fields per screen (`listPaneWidth`,
+  `detailPaneWidth`, `activityPaneWidth`, plus implicit gaps). A fourth
+  pane would add another. **The pattern scales linearly in pain** — each
+  new pane adds another term to the width equation and another cached
+  field. **blocked** at three panes; would be **prohibitive** at four.
+- **Anchor-bottom status line within a pane.** Adding a status line at
+  the bottom of the containers body (separate from the frame footer)
+  required subtracting another row from `bodyContentHeight`:
+  `bodyContentHeight := max(height-statusLineRows, 0)`, then *that*
+  feeds into list height, viewport heights, etc. Every chrome row added
+  forces every dependent height to recompute. **annoying** — this is
+  the same arithmetic as the existing chrome-subtraction pattern, just
+  one more layer.
+- **Mouse zones got harder.** `registerMouseZones` now has to know
+  that tab headers shifted left (because listPaneWidth shrank). The
+  test `TestMouseClickTabHeaderSwitchesTab` broke because I'd
+  hardcoded X=36 and the new layout put logs at X=28. **This is the
+  drift problem the user asked about** — manual rectangles *will* drift
+  from rendering whenever layout changes. The user's question about
+  auto-zones is exactly the right response; see "Auto-zones prototype"
+  section below.
+
+### Custom data viz (no widget; hand-rolled)
+
+- **Sparkline forced a hand-rolled renderer.** Flatte ships `Progress`
+  (horizontal bar) but no graph/sparkline/Chart widget. I wrote a
+  12-line `sparkline(history []float64, c color.Color) string` using
+  Unicode block characters (`▁▂▃▄▅▆▇█`). Works fine. But it's the **first
+  piece of "I had to build a widget from scratch"** friction in the
+  dogfood — every viz type not in `flatui` is do-it-yourself.
+  **fine** at this complexity (12 lines) but **logged as evidence** that
+  the widget library post-0.1 should consider data-viz primitives.
+- **History caching repeats the per-container-map pattern.** `cpuHistory
+  map[string][]float64` and `memHistory map[string][]float64` are now
+  the third and fourth per-container maps on `containersScreen`
+  (joining `statsCache` and `liveLogs`). Each async source creates
+  another. **annoying** — pattern repeats, no convention for "per-key
+  state cache."
+
+### Status line (positive — once the chrome math is done)
+
+- **`recomputeStatusLine()` is a clean fold.** Aggregate over all
+  containers' cached stats; format; done. Called from `tickStats` (Every
+  fold) and `layout`. The hard part was reserving the row; the content
+  was trivial. **fine**.
+- **`lipgloss.NewStyle().Background(...).Width(w).Render(line)`** for
+  the styled status bar is one line. No friction.
+
+### Animation
+
+- **There is no animation system.** The sparkline "animates" because
+  `tickStats` appends a new value each second and View re-renders — but
+  there is no easing, no interpolation, no transition. For a real
+  lazydocker-style animated graph (smooth curve, fade-in), I'd have to
+  hand-roll an easing loop in the Every fold and store intermediate
+  values. **fine for what we built; would be blocked** for anything
+  requiring smooth motion. Flatte's model assumes frames are cheap and
+  state-driven; smooth animation requires storing fractional state and
+  stepping it per-tick, which is doable but unsupported.
+
+### Task 9–11 verdict
+
+The glamour pass produced **two new pieces of evidence**:
+
+1. **Layout vocabulary is more urgent than Task 8 suggested.** Three
+   panes + a body-internal status line made the arithmetic notably
+   worse; four panes would be prohibitive. The case for extraction
+   strengthened from "important" to "urgent." A `Split*` returning
+   `Rect`s would make this a one-liner.
+2. **Custom data viz is a real gap.** Not urgent (sparkline was 12
+   lines), but the widget library should grow viz primitives post-0.1.
+
+It also produced **one strong reframing** of an existing finding: the
+**manual-zone drift** problem (which broke a test when layout changed)
+is the cleanest argument for **output-scanning auto-zones**. The user's
+instinct that "components should auto-register" is right — and the
+bubblezone-style approach (markers in rendered output, scan after View)
+is the cleanest fit for Flatte's pure-View contract. Prototyped next.
+
+---
+
+## Cumulative summary (final)
+
+(Updated each task. Predictions vs. observed.)
+
+| Area | Prediction | Task 1 | Task 2 | Task 3 | Task 4 | Task 5 | Task 6 | Task 7 | Glamour |
+|---|---|---|---|---|---|---|---|---|---|
+| Layout math | High pain | Mild. | **Confirmed** — 3 sites. | Reinforced — 6 widgets. | (unchanged) | (unchanged) | Reinforced — zones too. | Reinforced — 3 screens. | **URGENT** — 4 width fields per screen, anchor-bottom chrome multiplies. |
+| Scoped cancellation | High pain | — | — | — | **Confirmed sharper.** | — | — | — | (unchanged) |
+| Tabs within pane | Medium | — | — | **Resolved cleanly.** | — | — | — | — | (unchanged) |
+| Mouse zones | Medium | — | — | — | — | — | **Confirmed — manual Rects drift.** | — | **Worsened — layout change broke test.** |
+| View composition | Medium | Mild. | Mild. | Fine. | Fine. | Fine. | Fine. | Fine. | Fine — three panes still readable. |
+| Feature-module shape | Untested | Positive. | Strong positive. | Strong positive. | Strong positive. | Strong positive. | Strong positive. | **Linear scaling.** | (unchanged) |
+| Keyboard routing | Low–medium | Low. | Low. | Low. | Low. | Low. | Low. | Low. | Low. |
+| Polling (`Every`) | Low | — | — | — | **Low sidestep / high force.** | — | — | — | (unchanged) |
+| Streaming (`Stream`) | Low | — | — | — | **Low sidestep / high force.** | — | — | — | (unchanged) |
+| Modal routing | Low–medium | — | — | — | — | **Confirmed low.** | — | — | (unchanged) |
+| Per-screen lifecycle | (not predicted) | — | — | — | Mild gap. | — | — | — | (unchanged) |
+| Effects zero-value | (not predicted) | — | — | — | Annoying. | — | — | — | (unchanged) |
+| Custom data viz | (not predicted) | — | — | — | — | — | — | — | **New gap — hand-rolled sparkline; library should grow viz primitives.** |
+| Animation system | (not predicted) | — | — | — | — | — | — | — | **New gap — no easing/interpolation; only state-driven motion.** |
+
+**Final final verdict:** the glamour pass did not change the *list* of
+extraction candidates but it did change their *priority*. Layout
+vocabulary is now urgent, not just important. Auto-zones via output-
+scanning is now the cleanest fix for a problem the user identified and
+the dogfood independently confirmed. Custom data viz and animation are
+new gaps worth tracking post-0.1 but not urgent.
 (Updated each task. Predictions vs. observed.)
 
 | Area | Prediction | Task 1 | Task 2 | Task 3 | Task 4 |

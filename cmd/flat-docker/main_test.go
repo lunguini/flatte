@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
 )
@@ -243,10 +245,11 @@ func TestDetailShowsEmptyStateWhenNoMatches(t *testing.T) {
 func TestContainersLayoutSplitsBodyWidthBetweenPanes(t *testing.T) {
 	s := resizedState(80, 24)
 	c := &s.containers
-	wantList := 26
-	wantDetail := 80 - wantList - 2
-	if c.listPaneWidth != wantList || c.detailPaneWidth != wantDetail {
-		t.Fatalf("panes = %d/%d, want %d/%d", c.listPaneWidth, c.detailPaneWidth, wantList, wantDetail)
+	if c.listPaneWidth+c.detailPaneWidth+c.activityPaneWidth+4 != 80 {
+		t.Fatalf("panes %d + %d + %d + 4 (gaps) != 80 (total)", c.listPaneWidth, c.detailPaneWidth, c.activityPaneWidth)
+	}
+	if c.activityPaneWidth == 0 {
+		t.Fatalf("activity pane width is 0 — anchor-right pane missing")
 	}
 }
 
@@ -614,16 +617,18 @@ func TestMouseClickListRowSelectsIt(t *testing.T) {
 
 func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
-	// Tab headers at Y=chromeRowsTop+1=3, X starts at listPaneWidth+2=28
-	// logs tab at X=28+8=36
+	// Tab headers at Y=chromeRowsTop+1=3, X starts at listPaneWidth+2.
+	// logs tab sits at roughly tabsX+8; click somewhere in its range.
+	tabsX := s.containers.listPaneWidth + 2
+	logsX := tabsX + 9
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
-		X:      36, Y: 3,
+		X:      logsX, Y: 3,
 	}, flatte.Effects[State]{})
 
 	if s.containers.tab != tabLogs {
-		t.Fatalf("after click on logs tab header, tab = %v, want logs", s.containers.tab)
+		t.Fatalf("after click on logs tab header at X=%d, tab = %v, want logs", logsX, s.containers.tab)
 	}
 }
 
@@ -763,6 +768,100 @@ func TestScreensAreIsolatedFromEachOther(t *testing.T) {
 	}
 	if s.images.list.Cursor() != 2 {
 		t.Fatalf("images cursor not preserved: %d", s.images.list.Cursor())
+	}
+}
+
+func TestStatusLineUpdatesAfterStatsTick(t *testing.T) {
+	s := resizedState(80, 24)
+	before := s.containers.statusLine
+	s.containers.tickStats(time.Now())
+	after := s.containers.statusLine
+	if before == after {
+		t.Fatalf("status line did not change after tick\nbefore: %q\nafter:  %q", before, after)
+	}
+	if !strings.Contains(after, "running") {
+		t.Fatalf("status line missing running count: %q", after)
+	}
+}
+
+func TestActivityPaneReceivesEventsFromStatsTick(t *testing.T) {
+	s := resizedState(80, 24)
+	if len(s.containers.activity) != 0 {
+		t.Fatalf("activity not empty at start: %d events", len(s.containers.activity))
+	}
+	s.containers.tickStats(time.Now())
+	if len(s.containers.activity) != 1 {
+		t.Fatalf("after one tick, activity = %d events, want 1", len(s.containers.activity))
+	}
+	if !strings.Contains(s.containers.activity[0], "nginx-proxy") {
+		t.Fatalf("activity event missing container name: %q", s.containers.activity[0])
+	}
+}
+
+func TestActivityPaneReceivesEventsFromLiveLogAppend(t *testing.T) {
+	s := resizedState(80, 24)
+	before := len(s.containers.activity)
+	s.containers.appendLiveLog("a1b2c3d4e5", "test log line for activity")
+	if len(s.containers.activity) != before+1 {
+		t.Fatalf("activity not appended after live log: %d -> %d", before, len(s.containers.activity))
+	}
+	last := s.containers.activity[len(s.containers.activity)-1]
+	if !strings.Contains(last, "test log line") {
+		t.Fatalf("activity event content missing: %q", last)
+	}
+}
+
+func TestSparklineRendersBlockCharsAfterHistory(t *testing.T) {
+	s := resizedState(80, 24)
+	// Drive several ticks so cpuHistory fills
+	for i := 0; i < 5; i++ {
+		s.containers.tickStats(time.Now())
+	}
+	hist := s.containers.cpuHistory["a1b2c3d4e5"]
+	if len(hist) != 5 {
+		t.Fatalf("cpuHistory len = %d, want 5", len(hist))
+	}
+	rendered := sparkline(hist, lipgloss.Color("117"))
+	if strings.Contains(rendered, "(no history)") {
+		t.Fatalf("sparkline still shows placeholder after ticks: %q", rendered)
+	}
+	// Should contain at least one of the block characters
+	if !strings.ContainsAny(rendered, "▁▂▃▄▅▆▇█") {
+		t.Fatalf("sparkline missing block chars: %q", rendered)
+	}
+}
+
+func TestSparklineEmptyHistoryShowsPlaceholder(t *testing.T) {
+	rendered := sparkline(nil, lipgloss.Color("117"))
+	if !strings.Contains(rendered, "(no history)") {
+		t.Fatalf("empty sparkline should show placeholder, got %q", rendered)
+	}
+}
+
+func TestCPUHistoryCapsAtThirtyEntries(t *testing.T) {
+	s := resizedState(80, 24)
+	for i := 0; i < 50; i++ {
+		s.containers.tickStats(time.Now())
+	}
+	hist := s.containers.cpuHistory["a1b2c3d4e5"]
+	if len(hist) != 30 {
+		t.Fatalf("cpuHistory len = %d, want 30 (capped)", len(hist))
+	}
+}
+
+func TestAnchorRightActivityPanePresentInContainersView(t *testing.T) {
+	s := resizedState(80, 24)
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "activity") {
+		t.Fatalf("anchor-right activity pane missing in:\n%s", content)
+	}
+}
+
+func TestStatusLinePresentAtBottomOfContainersBody(t *testing.T) {
+	s := resizedState(80, 24)
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "containers (") {
+		t.Fatalf("status line missing aggregate count in:\n%s", content)
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"math"
 	"os"
 	"strconv"
@@ -293,6 +294,7 @@ type containersScreen struct {
 	width, height   int
 	listPaneWidth   int
 	detailPaneWidth int
+	activityPaneWidth int
 
 	focus      flatui.FocusRing
 	filter     flatui.TextField
@@ -307,11 +309,16 @@ type containersScreen struct {
 	inspect flatui.Viewport
 
 	statsCache map[string]containerStats
+	cpuHistory map[string][]float64
+	memHistory map[string][]float64
 	liveLogs   map[string][]string
 	logTarget  string
 	logCancel  context.CancelFunc
 	zones      flatui.ZoneMap
 	listHeight int
+
+	activity   []string
+	statusLine string
 }
 
 type containerStats struct {
@@ -330,28 +337,52 @@ func newContainersScreen() containersScreen {
 	return c
 }
 
+const statusLineRows = 1
+
 func (c *containersScreen) layout(width, height int) {
 	c.width, c.height = width, height
 	c.focus.SetCount(3)
-	c.listPaneWidth = min(30, max(width/3, 16))
-	c.detailPaneWidth = max(width-c.listPaneWidth-2, 0)
+	c.listPaneWidth = min(26, max(width/5, 14))
+	c.activityPaneWidth = 22
+	c.detailPaneWidth = max(width-c.listPaneWidth-2-c.activityPaneWidth-2, 0)
+
+	bodyContentHeight := max(height-statusLineRows, 0)
+
 	const listChromeRows = 3
-	c.listHeight = max(height-listChromeRows, 0)
+	c.listHeight = max(bodyContentHeight-listChromeRows, 0)
 	c.list.SetHeight(c.listHeight)
 
 	const detailChromeRows = 3
 	contentWidth := max(c.detailPaneWidth-2, 1)
-	contentHeight := max(height-detailChromeRows, 0)
+	contentHeight := max(bodyContentHeight-detailChromeRows, 0)
 	c.logs.SetSize(contentWidth, contentHeight)
 	c.inspect.SetSize(contentWidth, contentHeight)
-	c.cpu.SetWidth(max(contentWidth-12, 4))
-	c.mem.SetWidth(max(contentWidth-12, 4))
+	c.cpu.SetWidth(max(contentWidth-16, 4))
+	c.mem.SetWidth(max(contentWidth-16, 4))
 
 	if len(c.filtered) == 0 && len(c.containers) > 0 {
 		c.refreshFilter()
 	}
 	c.syncDetail()
+	c.recomputeStatusLine()
 	c.registerMouseZones()
+}
+
+func (c *containersScreen) recomputeStatusLine() {
+	total := len(c.containers)
+	running := 0
+	var totalCPU, totalMEM float64
+	for i := range c.containers {
+		if c.containers[i].Status == "running" {
+			running++
+		}
+		if st, ok := c.statsCache[c.containers[i].ID]; ok {
+			totalCPU += st.CPU
+			totalMEM += st.MEM
+		}
+	}
+	c.statusLine = fmt.Sprintf(" %d containers (%d running)  CPU %.0f%%  MEM %.0f%%  filter: %s ",
+		total, running, totalCPU, totalMEM, c.filter.Value)
 }
 
 func (c *containersScreen) registerMouseZones() {
@@ -476,6 +507,12 @@ func (c *containersScreen) tickStats(_ time.Time) {
 	if c.statsCache == nil {
 		c.statsCache = make(map[string]containerStats)
 	}
+	if c.cpuHistory == nil {
+		c.cpuHistory = make(map[string][]float64)
+	}
+	if c.memHistory == nil {
+		c.memHistory = make(map[string][]float64)
+	}
 	st := c.statsCache[ct.ID]
 	if st.Tick == 0 {
 		st.CPU = sampleCPU(ct)
@@ -485,8 +522,30 @@ func (c *containersScreen) tickStats(_ time.Time) {
 	st.CPU = clampStat(st.CPU + stepFor(ct.ID, st.Tick, 7, 3))
 	st.MEM = clampStat(st.MEM + stepFor(ct.Name, st.Tick, 5, 2))
 	c.statsCache[ct.ID] = st
+
+	c.cpuHistory[ct.ID] = appendHistory(c.cpuHistory[ct.ID], st.CPU, 30)
+	c.memHistory[ct.ID] = appendHistory(c.memHistory[ct.ID], st.MEM, 30)
+
 	c.cpu.SetPercent(st.CPU)
 	c.mem.SetPercent(st.MEM)
+
+	c.pushActivity(fmt.Sprintf("stats  %s  CPU %2.0f%%  MEM %2.0f%%", ct.Name, st.CPU, st.MEM))
+	c.recomputeStatusLine()
+}
+
+func appendHistory(h []float64, v float64, cap int) []float64 {
+	h = append(h, v)
+	if len(h) > cap {
+		h = h[len(h)-cap:]
+	}
+	return h
+}
+
+func (c *containersScreen) pushActivity(line string) {
+	c.activity = append(c.activity, line)
+	if len(c.activity) > 200 {
+		c.activity = c.activity[len(c.activity)-200:]
+	}
 }
 
 func clampStat(v float64) float64 {
@@ -568,6 +627,18 @@ func (c *containersScreen) appendLiveLog(id, line string) {
 	if sel := c.selected(); sel != nil && sel.ID == id {
 		c.logs.SetContent(c.renderedLogsFor(id))
 	}
+	shortID := id
+	if len(shortID) > 8 {
+		shortID = shortID[:8]
+	}
+	c.pushActivity("log    " + shortID + "  " + truncateForActivity(line))
+}
+
+func truncateForActivity(s string) string {
+	if len(s) > 60 {
+		return s[:60] + "…"
+	}
+	return s
 }
 
 func sampleCPU(ct *Container) float64 {
@@ -587,13 +658,13 @@ func sampleMEM(ct *Container) float64 {
 }
 
 func sampleLogs(ct Container) string {
-	const ts = "2026-06-25 10:00:01"
+	const ts = "10:00:01"
 	return strings.Join([]string{
-		ts + " starting " + ct.Name + " (" + ct.ID + ")",
-		ts + " image: " + ct.Image,
-		ts + " status: " + ct.Status,
+		ts + " starting " + ct.Name,
+		ts + " image=" + ct.Image,
+		ts + " status=" + ct.Status,
 		ts + " ready",
-		ts + " accepting traffic",
+		ts + " listening",
 	}, "\n")
 }
 
@@ -724,7 +795,57 @@ func (c *containersScreen) scrollActiveTab(delta int) {
 func (c *containersScreen) View(_ *State) string {
 	listPane := c.renderListPane()
 	detailPane := c.renderDetailPane()
-	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", detailPane)
+	activityPane := c.renderActivityPane()
+	mainRow := lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", detailPane, "  ", activityPane)
+	statusLine := c.renderStatusLine()
+	return strings.Join([]string{mainRow, statusLine}, "\n")
+}
+
+func (c *containersScreen) renderStatusLine() string {
+	if c.statusLine == "" {
+		c.recomputeStatusLine()
+	}
+	return lipgloss.NewStyle().
+		Width(c.width).
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("252")).
+		Render(c.statusLine)
+}
+
+func (c *containersScreen) renderActivityPane() string {
+	style := lipgloss.NewStyle().Width(c.activityPaneWidth)
+	title := "activity"
+	title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("117")).Render(title)
+
+	bodyHeight := max(c.height-statusLineRows-2, 0)
+	start := len(c.activity) - bodyHeight
+	if start < 0 {
+		start = 0
+	}
+	visible := c.activity[start:]
+	if len(visible) == 0 {
+		visible = []string{lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no events yet)")}
+	}
+	truncated := make([]string, len(visible))
+	for i, line := range visible {
+		truncated[i] = truncateToWidth(line, c.activityPaneWidth-2)
+	}
+	content := title + "\n\n" + strings.Join(truncated, "\n")
+	return style.Render(content)
+}
+
+func truncateToWidth(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	return ansiTruncate(s, width-1) + "…"
+}
+
+func ansiTruncate(s string, width int) string {
+	return lipgloss.NewStyle().MaxWidth(width).Render(s)
 }
 
 func (c *containersScreen) keyHints() string {
@@ -830,12 +951,17 @@ func (c *containersScreen) renderActiveTab(selected *Container) string {
 		} else {
 			statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render(selected.Status)
 		}
+		cpuSpark := sparkline(c.cpuHistory[selected.ID], lipgloss.Color("117"))
+		memSpark := sparkline(c.memHistory[selected.ID], lipgloss.Color("114"))
 		return strings.Join([]string{
 			"  status: " + statusLine,
 			"  image:  " + selected.Image,
 			"",
 			"  CPU " + c.cpu.View(),
+			"  hist " + cpuSpark,
+			"",
 			"  MEM " + c.mem.View(),
+			"  hist " + memSpark,
 		}, "\n")
 	case tabLogs:
 		view := c.logs.View()
@@ -851,6 +977,23 @@ func (c *containersScreen) renderActiveTab(selected *Container) string {
 		return view
 	}
 	return ""
+}
+
+var sparkBlocks = []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
+
+func sparkline(history []float64, c color.Color) string {
+	if len(history) == 0 {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no history)")
+	}
+	runes := make([]rune, len(history))
+	for i, v := range history {
+		idx := int(v/100.0*float64(len(sparkBlocks))) % len(sparkBlocks)
+		if idx < 0 {
+			idx = 0
+		}
+		runes[i] = sparkBlocks[idx]
+	}
+	return lipgloss.NewStyle().Foreground(c).Render(string(runes))
 }
 
 type Image struct {
