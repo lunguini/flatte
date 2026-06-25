@@ -9,6 +9,17 @@ images                      nginx:1.25
   myapp/web:3.0                                                                 
   myapp/worker:2.1                                                              
   myapp/migrate:1.4                                                             
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
 ────────────────────────────────────────────────────────────────────────────────
  j/k move  tab next  1/2/3 switch  q quit 
 [title flat-docker — images]

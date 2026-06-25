@@ -7,6 +7,19 @@ volumes                     data
   logs                        size:       1.2GB                                 
   cache                                                                         
   backups                                                                       
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
 ────────────────────────────────────────────────────────────────────────────────
  j/k move  tab next  1/2/3 switch  q quit 
 [title flat-docker — volumes]

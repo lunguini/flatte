@@ -156,8 +156,8 @@ func handleGlobalKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) bo
 }
 
 const (
-	chromeRowsTop    = 2
-	chromeRowsBottom = 1
+	chromeRowsTop    = 2 // tab bar + separator
+	chromeRowsBottom = 2 // separator + footer (help line) — both anchored to bottom
 )
 
 func (s *State) resize(width, height int) {
@@ -294,10 +294,11 @@ var sampleContainers = []Container{
 }
 
 type containersScreen struct {
-	width, height   int
-	listPaneWidth   int
-	detailPaneWidth int
+	width, height     int
+	listPaneWidth     int
+	detailPaneWidth   int
 	activityPaneWidth int
+	bodyContentHeight int
 
 	focus      flatui.FocusRing
 	filter     flatui.TextField
@@ -350,15 +351,15 @@ func (c *containersScreen) layout(width, height int) {
 	c.activityPaneWidth = 22
 	c.detailPaneWidth = max(width-c.listPaneWidth-2-c.activityPaneWidth-2, 0)
 
-	bodyContentHeight := max(height-statusLineRows, 0)
+	c.bodyContentHeight = max(height-statusLineRows, 0)
 
 	const listChromeRows = 3
-	c.listHeight = max(bodyContentHeight-listChromeRows, 0)
+	c.listHeight = max(c.bodyContentHeight-listChromeRows, 0)
 	c.list.SetHeight(c.listHeight)
 
 	const detailChromeRows = 3
 	contentWidth := max(c.detailPaneWidth-2, 1)
-	contentHeight := max(bodyContentHeight-detailChromeRows, 0)
+	contentHeight := max(c.bodyContentHeight-detailChromeRows, 0)
 	c.logs.SetSize(contentWidth, contentHeight)
 	c.inspect.SetSize(contentWidth, contentHeight)
 	c.cpu.SetWidth(max(contentWidth-16, 4))
@@ -797,11 +798,11 @@ func (c *containersScreen) renderStatusLine() string {
 }
 
 func (c *containersScreen) renderActivityPane() string {
-	style := lipgloss.NewStyle().Width(c.activityPaneWidth)
+	style := lipgloss.NewStyle().Width(c.activityPaneWidth).Height(c.bodyContentHeight)
 	title := "activity"
 	title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("117")).Render(title)
 
-	bodyHeight := max(c.height-statusLineRows-2, 0)
+	bodyHeight := max(c.bodyContentHeight-2, 0)
 	start := len(c.activity) - bodyHeight
 	if start < 0 {
 		start = 0
@@ -852,7 +853,7 @@ func (c *containersScreen) keyHints() string {
 }
 
 func (c *containersScreen) renderListPane() string {
-	style := lipgloss.NewStyle().Width(c.listPaneWidth)
+	style := lipgloss.NewStyle().Width(c.listPaneWidth).Height(c.bodyContentHeight)
 
 	filterLine := "filter: " + c.filter.Value
 	if c.filter.Value == "" {
@@ -886,7 +887,7 @@ func (c *containersScreen) renderListPane() string {
 }
 
 func (c *containersScreen) renderDetailPane() string {
-	style := lipgloss.NewStyle().Width(c.detailPaneWidth)
+	style := lipgloss.NewStyle().Width(c.detailPaneWidth).Height(c.bodyContentHeight)
 
 	selected := c.selected()
 	if selected == nil {
@@ -997,12 +998,13 @@ var sampleImages = []Image{
 }
 
 type imagesScreen struct {
-	width, height   int
-	listPaneWidth   int
-	detailPaneWidth int
-	focus           flatui.FocusRing
-	list            flatui.List
-	images          []Image
+	width, height     int
+	listPaneWidth     int
+	detailPaneWidth   int
+	bodyContentHeight int
+	focus             flatui.FocusRing
+	list              flatui.List
+	images            []Image
 }
 
 const (
@@ -1023,8 +1025,9 @@ func (i *imagesScreen) layout(width, height int) {
 	i.focus.SetCount(2)
 	i.listPaneWidth = min(30, max(width/3, 16))
 	i.detailPaneWidth = max(width-i.listPaneWidth-2, 0)
+	i.bodyContentHeight = height
 	const listChromeRows = 2 // title line + blank
-	i.list.SetHeight(max(height-listChromeRows, 0))
+	i.list.SetHeight(max(i.bodyContentHeight-listChromeRows, 0))
 }
 
 func (i *imagesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
@@ -1080,7 +1083,7 @@ func (i *imagesScreen) selected() *Image {
 }
 
 func (i *imagesScreen) renderListPane() string {
-	style := lipgloss.NewStyle().Width(i.listPaneWidth)
+	style := lipgloss.NewStyle().Width(i.listPaneWidth).Height(i.bodyContentHeight)
 	title := "images"
 	if i.focus.Focused(imgFocusList) {
 		title = lipgloss.NewStyle().Bold(true).Render(title)
@@ -1096,7 +1099,7 @@ func (i *imagesScreen) renderListPane() string {
 }
 
 func (i *imagesScreen) renderDetailPane() string {
-	style := lipgloss.NewStyle().Width(i.detailPaneWidth)
+	style := lipgloss.NewStyle().Width(i.detailPaneWidth).Height(i.bodyContentHeight)
 	sel := i.selected()
 	if sel == nil {
 		return style.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no image selected)"))
@@ -1129,12 +1132,13 @@ var sampleVolumes = []Volume{
 }
 
 type volumesScreen struct {
-	width, height   int
-	listPaneWidth   int
-	detailPaneWidth int
-	focus           flatui.FocusRing
-	list            flatui.List
-	volumes         []Volume
+	width, height     int
+	listPaneWidth     int
+	detailPaneWidth   int
+	bodyContentHeight int
+	focus             flatui.FocusRing
+	list              flatui.List
+	volumes           []Volume
 }
 
 const (
@@ -1155,8 +1159,9 @@ func (v *volumesScreen) layout(width, height int) {
 	v.focus.SetCount(2)
 	v.listPaneWidth = min(30, max(width/3, 16))
 	v.detailPaneWidth = max(width-v.listPaneWidth-2, 0)
+	v.bodyContentHeight = height
 	const listChromeRows = 2
-	v.list.SetHeight(max(height-listChromeRows, 0))
+	v.list.SetHeight(max(v.bodyContentHeight-listChromeRows, 0))
 }
 
 func (v *volumesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
@@ -1212,7 +1217,7 @@ func (v *volumesScreen) selected() *Volume {
 }
 
 func (v *volumesScreen) renderListPane() string {
-	style := lipgloss.NewStyle().Width(v.listPaneWidth)
+	style := lipgloss.NewStyle().Width(v.listPaneWidth).Height(v.bodyContentHeight)
 	title := "volumes"
 	if v.focus.Focused(volFocusList) {
 		title = lipgloss.NewStyle().Bold(true).Render(title)
@@ -1228,7 +1233,7 @@ func (v *volumesScreen) renderListPane() string {
 }
 
 func (v *volumesScreen) renderDetailPane() string {
-	style := lipgloss.NewStyle().Width(v.detailPaneWidth)
+	style := lipgloss.NewStyle().Width(v.detailPaneWidth).Height(v.bodyContentHeight)
 	sel := v.selected()
 	if sel == nil {
 		return style.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no volume selected)"))

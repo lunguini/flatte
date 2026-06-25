@@ -11,6 +11,14 @@ filter: (all)     nginx-proxy                             activity
 ●  nginx-web                                                                    
 ○  migration        MEM ███████░░░░░░░░░░░░░   35%                              
                     hist (no history)                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
  8 containers (6 running)  CPU 0%  MEM 0%  filter:                              
 ────────────────────────────────────────────────────────────────────────────────
  j/k move  s stop  x remove  tab next  1/2/3 switch  q quit 
