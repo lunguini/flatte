@@ -1095,6 +1095,71 @@ finding bugs in the existing renderer contract.
 
 ---
 
+## Terminal font capability gap (2026-06-25)
+
+User asked about bundling a font in flat-docker or auto-detecting
+missing Powerline glyphs to show a notification. The honest answer
+shaped what got implemented; worth recording.
+
+### What's not possible
+
+- **Bundling a font inside flat** is structurally impossible. Terminals
+  are byte-streams; the terminal emulator owns font rendering. The app
+  emits Unicode code points + ANSI styling, the terminal decides how to
+  draw them. No API exists for an application to override the terminal's
+  font (categorically different from `@font-face` web or runtime-loaded
+  native GUI fonts).
+- **Reliable detection of "did the glyph render"** is also not possible.
+  The terminal does not feed back font-coverage information. Three
+  indirect approaches all fail:
+  1. `$TERM_PROGRAM` lookup — high-maintenance DB of terminal
+     capabilities; ignores user font config.
+  2. **Cursor-position probing** (emit glyph, DSR query, check advance) —
+     requires framework support for DSR response handling; many terminals
+     show tofu that still advances the cursor by 1 cell, false-positive.
+  3. **OSC 60 (font report)** — virtually no terminal supports it.
+
+### What got implemented
+
+- **`glyphSet` choice** with two presets: `glyphPower` (Powerline
+  U+E0BA/U+E0BC, requires Nerd Font) and `glyphSafe` (standard `[`/`]`
+  brackets, render everywhere).
+- **`FLAT_DOCKER_GLYPHS` env var** picks the set. Defaults to `powerline`
+  because that's the look the maintainers want; users with bare
+  terminals set `FLAT_DOCKER_GLYPHS=safe` to fall back.
+- **One-time tip in the activity feed** at startup. Either: "if tab
+  edges look like boxes, install a Nerd Font or set
+  FLAT_DOCKER_GLYPHS=safe" (when Powerline), or "using safe (ASCII)
+  glyphs; set FLAT_DOCKER_GLYPHS=powerline with a Nerd Font for nicer
+  tabs" (when Safe). Honest about the limitation.
+
+### Implication for flatte post-0.1
+
+This is a real framework concern, not just an app concern. Two
+candidate framework additions:
+
+1. **`flatui.GlyphSet` registry** — framework-managed named glyph sets
+   (`Powerline`, `Rounded`, `Safe`) that widgets can opt into. Apps
+   choose once; widgets pick up the choice. Avoids per-app env vars.
+2. **Best-effort terminal capability probe** — `flatte.ProbeTerminal(out)
+   TerminalInfo` that queries XTVERSION and matches against a known
+   terminal capability DB. Doesn't catch user font config but catches
+   the common case (e.g., "this is WezTerm 20240101 — Nerd Font almost
+   certainly installed"). Opt-in; apps decide how to react.
+
+Neither is urgent. The env-var approach in flat-docker proves the
+pattern works for now.
+
+### Verdict
+
+The user's instinct (bundle / detect) is correct in spirit — the
+framework should not leave users staring at tofu boxes — but the
+implementation is constrained by terminal architecture. The honest
+workaround (config + documentation + one-time tip) is the right
+shape until terminal capability probing matures.
+
+---
+
 ## Craft pass — scroll affordances + visual polish (2026-06-25)
 (Updated each task. Predictions vs. observed.)
 

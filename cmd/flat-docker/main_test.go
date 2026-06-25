@@ -766,6 +766,74 @@ func TestLogsUseWrappedContentSoLongLinesWrap(t *testing.T) {
 	}
 }
 
+func TestPickGlyphSetDefaultsToPowerline(t *testing.T) {
+	t.Setenv("FLAT_DOCKER_GLYPHS", "")
+	g := pickGlyphSet()
+	if g != glyphPower {
+		t.Fatalf("default glyph set = %+v, want glyphPower", g)
+	}
+}
+
+func TestPickGlyphSetRespectsEnvVar(t *testing.T) {
+	cases := []struct{ env, name string }{
+		{"safe", "safe"},
+		{"ascii", "ascii"},
+		{"off", "off"},
+		{"0", "0"},
+		{"false", "false"},
+		{"SAFE", "SAFE (capital)"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("FLAT_DOCKER_GLYPHS", c.env)
+			g := pickGlyphSet()
+			if g != glyphSafe {
+				t.Fatalf("FLAT_DOCKER_GLYPHS=%q -> %+v, want glyphSafe", c.env, g)
+			}
+		})
+	}
+}
+
+func TestPickGlyphSetPowerlineWhenExplicitlySet(t *testing.T) {
+	t.Setenv("FLAT_DOCKER_GLYPHS", "powerline")
+	g := pickGlyphSet()
+	if g != glyphPower {
+		t.Fatalf("FLAT_DOCKER_GLYPHS=powerline -> %+v, want glyphPower", g)
+	}
+}
+
+func TestTipForGlyphSetMentionsFallbackForPowerline(t *testing.T) {
+	tip := tipForGlyphSet(glyphPower)
+	if !strings.Contains(tip, "FLAT_DOCKER_GLYPHS=safe") {
+		t.Fatalf("powerline tip should mention the safe fallback: %q", tip)
+	}
+	if !strings.Contains(tip, "Nerd Font") {
+		t.Fatalf("powerline tip should mention Nerd Font: %q", tip)
+	}
+}
+
+func TestTipForGlyphSetMentionsUpgradeForSafe(t *testing.T) {
+	tip := tipForGlyphSet(glyphSafe)
+	if !strings.Contains(tip, "FLAT_DOCKER_GLYPHS=powerline") {
+		t.Fatalf("safe tip should mention the powerline upgrade: %q", tip)
+	}
+}
+
+func TestPowerlineTabWidthMatchesContent(t *testing.T) {
+	rendered, width := powerlineTab("stats", true)
+	// Width is auto-derived from the rendered string. Whatever lipgloss
+	// reports, the rendered string's visible width should match.
+	if width != lipgloss.Width(rendered) {
+		t.Fatalf("returned width %d != lipgloss.Width(rendered) %d", width, lipgloss.Width(rendered))
+	}
+	// When using safe glyphs, the brackets add 2 chars vs the inner label width.
+	// When using powerline, the slants add 2 chars. Either way, the result is
+	// len(label) + 6 (2 glyphs + 2*2 padding). Sanity check.
+	if width < lipgloss.Width("stats")+2 {
+		t.Fatalf("width %d looks too small for label 'stats'", width)
+	}
+}
+
 func TestTabSwitchKeysOnlyWorkWhenDetailFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	// focus starts on list

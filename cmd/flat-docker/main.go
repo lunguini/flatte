@@ -377,6 +377,34 @@ func defaultPalette() palette {
 
 var pal = defaultPalette()
 
+// glyphSet controls which characters tab edges use. Powerline requires
+// the user's terminal font to include U+E0BA/U+E0BC (Nerd Font, etc.);
+// Safe uses standard brackets that render in every terminal.
+type glyphSet struct {
+	left  string
+	right string
+}
+
+var (
+	glyphSafe = glyphSet{"[", "]"}
+	glyphPower = glyphSet{powerlineLeftSlant, powerlineRightSlant}
+)
+
+// activeGlyphs is the process-wide choice, picked from $FLAT_DOCKER_GLYPHS
+// at startup. Default is Powerline because the maintainers want the best
+// visuals; users whose terminals can't render the PUA glyphs set
+// FLAT_DOCKER_GLYPHS=safe to fall back to brackets.
+var activeGlyphs = pickGlyphSet()
+
+func pickGlyphSet() glyphSet {
+	switch strings.ToLower(os.Getenv("FLAT_DOCKER_GLYPHS")) {
+	case "safe", "ascii", "off", "0", "false":
+		return glyphSafe
+	default:
+		return glyphPower
+	}
+}
+
 const (
 	powerlineLeftSlant  = "\ue0ba"
 	powerlineRightSlant = "\ue0bc"
@@ -395,11 +423,10 @@ func powerlineTab(label string, active bool) (string, int) {
 		text = pal.muted
 	}
 	bar := pal.bg
-	l := lipgloss.NewStyle().Foreground(fill).Background(bar).Render(powerlineLeftSlant)
+	l := lipgloss.NewStyle().Foreground(fill).Background(bar).Render(activeGlyphs.left)
 	b := lipgloss.NewStyle().Foreground(text).Background(fill).Padding(0, 2).Render(label)
-	r := lipgloss.NewStyle().Foreground(fill).Background(bar).Render(powerlineRightSlant)
+	r := lipgloss.NewStyle().Foreground(fill).Background(bar).Render(activeGlyphs.right)
 	rendered := l + b + r
-	// width = slant(1) + padding(2) + label + padding(2) + slant(1)
 	width := lipgloss.Width(rendered)
 	return rendered, width
 }
@@ -1911,4 +1938,17 @@ func initAsync(s *State, fx flatte.Effects[State]) {
 		s.containers.tickStats(now)
 	})
 	s.containers.startScopedLogs(s, fx)
+	s.containers.pushActivity(tipForGlyphSet(activeGlyphs))
+}
+
+// tipForGlyphSet returns a one-time hint that explains the glyph choice
+// and how to switch. Detection of "did the glyphs render" is not possible
+// from inside a terminal — there is no feedback channel from the terminal
+// back to the app about font coverage. The honest workaround is to inform
+// the user once and let them pick via env var.
+func tipForGlyphSet(g glyphSet) string {
+	if g == glyphPower {
+		return "tip   if tab edges look like boxes, install a Nerd Font or set FLAT_DOCKER_GLYPHS=safe"
+	}
+	return "tip   using safe (ASCII) glyphs; set FLAT_DOCKER_GLYPHS=powerline with a Nerd Font for nicer tabs"
 }
