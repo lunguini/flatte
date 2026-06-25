@@ -11,5 +11,5 @@ filter: (all)               nginx-proxy
 ●  nginx-web                                                                    
 ○  migration                                                                    
 ────────────────────────────────────────────────────────────────────────────────
- j/k move  tab next  1/2/3 switch  q quit 
+ j/k move  s stop  x remove  tab next  1/2/3 switch  q quit 
 [title flat-docker — containers]

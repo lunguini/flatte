@@ -389,7 +389,62 @@ initial review — the feedback was righter than I credited, and the
 extraction candidate is now concrete and sample-driven. The closed
 `Effects` struct (no public way to derive a child context from `fx`) is a
 related gap that would be cheap to fix.
-## Cumulative summary
+
+---
+
+## Task 5 — Confirm modal for stop/remove
+
+Predicted low–medium pain; confirmed low. The routing pattern is well-
+trodden (`flat-modal` dogfoods it) and the feature-module shape extended
+naturally to the modal: `confirmModel` has its own `Handle`, root
+delegates with one `if s.modal != nil` guard.
+
+### Routing (predicted low–medium — confirmed low)
+
+- **`cmd/flat-docker/main.go` root `Handle`** — the modal-first guard is
+  literally `if s.modal != nil { s.modal.Handle(s, ev, fx); return }`.
+  Two lines. Background async still applies through the loop while the
+  modal is open (Stats Every keeps ticking; Logs streamer keeps streaming)
+  because the guard only intercepts *input*, not *updates*. **fine**.
+- **`confirmModel.Handle`** is a 10-line key switch (y confirms, n/Esc
+  cancels). No surprises. **fine**.
+
+### Layout (positive finding for `flatui.Overlay`)
+
+- **`flatui.Overlay(content, renderModal(m))`** worked first try, no
+  arithmetic required. The base frame shows through where the modal
+  doesn't cover; the modal is centered. `OverlayOrigin` exists for
+  cursor placement but isn't needed here (modal has no text input).
+  **fine** — this is the kind of "do less, work better" outcome the
+  feedback's "abstraction is found, not designed" rule protects.
+- **Modal styling** is plain Lip Gloss: `RoundedBorder`, fixed width,
+  padding. ~8 lines. No friction.
+
+### Feature-module shape (continued positive)
+
+- **Root `State` owns `modal *confirmModel`**, the modal owns its own
+  Handle, and `applyModalAction` lives next to it. The action target is
+  captured by ID at open time, so even if selection drifts the action
+  applies to the right container. The action's effect mutates
+  `containers.containers[]` and calls `recomputeDetailWidgets` — same
+  pattern as everywhere else. **No friction.**
+
+### What this task did not yet exercise
+
+- Mouse zones (Task 6).
+- Cross-screen structure reuse (Task 7).
+
+### Task 5 verdict
+
+**Modal-over-complex-base is a non-issue in Flatte.** The feedback
+flagged it as a place where users would "independently reinvent" routing,
+but the pattern is one line and well-documented by existing samples.
+This was correctly predicted low pain and the dogfood confirms it. The
+running tally of "things the feedback worried about that turned out fine"
+grows by one.
+
+---
+
 
 (Updated each task. Predictions vs. observed.)
 
@@ -404,7 +459,7 @@ related gap that would be cheap to fix.
 | Keyboard routing | Low–medium | Low. | Low. | Low. | Low. |
 | Polling (`Every`) | Low | Not yet hit. | Not yet hit. | Not yet hit. | **Low for sidestep pattern; high for cancellable pattern (not natively supported).** |
 | Streaming (`Stream`) | Low | Not yet hit. | Not yet hit. | Not yet hit. | **Low for sidestep pattern; high for cancellable pattern (not natively supported).** |
-| Modal routing | Low–medium | Not yet hit. | Not yet hit. | Not yet hit. | Not yet hit — Task 5. |
+| Modal routing | Low–medium | Not yet hit. | Not yet hit. | Not yet hit. | **Confirmed low** — one-line guard; `flatui.Overlay` works first try. |
 | Per-screen lifecycle | (not predicted) | — | — | — | **Mild gap — `App.Init` is app-lifetime only; no screen enter/exit hooks.** |
 | Effects zero-value | (not predicted) | — | — | — | **Annoying — `fx.Context` is nil on zero Effects; `Effects.context()` default is unexported.** |
 

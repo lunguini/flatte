@@ -503,6 +503,96 @@ func TestAppendLiveLogDoesNotTouchOtherContainerBuffers(t *testing.T) {
 	}
 }
 
+func TestStopKeyOpensConfirmModal(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	if s.modal == nil {
+		t.Fatal("no modal opened after s")
+	}
+	if s.modal.action != "stop" {
+		t.Fatalf("modal action = %q, want stop", s.modal.action)
+	}
+	if s.modal.targetID != "a1b2c3d4e5" {
+		t.Fatalf("modal targetID = %q, want a1b2c3d4e5", s.modal.targetID)
+	}
+}
+
+func TestRemoveKeyOpensConfirmModal(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('x'), flatte.Effects[State]{})
+	if s.modal == nil || s.modal.action != "remove" {
+		t.Fatalf("after x, modal = %+v, want action=remove", s.modal)
+	}
+}
+
+func TestModalCapturesInputUntilClosed(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	if s.modal == nil {
+		t.Fatal("modal not opened")
+	}
+
+	// j during modal should NOT move the list (modal captures it)
+	listCursorBefore := s.containers.list.Cursor()
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	if s.containers.list.Cursor() != listCursorBefore {
+		t.Fatalf("j during modal moved list: %d -> %d", listCursorBefore, s.containers.list.Cursor())
+	}
+}
+
+func TestModalConfirmAppliesAction(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	Handle(s, keyChar('y'), flatte.Effects[State]{})
+
+	if s.modal != nil {
+		t.Fatal("modal not closed after y")
+	}
+	if s.containers.containers[0].Status != "exited" {
+		t.Fatalf("after confirm stop, status = %q, want exited", s.containers.containers[0].Status)
+	}
+}
+
+func TestModalCancelDoesNotApplyAction(t *testing.T) {
+	s := resizedState(80, 24)
+	originalStatus := s.containers.containers[0].Status
+	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	Handle(s, keyChar('n'), flatte.Effects[State]{})
+
+	if s.modal != nil {
+		t.Fatal("modal not closed after n")
+	}
+	if s.containers.containers[0].Status != originalStatus {
+		t.Fatalf("after cancel, status changed: %q -> %q", originalStatus, s.containers.containers[0].Status)
+	}
+}
+
+func TestModalEscapeCloses(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
+	if s.modal != nil {
+		t.Fatal("modal not closed after Esc")
+	}
+}
+
+func TestModalRendersAsOverlayOverBase(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('s'), flatte.Effects[State]{})
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "stop container") {
+		t.Fatalf("modal title missing in:\n%s", content)
+	}
+	if !strings.Contains(content, "stop nginx-proxy?") {
+		t.Fatalf("modal body missing target name in:\n%s", content)
+	}
+	// Base content still present underneath
+	if !strings.Contains(content, "[1 containers]") {
+		t.Fatalf("base tab bar missing under modal in:\n%s", content)
+	}
+}
+
 func keyChar(r rune) flatte.KeyEvent {
 	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}
 }

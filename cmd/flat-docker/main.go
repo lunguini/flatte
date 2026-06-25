@@ -41,6 +41,62 @@ type State struct {
 	containers containersScreen
 	images     imagesScreen
 	volumes    volumesScreen
+
+	modal *confirmModel
+}
+
+type confirmModel struct {
+	action     string
+	targetID   string
+	targetName string
+}
+
+func (m *confirmModel) Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	key, ok := ev.(flatte.KeyEvent)
+	if !ok {
+		return
+	}
+	switch key.Key {
+	case flatte.KeyEscape:
+		s.modal = nil
+	case flatte.KeyCharacter:
+		switch key.Rune {
+		case 'y', 'Y':
+			s.applyModalAction()
+			s.modal = nil
+		case 'n', 'N':
+			s.modal = nil
+		}
+	}
+}
+
+func (s *State) applyModalAction() {
+	if s.modal == nil {
+		return
+	}
+	for i := range s.containers.containers {
+		if s.containers.containers[i].ID == s.modal.targetID {
+			switch s.modal.action {
+			case "stop":
+				s.containers.containers[i].Status = "exited"
+			case "remove":
+				s.containers.containers[i].Status = "removed"
+			}
+			break
+		}
+	}
+	s.containers.recomputeDetailWidgets()
+}
+
+func (s *State) openConfirm(action string, ct *Container) {
+	if ct == nil {
+		return
+	}
+	s.modal = &confirmModel{
+		action:     action,
+		targetID:   ct.ID,
+		targetName: ct.Name,
+	}
 }
 
 func NewState() *State {
@@ -50,6 +106,10 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	if s.modal != nil {
+		s.modal.Handle(s, ev, fx)
+		return
+	}
 	switch e := ev.(type) {
 	case flatte.ResizeEvent:
 		s.resize(e.Width, e.Height)
@@ -125,10 +185,24 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 		body = s.volumes.View(s)
 	}
 	content := strings.Join([]string{header, separator, body, separator, footer}, "\n")
+	if s.modal != nil {
+		content = flatui.Overlay(content, renderModal(s.modal))
+	}
 	return flatte.Frame{
 		Content: content,
 		Title:   "flat-docker — " + s.screen.Name(),
 	}
+}
+
+func renderModal(m *confirmModel) string {
+	title := fmt.Sprintf(" %s container ", m.action)
+	body := fmt.Sprintf("\n  %s %s?\n\n  y confirm   n/esc cancel\n", m.action, m.targetName)
+	return lipgloss.NewStyle().
+		Width(40).
+		Padding(0, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("203")).
+		Render(title + body)
 }
 
 func renderTabBar(s *State, width int) string {
@@ -551,6 +625,10 @@ func (c *containersScreen) handleChar(root *State, fx flatte.Effects[State], r r
 		case 'k', 'K':
 			c.list.MoveUp()
 			c.onSelectionChange(root, fx)
+		case 's', 'S':
+			root.openConfirm("stop", c.selected())
+		case 'x', 'X':
+			root.openConfirm("remove", c.selected())
 		}
 	case focusDetail:
 		switch r {
@@ -594,7 +672,7 @@ func (c *containersScreen) keyHints() string {
 	case focusFilter:
 		return "type filter  tab next  1/2/3 switch  q quit"
 	case focusList:
-		return "j/k move  tab next  1/2/3 switch  q quit"
+		return "j/k move  s stop  x remove  tab next  1/2/3 switch  q quit"
 	case focusDetail:
 		switch c.tab {
 		case tabStats:
