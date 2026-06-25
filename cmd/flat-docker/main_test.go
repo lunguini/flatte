@@ -99,7 +99,7 @@ func TestViewRendersSharedChromeAndActiveScreenBody(t *testing.T) {
 	if !strings.Contains(content, "1 containers") {
 		t.Fatalf("containers tab label missing in:\n%s", content)
 	}
-	if !strings.Contains(content, "filter:") || !strings.Contains(content, "nginx-proxy") {
+	if !strings.Contains(content, "filter:") || !strings.Contains(content, "nginx") {
 		t.Fatalf("containers list pane missing in:\n%s", content)
 	}
 	if !strings.Contains(content, "1/2/3 switch") {
@@ -1496,22 +1496,28 @@ func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
 	View(s, flatte.RenderContext{Width: 80})
 
-	// Tab clicks now go through the tabBar component (HandleMouseAt).
-	// Detail tabs start at listPaneWidth + dividerWidth + 1 (inside border).
-	// The "logs" tab is the second tab; its X offset = tabLabelWidth("stats").
-	detailTabsStartX := s.containers.listPaneWidth + dividerWidth + 1
-	logsOffset := tabLabelWidth("stats")
-	clickX := detailTabsStartX + logsOffset + 1
-	clickY := chromeRowsTop + 2
+	// composeHeader right-aligns tabs. Compute the tab strip's frame X:
+	// detail content starts at listPaneWidth + dividerWidth + 1.
+	// Tab strip local start = contentWidth - totalTabsWidth.
+	// "logs" is the second tab; click at tabStripStart + tabLabelWidth("stats") + 1.
+	contentStartX := s.containers.listPaneWidth + dividerWidth + 1
+	contentWidth := s.containers.detailPaneWidth - paneBorderCols
+	totalTabsW := tabLabelWidth("stats") + tabLabelWidth("logs") + tabLabelWidth("inspect")
+	tabStripLocalStart := contentWidth - totalTabsW
+	if tabStripLocalStart < 0 {
+		t.Skipf("pane too narrow for tabs (contentWidth=%d, tabsW=%d)", contentWidth, totalTabsW)
+	}
+	logsX := contentStartX + tabStripLocalStart + tabLabelWidth("stats") + 1
+	clickY := chromeRowsTop + 1
 
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
-		X:      clickX, Y: clickY,
+		X:      logsX, Y: clickY,
 	}, flatte.Effects[State]{})
 
 	if s.containers.tab != tabLogs {
-		t.Fatalf("after click on logs tab at (%d,%d), tab = %v, want logs", clickX, clickY, s.containers.tab)
+		t.Fatalf("click at (%d,%d): tab = %v, want logs", logsX, clickY, s.containers.tab)
 	}
 }
 

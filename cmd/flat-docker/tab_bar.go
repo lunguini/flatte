@@ -97,3 +97,62 @@ func (t *tabBar) TabStartX(i, stripStartX int) int {
 	}
 	return x
 }
+
+// composeHeader places left content at the left edge and right content at
+// the right edge of a width-bounded row, on a shared background. The gap
+// between them absorbs the remaining space. This is the composition
+// primitive for "title left, tabs right" or any two-element header layout.
+//
+// It deliberately does NOT aggregate title and tabs into one component —
+// the caller owns which is which and which side each goes on. The helper
+// just handles the alignment math so every caller gets it right without
+// rewriting lipgloss.PlaceHorizontal / spacer arithmetic.
+func composeHeader(left, right string, width int, bg color.Color) string {
+	rightW := lipgloss.Width(right)
+	if rightW >= width {
+		return lipgloss.NewStyle().Background(bg).Width(width).MaxWidth(width).Render(right)
+	}
+	maxLeftW := width - rightW - 1
+	leftW := lipgloss.Width(left)
+	if leftW > maxLeftW {
+		if maxLeftW > 1 {
+			left = truncateStyled(left, maxLeftW-1) + "…"
+		} else {
+			left = ""
+		}
+		leftW = lipgloss.Width(left)
+	}
+	gap := width - leftW - rightW
+	if gap < 1 {
+		gap = 1
+	}
+	spacer := lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", gap))
+	return lipgloss.NewStyle().Background(bg).Width(width).MaxWidth(width).Render(left + spacer + right)
+}
+
+func truncateStyled(s string, width int) string {
+	if lipgloss.Width(s) <= width {
+		return s
+	}
+	// Strip ANSI, truncate, re-render as plain (simple — loses styling
+	// but keeps the width correct)
+	stripped := make([]rune, 0, width)
+	inEscape := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if r == 'm' || (r >= '@' && r <= '~') {
+				inEscape = false
+			}
+			continue
+		}
+		stripped = append(stripped, r)
+		if len(stripped) >= width {
+			break
+		}
+	}
+	return string(stripped)
+}

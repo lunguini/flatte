@@ -550,12 +550,9 @@ func renderModal(m *confirmModel) string {
 
 func renderTabBar(s *State, width int) string {
 	s.headerTabs.SetActive(int(s.screen))
-	content := s.headerTabs.Render()
-	return lipgloss.NewStyle().
-		Width(width).
-		Background(pal.bg).
-		Foreground(pal.text).
-		Render(content)
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 1).Render("flat-docker")
+	tabs := s.headerTabs.Render()
+	return composeHeader(title, tabs, width, pal.bg)
 }
 
 func renderHeaderSeparator(width int) string {
@@ -718,7 +715,7 @@ type dragState struct {
 
 const (
 	dividerWidth     = 1
-	minListWidth     = 14
+	minListWidth     = 20
 	minDetailWidth   = 20
 	minActivityWidth = 12
 )
@@ -814,7 +811,7 @@ func (c *containersScreen) layout(width, height int) {
 
 	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
 	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
-	const detailChromeRows = 3
+	const detailChromeRows = 2 // title+tabs row + blank (title merged into tab bar via composeHeader)
 	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
 	c.logs.SetSize(detailInnerWidth, contentHeight)
 	c.inspect.SetSize(detailInnerWidth, contentHeight)
@@ -872,7 +869,7 @@ func (c *containersScreen) applyDrag(currentX int) {
 	// Re-size dependent widgets
 	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
 	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
-	const detailChromeRows = 3
+	const detailChromeRows = 2
 	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
 	c.logs.SetSize(detailInnerWidth, contentHeight)
 	c.inspect.SetSize(detailInnerWidth, contentHeight)
@@ -990,14 +987,26 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		return
 	}
 
-	// Detail tab clicks via tabBar component
-	detailTabsStartX := c.listPaneWidth + dividerWidth + 1 // inside detail pane left border
-	detailTabsY := chromeRowsTop + 2
-	if m.Y == detailTabsY && m.X >= detailTabsStartX {
-		localX := m.X - detailTabsStartX
-		if c.detailTabs.HandleMouseAt(localX) {
-			c.tab = detailTab(c.detailTabs.Active())
-			return
+	// Detail tab clicks via tabBar component.
+	// composeHeader right-aligns the tabs; compute the tab strip start.
+	detailContentStartX := c.listPaneWidth + dividerWidth + 1
+	detailContentWidth := c.detailPaneWidth - paneBorderCols
+	detailHeaderY := chromeRowsTop + 1
+	if m.Y == detailHeaderY && m.X >= detailContentStartX {
+		totalTabsW := 0
+		for _, item := range c.detailTabs.items {
+			totalTabsW += tabLabelWidth(item.label)
+		}
+		tabStripStart := detailContentWidth - totalTabsW
+		if tabStripStart < 0 {
+			tabStripStart = 0
+		}
+		localX := m.X - detailContentStartX
+		if localX >= tabStripStart {
+			if c.detailTabs.HandleMouseAt(localX - tabStripStart) {
+				c.tab = detailTab(c.detailTabs.Active())
+				return
+			}
 		}
 	}
 
@@ -1636,12 +1645,11 @@ func (c *containersScreen) renderDetailPane() string {
 		return paneStyle(c.detailPaneWidth, c.bodyContentHeight, c.focus.Focused(focusDetail)).Render(empty)
 	}
 
-	titleLine := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(selected.Name)
-
-	tabLine := c.renderTabBar()
+	// Header row: title left, tabs right (via composeHeader in renderTabBar)
+	headerRow := c.renderTabBar()
 	body := c.renderActiveTab(selected)
 
-	inner := contentStyle.Render(strings.Join([]string{titleLine, tabLine, "", body}, "\n"))
+	inner := contentStyle.Render(strings.Join([]string{headerRow, "", body}, "\n"))
 	bar := c.detailScrollbar()
 	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
 	combined := withScrollbar(inner, barStyled)
@@ -1663,11 +1671,19 @@ func (c *containersScreen) detailScrollbar() string {
 
 func (c *containersScreen) renderTabBar() string {
 	c.detailTabs.SetActive(int(c.tab))
-	bar := c.detailTabs.Render()
-	if indicator := c.renderFollowIndicator(); indicator != "" {
-		bar += " " + indicator
+	tabs := c.detailTabs.Render()
+	sel := c.selected()
+	titleText := "(no selection)"
+	if sel != nil {
+		titleText = sel.Name
 	}
-	return lipgloss.NewStyle().Background(pal.bg).Render(bar)
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 1).Render(titleText)
+	indicator := c.renderFollowIndicator()
+	rightPart := tabs
+	if indicator != "" {
+		rightPart = tabs + " " + indicator
+	}
+	return composeHeader(title, rightPart, c.detailPaneWidth-paneBorderCols, pal.bg)
 }
 
 func (c *containersScreen) renderActiveTab(selected *Container) string {
