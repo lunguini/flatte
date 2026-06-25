@@ -397,7 +397,6 @@ func (s *State) resize(width, height int) {
 	s.images.layout(bodyWidth, bodyHeight)
 	s.volumes.layout(bodyWidth, bodyHeight)
 }
-
 func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	width := ctx.Width
 	if s.width > 0 {
@@ -405,7 +404,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	}
 
 	header := renderTabBar(s, width)
-	separator := strings.Repeat("─", width)
+	separator := renderHeaderSeparator(width)
 	footer := renderFooter(s, width)
 
 	var body string
@@ -417,6 +416,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	case screenVolumes:
 		body = s.volumes.View(s)
 	}
+
 	content := strings.Join([]string{header, separator, body, separator, footer}, "\n")
 	if s.modal != nil {
 		content = flatui.Overlay(content, renderModal(s.modal))
@@ -477,32 +477,43 @@ func renderModal(m *confirmModel) string {
 
 func renderTabBar(s *State, width int) string {
 	labels := []struct {
+		key    string
 		name   string
 		active bool
 	}{
-		{"1 containers", s.screen == screenContainers},
-		{"2 images", s.screen == screenImages},
-		{"3 volumes", s.screen == screenVolumes},
+		{"1", "containers", s.screen == screenContainers},
+		{"2", "images", s.screen == screenImages},
+		{"3", "volumes", s.screen == screenVolumes},
 	}
 	parts := make([]string, len(labels))
 	for i, l := range labels {
-		text := l.name
+		var text string
 		if l.active {
+			text = fmt.Sprintf("/ %s %s /", l.key, l.name)
 			text = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("23")).
-				Background(lipgloss.Color("117")).
-				Padding(0, 1).
+				Foreground(pal.accent).
 				Render(text)
 		} else {
+			text = fmt.Sprintf("  %s %s  ", l.key, l.name)
 			text = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("245")).
-				Padding(0, 1).
+				Foreground(pal.muted).
 				Render(text)
 		}
 		parts[i] = text
 	}
-	return strings.Join(parts, " ")
+	content := strings.Join(parts, "")
+	return lipgloss.NewStyle().
+		Width(width).
+		Background(pal.bg).
+		Foreground(pal.text).
+		Render(content)
+}
+
+func renderHeaderSeparator(width int) string {
+	return lipgloss.NewStyle().
+		Foreground(pal.accent).
+		Render(strings.Repeat("━", width))
 }
 
 func renderFooter(s *State, width int) string {
@@ -1284,7 +1295,7 @@ func (c *containersScreen) View(root *State) string {
 	listPane := c.renderListPane()
 	detailPane := c.renderDetailPane()
 	activityPane := c.renderActivityPane()
-	mainRow := lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", detailPane, "  ", activityPane)
+	mainRow := lipgloss.JoinHorizontal(lipgloss.Top, listPane, "", detailPane, "", activityPane)
 	var statusRow string
 	if root.command != nil {
 		statusRow = root.command.View(c.width)
@@ -1461,21 +1472,18 @@ func (c *containersScreen) renderTabBar() string {
 	}
 	parts := make([]string, len(tabs))
 	for i, t := range tabs {
-		text := t.name
+		var text string
 		if t.active {
+			text = "/ " + t.name + " /"
 			text = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("23")).
-				Background(lipgloss.Color("117")).
-				Padding(0, 1).
+				Foreground(pal.accent).
 				Render(text)
-			text = flatui.Mark("tab:"+t.name, text)
 		} else {
-			styled := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("245")).
-				Padding(0, 1).
+			text = "  " + t.name + "  "
+			text = lipgloss.NewStyle().
+				Foreground(pal.muted).
 				Render(text)
-			text = flatui.Mark("tab:"+t.name, styled)
 		}
 		parts[i] = text
 	}

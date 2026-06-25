@@ -1088,22 +1088,22 @@ func TestMouseClickListRowSelectsIt(t *testing.T) {
 
 func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80}) // populate zones from rendered output
+	View(s, flatte.RenderContext{Width: 80})
 
-	logsRect, ok := s.containers.zones.Rect("tab:logs")
-	if !ok {
-		t.Fatal("tab:logs zone not registered after View")
+	// Tab markers were removed from the in-pane tab bar because their OSC9
+	// bytes confuse lipgloss's width calculation (counts markers as visible
+	// width, causing the tab bar to wrap inside the width-constrained pane,
+	// overflowing content and triggering MaxHeight clipping of the bottom
+	// border — see TTY-found bug 2026-06-25). Tabs are keyboard-only now.
+	_, ok := s.containers.zones.Rect("tab:logs")
+	if ok {
+		t.Skip("tab markers restored — update this test to verify click works")
 	}
-	clickX := logsRect.X + 1
-	clickY := logsRect.Y
-	Handle(s, flatte.MouseEvent{
-		Action: flatte.MousePress,
-		Button: flatte.MouseLeft,
-		X:      clickX, Y: clickY,
-	}, flatte.Effects[State]{})
-
+	// Verify the keyboard path still works as the fallback.
+	s.containers.focus.Select(focusDetail)
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
 	if s.containers.tab != tabLogs {
-		t.Fatalf("after click on logs tab header at (%d,%d), tab = %v, want logs", clickX, clickY, s.containers.tab)
+		t.Fatalf("Right arrow should switch to logs tab; got %v", s.containers.tab)
 	}
 }
 
