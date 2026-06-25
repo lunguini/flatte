@@ -904,12 +904,13 @@ func (c *containersScreen) dividerAt(x, y int) int {
 	if y < bodyTop || y >= bodyBottom {
 		return -1
 	}
+	// Layout: list(listPaneWidth) | div0(dividerWidth) | detail(detailPaneWidth) | div1(dividerWidth) | activity
 	div0X := c.listPaneWidth
-	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth + dividerWidth
-	if x == div0X || x == div0X+dividerWidth-1 {
+	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth
+	if x == div0X {
 		return 0
 	}
-	if x == div1X || x == div1X+dividerWidth-1 {
+	if x == div1X {
 		return 1
 	}
 	return -1
@@ -1033,7 +1034,7 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 func (c *containersScreen) scrollAt(x, _, delta int) {
 	listPaneEnd := c.listPaneWidth
 	detailPaneStart := listPaneEnd + dividerWidth
-	detailPaneEnd := detailPaneStart + c.detailPaneWidth + dividerWidth
+	detailPaneEnd := detailPaneStart + c.detailPaneWidth
 
 	switch {
 	case x < listPaneEnd:

@@ -834,8 +834,8 @@ func TestPowerlineTabWidthMatchesContent(t *testing.T) {
 func TestDividerHitDetection(t *testing.T) {
 	s := resizedState(80, 24)
 	c := &s.containers
-	div0X := c.listPaneWidth       // list|detail divider
-	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth + dividerWidth
+	div0X := c.listPaneWidth                                  // list|detail divider
+	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth // detail|activity divider
 
 	if got := c.dividerAt(div0X, 5); got != 0 {
 		t.Fatalf("dividerAt(%d, 5) = %d, want 0", div0X, got)
@@ -855,6 +855,29 @@ func TestDividerMissesWhenOutsideBodyHeight(t *testing.T) {
 	// Y above the body area
 	if got := c.dividerAt(div0X, 0); got != -1 {
 		t.Fatalf("dividerAt above body should miss: got %d", got)
+	}
+}
+
+func TestDivider1XPositionMatchesActualDividerColumn(t *testing.T) {
+	// Regression: div1X used to be off-by-one (extra dividerWidth), making
+	// the right divider un-draggable. Verify div1 hit detection matches
+	// the actual divider column position in the rendered layout.
+	s := resizedState(80, 24)
+	c := &s.containers
+
+	// The layout is: list(L) | div0(1) | detail(D) | div1(1) | activity(A)
+	// div1 is at X = L + 1 + D.
+	wantDiv1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth
+	if got := c.dividerAt(wantDiv1X, 5); got != 1 {
+		t.Fatalf("dividerAt(div1X=%d, 5) = %d, want 1", wantDiv1X, got)
+	}
+	// One cell to the right should be inside activity, not on the divider
+	if got := c.dividerAt(wantDiv1X+1, 5); got != -1 {
+		t.Fatalf("X=div1X+1 should be inside activity (no divider): got %d", got)
+	}
+	// One cell to the left should be inside detail, not on the divider
+	if got := c.dividerAt(wantDiv1X-1, 5); got != -1 {
+		t.Fatalf("X=div1X-1 should be inside detail (no divider): got %d", got)
 	}
 }
 
@@ -901,7 +924,7 @@ func TestDragDivider1ShrinksActivity(t *testing.T) {
 	s := resizedState(80, 24)
 	View(s, flatte.RenderContext{Width: 80})
 	c := &s.containers
-	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth + dividerWidth
+	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth
 	startActivity := c.activityPaneWidth
 
 	Handle(s, flatte.MouseEvent{
