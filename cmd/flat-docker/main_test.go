@@ -246,8 +246,9 @@ func TestDetailShowsEmptyStateWhenNoMatches(t *testing.T) {
 func TestContainersLayoutSplitsBodyWidthBetweenPanes(t *testing.T) {
 	s := resizedState(80, 24)
 	c := &s.containers
-	if c.listPaneWidth+c.detailPaneWidth+c.activityPaneWidth+4 != 80 {
-		t.Fatalf("panes %d + %d + %d + 4 (gaps) != 80 (total)", c.listPaneWidth, c.detailPaneWidth, c.activityPaneWidth)
+	// Panes touch (no gaps) — widths sum to body width
+	if c.listPaneWidth+c.detailPaneWidth+c.activityPaneWidth != 80 {
+		t.Fatalf("panes %d + %d + %d != 80 (no gaps; panes touch)", c.listPaneWidth, c.detailPaneWidth, c.activityPaneWidth)
 	}
 	if c.activityPaneWidth == 0 {
 		t.Fatalf("activity pane width is 0 — anchor-right pane missing")
@@ -1090,20 +1091,21 @@ func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
 	View(s, flatte.RenderContext{Width: 80})
 
-	// Tab markers were removed from the in-pane tab bar because their OSC9
-	// bytes confuse lipgloss's width calculation (counts markers as visible
-	// width, causing the tab bar to wrap inside the width-constrained pane,
-	// overflowing content and triggering MaxHeight clipping of the bottom
-	// border — see TTY-found bug 2026-06-25). Tabs are keyboard-only now.
-	_, ok := s.containers.zones.Rect("tab:logs")
-	if ok {
-		t.Skip("tab markers restored — update this test to verify click works")
+	// Tabs use a manual ZoneMap (positions deterministic from label widths),
+	// NOT auto-zones — the OSC9 markers confused lipgloss's width calculation
+	// inside the width-constrained pane. Verify the manual zones work.
+	logsRect, ok := s.containers.tabZones.Rect("tab:logs")
+	if !ok {
+		t.Fatal("tab:logs manual zone not registered")
 	}
-	// Verify the keyboard path still works as the fallback.
-	s.containers.focus.Select(focusDetail)
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseLeft,
+		X:      logsRect.X + 2, Y: logsRect.Y, // middle of the tab
+	}, flatte.Effects[State]{})
+
 	if s.containers.tab != tabLogs {
-		t.Fatalf("Right arrow should switch to logs tab; got %v", s.containers.tab)
+		t.Fatalf("after click on tab:logs zone at %+v, tab = %v, want logs", logsRect, s.containers.tab)
 	}
 }
 

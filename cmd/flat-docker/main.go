@@ -357,6 +357,8 @@ type palette struct {
 	good   color.Color
 	bad    color.Color
 	bg     color.Color
+	tabBg  color.Color // inactive tab fill (slightly lighter than bg)
+	dark   color.Color // high-contrast text for accent backgrounds
 }
 
 func defaultPalette() palette {
@@ -368,10 +370,39 @@ func defaultPalette() palette {
 		good:   lipgloss.Color("114"),
 		bad:    lipgloss.Color("203"),
 		bg:     lipgloss.Color("236"),
+		tabBg:  lipgloss.Color("238"),
+		dark:   lipgloss.Color("23"),
 	}
 }
 
 var pal = defaultPalette()
+
+const (
+	powerlineLeftSlant  = "\ue0ba"
+	powerlineRightSlant = "\ue0bc"
+)
+
+// powerlineTab renders a label as a Powerline-style tab: diagonal slant
+// edges (filled triangles) on a colored fill, against a surrounding bar
+// background. Returns the rendered string and its visible width.
+func powerlineTab(label string, active bool) (string, int) {
+	var fill, text color.Color
+	if active {
+		fill = pal.accent
+		text = pal.dark
+	} else {
+		fill = pal.tabBg
+		text = pal.muted
+	}
+	bar := pal.bg
+	l := lipgloss.NewStyle().Foreground(fill).Background(bar).Render(powerlineLeftSlant)
+	b := lipgloss.NewStyle().Foreground(text).Background(fill).Padding(0, 2).Render(label)
+	r := lipgloss.NewStyle().Foreground(fill).Background(bar).Render(powerlineRightSlant)
+	rendered := l + b + r
+	// width = slant(1) + padding(2) + label + padding(2) + slant(1)
+	width := lipgloss.Width(rendered)
+	return rendered, width
+}
 
 const paneBorderRows = 2 // top + bottom border
 const paneBorderCols = 2 // left + right border
@@ -477,32 +508,20 @@ func renderModal(m *confirmModel) string {
 
 func renderTabBar(s *State, width int) string {
 	labels := []struct {
-		key    string
-		name   string
-		active bool
+		key, name string
+		active    bool
 	}{
 		{"1", "containers", s.screen == screenContainers},
 		{"2", "images", s.screen == screenImages},
 		{"3", "volumes", s.screen == screenVolumes},
 	}
-	parts := make([]string, len(labels))
-	for i, l := range labels {
-		var text string
-		if l.active {
-			text = fmt.Sprintf("/ %s %s /", l.key, l.name)
-			text = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(pal.accent).
-				Render(text)
-		} else {
-			text = fmt.Sprintf("  %s %s  ", l.key, l.name)
-			text = lipgloss.NewStyle().
-				Foreground(pal.muted).
-				Render(text)
-		}
-		parts[i] = text
+	var b strings.Builder
+	for _, l := range labels {
+		rendered, _ := powerlineTab(l.key+" "+l.name, l.active)
+		b.WriteString(rendered)
+		b.WriteString(" ") // 1-char gap between tabs (bar bg shows through)
 	}
-	content := strings.Join(parts, "")
+	content := b.String()
 	return lipgloss.NewStyle().
 		Width(width).
 		Background(pal.bg).
@@ -651,7 +670,8 @@ type containersScreen struct {
 	liveLogs   map[string][]string
 	logTarget  string
 	logCancel  context.CancelFunc
-	zones      *flatui.ZoneScanner
+	zones      *flatui.ZoneScanner // auto-zones for list rows
+	tabZones   flatui.ZoneMap      // manual zones for tabs (positions deterministic)
 	listHeight int
 
 	activity   []string
@@ -727,7 +747,7 @@ func (c *containersScreen) layout(width, height int) {
 	c.focus.SetCount(3)
 	c.listPaneWidth = min(28, max(width/5, 18))
 	c.activityPaneWidth = 24
-	c.detailPaneWidth = max(width-c.listPaneWidth-2-c.activityPaneWidth-2, 0)
+	c.detailPaneWidth = max(width-c.listPaneWidth-c.activityPaneWidth, 0) // panes touch — no gaps
 
 	c.bodyContentHeight = max(height-statusLineRows, 0)
 
@@ -750,6 +770,28 @@ func (c *containersScreen) layout(width, height int) {
 	}
 	c.syncDetail()
 	c.recomputeStatusLine()
+	c.registerTabZones()
+}
+
+// registerTabZones records clickable rectangles for the in-pane detail
+// tabs. Positions are deterministic from label widths + the cached
+// listPaneWidth, so they don't drift from rendering. Used because the
+// auto-zone OSC9 markers confuse lipgloss's width calculation inside the
+// width-constrained pane (TTY-found bug 2026-06-25).
+func (c *containersScreen) registerTabZones() {
+	c.tabZones.Clear()
+	tabsX := c.listPaneWidth + 1 // inside detail pane's left border (panes touch)
+	tabsY := chromeRowsTop + 2   // pane top border (chromeRowsTop) + title row (1) = tab bar row
+	x := tabsX
+	for _, t := range []struct{ id, label string }{
+		{"tab:stats", "stats"},
+		{"tab:logs", "logs"},
+		{"tab:inspect", "inspect"},
+	} {
+		width := lipgloss.Width(t.label) + 6 // slant(1) + pad(2) + label + pad(2) + slant(1)
+		c.tabZones.Set(t.id, flatui.Rect{X: x, Y: tabsY, Width: width, Height: 1})
+		x += width
+	}
 }
 
 func (c *containersScreen) recomputeStatusLine() {
@@ -792,20 +834,24 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		return
 	}
 
+	// Manual tab zones first (positions deterministic, not from rendered output)
+	if id, ok := c.tabZones.At(m.X, m.Y); ok {
+		switch id {
+		case "tab:stats":
+			c.tab = tabStats
+			return
+		case "tab:logs":
+			c.tab = tabLogs
+			return
+		case "tab:inspect":
+			c.tab = tabInspect
+			return
+		}
+	}
+
+	// Auto-zones for list rows (derived from rendered output via ZoneScanner)
 	id, ok := c.zones.At(m.X, m.Y)
 	if !ok {
-		return
-	}
-	if id == "tab:stats" {
-		c.tab = tabStats
-		return
-	}
-	if id == "tab:logs" {
-		c.tab = tabLogs
-		return
-	}
-	if id == "tab:inspect" {
-		c.tab = tabInspect
 		return
 	}
 	if len(id) > 5 && id[:5] == "list:" {
@@ -1470,28 +1516,16 @@ func (c *containersScreen) renderTabBar() string {
 		{"logs", c.tab == tabLogs},
 		{"inspect", c.tab == tabInspect},
 	}
-	parts := make([]string, len(tabs))
-	for i, t := range tabs {
-		var text string
-		if t.active {
-			text = "/ " + t.name + " /"
-			text = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(pal.accent).
-				Render(text)
-		} else {
-			text = "  " + t.name + "  "
-			text = lipgloss.NewStyle().
-				Foreground(pal.muted).
-				Render(text)
-		}
-		parts[i] = text
+	var b strings.Builder
+	for _, t := range tabs {
+		rendered, _ := powerlineTab(t.name, t.active)
+		b.WriteString(rendered)
 	}
-	bar := strings.Join(parts, "")
 	if indicator := c.renderFollowIndicator(); indicator != "" {
-		bar += " " + indicator
+		b.WriteString(" ")
+		b.WriteString(indicator)
 	}
-	return bar
+	return lipgloss.NewStyle().Background(pal.bg).Render(b.String())
 }
 
 func (c *containersScreen) renderActiveTab(selected *Container) string {
