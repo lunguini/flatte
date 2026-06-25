@@ -569,7 +569,76 @@ have converged** — Tasks 8 should write them up.
 
 ---
 
+## Final verdict (Task 8 synthesis)
 
+The dogfood is complete: 7 tasks, ~1,500 LOC of sample code, 49 tests
+passing, three goldens. This section consolidates the findings; the full
+synthesis with concrete extraction proposals lives in `.docs/d03.md`.
+
+### What the dogfood changed (the maintainer's initial review was wrong on these)
+
+1. **Layout vocabulary.** Initial review: "already on the post-0.1
+   roadmap; mild at one site." **Dogfood verdict: confirmed and
+   reinforced four times** (Tasks 2, 3, 6, 7). The pattern crossed the
+   project's own "abstraction is found, not designed" threshold at
+   Task 7, where `imagesScreen.layout` and `volumesScreen.layout` are
+   byte-identical to `containersScreen.layout`'s pane-split math.
+2. **`flatte.Scope` for cancellable async.** Initial review: "a real
+   gap, but minor; sidestep patterns may suffice." **Dogfood verdict:
+   sharper than predicted.** `Every`/`Stream` cannot be cancelled by
+   name today; only `Latest`/`Cancel`. The 30-line hand-rolled goroutine
+   for scoped Logs in Task 4 is the sharpest single piece of dogfood
+   evidence in the whole exercise. The sidestep pattern works but only
+   by structuring the app to not need scoped lifetime.
+
+### What the dogfood validated (initial review was right)
+
+3. **Feature-module shape.** Initial review: "the project already
+   practices this; quick-reference.md shows the screen-enum pattern."
+   **Dogfood verdict: fully validated.** Adding two screens (Task 7)
+   was purely additive at the screen level — root code did not change.
+   The feedback's "feature module" recommendation is the dogfood's
+   strongest positive finding and deserves to be documented in
+   `quick-reference.md` without any framework code change.
+
+### What the dogfood rejected (initial review was right to be cautious)
+
+4. **`flatui.Tabs` widget.** Task 3 evidence: plain state (iota enum +
+   two one-line wraparound methods + 14-line tab-bar renderer) handles
+   tabs-within-pane cleanly. A widget would be more cost than savings.
+5. **Modal manager / router helper.** Task 5 evidence: one-line guard.
+   Existing `flat-modal` documents the pattern.
+6. **Screen lifecycle hooks.** Task 4 sidestep pattern avoided needing
+   them. Defer until an app's per-screen async cost makes them
+   necessary.
+
+### Smaller frictions worth fixing cheaply
+
+- `Effects.context()` default is unexported (Task 4).
+- `List.height` is unexported (Task 6).
+- `Viewport.height` was unexported (Task 3) — already worked around via
+  `VisibleLines()`, but the pattern repeats.
+
+### Numbers
+
+- ~1,500 LOC sample, 49 tests, 3 goldens.
+- Layout math is ~30% of the screen code; with the proposed vocabulary
+  it would drop to ~10%.
+- Stats (sidestep pattern): 11 LOC. Logs (forced-cancellation): 30 LOC.
+  Difference: the entire case for `flatte.Scope`.
+
+### What this dogfood was *not*
+
+- Not a TTY pass. The app is unverified in a real terminal; the dogfood
+  is about *architecture friction*, not render correctness. Anyone
+  proposing the extractions should run `flat-docker` in a real terminal
+  first to confirm there are no surprises the test harness can't see.
+- Not a Bubble Tea comparison. The dogfood tests Flatte against the
+  feedback's predictions; it does not re-run the head-to-head against
+  BT v1/v2 that `cmd/bubble-*` already covers.
+- Not evidence for *every* TUI pattern. No drag-and-drop, no animations,
+  no scroll-region management, no IME input. The findings generalize to
+  "multi-pane apps with async and modals"; beyond that is unknown.
 (Updated each task. Predictions vs. observed.)
 
 | Area | Prediction | Task 1 | Task 2 | Task 3 | Task 4 |
@@ -584,14 +653,11 @@ have converged** — Tasks 8 should write them up.
 | Polling (`Every`) | Low | Not yet hit. | Not yet hit. | Not yet hit. | **Low for sidestep pattern; high for cancellable pattern (not natively supported).** |
 | Streaming (`Stream`) | Low | Not yet hit. | Not yet hit. | Not yet hit. | **Low for sidestep pattern; high for cancellable pattern (not natively supported).** |
 | Modal routing | Low–medium | Not yet hit. | Not yet hit. | Not yet hit. | **Confirmed low** — one-line guard; `flatui.Overlay` works first try. |
-| Per-screen lifecycle | (not predicted) | — | — | — | **Mild gap — `App.Init` is app-lifetime only; no screen enter/exit hooks.** |
-| Effects zero-value | (not predicted) | — | — | — | **Annoying — `fx.Context` is nil on zero Effects; `Effects.context()` default is unexported.** |
+| Per-screen lifecycle | (not predicted) | — | — | — | Mild gap — `App.Init` is app-lifetime only; no screen enter/exit hooks. **Defer per Task 8 synthesis.** |
+| Effects zero-value | (not predicted) | — | — | — | **Annoying** — `fx.Context` is nil on zero Effects; `Effects.context()` default is unexported. Cheap fix post-0.1. |
 
-**Running verdict:** the layout friction is confirmed and reinforced across
-all layout-bearing tasks. **Task 4 flipped my opinion on scoped
-cancellation** — the feedback was righter than I credited. Two concrete
-extraction candidates now have sample-driven evidence: (1) layout
-vocabulary, (2) `flatte.Scope` for cancellable async. Two related smaller
-gaps surfaced: per-screen lifecycle hooks, and the unexported
-`Effects.context()` default. Tabs-within-pane is settled in Flatte's favor.
-Tasks 5–7 remain, all predicted lower pain.
+**Final verdict:** the dogfood **changed my position** on the feedback.
+Two of three predictions (layout, scoped async) are now sample-driven
+justified. One (feature module) was already right and is formally
+validated. Two implied worries (tabs, router) were correctly rejected.
+Full synthesis + concrete extraction proposals in `.docs/d03.md`.
