@@ -103,6 +103,8 @@ func (s *State) openConfirm(action string, ct *Container) {
 func NewState() *State {
 	s := &State{screen: screenContainers}
 	s.containers = newContainersScreen()
+	s.images = newImagesScreen()
+	s.volumes = newVolumesScreen()
 	return s
 }
 
@@ -237,9 +239,9 @@ func renderFooter(s *State, width int) string {
 	case screenContainers:
 		hints = s.containers.keyHints()
 	case screenImages:
-		hints = "images screen"
+		hints = s.images.keyHints()
 	case screenVolumes:
-		hints = "volumes screen"
+		hints = s.volumes.keyHints()
 	}
 	help := " " + hints + " "
 	styled := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(help)
@@ -851,49 +853,270 @@ func (c *containersScreen) renderActiveTab(selected *Container) string {
 	return ""
 }
 
+type Image struct {
+	RepoTag, ID, Size, Created string
+	Containers                 int
+}
+
+var sampleImages = []Image{
+	{RepoTag: "nginx:1.25", ID: "sha256:a1b2c3d4", Size: "150MB", Created: "2026-06-15", Containers: 3},
+	{RepoTag: "myapp/api:2.1", ID: "sha256:b2c3d4e5", Size: "210MB", Created: "2026-06-10", Containers: 2},
+	{RepoTag: "postgres:16", ID: "sha256:c3d4e5f6", Size: "380MB", Created: "2026-05-20", Containers: 1},
+	{RepoTag: "redis:7", ID: "sha256:d4e5f6g7", Size: "110MB", Created: "2026-05-15", Containers: 1},
+	{RepoTag: "myapp/web:3.0", ID: "sha256:e5f6g7h8", Size: "280MB", Created: "2026-06-08", Containers: 0},
+	{RepoTag: "myapp/worker:2.1", ID: "sha256:f6g7h8i9", Size: "190MB", Created: "2026-06-09", Containers: 1},
+	{RepoTag: "myapp/migrate:1.4", ID: "sha256:g7h8i9j0", Size: "85MB", Created: "2026-06-05", Containers: 0},
+}
+
 type imagesScreen struct {
-	width, height int
+	width, height   int
+	listPaneWidth   int
+	detailPaneWidth int
+	focus           flatui.FocusRing
+	list            flatui.List
+	images          []Image
+}
+
+const (
+	imgFocusList = iota
+	imgFocusDetail
+)
+
+func newImagesScreen() imagesScreen {
+	c := imagesScreen{images: sampleImages}
+	c.focus.SetCount(2)
+	c.focus.Select(imgFocusList)
+	c.list.SetCount(len(sampleImages))
+	return c
 }
 
 func (i *imagesScreen) layout(width, height int) {
 	i.width, i.height = width, height
+	i.focus.SetCount(2)
+	i.listPaneWidth = min(30, max(width/3, 16))
+	i.detailPaneWidth = max(width-i.listPaneWidth-2, 0)
+	const listChromeRows = 2 // title line + blank
+	i.list.SetHeight(max(height-listChromeRows, 0))
 }
 
-func (i *imagesScreen) Handle(_ *State, _ flatte.Event, _ flatte.Effects[State]) {}
+func (i *imagesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
+	key, ok := ev.(flatte.KeyEvent)
+	if !ok {
+		return
+	}
+	switch key.Key {
+	case flatte.KeyTab:
+		if key.Mod.Contains(flatte.ModShift) {
+			i.focus.Prev()
+		} else {
+			i.focus.Next()
+		}
+	case flatte.KeyUp:
+		if i.focus.Focused(imgFocusList) {
+			i.list.MoveUp()
+		}
+	case flatte.KeyDown:
+		if i.focus.Focused(imgFocusList) {
+			i.list.MoveDown()
+		}
+	case flatte.KeyCharacter:
+		if i.focus.Focused(imgFocusList) {
+			switch key.Rune {
+			case 'j', 'J':
+				i.list.MoveDown()
+			case 'k', 'K':
+				i.list.MoveUp()
+			}
+		}
+	}
+}
 
-func (i *imagesScreen) View(root *State) string {
-	return placeholderBody(root.screen.Name(), i.width, i.height)
+func (i *imagesScreen) View(_ *State) string {
+	listPane := i.renderListPane()
+	detailPane := i.renderDetailPane()
+	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", detailPane)
+}
+
+func (i *imagesScreen) keyHints() string {
+	if i.focus.Focused(imgFocusList) {
+		return "j/k move  tab next  1/2/3 switch  q quit"
+	}
+	return "tab next  1/2/3 switch  q quit"
+}
+
+func (i *imagesScreen) selected() *Image {
+	if i.list.Cursor() < 0 || i.list.Cursor() >= len(i.images) {
+		return nil
+	}
+	return &i.images[i.list.Cursor()]
+}
+
+func (i *imagesScreen) renderListPane() string {
+	style := lipgloss.NewStyle().Width(i.listPaneWidth)
+	title := "images"
+	if i.focus.Focused(imgFocusList) {
+		title = lipgloss.NewStyle().Bold(true).Render(title)
+	}
+	content := i.list.View(func(idx int, selected bool) string {
+		marker := "  "
+		if selected {
+			marker = "> "
+		}
+		return marker + i.images[idx].RepoTag
+	})
+	return style.Render(title + "\n\n" + content)
+}
+
+func (i *imagesScreen) renderDetailPane() string {
+	style := lipgloss.NewStyle().Width(i.detailPaneWidth)
+	sel := i.selected()
+	if sel == nil {
+		return style.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no image selected)"))
+	}
+	title := sel.RepoTag
+	if i.focus.Focused(imgFocusDetail) {
+		title = lipgloss.NewStyle().Bold(true).Render(title)
+	}
+	rows := []string{
+		title,
+		"",
+		"  id:         " + sel.ID,
+		"  size:       " + sel.Size,
+		"  created:    " + sel.Created,
+		"  containers: " + strconv.Itoa(sel.Containers),
+	}
+	return style.Render(strings.Join(rows, "\n"))
+}
+
+type Volume struct {
+	Name, Driver, Mountpoint, Size string
+}
+
+var sampleVolumes = []Volume{
+	{Name: "data", Driver: "local", Mountpoint: "/var/lib/docker/volumes/data/_data", Size: "1.2GB"},
+	{Name: "config", Driver: "local", Mountpoint: "/var/lib/docker/volumes/config/_data", Size: "12MB"},
+	{Name: "logs", Driver: "local", Mountpoint: "/var/lib/docker/volumes/logs/_data", Size: "450MB"},
+	{Name: "cache", Driver: "local", Mountpoint: "/var/lib/docker/volumes/cache/_data", Size: "890MB"},
+	{Name: "backups", Driver: "local", Mountpoint: "/var/lib/docker/volumes/backups/_data", Size: "5.4GB"},
 }
 
 type volumesScreen struct {
-	width, height int
+	width, height   int
+	listPaneWidth   int
+	detailPaneWidth int
+	focus           flatui.FocusRing
+	list            flatui.List
+	volumes         []Volume
+}
+
+const (
+	volFocusList = iota
+	volFocusDetail
+)
+
+func newVolumesScreen() volumesScreen {
+	c := volumesScreen{volumes: sampleVolumes}
+	c.focus.SetCount(2)
+	c.focus.Select(volFocusList)
+	c.list.SetCount(len(sampleVolumes))
+	return c
 }
 
 func (v *volumesScreen) layout(width, height int) {
 	v.width, v.height = width, height
+	v.focus.SetCount(2)
+	v.listPaneWidth = min(30, max(width/3, 16))
+	v.detailPaneWidth = max(width-v.listPaneWidth-2, 0)
+	const listChromeRows = 2
+	v.list.SetHeight(max(height-listChromeRows, 0))
 }
 
-func (v *volumesScreen) Handle(_ *State, _ flatte.Event, _ flatte.Effects[State]) {}
-
-func (v *volumesScreen) View(root *State) string {
-	return placeholderBody(root.screen.Name(), v.width, v.height)
+func (v *volumesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
+	key, ok := ev.(flatte.KeyEvent)
+	if !ok {
+		return
+	}
+	switch key.Key {
+	case flatte.KeyTab:
+		if key.Mod.Contains(flatte.ModShift) {
+			v.focus.Prev()
+		} else {
+			v.focus.Next()
+		}
+	case flatte.KeyUp:
+		if v.focus.Focused(volFocusList) {
+			v.list.MoveUp()
+		}
+	case flatte.KeyDown:
+		if v.focus.Focused(volFocusList) {
+			v.list.MoveDown()
+		}
+	case flatte.KeyCharacter:
+		if v.focus.Focused(volFocusList) {
+			switch key.Rune {
+			case 'j', 'J':
+				v.list.MoveDown()
+			case 'k', 'K':
+				v.list.MoveUp()
+			}
+		}
+	}
 }
 
-func placeholderBody(screenName string, width, height int) string {
-	lines := []string{
+func (v *volumesScreen) View(_ *State) string {
+	listPane := v.renderListPane()
+	detailPane := v.renderDetailPane()
+	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", detailPane)
+}
+
+func (v *volumesScreen) keyHints() string {
+	if v.focus.Focused(volFocusList) {
+		return "j/k move  tab next  1/2/3 switch  q quit"
+	}
+	return "tab next  1/2/3 switch  q quit"
+}
+
+func (v *volumesScreen) selected() *Volume {
+	if v.list.Cursor() < 0 || v.list.Cursor() >= len(v.volumes) {
+		return nil
+	}
+	return &v.volumes[v.list.Cursor()]
+}
+
+func (v *volumesScreen) renderListPane() string {
+	style := lipgloss.NewStyle().Width(v.listPaneWidth)
+	title := "volumes"
+	if v.focus.Focused(volFocusList) {
+		title = lipgloss.NewStyle().Bold(true).Render(title)
+	}
+	content := v.list.View(func(idx int, selected bool) string {
+		marker := "  "
+		if selected {
+			marker = "> "
+		}
+		return marker + v.volumes[idx].Name
+	})
+	return style.Render(title + "\n\n" + content)
+}
+
+func (v *volumesScreen) renderDetailPane() string {
+	style := lipgloss.NewStyle().Width(v.detailPaneWidth)
+	sel := v.selected()
+	if sel == nil {
+		return style.Render(lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render("(no volume selected)"))
+	}
+	title := sel.Name
+	if v.focus.Focused(volFocusDetail) {
+		title = lipgloss.NewStyle().Bold(true).Render(title)
+	}
+	rows := []string{
+		title,
 		"",
-		fmt.Sprintf("  %s screen", screenName),
-		fmt.Sprintf("  body: %d wide × %d tall", width, height),
-		"",
-		"  placeholder — task 2 adds real content",
+		"  driver:     " + sel.Driver,
+		"  mountpoint: " + sel.Mountpoint,
+		"  size:       " + sel.Size,
 	}
-	for len(lines) < height {
-		lines = append(lines, "")
-	}
-	if height > 0 && len(lines) > height {
-		lines = lines[:height]
-	}
-	return strings.Join(lines, "\n")
+	return style.Render(strings.Join(rows, "\n"))
 }
 
 func main() {

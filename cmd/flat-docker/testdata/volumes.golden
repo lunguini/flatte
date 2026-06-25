@@ -1,26 +1,12 @@
  1 containers   2 images  [3 volumes]
 ────────────────────────────────────────────────────────────────────────────────
-
-  volumes screen
-  body: 80 wide × 21 tall
-
-  placeholder — task 2 adds real content
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+volumes                     data                                                
+                                                                                
+> data                        driver:     local                                 
+  config                      mountpoint: /var/lib/docker/volumes/data/_data    
+  logs                        size:       1.2GB                                 
+  cache                                                                         
+  backups                                                                       
 ────────────────────────────────────────────────────────────────────────────────
- volumes screen 
+ j/k move  tab next  1/2/3 switch  q quit 
 [title flat-docker — volumes]

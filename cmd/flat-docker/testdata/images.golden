@@ -1,26 +1,14 @@
  1 containers  [2 images]  3 volumes 
 ────────────────────────────────────────────────────────────────────────────────
-
-  images screen
-  body: 80 wide × 21 tall
-
-  placeholder — task 2 adds real content
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+images                      nginx:1.25                                          
+                                                                                
+> nginx:1.25                  id:         sha256:a1b2c3d4                       
+  myapp/api:2.1               size:       150MB                                 
+  postgres:16                 created:    2026-06-15                            
+  redis:7                     containers: 3                                     
+  myapp/web:3.0                                                                 
+  myapp/worker:2.1                                                              
+  myapp/migrate:1.4                                                             
 ────────────────────────────────────────────────────────────────────────────────
- images screen 
+ j/k move  tab next  1/2/3 switch  q quit 
 [title flat-docker — images]

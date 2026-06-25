@@ -688,6 +688,84 @@ func TestMouseZonesRecomputeOnResize(t *testing.T) {
 	}
 }
 
+func TestImagesScreenListMovesWithJK(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenImages
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	if s.images.list.Cursor() != 1 {
+		t.Fatalf("images cursor after j = %d, want 1", s.images.list.Cursor())
+	}
+	Handle(s, keyChar('k'), flatte.Effects[State]{})
+	if s.images.list.Cursor() != 0 {
+		t.Fatalf("images cursor after k = %d, want 0", s.images.list.Cursor())
+	}
+}
+
+func TestImagesScreenDetailShowsSelectedImage(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenImages
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "myapp/api:2.1") || !strings.Contains(content, "sha256:b2c3d4e5") {
+		t.Fatalf("images detail missing selected image in:\n%s", content)
+	}
+}
+
+func TestImagesScreenTabCyclesFocus(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenImages
+	if !s.images.focus.Focused(imgFocusList) {
+		t.Fatal("images focus should start on list")
+	}
+	Handle(s, keyTab(false), flatte.Effects[State]{})
+	if !s.images.focus.Focused(imgFocusDetail) {
+		t.Fatal("images focus should be on detail after Tab")
+	}
+	Handle(s, keyTab(false), flatte.Effects[State]{})
+	if !s.images.focus.Focused(imgFocusList) {
+		t.Fatal("images focus should wrap to list after second Tab")
+	}
+}
+
+func TestVolumesScreenListMovesWithJK(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenVolumes
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	if s.volumes.list.Cursor() != 2 {
+		t.Fatalf("volumes cursor after 2j = %d, want 2", s.volumes.list.Cursor())
+	}
+}
+
+func TestVolumesScreenDetailShowsSelectedVolume(t *testing.T) {
+	s := resizedState(80, 24)
+	s.screen = screenVolumes
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+
+	content := View(s, flatte.RenderContext{Width: 80}).Content
+	if !strings.Contains(content, "config") || !strings.Contains(content, "/var/lib/docker/volumes/config/_data") {
+		t.Fatalf("volumes detail missing selected volume in:\n%s", content)
+	}
+}
+
+func TestScreensAreIsolatedFromEachOther(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	containersCursor := s.containers.list.Cursor()
+	Handle(s, keyChar('2'), flatte.Effects[State]{})
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	Handle(s, keyChar('1'), flatte.Effects[State]{})
+
+	if s.containers.list.Cursor() != containersCursor {
+		t.Fatalf("containers cursor drifted while on images: %d -> %d", containersCursor, s.containers.list.Cursor())
+	}
+	if s.images.list.Cursor() != 2 {
+		t.Fatalf("images cursor not preserved: %d", s.images.list.Cursor())
+	}
+}
+
 func keyChar(r rune) flatte.KeyEvent {
 	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}
 }

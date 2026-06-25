@@ -508,6 +508,67 @@ evidence for Task 8.
 
 ---
 
+## Task 7 — Images + Volumes screens
+
+Predicted to confirm the feature-module shape scales; **confirmed, plus
+the layout-math friction hits its clearest "found" threshold**.
+
+### Feature-module shape (positive, scales linearly)
+
+- **`cmd/flat-docker/main.go` `imagesScreen` and `volumesScreen`** — each
+  is a self-contained struct with `Handle`/`View`/`layout`/`keyHints`/
+  `selected`/`renderListPane`/`renderDetailPane`, modeled on the same
+  pattern as `containersScreen` minus tabs/async/mouse. **Root code did
+  not change at all** to add them: `NewState` constructs them, root
+  `Handle`/`View` switches on `s.screen`, `renderFooter` asks the active
+  screen for `keyHints`. The feature-module shape's payoff is clearest
+  here — adding a new screen is purely additive at the screen level.
+  **No friction.**
+- **Screen isolation is automatic.** `TestScreensAreIsolatedFromEachOther`
+  verifies that cursor state on `containers` is preserved while the user
+  navigates to `images` and moves there. Each screen owns its own state,
+  and because there is no shared mutation site, isolation is the default.
+  **fine**.
+
+### Layout (the "found" threshold crossed)
+
+- **Both `imagesScreen.layout` and `volumesScreen.layout` are byte-identical
+  to `containersScreen.layout`'s pane-split math** (`listPaneWidth = min(30,
+  max(width/3, 16))`, `detailPaneWidth = width - listPaneWidth - 2`,
+  `list.SetHeight(height - listChromeRows)`). The same lines appear three
+  times now. **This crosses the project's "abstraction is found, not
+  designed" threshold** — the pattern is no longer found, it is plainly
+  repeated. **annoying** — and the strongest evidence yet for the layout-
+  vocabulary extraction candidate.
+- **The `renderListPane`/`renderDetailPane` patterns are also repeated**,
+  with only the data fields differing (Container vs Image vs Volume).
+  Three near-identical ~15-line render methods. A generic "list+detail
+  pane" helper would close this, but that's a heavier abstraction; logged
+  as a maybe-candidate.
+
+### What this confirms
+
+- **Feature-module shape scales linearly** to multiple screens with no
+  root-code growth. Adding a screen is purely additive. **The feedback's
+  "feature module" recommendation is fully validated** — this is the
+  pattern's strongest evidence.
+- **Layout-math extraction is now overdue by the project's own rule.**
+  Three copies of the same pane-split arithmetic is "found abstraction"
+  by any reasonable reading. Task 8 should propose this as the #1
+  post-0.1 extraction.
+- **No new friction surfaced.** The patterns repeat; they do not get
+  worse. That itself is informative: the dogfood is converging on a small
+  set of repeated patterns, not discovering new ones.
+
+### Task 7 verdict
+
+Task 7 was the lowest-friction task in the dogfood: the feature-module
+shape made adding two more screens purely additive, and the only friction
+was the by-now-familiar layout-math repetition. **The dogfood's findings
+have converged** — Tasks 8 should write them up.
+
+---
+
 
 (Updated each task. Predictions vs. observed.)
 
