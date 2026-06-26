@@ -1,24 +1,24 @@
  flat-docker                       1 containers    2 images    3 volumes  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-╭──────────────────╮ ╭─ nginx-proxy ──────────────────╮ ╭──────────────────────╮
-│filter: (all)     │ │  stats    logs    inspect │ │activity              │
-│                  │ │                               │ │                      │
-│●> nginx-proxy    │ │                                │ │(no events yet)       │
-│●  api-server     │ │  status: running               │ │                      │
-│●  postgres       │ │  image:  nginx:1.25            │ │                      │
-│●  redis-cache    │ │                                │ │                      │
-│○  frontend       │ │  CPU █████████░░░░░░   63%     │ │                      │
-│●  worker         │ │  hist (no history)             │ │                      │
-│●  nginx-web      │││                                │││                      │
-│○  migration      │ │  MEM █████░░░░░░░░░░   35%     │ │                      │
-│                  │ │  hist (no history)             │ │                      │
-│                  │ │                                │ │                      │
-│                  │ │                                │ │                      │
-│                  │ │                                │ │                      │
-│                  │ │                                │ │                      │
-│                  │ │                                │ │                      │
-│                  │ │                                │ │                      │
-╰──────────────────╯ ╰────────────────────────────────╯ ╰──────────────────────╯
+                                                                                
+ filter: (all)          stats    logs    inspect    activity               
+                                                                               
+ ●> nginx-proxy                                          (no events yet)        
+ ●  api-server          status: running                                         
+ ●  postgres            image:  nginx:1.25                                      
+ ●  redis-cache                                                                 
+ ○  frontend            CPU █████████░░░░░░   63%                               
+ ●  worker              hist (no history)                                       
+ ●  nginx-web       │                                  │                        
+ ○  migration           MEM █████░░░░░░░░░░   35%                               
+                        hist (no history)                                       
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
  8 containers (6 running)  avg CPU  0%  avg MEM  0%  filter: (all)              
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  j/k move  s stop  x remove  : command  tab next  1/2/3 switch  q quit 

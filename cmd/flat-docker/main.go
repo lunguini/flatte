@@ -457,20 +457,37 @@ func powerlineTab(label string, active bool) (string, int) {
 	return rendered, width
 }
 
-const paneBorderRows = 2 // top + bottom border
-const paneBorderCols = 2 // left + right border
+const paneBorderRows = 2 // top + bottom border (only when border=true)
+const paneBorderCols = 2 // left + right border (only when border=true)
+const panePadding = 1    // cells of padding on each side
 
-func paneStyle(width, height int, focused bool) lipgloss.Style {
-	borderFg := pal.panel
-	if focused {
-		borderFg = pal.accent
-	}
-	return lipgloss.NewStyle().
+func paneStyle(width, height int, focused bool, border bool) lipgloss.Style {
+	s := lipgloss.NewStyle().
 		Width(width).
 		Height(height).
 		MaxHeight(height).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(borderFg)
+		MaxWidth(width).
+		Padding(panePadding, panePadding)
+	if border {
+		borderFg := pal.panel
+		if focused {
+			borderFg = pal.accent
+		}
+		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(borderFg)
+	}
+	return s
+}
+
+// paneInnerDims returns the content area dimensions inside a pane,
+// accounting for padding (and border if present).
+func paneInnerDims(paneWidth, paneHeight int, border bool) (int, int) {
+	cw := paneWidth - 2*panePadding
+	ch := paneHeight - 2*panePadding
+	if border {
+		cw -= paneBorderCols
+		ch -= paneBorderRows
+	}
+	return max(cw, 1), max(ch, 0)
 }
 
 // makeTitledTopBorder constructs a rounded top border with a title
@@ -492,20 +509,12 @@ func makeTitledTopBorder(width int, title string, borderFg color.Color) string {
 	return lipgloss.NewStyle().Foreground(borderFg).Render(raw)
 }
 
-// renderTitledPane renders content inside a bordered pane where the top
-// border carries a title. Works by rendering normally with paneStyle,
-// then replacing the first line with the titled version.
+// renderTitledPane is retained for backwards compatibility but now
+// simply renders with no border + padding (the title moves to a bg-filled
+// header row inside the content, handled by the caller).
 func renderTitledPane(width, height int, focused bool, title string, content string) string {
-	pane := paneStyle(width, height, focused).Render(content)
-	borderFg := pal.panel
-	if focused {
-		borderFg = pal.accent
-	}
-	lines := strings.SplitN(pane, "\n", 2)
-	if len(lines) < 2 {
-		return pane
-	}
-	return makeTitledTopBorder(width, title, borderFg) + "\n" + lines[1]
+	_ = title
+	return paneStyle(width, height, focused, false).Render(content)
 }
 
 func (s *State) resize(width, height int) {
@@ -1606,9 +1615,10 @@ func (c *containersScreen) renderActivityPane() string {
 	for i, line := range visible {
 		truncated[i] = truncateToWidth(line, activityInnerWidth)
 	}
-	content := title + "\n\n" + strings.Join(truncated, "\n")
+	headerRow := lipgloss.NewStyle().Width(activityInnerWidth).Background(pal.bg).Render(title)
+	content := headerRow + "\n\n" + strings.Join(truncated, "\n")
 	inner := contentStyle.Render(content)
-	return paneStyle(c.activityPaneWidth, c.bodyContentHeight, false).Render(inner)
+	return paneStyle(c.activityPaneWidth, c.bodyContentHeight, false, false).Render(inner)
 }
 
 func truncateToWidth(s string, width int) string {
@@ -1693,7 +1703,7 @@ func (c *containersScreen) renderListPane() string {
 	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), listInnerHeight)
 	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
 	combined := withScrollbar(inner, barStyled)
-	return paneStyle(c.listPaneWidth, c.bodyContentHeight, c.focus.Focused(focusList) || c.focus.Focused(focusFilter)).Render(combined)
+	return paneStyle(c.listPaneWidth, c.bodyContentHeight, c.focus.Focused(focusList) || c.focus.Focused(focusFilter), false).Render(combined)
 }
 
 func (c *containersScreen) renderDetailPane() string {
@@ -1704,18 +1714,26 @@ func (c *containersScreen) renderDetailPane() string {
 	selected := c.selected()
 	if selected == nil {
 		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no container selected)")
-		return renderTitledPane(c.detailPaneWidth, c.bodyContentHeight, c.focus.Focused(focusDetail), "(no selection)", empty)
+		return paneStyle(c.detailPaneWidth, c.bodyContentHeight, c.focus.Focused(focusDetail), false).Render(empty)
 	}
 
-	headerRow := c.renderTabBar()
-	body := c.renderActiveTab(selected)
+	c.detailTabs.SetActive(int(c.tab))
+	tabs := c.detailTabs.Render()
+	indicator := c.renderFollowIndicator()
+	rightPart := tabs
+	if indicator != "" {
+		rightPart = tabs + " " + indicator
+	}
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(selected.Name)
+	headerRow := composeHeader(title, rightPart, detailInnerWidth, pal.bg)
 
+	body := c.renderActiveTab(selected)
 	inner := contentStyle.Render(strings.Join([]string{headerRow, "", body}, "\n"))
 	bar := c.detailScrollbar()
 	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
 	combined := withScrollbar(inner, barStyled)
 	focused := c.focus.Focused(focusDetail)
-	return renderTitledPane(c.detailPaneWidth, c.bodyContentHeight, focused, selected.Name, combined)
+	return paneStyle(c.detailPaneWidth, c.bodyContentHeight, focused, false).Render(combined)
 }
 
 func (c *containersScreen) detailScrollbar() string {

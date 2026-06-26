@@ -101,7 +101,7 @@ func (l *paneLayout) View() string {
 		contentWidth := max(p.width-paneBorderCols, 1)
 		contentHeight := max(l.height-paneBorderRows, 0)
 		inner := p.render(contentWidth, contentHeight)
-		outer := paneStyle(p.width, l.height, false).Render(inner)
+		outer := paneStyle(p.width, l.height, false, false).Render(inner)
 		parts = append(parts, outer)
 		if i < len(l.panes)-1 {
 			parts = append(parts, l.renderDivider(i))
