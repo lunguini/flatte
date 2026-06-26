@@ -43,6 +43,9 @@ func (l List) Count() int { return l.count }
 // Offset is the index of the first visible row (for tests and indicators).
 func (l List) Offset() int { return l.offset }
 
+// Height returns the number of visible rows the list was sized to via SetHeight.
+func (l List) Height() int { return l.height }
+
 // View renders the visible rows: render is called for each visible item index
 // with whether it is the selected row, and the results are joined by newlines.
 // The app decides each row's appearance (marker, styling, truncation).

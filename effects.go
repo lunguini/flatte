@@ -135,6 +135,14 @@ func (fx Effects[S]) context() context.Context {
 	return fx.Context
 }
 
+// Ctx returns the loop's context, defaulting to context.Background() if
+// none is set (e.g., in tests using the zero Effects value). Use this to
+// derive child contexts for scoped async work — context.WithCancel(fx.Ctx())
+// gives you a cancellable handle for per-screen or per-selection goroutines.
+func (fx Effects[S]) Ctx() context.Context {
+	return fx.context()
+}
+
 // latestEntry identifies one generation of Latest work. Its pointer identity
 // is what lets release distinguish "my entry" from a newer replacement.
 type latestEntry struct {

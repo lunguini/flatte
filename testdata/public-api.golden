@@ -13,6 +13,8 @@ flatte
   const KeyEscape
   const KeyHome
   const KeyLeft
+  const KeyPageDown
+  const KeyPageUp
   const KeyRight
   const KeyTab
   const KeyUnknown
@@ -53,6 +55,7 @@ flatte
   func WithReportFocus
   func WithoutBracketedPaste
   func WithoutDefaultQuit
+  method Effects.Ctx
   method Effects.Print
   method Effects.Printf
   method Effects.Quit
@@ -125,6 +128,7 @@ flatui
   method KeyMap.View
   method List.Count
   method List.Cursor
+  method List.Height
   method List.MoveDown
   method List.MoveUp
   method List.Offset

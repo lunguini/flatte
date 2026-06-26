@@ -23,6 +23,8 @@ const (
 	KeyDelete
 	KeyHome
 	KeyEnd
+	KeyPageUp
+	KeyPageDown
 )
 
 // Mod is a bitmask of key modifiers.
