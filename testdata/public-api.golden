@@ -44,8 +44,12 @@ flatte
   func Named
   func NewEffects
   func NewHarnessEffects
+  func NewScope
   func RenderContextFor
   func Run
+  func ScopeEvery
+  func ScopeGo
+  func ScopeStream
   func SelectFile
   func Stream
   func WithInline
@@ -65,6 +69,8 @@ flatte
   method Mod.Contains
   method NoopTracer.Event
   method NoopTracer.Update
+  method Scope.Cancel
+  method Scope.Ctx
   method UpdateTracer.Event
   method UpdateTracer.Update
   type App
@@ -90,6 +96,7 @@ flatte
   type PasteEvent
   type RenderContext
   type ResizeEvent
+  type Scope
   type StateUpdate
   type Tracer
   type UpdateTracer
@@ -97,6 +104,7 @@ flatte
 flatui
   const KeyMapFull
   const KeyMapShort
+  const SplitDividerWidth
   func Card
   func CardBodyHeight
   func CardBodyWidth
@@ -104,10 +112,12 @@ flatui
   func CardWithStyle
   func ComposeHeader
   func ContentWidth
+  func DefaultSplitLayoutStyle
   func FrameWidth
   func Mark
   func NewProgress
   func NewSpinner
+  func NewSplitLayout
   func NewStopwatch
   func NewTabBar
   func NewTimer
@@ -161,6 +171,11 @@ flatui
   method Spinner.Frame
   method Spinner.Tick
   method Spinner.View
+  method SplitLayout.HandleMouse
+  method SplitLayout.Layout
+  method SplitLayout.PaneCount
+  method SplitLayout.PaneWidth
+  method SplitLayout.View
   method Stopwatch.Elapsed
   method Stopwatch.Reset
   method Stopwatch.Running
@@ -302,10 +317,15 @@ flatui
   type KeyMapOptions
   type List
   type Paginator
+  type PaneEntry
+  type PaneMouseFunc
+  type PaneRenderFunc
   type Progress
   type ProgressStyle
   type Rect
   type Spinner
+  type SplitLayout
+  type SplitLayoutStyle
   type Stopwatch
   type TabBar
   type TabGlyphs
