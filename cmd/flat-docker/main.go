@@ -949,20 +949,36 @@ func (c *containersScreen) dividerAt(x, y int) int {
 }
 
 func (c *containersScreen) renderDivider(idx int) string {
-	color := pal.panel
-	if c.drag != nil && c.drag.divider == idx {
-		color = pal.accent
+	return renderDragDivider(c.bodyContentHeight, c.drag != nil && c.drag.divider == idx)
+}
+
+// renderDragDivider produces a 1-col-wide, height-tall divider with a
+// background color matching the pane borders, and a single │ in the
+// vertical center as a visible grip indicator. The bg fills the column
+// (spaces are invisible against it); the │ stands out as a contrast.
+func renderDragDivider(height int, dragging bool) string {
+	bg := pal.panel
+	gripFg := pal.bg // dark against gray — clearly visible
+	if dragging {
+		bg = pal.accent
+		gripFg = pal.dark // dark against blue
 	}
-	rows := make([]string, c.bodyContentHeight)
-	for i := range rows {
-		rows[i] = "│"
+	midY := height / 2
+	rows := make([]string, height)
+	for i := 0; i < height; i++ {
+		if i == midY {
+			rows[i] = "│"
+		} else {
+			rows[i] = " "
+		}
 	}
 	content := strings.Join(rows, "\n")
 	return lipgloss.NewStyle().
 		Width(dividerWidth).
-		Height(c.bodyContentHeight).
-		MaxHeight(c.bodyContentHeight).
-		Foreground(color).
+		Height(height).
+		MaxHeight(height).
+		Foreground(gripFg).
+		Background(bg).
 		Render(content)
 }
 

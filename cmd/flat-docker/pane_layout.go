@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"charm.land/lipgloss/v2"
 
 	"github.com/lunguini/flatte"
@@ -113,20 +111,7 @@ func (l *paneLayout) View() string {
 }
 
 func (l *paneLayout) renderDivider(idx int) string {
-	color := pal.panel
-	if l.drag != nil && l.drag.divider == idx {
-		color = pal.accent
-	}
-	rows := make([]string, l.height)
-	for i := range rows {
-		rows[i] = "│"
-	}
-	return lipgloss.NewStyle().
-		Width(dividerWidth).
-		Height(l.height).
-		MaxHeight(l.height).
-		Foreground(color).
-		Render(strings.Join(rows, "\n"))
+	return renderDragDivider(l.height, l.drag != nil && l.drag.divider == idx)
 }
 
 func (l *paneLayout) HandleMouse(m flatte.MouseEvent) bool {
