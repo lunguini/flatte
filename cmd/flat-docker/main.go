@@ -27,7 +27,7 @@ const (
 func (sc screen) Name() string {
 	switch sc {
 	case screenContainers:
-		return "containers"
+		return "container"
 	case screenImages:
 		return "images"
 	case screenVolumes:
@@ -412,7 +412,7 @@ type glyphSet struct {
 }
 
 var (
-	glyphSafe = glyphSet{"[", "]"}
+	glyphSafe  = glyphSet{"[", "]"}
 	glyphPower = glyphSet{powerlineLeftSlant, powerlineRightSlant}
 )
 
@@ -605,7 +605,7 @@ func renderModal(m *confirmModel) string {
 
 func renderTabBar(s *State, width int) string {
 	s.headerTabs.SetActive(int(s.screen))
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 1).Render("flat-docker")
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 0).Render("flat-docker")
 	tabs := s.headerTabs.Render()
 	return composeHeader(title, tabs, width, pal.bg)
 }
@@ -651,7 +651,7 @@ func scrollbarLines(offset, visible, total, height int) string {
 	if thumbSize > height {
 		thumbSize = height
 	}
-	thumbPos := int(float64(offset) / float64(maxOffset) * float64(height - thumbSize))
+	thumbPos := int(float64(offset) / float64(maxOffset) * float64(height-thumbSize))
 	if thumbPos < 0 {
 		thumbPos = 0
 	}
@@ -750,8 +750,8 @@ type containersScreen struct {
 	cpuHistory map[string][]float64
 	memHistory map[string][]float64
 	liveLogs   map[string][]string
-	logTarget  string
-	logCancel  context.CancelFunc
+	logTarget string
+	logScope  *flatte.Scope
 	zones      *flatui.ZoneScanner // auto-zones for list rows
 	detailTabs *tabBar             // stats/logs/inspect tab strip with mouse support
 	listHeight int
@@ -763,10 +763,10 @@ type containersScreen struct {
 }
 
 type dragState struct {
-	divider             int // 0 = list|detail, 1 = detail|activity
-	startX              int
-	startListWidth      int
-	startActivityWidth  int
+	divider            int // 0 = list|detail, 1 = detail|activity
+	startX             int
+	startListWidth     int
+	startActivityWidth int
 }
 
 const (
@@ -1036,10 +1036,10 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 	if m.Action == flatte.MousePress {
 		if div := c.dividerAt(m.X, m.Y); div >= 0 {
 			c.drag = &dragState{
-				divider:             div,
-				startX:              m.X,
-				startListWidth:      c.listPaneWidth,
-				startActivityWidth:  c.activityPaneWidth,
+				divider:            div,
+				startX:             m.X,
+				startListWidth:     c.listPaneWidth,
+				startActivityWidth: c.activityPaneWidth,
 			}
 			return
 		}
@@ -1241,9 +1241,9 @@ func stepFor(seed string, tick, mod, amp int) float64 {
 }
 
 func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
-	if c.logCancel != nil {
-		c.logCancel()
-		c.logCancel = nil
+	if c.logScope != nil {
+		c.logScope.Cancel()
+		c.logScope = nil
 	}
 	ct := c.selected()
 	if ct == nil {
@@ -1258,16 +1258,9 @@ func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
 		c.liveLogs = make(map[string][]string)
 	}
 
-	parent := fx.Context
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, cancel := context.WithCancel(parent)
-	c.logCancel = cancel
+	c.logScope = flatte.NewScope(fx, "logs:"+ct.ID)
 	targetID := ct.ID
-	updates := fx.Updates
-
-	go func() {
+	flatte.ScopeStream(c.logScope, fx, func(ctx context.Context, send func(string)) {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -1275,21 +1268,12 @@ func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				line := scopedLogLine(targetID, len(c.liveLogs[targetID]))
-				update := flatte.Named("scoped-log:"+targetID, func(s *State) {
-					s.containers.appendLiveLog(targetID, line)
-				})
-				if updates == nil {
-					return
-				}
-				select {
-				case updates <- update:
-				case <-ctx.Done():
-					return
-				}
+				send(scopedLogLine(targetID, len(c.liveLogs[targetID])))
 			}
 		}
-	}()
+	}, func(s *State, line string) {
+		s.containers.appendLiveLog(targetID, line)
+	})
 }
 
 func scopedLogLine(id string, seq int) string {
@@ -1842,12 +1826,12 @@ var sampleImages = []Image{
 }
 
 type imagesScreen struct {
-	width   int
-	height  int
-	focus   flatui.FocusRing
-	list    flatui.List
-	images  []Image
-	layout  *paneLayout
+	width  int
+	height int
+	focus  flatui.FocusRing
+	list   flatui.List
+	images []Image
+	layout *paneLayout
 }
 
 const (

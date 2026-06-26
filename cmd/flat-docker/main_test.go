@@ -1319,8 +1319,8 @@ func TestScopedLogsRestartOnSelectionChange(t *testing.T) {
 
 	// Initial streamer for first container
 	s.containers.startScopedLogs(s, fx)
-	if s.containers.logCancel == nil {
-		t.Fatal("no logCancel after first startScopedLogs")
+	if s.containers.logScope == nil {
+		t.Fatal("no logScope after first startScopedLogs")
 	}
 	if s.containers.logTarget != "a1b2c3d4e5" {
 		t.Fatalf("logTarget = %q, want a1b2c3d4e5", s.containers.logTarget)
@@ -1328,8 +1328,8 @@ func TestScopedLogsRestartOnSelectionChange(t *testing.T) {
 
 	// Move selection to second container — should cancel old, start new
 	Handle(s, keyChar('j'), fx)
-	if s.containers.logCancel == nil {
-		t.Fatal("logCancel became nil after selection change")
+	if s.containers.logScope == nil {
+		t.Fatal("logScope became nil after selection change")
 	}
 	if s.containers.logTarget != "b2c3d4e5f6" {
 		t.Fatalf("logTarget = %q after selection change, want b2c3d4e5f6", s.containers.logTarget)
@@ -1349,7 +1349,7 @@ func TestScopedLogsCancelReleasesGoroutine(t *testing.T) {
 		close(done)
 	}()
 
-	s.containers.logCancel() // cancel the streamer's own context
+	s.containers.logScope.Cancel() // cancel the streamer's scope
 	// streamer should exit; verify the parent context still alive
 	select {
 	case <-done:
