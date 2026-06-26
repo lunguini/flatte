@@ -11,6 +11,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui"
 )
 
 func resizedState(width, height int) *State {
@@ -770,9 +771,9 @@ func TestLogsUseWrappedContentSoLongLinesWrap(t *testing.T) {
 
 func TestPickGlyphSetDefaultsToPowerline(t *testing.T) {
 	t.Setenv("FLAT_DOCKER_GLYPHS", "")
-	g := pickGlyphSet()
-	if g != glyphPower {
-		t.Fatalf("default glyph set = %+v, want glyphPower", g)
+	g := pickGlyphs()
+	if g != flatui.TabGlyphsPowerline {
+		t.Fatalf("default glyph set = %+v, want flatui.TabGlyphsPowerline", g)
 	}
 }
 
@@ -788,9 +789,9 @@ func TestPickGlyphSetRespectsEnvVar(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv("FLAT_DOCKER_GLYPHS", c.env)
-			g := pickGlyphSet()
-			if g != glyphSafe {
-				t.Fatalf("FLAT_DOCKER_GLYPHS=%q -> %+v, want glyphSafe", c.env, g)
+			g := pickGlyphs()
+			if g != flatui.TabGlyphsSafe {
+				t.Fatalf("FLAT_DOCKER_GLYPHS=%q -> %+v, want flatui.TabGlyphsSafe", c.env, g)
 			}
 		})
 	}
@@ -798,14 +799,14 @@ func TestPickGlyphSetRespectsEnvVar(t *testing.T) {
 
 func TestPickGlyphSetPowerlineWhenExplicitlySet(t *testing.T) {
 	t.Setenv("FLAT_DOCKER_GLYPHS", "powerline")
-	g := pickGlyphSet()
-	if g != glyphPower {
-		t.Fatalf("FLAT_DOCKER_GLYPHS=powerline -> %+v, want glyphPower", g)
+	g := pickGlyphs()
+	if g != flatui.TabGlyphsPowerline {
+		t.Fatalf("FLAT_DOCKER_GLYPHS=powerline -> %+v, want flatui.TabGlyphsPowerline", g)
 	}
 }
 
 func TestTipForGlyphSetMentionsFallbackForPowerline(t *testing.T) {
-	tip := tipForGlyphSet(glyphPower)
+	tip := tipForGlyphs(flatui.TabGlyphsPowerline)
 	if !strings.Contains(tip, "FLAT_DOCKER_GLYPHS=safe") {
 		t.Fatalf("powerline tip should mention the safe fallback: %q", tip)
 	}
@@ -815,19 +816,9 @@ func TestTipForGlyphSetMentionsFallbackForPowerline(t *testing.T) {
 }
 
 func TestTipForGlyphSetMentionsUpgradeForSafe(t *testing.T) {
-	tip := tipForGlyphSet(glyphSafe)
+	tip := tipForGlyphs(flatui.TabGlyphsSafe)
 	if !strings.Contains(tip, "FLAT_DOCKER_GLYPHS=powerline") {
 		t.Fatalf("safe tip should mention the powerline upgrade: %q", tip)
-	}
-}
-
-func TestPowerlineTabWidthMatchesContent(t *testing.T) {
-	rendered, width := powerlineTab("stats", true)
-	if width != lipgloss.Width(rendered) {
-		t.Fatalf("returned width %d != lipgloss.Width(rendered) %d", width, lipgloss.Width(rendered))
-	}
-	if width < lipgloss.Width("stats")+2 {
-		t.Fatalf("width %d looks too small for label 'stats'", width)
 	}
 }
 
@@ -1030,13 +1021,12 @@ func TestClickInsidePaneStillWorksDuringNonDrag(t *testing.T) {
 func TestImagesScreenMouseClickSelectsRow(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
-	// Click on the second row of the images list pane.
-	// List pane starts at X=0, content starts at X=1 (inside left border).
-	// Row 0 is at content Y=2 (after title + blank); row 1 at Y=3.
-	// Frame Y = chromeRowsTop + 1 (border) + 3 (content Y) = 6.
+	// Framework SplitLayout returns pane-local coords (no border offset).
+	// Pane starts at frame Y=chromeRowsTop=2. Title at Y=2, blank at Y=3,
+	// list item 0 at Y=4, item 1 at Y=5.
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
-		X: 3, Y: 6,
+		X: 3, Y: 5,
 	}, flatte.Effects[State]{})
 	if s.images.list.Cursor() != 1 {
 		t.Fatalf("images click: cursor = %d, want 1", s.images.list.Cursor())
@@ -1095,7 +1085,7 @@ func TestVolumesScreenMouseClickSelectsRow(t *testing.T) {
 	s.screen = screenVolumes
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
-		X: 3, Y: 6,
+		X: 3, Y: 5,
 	}, flatte.Effects[State]{})
 	if s.volumes.list.Cursor() != 1 {
 		t.Fatalf("volumes click: cursor = %d, want 1", s.volumes.list.Cursor())
@@ -1133,10 +1123,10 @@ func TestHeaderTabMouseClickSwitchesScreen(t *testing.T) {
 	}
 
 	// Tabs are right-aligned via composeHeader. Compute their frame X.
-	totalTabsW := tabLabelWidth("1 containers") + tabLabelWidth("2 images") + tabLabelWidth("3 volumes")
+	totalTabsW := flatui.TabLabelWidth("1 containers") + flatui.TabLabelWidth("2 images") + flatui.TabLabelWidth("3 volumes")
 	tabStripStart := 80 - totalTabsW
 	// "2 images" is the second tab; click inside it.
-	imagesTabStart := tabStripStart + tabLabelWidth("1 containers")
+	imagesTabStart := tabStripStart + flatui.TabLabelWidth("1 containers")
 	clickX := imagesTabStart + 1
 
 	Handle(s, flatte.MouseEvent{
@@ -1152,9 +1142,9 @@ func TestHeaderTabMouseClickSwitchesScreen(t *testing.T) {
 func TestHeaderTabMouseClickOnThirdTab(t *testing.T) {
 	s := resizedState(80, 24)
 
-	totalTabsW := tabLabelWidth("1 containers") + tabLabelWidth("2 images") + tabLabelWidth("3 volumes")
+	totalTabsW := flatui.TabLabelWidth("1 containers") + flatui.TabLabelWidth("2 images") + flatui.TabLabelWidth("3 volumes")
 	tabStripStart := 80 - totalTabsW
-	volumesTabStart := tabStripStart + tabLabelWidth("1 containers") + tabLabelWidth("2 images")
+	volumesTabStart := tabStripStart + flatui.TabLabelWidth("1 containers") + flatui.TabLabelWidth("2 images")
 	clickX := volumesTabStart + 1
 
 	Handle(s, flatte.MouseEvent{
@@ -1503,15 +1493,15 @@ func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	// composeHeader right-aligns tabs. Compute the tab strip's frame X:
 	// detail content starts at listPaneWidth + dividerWidth + 1.
 	// Tab strip local start = contentWidth - totalTabsWidth.
-	// "logs" is the second tab; click at tabStripStart + tabLabelWidth("stats") + 1.
+	// "logs" is the second tab; click at tabStripStart + flatui.TabLabelWidth("stats") + 1.
 	contentStartX := s.containers.listPaneWidth + dividerWidth + 1
 	contentWidth := s.containers.detailPaneWidth - paneBorderCols
-	totalTabsW := tabLabelWidth("stats") + tabLabelWidth("logs") + tabLabelWidth("inspect")
+	totalTabsW := flatui.TabLabelWidth("stats") + flatui.TabLabelWidth("logs") + flatui.TabLabelWidth("inspect")
 	tabStripLocalStart := contentWidth - totalTabsW
 	if tabStripLocalStart < 0 {
 		t.Skipf("pane too narrow for tabs (contentWidth=%d, tabsW=%d)", contentWidth, totalTabsW)
 	}
-	logsX := contentStartX + tabStripLocalStart + tabLabelWidth("stats") + 1
+	logsX := contentStartX + tabStripLocalStart + flatui.TabLabelWidth("stats") + 1
 	clickY := chromeRowsTop + 1
 
 	Handle(s, flatte.MouseEvent{

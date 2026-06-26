@@ -47,7 +47,7 @@ type State struct {
 	modal      *confirmModel
 	command    *commandModel
 	cmdHistory []string
-	headerTabs *tabBar
+	headerTabs *flatui.TabBar
 }
 
 type confirmModel struct {
@@ -292,11 +292,11 @@ func NewState() *State {
 	s.containers = newContainersScreen()
 	s.images = newImagesScreen()
 	s.volumes = newVolumesScreen()
-	s.headerTabs = newTabBar(
-		tabItem{id: "containers", label: "1 containers"},
-		tabItem{id: "images", label: "2 images"},
-		tabItem{id: "volumes", label: "3 volumes"},
-	)
+	s.headerTabs = flatui.NewTabBar(
+		flatui.TabItem{ID: "containers", Label: "1 containers"},
+		flatui.TabItem{ID: "images", Label: "2 images"},
+		flatui.TabItem{ID: "volumes", Label: "3 volumes"},
+	).WithGlyphs(pickGlyphs())
 	return s
 }
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
@@ -312,10 +312,7 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	// Header tab mouse clicks — root-level, above screen dispatch.
 	// composeHeader right-aligns the tabs; compute their frame X start.
 	if m, ok := ev.(flatte.MouseEvent); ok && m.Action == flatte.MousePress && m.Y == 0 {
-		totalTabsW := 0
-		for _, item := range s.headerTabs.items {
-			totalTabsW += tabLabelWidth(item.label)
-		}
+		totalTabsW := s.headerTabs.TotalWidth()
 		tabStripStart := s.width - totalTabsW
 		if tabStripStart < 0 {
 			tabStripStart = 0
@@ -403,58 +400,22 @@ func defaultPalette() palette {
 
 var pal = defaultPalette()
 
-// glyphSet controls which characters tab edges use. Powerline requires
-// the user's terminal font to include U+E0BA/U+E0BC (Nerd Font, etc.);
-// Safe uses standard brackets that render in every terminal.
-type glyphSet struct {
-	left  string
-	right string
-}
-
-var (
-	glyphSafe  = glyphSet{"[", "]"}
-	glyphPower = glyphSet{powerlineLeftSlant, powerlineRightSlant}
-)
-
-// activeGlyphs is the process-wide choice, picked from $FLAT_DOCKER_GLYPHS
-// at startup. Default is Powerline because the maintainers want the best
-// visuals; users whose terminals can't render the PUA glyphs set
-// FLAT_DOCKER_GLYPHS=safe to fall back to brackets.
-var activeGlyphs = pickGlyphSet()
-
-func pickGlyphSet() glyphSet {
+// pickGlyphs reads FLAT_DOCKER_GLYPHS and returns the framework glyph preset.
+func pickGlyphs() flatui.TabGlyphs {
 	switch strings.ToLower(os.Getenv("FLAT_DOCKER_GLYPHS")) {
 	case "safe", "ascii", "off", "0", "false":
-		return glyphSafe
+		return flatui.TabGlyphsSafe
 	default:
-		return glyphPower
+		return flatui.TabGlyphsPowerline
 	}
 }
 
-const (
-	powerlineLeftSlant  = "\ue0ba"
-	powerlineRightSlant = "\ue0bc"
-)
-
-// powerlineTab renders a label as a Powerline-style tab: diagonal slant
-// edges (filled triangles) on a colored fill, against a surrounding bar
-// background. Returns the rendered string and its visible width.
-func powerlineTab(label string, active bool) (string, int) {
-	var fill, text color.Color
-	if active {
-		fill = pal.accent
-		text = pal.dark
-	} else {
-		fill = pal.tabBg
-		text = pal.muted
+// tipForGlyphs returns a one-time startup hint about glyph choice.
+func tipForGlyphs(g flatui.TabGlyphs) string {
+	if g == flatui.TabGlyphsPowerline {
+		return "tip   if tab edges look like boxes, install a Nerd Font or set FLAT_DOCKER_GLYPHS=safe"
 	}
-	bar := pal.bg
-	l := lipgloss.NewStyle().Foreground(fill).Background(bar).Render(activeGlyphs.left)
-	b := lipgloss.NewStyle().Foreground(text).Background(fill).Padding(0, 2).Render(label)
-	r := lipgloss.NewStyle().Foreground(fill).Background(bar).Render(activeGlyphs.right)
-	rendered := l + b + r
-	width := lipgloss.Width(rendered)
-	return rendered, width
+	return "tip   using safe (ASCII) glyphs; set FLAT_DOCKER_GLYPHS=powerline with a Nerd Font for nicer tabs"
 }
 
 const paneBorderRows = 1 // bottom padding only (top=0 so headers are flush)
@@ -606,8 +567,8 @@ func renderModal(m *confirmModel) string {
 func renderTabBar(s *State, width int) string {
 	s.headerTabs.SetActive(int(s.screen))
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 0).Render("flat-docker")
-	tabs := s.headerTabs.Render()
-	return composeHeader(title, tabs, width, pal.bg)
+	tabs := s.headerTabs.Render(pal.accent, pal.tabBg, pal.bg)
+	return flatui.ComposeHeader(title, tabs, width, pal.bg)
 }
 
 func renderHeaderSeparator(width int) string {
@@ -753,7 +714,7 @@ type containersScreen struct {
 	logTarget string
 	logScope  *flatte.Scope
 	zones      *flatui.ZoneScanner // auto-zones for list rows
-	detailTabs *tabBar             // stats/logs/inspect tab strip with mouse support
+	detailTabs *flatui.TabBar             // stats/logs/inspect tab strip with mouse support
 	listHeight int
 
 	activity   []string
@@ -831,11 +792,11 @@ func newContainersScreen() containersScreen {
 		mem:        flatui.NewProgress(18),
 		zones:      flatui.NewZoneScanner(),
 		followTail: true,
-		detailTabs: newTabBar(
-			tabItem{id: "stats", label: "stats"},
-			tabItem{id: "logs", label: "logs"},
-			tabItem{id: "inspect", label: "inspect"},
-		),
+		detailTabs: flatui.NewTabBar(
+			flatui.TabItem{ID: "stats", Label: "stats"},
+			flatui.TabItem{ID: "logs", Label: "logs"},
+			flatui.TabItem{ID: "inspect", Label: "inspect"},
+		).WithGlyphs(pickGlyphs()),
 	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
@@ -1065,10 +1026,7 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 	detailContentWidth := c.detailPaneWidth - paneBorderCols
 	detailHeaderY := chromeRowsTop // flush at top — no top padding
 	if m.Y == detailHeaderY && m.X >= detailContentStartX {
-		totalTabsW := 0
-		for _, item := range c.detailTabs.items {
-			totalTabsW += tabLabelWidth(item.label)
-		}
+		totalTabsW := c.detailTabs.TotalWidth()
 		tabStripStart := detailContentWidth - totalTabsW
 		if tabStripStart < 0 {
 			tabStripStart = 0
@@ -1703,14 +1661,14 @@ func (c *containersScreen) renderDetailPane() string {
 	}
 
 	c.detailTabs.SetActive(int(c.tab))
-	tabs := c.detailTabs.Render()
+	tabs := c.detailTabs.Render(pal.accent, pal.tabBg, pal.bg)
 	indicator := c.renderFollowIndicator()
 	rightPart := tabs
 	if indicator != "" {
 		rightPart = tabs + " " + indicator
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
-	headerRow := composeHeader(title, rightPart, detailInnerWidth, pal.accent)
+	headerRow := flatui.ComposeHeader(title, rightPart, detailInnerWidth, pal.accent)
 
 	body := c.renderActiveTab(selected)
 	inner := contentStyle.Render(strings.Join([]string{headerRow, "", body}, "\n"))
@@ -1735,7 +1693,7 @@ func (c *containersScreen) detailScrollbar() string {
 
 func (c *containersScreen) renderTabBar() string {
 	c.detailTabs.SetActive(int(c.tab))
-	bar := c.detailTabs.Render()
+	bar := c.detailTabs.Render(pal.accent, pal.tabBg, pal.bg)
 	if indicator := c.renderFollowIndicator(); indicator != "" {
 		bar += " " + indicator
 	}
@@ -1831,7 +1789,7 @@ type imagesScreen struct {
 	focus  flatui.FocusRing
 	list   flatui.List
 	images []Image
-	layout *paneLayout
+	layout *flatui.SplitLayout
 }
 
 const (
@@ -1844,17 +1802,17 @@ func newImagesScreen() *imagesScreen {
 	s.focus.SetCount(2)
 	s.focus.Select(imgFocusList)
 	s.list.SetCount(len(sampleImages))
-	s.layout = newPaneLayout(
-		paneEntry{
-			id:       "list",
-			minWidth: minListWidth,
-			render:   s.renderImageListContent,
-			onMouse:  s.handleImageListMouse,
+	s.layout = flatui.NewSplitLayout(flatui.DefaultSplitLayoutStyle(),
+		flatui.PaneEntry{
+			ID:       "list",
+			MinWidth: minListWidth,
+			Render:   s.renderImageListContent,
+			OnMouse:  s.handleImageListMouse,
 		},
-		paneEntry{
-			id:       "detail",
-			minWidth: minDetailWidth,
-			render:   s.renderImageDetailContent,
+		flatui.PaneEntry{
+			ID:       "detail",
+			MinWidth: minDetailWidth,
+			Render:   s.renderImageDetailContent,
 		},
 	)
 	return s
@@ -1921,8 +1879,10 @@ func (i *imagesScreen) selected() *Image {
 	return &i.images[i.list.Cursor()]
 }
 
-func (i *imagesScreen) renderImageListContent(contentWidth, contentHeight int) string {
-	style := lipgloss.NewStyle().Width(contentWidth - 1).Height(contentHeight)
+func (i *imagesScreen) renderImageListContent(paneWidth, paneHeight int) string {
+	contentWidth := max(paneWidth-paneBorderCols-1, 1)
+	contentHeight := max(paneHeight-paneBorderRows, 0)
+	style := lipgloss.NewStyle().Width(contentWidth).Height(contentHeight)
 	scrollStyle := lipgloss.NewStyle().Height(contentHeight)
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("images")
 	content := i.list.View(func(idx int, selected bool) string {
@@ -1942,24 +1902,27 @@ func (i *imagesScreen) renderImageListContent(contentWidth, contentHeight int) s
 	if i.list.Count() > visible {
 		bar = scrollbarLines(i.list.Offset(), visible, i.list.Count(), contentHeight)
 	}
-	return withScrollbar(inner, scrollStyle.Foreground(pal.panel).Render(bar))
+	combined := withScrollbar(inner, scrollStyle.Foreground(pal.panel).Render(bar))
+	return paneStyle(paneWidth, paneHeight, i.focus.Focused(imgFocusList), false).Render(combined)
 }
 
-func (i *imagesScreen) renderImageDetailContent(contentWidth, contentHeight int) string {
+func (i *imagesScreen) renderImageDetailContent(paneWidth, paneHeight int) string {
+	contentWidth := max(paneWidth-paneBorderCols, 1)
+	contentHeight := max(paneHeight-paneBorderRows, 0)
 	style := lipgloss.NewStyle().Width(contentWidth).Height(contentHeight)
 	sel := i.selected()
 	if sel == nil {
-		return style.Render(lipgloss.NewStyle().Foreground(pal.muted).Render("(no image selected)"))
+		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no image selected)")
+		return paneStyle(paneWidth, paneHeight, false, false).Render(empty)
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(sel.RepoTag)
-	rows := []string{
-		title, "",
+	rows := []string{title, "",
 		"  id:         " + sel.ID,
 		"  size:       " + sel.Size,
 		"  created:    " + sel.Created,
-		"  containers: " + strconv.Itoa(sel.Containers),
-	}
-	return style.Render(strings.Join(rows, "\n"))
+		"  containers: " + strconv.Itoa(sel.Containers)}
+	inner := style.Render(strings.Join(rows, "\n"))
+	return paneStyle(paneWidth, paneHeight, i.focus.Focused(imgFocusDetail), false).Render(inner)
 }
 
 func (i *imagesScreen) handleImageListMouse(m flatte.MouseEvent, localX, localY int) {
@@ -1994,7 +1957,7 @@ type volumesScreen struct {
 	focus   flatui.FocusRing
 	list    flatui.List
 	volumes []Volume
-	layout  *paneLayout
+	layout  *flatui.SplitLayout
 }
 
 const (
@@ -2007,17 +1970,17 @@ func newVolumesScreen() *volumesScreen {
 	s.focus.SetCount(2)
 	s.focus.Select(volFocusList)
 	s.list.SetCount(len(sampleVolumes))
-	s.layout = newPaneLayout(
-		paneEntry{
-			id:       "list",
-			minWidth: minListWidth,
-			render:   s.renderVolumeListContent,
-			onMouse:  s.handleVolumeListMouse,
+	s.layout = flatui.NewSplitLayout(flatui.DefaultSplitLayoutStyle(),
+		flatui.PaneEntry{
+			ID:       "list",
+			MinWidth: minListWidth,
+			Render:   s.renderVolumeListContent,
+			OnMouse:  s.handleVolumeListMouse,
 		},
-		paneEntry{
-			id:       "detail",
-			minWidth: minDetailWidth,
-			render:   s.renderVolumeDetailContent,
+		flatui.PaneEntry{
+			ID:       "detail",
+			MinWidth: minDetailWidth,
+			Render:   s.renderVolumeDetailContent,
 		},
 	)
 	return s
@@ -2084,8 +2047,10 @@ func (v *volumesScreen) selected() *Volume {
 	return &v.volumes[v.list.Cursor()]
 }
 
-func (v *volumesScreen) renderVolumeListContent(contentWidth, contentHeight int) string {
-	style := lipgloss.NewStyle().Width(contentWidth - 1).Height(contentHeight)
+func (v *volumesScreen) renderVolumeListContent(paneWidth, paneHeight int) string {
+	contentWidth := max(paneWidth-paneBorderCols-1, 1)
+	contentHeight := max(paneHeight-paneBorderRows, 0)
+	style := lipgloss.NewStyle().Width(contentWidth).Height(contentHeight)
 	scrollStyle := lipgloss.NewStyle().Height(contentHeight)
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("volumes")
 	content := v.list.View(func(idx int, selected bool) string {
@@ -2105,23 +2070,26 @@ func (v *volumesScreen) renderVolumeListContent(contentWidth, contentHeight int)
 	if v.list.Count() > visible {
 		bar = scrollbarLines(v.list.Offset(), visible, v.list.Count(), contentHeight)
 	}
-	return withScrollbar(inner, scrollStyle.Foreground(pal.panel).Render(bar))
+	combined := withScrollbar(inner, scrollStyle.Foreground(pal.panel).Render(bar))
+	return paneStyle(paneWidth, paneHeight, v.focus.Focused(volFocusList), false).Render(combined)
 }
 
-func (v *volumesScreen) renderVolumeDetailContent(contentWidth, contentHeight int) string {
+func (v *volumesScreen) renderVolumeDetailContent(paneWidth, paneHeight int) string {
+	contentWidth := max(paneWidth-paneBorderCols, 1)
+	contentHeight := max(paneHeight-paneBorderRows, 0)
 	style := lipgloss.NewStyle().Width(contentWidth).Height(contentHeight)
 	sel := v.selected()
 	if sel == nil {
-		return style.Render(lipgloss.NewStyle().Foreground(pal.muted).Render("(no volume selected)"))
+		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no volume selected)")
+		return paneStyle(paneWidth, paneHeight, false, false).Render(empty)
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(sel.Name)
-	rows := []string{
-		title, "",
+	rows := []string{title, "",
 		"  driver:     " + sel.Driver,
 		"  mountpoint: " + sel.Mountpoint,
-		"  size:       " + sel.Size,
-	}
-	return style.Render(strings.Join(rows, "\n"))
+		"  size:       " + sel.Size}
+	inner := style.Render(strings.Join(rows, "\n"))
+	return paneStyle(paneWidth, paneHeight, v.focus.Focused(volFocusDetail), false).Render(inner)
 }
 
 func (v *volumesScreen) handleVolumeListMouse(m flatte.MouseEvent, localX, localY int) {
@@ -2157,7 +2125,7 @@ func initAsync(s *State, fx flatte.Effects[State]) {
 		s.containers.tickStats(now)
 	})
 	s.containers.startScopedLogs(s, fx)
-	s.containers.pushActivity(tipForGlyphSet(activeGlyphs))
+	s.containers.pushActivity(tipForGlyphs(pickGlyphs()))
 }
 
 // tipForGlyphSet returns a one-time hint that explains the glyph choice
@@ -2165,9 +2133,3 @@ func initAsync(s *State, fx flatte.Effects[State]) {
 // from inside a terminal — there is no feedback channel from the terminal
 // back to the app about font coverage. The honest workaround is to inform
 // the user once and let them pick via env var.
-func tipForGlyphSet(g glyphSet) string {
-	if g == glyphPower {
-		return "tip   if tab edges look like boxes, install a Nerd Font or set FLAT_DOCKER_GLYPHS=safe"
-	}
-	return "tip   using safe (ASCII) glyphs; set FLAT_DOCKER_GLYPHS=powerline with a Nerd Font for nicer tabs"
-}
