@@ -457,9 +457,9 @@ func powerlineTab(label string, active bool) (string, int) {
 	return rendered, width
 }
 
-const paneBorderRows = 2 // top + bottom border (only when border=true)
-const paneBorderCols = 2 // left + right border (only when border=true)
-const panePadding = 1    // cells of padding on each side
+const paneBorderRows = 1 // bottom padding only (top=0 so headers are flush)
+const paneBorderCols = 2 // left + right padding
+const panePadding = 1    // cells of padding per side
 
 func paneStyle(width, height int, focused bool, border bool) lipgloss.Style {
 	s := lipgloss.NewStyle().
@@ -467,7 +467,7 @@ func paneStyle(width, height int, focused bool, border bool) lipgloss.Style {
 		Height(height).
 		MaxHeight(height).
 		MaxWidth(width).
-		Padding(panePadding, panePadding)
+		Padding(0, panePadding, panePadding, panePadding) // top=0, sides=1, bottom=1
 	if border {
 		borderFg := pal.panel
 		if focused {
@@ -612,8 +612,9 @@ func renderTabBar(s *State, width int) string {
 
 func renderHeaderSeparator(width int) string {
 	return lipgloss.NewStyle().
-		Foreground(pal.accent).
-		Render(strings.Repeat("━", width))
+		Width(width).
+		Background(pal.accent).
+		Render(strings.Repeat(" ", width))
 }
 
 func renderFooter(s *State, width int) string {
@@ -1062,7 +1063,7 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 	// composeHeader right-aligns the tabs; compute the tab strip start.
 	detailContentStartX := c.listPaneWidth + dividerWidth + 1
 	detailContentWidth := c.detailPaneWidth - paneBorderCols
-	detailHeaderY := chromeRowsTop + 1
+	detailHeaderY := chromeRowsTop // flush at top — no top padding
 	if m.Y == detailHeaderY && m.X >= detailContentStartX {
 		totalTabsW := 0
 		for _, item := range c.detailTabs.items {
@@ -1600,7 +1601,7 @@ func (c *containersScreen) renderActivityPane() string {
 	activityInnerWidth := max(c.activityPaneWidth-paneBorderCols, 1)
 	activityInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
 	contentStyle := lipgloss.NewStyle().Width(activityInnerWidth).Height(activityInnerHeight)
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("activity")
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render("activity")
 
 	bodyHeight := max(activityInnerHeight-2, 0)
 	start := len(c.activity) - bodyHeight
@@ -1615,7 +1616,7 @@ func (c *containersScreen) renderActivityPane() string {
 	for i, line := range visible {
 		truncated[i] = truncateToWidth(line, activityInnerWidth)
 	}
-	headerRow := lipgloss.NewStyle().Width(activityInnerWidth).Background(pal.bg).Render(title)
+	headerRow := lipgloss.NewStyle().Width(activityInnerWidth).Background(pal.accent).Render(title)
 	content := headerRow + "\n\n" + strings.Join(truncated, "\n")
 	inner := contentStyle.Render(content)
 	return paneStyle(c.activityPaneWidth, c.bodyContentHeight, false, false).Render(inner)
@@ -1724,8 +1725,8 @@ func (c *containersScreen) renderDetailPane() string {
 	if indicator != "" {
 		rightPart = tabs + " " + indicator
 	}
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(selected.Name)
-	headerRow := composeHeader(title, rightPart, detailInnerWidth, pal.bg)
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
+	headerRow := composeHeader(title, rightPart, detailInnerWidth, pal.accent)
 
 	body := c.renderActiveTab(selected)
 	inner := contentStyle.Render(strings.Join([]string{headerRow, "", body}, "\n"))

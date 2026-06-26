@@ -1,6 +1,5 @@
  flat-docker                       1 containers    2 images    3 volumes  
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                                                                               
+                                                                                
  volumes                                 data                                  
                                                                                
  > data                                    driver:     local                   
@@ -8,6 +7,7 @@
    logs                                  /var/lib/docker/volumes/data/_data    
    cache                                   size:       1.2GB                   
    backups                                                                     
+                                                                               
                                                                                
                                                                                
                                        │                                       
@@ -20,6 +20,6 @@
                                                                                
                                                                                
                                                                                
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                                                                
  j/k move  tab next  1/2/3 switch  q quit 
 [title flat-docker — volumes]

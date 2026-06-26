@@ -1,6 +1,5 @@
  flat-docker                       1 containers    2 images    3 volumes  
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                                                                               
+                                                                                
  images                                  nginx:1.25                            
                                                                                
  > nginx:1.25                              id:         sha256:a1b2c3d4         
@@ -10,6 +9,7 @@
    myapp/web:3.0                                                               
    myapp/worker:2.1                                                            
    myapp/migrate:1.4                                                           
+                                                                               
                                        │                                       
                                                                                
                                                                                
@@ -20,6 +20,6 @@
                                                                                
                                                                                
                                                                                
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                                                                                
  j/k move  tab next  1/2/3 switch  q quit 
 [title flat-docker — images]
