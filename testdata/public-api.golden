@@ -102,12 +102,14 @@ flatui
   func CardBodyWidth
   func CardOrigin
   func CardWithStyle
+  func ComposeHeader
   func ContentWidth
   func FrameWidth
   func Mark
   func NewProgress
   func NewSpinner
   func NewStopwatch
+  func NewTabBar
   func NewTimer
   func NewTree
   func NewZoneScanner
@@ -115,6 +117,7 @@ flatui
   func OverlayOrigin
   func Subtle
   func SubtleWithStyle
+  func TabLabelWidth
   func Title
   func TitleWithStyle
   method FocusRing.Count
@@ -165,6 +168,16 @@ flatui
   method Stopwatch.Stop
   method Stopwatch.Tick
   method Stopwatch.Toggle
+  method TabBar.Active
+  method TabBar.ActiveID
+  method TabBar.HandleMouseAt
+  method TabBar.Next
+  method TabBar.Prev
+  method TabBar.Render
+  method TabBar.SetActive
+  method TabBar.TabStartX
+  method TabBar.TotalWidth
+  method TabBar.WithGlyphs
   method Table.Cursor
   method Table.Header
   method Table.HeaderWithStyle
@@ -294,6 +307,9 @@ flatui
   type Rect
   type Spinner
   type Stopwatch
+  type TabBar
+  type TabGlyphs
+  type TabItem
   type Table
   type TableStyle
   type TextField
@@ -309,6 +325,8 @@ flatui
   type ZoneScanner
   var SpinnerDots
   var SpinnerLine
+  var TabGlyphsPowerline
+  var TabGlyphsSafe
 flatest
   func AssertFrames
   func AssertGolden
