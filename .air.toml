@@ -1,0 +1,14 @@
+root = "."
+tmp_dir = "cmd/tmp"
+
+[build]
+  cmd = "cd cmd && go build -o ./tmp/flat-docker ./flat-docker/"
+  bin = "cmd/tmp/flat-docker"
+  include_ext = ["go"]
+  exclude_dir = ["cmd/bubble-modal", "cmd/bubble-v2-modal", "cmd/bubble-v2-search", "cmd/tmp", "tmp"]
+  delay = 300
+  kill_delay = "500ms"
+
+[log]
+  time = true
+  main_only = false
