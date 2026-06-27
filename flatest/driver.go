@@ -127,3 +127,11 @@ func (d *Driver[S]) State() *S { return d.app.State }
 
 // Quit reports whether the app has requested quit via fx.Quit().
 func (d *Driver[S]) Quit() bool { return d.quit }
+
+// Close calls the app's OnExit hook, mirroring what Run does on loop exit.
+// Call it at the end of a test to verify state-save callbacks.
+func (d *Driver[S]) Close() {
+	if d.app.OnExit != nil {
+		d.app.OnExit(d.app.State)
+	}
+}

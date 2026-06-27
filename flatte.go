@@ -22,6 +22,10 @@ type App[S any] struct {
 	Handle func(*S, Event, Effects[S])
 	View   func(*S, RenderContext) Frame
 	Tracer Tracer
+	// OnExit is called after the loop ends, on every exit path (clean quit,
+	// context cancel, signal). Use it to persist state before the process
+	// exits. It fires before terminal restoration.
+	OnExit func(*S)
 }
 
 // action is a one-shot terminal capability request, queued by Effects
@@ -381,6 +385,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	}()
 	resize, stopResize := notifyResize()
 	defer stopResize()
+	defer func() {
+		if app.OnExit != nil {
+			app.OnExit(app.State)
+		}
+	}()
 	updates := make(chan StateUpdate[S], 64)
 	quitRequested := false
 	effects := NewEffects(runCtx, updates, func() { quitRequested = true })
