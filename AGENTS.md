@@ -131,6 +131,14 @@ deterministic (no wall-clock, no randomness in `View`).
 - **Abstraction is found, not designed.** Extract a helper only after the
   pattern repeats across samples; record the evidence in the evaluation log.
   Every roadmap phase is a decision gate.
+- **Healthy abstractions: slightly opinionated, not confining.** An extracted
+  API should have a clear point of view but never block the caller from doing
+  something it didn't anticipate. If adding padding to a title breaks the
+  header composer, the abstraction is too rigid — it baked in one usage
+  pattern and called it a general API. Prefer composable primitives over
+  fixed-arity helpers; prefer "here are the building blocks" over "here is
+  the one shape I support." When in doubt, leave composition in the app and
+  wait for the pattern to repeat.
 - **Agent-tractability is a design constraint.** A feature must be a
   local, compiler-visible edit. If adding something requires tracking
   non-local coupling, redesign it.

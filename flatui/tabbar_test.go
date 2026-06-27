@@ -124,29 +124,3 @@ func TestTabBarTabStartX(t *testing.T) {
 		t.Fatalf("TabStartX(1) = %d, want %d", tb.TabStartX(1), TabLabelWidth("alpha"))
 	}
 }
-
-func TestComposeHeaderBasic(t *testing.T) {
-	result := ComposeHeader("left", "right", 20, lipgloss.Color("236"))
-	if !strings.Contains(result, "left") || !strings.Contains(result, "right") {
-		t.Fatalf("ComposeHeader missing parts: %q", result)
-	}
-}
-
-func TestComposeHeaderTruncatesLeftWhenTooWide(t *testing.T) {
-	longLeft := strings.Repeat("x", 50)
-	result := ComposeHeader(longLeft, "R", 10, lipgloss.Color("236"))
-	if !strings.Contains(result, "…") {
-		t.Fatalf("expected truncation with ellipsis: %q", result)
-	}
-	if !strings.Contains(result, "R") {
-		t.Fatalf("right content should survive truncation: %q", result)
-	}
-}
-
-func TestComposeHeaderRightOnlyWhenTooWide(t *testing.T) {
-	longRight := strings.Repeat("R", 50)
-	result := ComposeHeader("L", longRight, 10, lipgloss.Color("236"))
-	if !strings.Contains(result, "R") {
-		t.Fatalf("right should render when wider than width: %q", result)
-	}
-}

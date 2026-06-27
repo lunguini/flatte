@@ -41,12 +41,14 @@ flatte
   func Exec
   func Go
   func Latest
+  func LoadState
   func Named
   func NewEffects
   func NewHarnessEffects
   func NewScope
   func RenderContextFor
   func Run
+  func SaveState
   func ScopeEvery
   func ScopeGo
   func ScopeStream
@@ -104,20 +106,16 @@ flatte
 flatui
   const KeyMapFull
   const KeyMapShort
-  const SplitDividerWidth
   func Card
   func CardBodyHeight
   func CardBodyWidth
   func CardOrigin
   func CardWithStyle
-  func ComposeHeader
   func ContentWidth
-  func DefaultSplitLayoutStyle
   func FrameWidth
   func Mark
   func NewProgress
   func NewSpinner
-  func NewSplitLayout
   func NewStopwatch
   func NewTabBar
   func NewTimer
@@ -171,11 +169,6 @@ flatui
   method Spinner.Frame
   method Spinner.Tick
   method Spinner.View
-  method SplitLayout.HandleMouse
-  method SplitLayout.Layout
-  method SplitLayout.PaneCount
-  method SplitLayout.PaneWidth
-  method SplitLayout.View
   method Stopwatch.Elapsed
   method Stopwatch.Reset
   method Stopwatch.Running
@@ -317,15 +310,10 @@ flatui
   type KeyMapOptions
   type List
   type Paginator
-  type PaneEntry
-  type PaneMouseFunc
-  type PaneRenderFunc
   type Progress
   type ProgressStyle
   type Rect
   type Spinner
-  type SplitLayout
-  type SplitLayoutStyle
   type Stopwatch
   type TabBar
   type TabGlyphs
@@ -357,6 +345,7 @@ flatest
   func Replay
   func Start
   method Driver.Advance
+  method Driver.Close
   method Driver.Frame
   method Driver.Quit
   method Driver.Send

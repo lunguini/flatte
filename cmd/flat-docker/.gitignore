@@ -1,3 +1,4 @@
 tmp/
 tmp/
 flat-docker
+.flat-docker-state.gob
