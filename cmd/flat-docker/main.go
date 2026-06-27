@@ -6,14 +6,18 @@ import (
 	"image/color"
 	"math"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type screen int
@@ -39,15 +43,19 @@ func (sc screen) Name() string {
 type State struct {
 	width, height int
 	screen        screen
+	rects         map[string]layout.Rect // full-frame solved geometry
+	bodyYOffset   int                    // Y where body starts (header + separator)
 
 	containers containersScreen
 	images     *imagesScreen
 	volumes    *volumesScreen
 
-	modal      *confirmModel
-	command    *commandModel
-	cmdHistory []string
+	confirmModal *confirmModel
+	commandModal *commandModel
+
 	headerTabs *flatui.TabBar
+
+	cmdHistory []string
 }
 
 type confirmModel struct {
@@ -72,14 +80,14 @@ func (m *commandModel) Handle(s *State, ev flatte.Event, fx flatte.Effects[State
 	}
 	switch key.Key {
 	case flatte.KeyEscape:
-		s.command = nil
+		s.commandModal = nil
 	case flatte.KeyEnter:
 		line := strings.TrimSpace(m.input.Value)
 		if line != "" {
 			s.cmdHistory = append(s.cmdHistory, line)
 		}
 		m.execute(s, fx, line)
-		s.command = nil
+		s.commandModal = nil
 	case flatte.KeyBackspace:
 		m.input.Backspace()
 	case flatte.KeyDelete:
@@ -246,25 +254,25 @@ func (m *confirmModel) Handle(s *State, ev flatte.Event, fx flatte.Effects[State
 	}
 	switch key.Key {
 	case flatte.KeyEscape:
-		s.modal = nil
+		s.confirmModal = nil
 	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'y', 'Y':
 			s.applyModalAction()
-			s.modal = nil
+			s.confirmModal = nil
 		case 'n', 'N':
-			s.modal = nil
+			s.confirmModal = nil
 		}
 	}
 }
 
 func (s *State) applyModalAction() {
-	if s.modal == nil {
+	if s.confirmModal == nil {
 		return
 	}
 	for i := range s.containers.containers {
-		if s.containers.containers[i].ID == s.modal.targetID {
-			switch s.modal.action {
+		if s.containers.containers[i].ID == s.confirmModal.targetID {
+			switch s.confirmModal.action {
 			case "stop":
 				s.containers.containers[i].Status = "exited"
 			case "remove":
@@ -280,7 +288,7 @@ func (s *State) openConfirm(action string, ct *Container) {
 	if ct == nil {
 		return
 	}
-	s.modal = &confirmModel{
+	s.confirmModal = &confirmModel{
 		action:     action,
 		targetID:   ct.ID,
 		targetName: ct.Name,
@@ -300,12 +308,12 @@ func NewState() *State {
 	return s
 }
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	if s.modal != nil {
-		s.modal.Handle(s, ev, fx)
+	if s.confirmModal != nil {
+		s.confirmModal.Handle(s, ev, fx)
 		return
 	}
-	if s.command != nil {
-		s.command.Handle(s, ev, fx)
+	if s.commandModal != nil {
+		s.commandModal.Handle(s, ev, fx)
 		return
 	}
 
@@ -439,77 +447,93 @@ func paneStyle(width, height int, focused bool, border bool) lipgloss.Style {
 	return s
 }
 
-// paneInnerDims returns the content area dimensions inside a pane,
-// accounting for padding (and border if present).
-func paneInnerDims(paneWidth, paneHeight int, border bool) (int, int) {
-	cw := paneWidth - 2*panePadding
-	ch := paneHeight - 2*panePadding
-	if border {
-		cw -= paneBorderCols
-		ch -= paneBorderRows
-	}
-	return max(cw, 1), max(ch, 0)
-}
-
-// makeTitledTopBorder constructs a rounded top border with a title
-// embedded: ╭─ title ────╮. The title sits inside the border line,
-// using the border's foreground color. This is the standard TUI
-// titled-border pattern — keeps the title visible even when the pane
-// content area is too narrow for an in-content title row.
-func makeTitledTopBorder(width int, title string, borderFg color.Color) string {
-	inner := width - 2 // left corner + right corner
-	titleText := ""
-	if title != "" {
-		titleText = " " + title + " "
-	}
-	titleW := lipgloss.Width(titleText)
-	remaining := max(inner-titleW, 0)
-	leftFill := min(1, remaining)
-	rightFill := remaining - leftFill
-	raw := "╭" + strings.Repeat("─", leftFill) + titleText + strings.Repeat("─", rightFill) + "╮"
-	return lipgloss.NewStyle().Foreground(borderFg).Render(raw)
-}
-
-// renderTitledPane is retained for backwards compatibility but now
-// simply renders with no border + padding (the title moves to a bg-filled
-// header row inside the content, handled by the caller).
-func renderTitledPane(width, height int, focused bool, title string, content string) string {
-	_ = title
-	return paneStyle(width, height, focused, false).Render(content)
-}
-
 func (s *State) resize(width, height int) {
 	s.width, s.height = width, height
+	s.headerTabs.SetActive(int(s.screen))
+
+	// Measure the header to determine body Y offset dynamically — if the
+	// title has padding, the header is taller, and the body starts lower.
+	// This replaces the hardcoded chromeRowsTop constant.
+	titleStr := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(1, 1).Render("flat-docker")
+	tabsStr := s.headerTabs.Render(pal.accent, pal.tabBg, pal.bg)
+	headerMeasured := layout.MeasurePass(layout.Row(
+		layout.ContentBox("title", titleStr),
+		layout.Spacer(),
+		layout.ContentBox("tabs", tabsStr),
+	))
+	headerH := 1
+	if headerMeasured.H.Kind == layout.SizeFixed {
+		headerH = headerMeasured.H.Value
+	}
+	s.bodyYOffset = headerH + 1 // header rows + 1 separator row
+
 	bodyWidth := width
-	bodyHeight := max(height-chromeRowsTop-chromeRowsBottom, 0)
-	s.containers.layout(bodyWidth, bodyHeight)
-	s.images.layout_(bodyWidth, bodyHeight)
-	s.volumes.layout_(bodyWidth, bodyHeight)
+	bodyHeight := max(height-s.bodyYOffset-chromeRowsBottom, 0)
+	s.containers.layout(bodyWidth, bodyHeight, s.bodyYOffset)
+	s.images.layout_(bodyWidth, bodyHeight, s.bodyYOffset)
+	s.volumes.layout_(bodyWidth, bodyHeight, s.bodyYOffset)
 }
 func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	width := ctx.Width
 	if s.width > 0 {
 		width = s.width
 	}
+	height := s.height
+	if height <= 0 {
+		height = 24
+	}
 
-	header := renderTabBar(s, width)
-	separator := renderHeaderSeparator(width)
-	footer := renderFooter(s, width)
+	// Build the full-frame tree via the builder API.
+	// The active screen's body tree is nested inside the chrome.
+	var bodyTree layout.Node
+	switch s.screen {
+	case screenContainers:
+		bodyTree = s.containers.bodyTree()
+	case screenImages:
+		bodyTree = s.images.bodyTree()
+	case screenVolumes:
+		bodyTree = s.volumes.bodyTree()
+	}
 
+	children := []layout.Node{
+		layout.Box("header").Height(1),
+		layout.Box("sep1").Height(1),
+		bodyTree,
+		layout.Box("sep2").Height(1),
+		layout.Box("footer").Height(1),
+	}
+
+	if s.confirmModal != nil {
+		children = append(children, layout.Box("modal").
+			Width(40).Height(7).Layer().Border())
+	}
+
+	tree := layout.Col(children...)
+	s.rects = layout.Solve(tree, width, height)
+
+	// Render each section into its solved rect.
+	r := s.rects
+	header := renderTabBar(s, r["header"].W)
+	sep := renderHeaderSeparator(r["sep1"].W)
 	var body string
 	switch s.screen {
 	case screenContainers:
-		body = s.containers.View(s)
+		body = s.containers.renderBody(s)
 	case screenImages:
-		body = s.images.View(s)
+		body = s.images.renderBody()
 	case screenVolumes:
-		body = s.volumes.View(s)
+		body = s.volumes.renderBody()
+	}
+	footer := renderFooter(s, r["footer"].W)
+
+	content := strings.Join([]string{header, sep, body, sep, footer}, "\n")
+
+	// Modal overlay positioned by the solver's Layer pass.
+	if s.confirmModal != nil {
+		mr := r["modal"]
+		content = overlayRect(content, renderModal(s.confirmModal), mr.X, mr.Y, mr.W, mr.H)
 	}
 
-	content := strings.Join([]string{header, separator, body, separator, footer}, "\n")
-	if s.modal != nil {
-		content = flatui.Overlay(content, renderModal(s.modal))
-	}
 	if s.screen == screenContainers {
 		s.containers.zones.Scan(content)
 	}
@@ -517,8 +541,8 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 		Content: content,
 		Title:   "flat-docker — " + s.screen.Name(),
 	}
-	if s.command != nil {
-		frame.Cursor = commandCursor(content, s.command)
+	if s.commandModal != nil {
+		frame.Cursor = commandCursor(content, s.commandModal)
 	}
 	return frame
 }
@@ -546,6 +570,35 @@ func flatestStripAnsi(s string) string {
 	return lipgloss.NewStyle().Render(s)
 }
 
+// overlayRect composites layer on top of base at the solver-specified (x,y).
+// This is the rendering counterpart of the builder's Layer node — the solver
+// positions the overlay, this function paints it.
+func overlayRect(base, layer string, x, y, _, _ int) string {
+	baseStyled := uv.NewStyledString(base)
+	layerStyled := uv.NewStyledString(layer)
+	baseBounds := baseStyled.Bounds()
+	if baseBounds.Empty() {
+		return base
+	}
+	canvas := uv.NewScreenBuffer(baseBounds.Dx(), baseBounds.Dy())
+	baseStyled.Draw(canvas, canvas.Bounds())
+	layerBounds := layerStyled.Bounds()
+	if !layerBounds.Empty() {
+		area := uv.Rect(x, y, layerBounds.Dx(), layerBounds.Dy())
+		canvas.FillArea(&uv.EmptyCell, area)
+		layerStyled.Draw(canvas, area)
+	}
+	return trimTrailingSpaceRect(canvas.Render())
+}
+
+func trimTrailingSpaceRect(s string) string {
+	rows := strings.Split(s, "\n")
+	for i, row := range rows {
+		rows[i] = strings.TrimRight(row, " \t")
+	}
+	return strings.Join(rows, "\n")
+}
+
 func looksLikeCommandBar(line string) bool {
 	// The command bar always sits on the dark bg (status line area).
 	// After ANSI strip, an empty command bar is ": type a command (try :help)"
@@ -566,9 +619,18 @@ func renderModal(m *confirmModel) string {
 
 func renderTabBar(s *State, width int) string {
 	s.headerTabs.SetActive(int(s.screen))
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 0).Render("flat-docker")
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(1, 1).Render("flat-docker")
 	tabs := s.headerTabs.Render(pal.accent, pal.tabBg, pal.bg)
-	return flatui.ComposeHeader(title, tabs, width, pal.bg)
+	// Header is a Row: title left, tabs right. Auto-sizes to content height.
+	// Replaces flatui.ComposeHeader — the Spacer pushes tabs to the right edge.
+	return layout.Render(
+		layout.Row(
+			layout.ContentBox("title", title),
+			layout.Spacer(),
+			layout.ContentBox("tabs", tabs),
+		),
+		width, s.bodyYOffset,
+	)
 }
 
 func renderHeaderSeparator(width int) string {
@@ -580,8 +642,8 @@ func renderHeaderSeparator(width int) string {
 
 func renderFooter(s *State, width int) string {
 	hints := ""
-	if s.command != nil {
-		hints = s.command.keyHints()
+	if s.commandModal != nil {
+		hints = s.commandModal.keyHints()
 	} else {
 		switch s.screen {
 		case screenContainers:
@@ -690,10 +752,12 @@ var sampleContainers = []Container{
 
 type containersScreen struct {
 	width, height     int
+	bodyYOffset       int
 	listPaneWidth     int
 	detailPaneWidth   int
 	activityPaneWidth int
 	bodyContentHeight int
+	rects             map[string]layout.Rect // solved geometry, updated each layout pass
 
 	focus      flatui.FocusRing
 	filter     flatui.TextField
@@ -711,16 +775,17 @@ type containersScreen struct {
 	cpuHistory map[string][]float64
 	memHistory map[string][]float64
 	liveLogs   map[string][]string
-	logTarget string
-	logScope  *flatte.Scope
+	logTarget  string
+	logScope   *flatte.Scope
 	zones      *flatui.ZoneScanner // auto-zones for list rows
-	detailTabs *flatui.TabBar             // stats/logs/inspect tab strip with mouse support
+	detailTabs *flatui.TabBar      // stats/logs/inspect tab strip with mouse support
 	listHeight int
 
-	activity   []string
-	statusLine string
-	followTail bool
-	drag       *dragState // non-nil while a divider is being dragged
+	activity      []string
+	statusLine    string
+	followTail    bool
+	drag          *dragState // non-nil while a divider is being dragged
+	pendingCursor int        // restored from session after layout sets list count
 }
 
 type dragState struct {
@@ -728,6 +793,12 @@ type dragState struct {
 	startX             int
 	startListWidth     int
 	startActivityWidth int
+}
+
+// splitDrag tracks a 2-pane divider drag (images/volumes screens).
+type splitDrag struct {
+	startX     int
+	startWidth int
 }
 
 const (
@@ -805,8 +876,9 @@ func newContainersScreen() containersScreen {
 
 const statusLineRows = 1
 
-func (c *containersScreen) layout(width, height int) {
+func (c *containersScreen) layout(width, height, bodyYOffset int) {
 	c.width, c.height = width, height
+	c.bodyYOffset = bodyYOffset
 	c.focus.SetCount(3)
 
 	// Initialize default pane widths on first layout; thereafter the user owns them
@@ -817,10 +889,44 @@ func (c *containersScreen) layout(width, height int) {
 		c.activityPaneWidth = 24
 	}
 	c.clampPaneWidths(width)
-	c.detailPaneWidth = max(width-c.listPaneWidth-c.activityPaneWidth-2*dividerWidth, minDetailWidth)
 
-	c.bodyContentHeight = max(height-statusLineRows, 0)
+	c.solveAndSize()
 
+	if len(c.filtered) == 0 && len(c.containers) > 0 {
+		c.refreshFilter()
+	}
+	if c.pendingCursor >= 0 && c.pendingCursor < c.list.Count() {
+		c.list.Select(c.pendingCursor)
+		c.recomputeDetailWidgets()
+	}
+	c.pendingCursor = -1
+	c.syncDetail()
+	c.recomputeStatusLine()
+	c.detailTabs.SetActive(int(c.tab))
+}
+
+// solveAndSize builds the layout tree, solves it, and sizes all dependent
+// widgets from the solved rects. Called from layout() and applyDrag() —
+// the single site for pane geometry derivation, eliminating the duplication
+// that existed between layout() and applyDrag().
+func (c *containersScreen) solveAndSize() {
+	tree := layout.Col(
+		layout.Row(
+			layout.Box("list").Width(c.listPaneWidth),
+			layout.Box("div0").Width(dividerWidth),
+			layout.Box("detail").Grow(1),
+			layout.Box("div1").Width(dividerWidth),
+			layout.Box("activity").Width(c.activityPaneWidth),
+		).Grow(1),
+		layout.Box("status").Height(statusLineRows),
+	)
+	c.rects = layout.Solve(tree, c.width, c.height)
+
+	// Derived dimensions from solved rects.
+	c.detailPaneWidth = c.rects["detail"].W
+	c.bodyContentHeight = c.rects["list"].H
+
+	// Size widgets from solved inner dimensions.
 	listInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
 	const listChromeRows = 2
 	c.listHeight = max(listInnerHeight-listChromeRows, 0)
@@ -828,19 +934,12 @@ func (c *containersScreen) layout(width, height int) {
 
 	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
 	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
-	const detailChromeRows = 2 // title+tabs row + blank (title merged into tab bar via composeHeader)
+	const detailChromeRows = 2
 	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
 	c.logs.SetSize(detailInnerWidth, contentHeight)
 	c.inspect.SetSize(detailInnerWidth, contentHeight)
 	c.cpu.SetWidth(max(detailInnerWidth-16, 4))
 	c.mem.SetWidth(max(detailInnerWidth-16, 4))
-
-	if len(c.filtered) == 0 && len(c.containers) > 0 {
-		c.refreshFilter()
-	}
-	c.syncDetail()
-	c.recomputeStatusLine()
-	c.detailTabs.SetActive(int(c.tab))
 }
 
 // clampPaneWidths enforces minimums on list and activity widths given the
@@ -882,16 +981,7 @@ func (c *containersScreen) applyDrag(currentX int) {
 		maxActivity := c.width - c.listPaneWidth - minDetailWidth - 2*dividerWidth
 		c.activityPaneWidth = max(minActivityWidth, min(newActivity, maxActivity))
 	}
-	c.detailPaneWidth = max(c.width-c.listPaneWidth-c.activityPaneWidth-2*dividerWidth, minDetailWidth)
-	// Re-size dependent widgets
-	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
-	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
-	const detailChromeRows = 2
-	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
-	c.logs.SetSize(detailInnerWidth, contentHeight)
-	c.inspect.SetSize(detailInnerWidth, contentHeight)
-	c.cpu.SetWidth(max(detailInnerWidth-16, 4))
-	c.mem.SetWidth(max(detailInnerWidth-16, 4))
+	c.solveAndSize()
 	c.detailTabs.SetActive(int(c.tab))
 }
 
@@ -900,20 +990,19 @@ func (c *containersScreen) applyDrag(currentX int) {
 // manual ZoneMap rectangles. See handleMouse for the click routing.
 
 // dividerAt reports which divider (0 or 1) is at the given frame
-// coordinates, if any. Returns -1 if no divider is hit.
+// coordinates, using solved rects for hit-testing.
 func (c *containersScreen) dividerAt(x, y int) int {
-	bodyTop := chromeRowsTop
-	bodyBottom := chromeRowsTop + c.bodyContentHeight
-	if y < bodyTop || y >= bodyBottom {
+	if c.rects == nil {
 		return -1
 	}
-	// Layout: list(listPaneWidth) | div0(dividerWidth) | detail(detailPaneWidth) | div1(dividerWidth) | activity
-	div0X := c.listPaneWidth
-	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth
-	if x == div0X {
+	bodyY := y - c.bodyYOffset
+	if bodyY < 0 || bodyY >= c.bodyContentHeight {
+		return -1
+	}
+	if r := c.rects["div0"]; x >= r.X && x < r.X+r.W {
 		return 0
 	}
-	if x == div1X {
+	if r := c.rects["div1"]; x >= r.X && x < r.X+r.W {
 		return 1
 	}
 	return -1
@@ -1020,12 +1109,11 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		return
 	}
 
-	// Detail tab clicks via tabBar component.
-	// composeHeader right-aligns the tabs; compute the tab strip start.
-	detailContentStartX := c.listPaneWidth + dividerWidth + 1
-	detailContentWidth := c.detailPaneWidth - paneBorderCols
-	detailHeaderY := chromeRowsTop // flush at top — no top padding
-	if m.Y == detailHeaderY && m.X >= detailContentStartX {
+	// Detail tab clicks via tabBar component, using solved rect positions.
+	detailRect := c.rects["detail"]
+	detailContentStartX := detailRect.X + panePadding
+	detailContentWidth := detailRect.W - paneBorderCols
+	if m.Y == c.bodyYOffset && m.X >= detailContentStartX {
 		totalTabsW := c.detailTabs.TotalWidth()
 		tabStripStart := detailContentWidth - totalTabsW
 		if tabStripStart < 0 {
@@ -1055,19 +1143,23 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 	}
 }
 
-func (c *containersScreen) scrollAt(x, _, delta int) {
-	listPaneEnd := c.listPaneWidth
-	detailPaneStart := listPaneEnd + dividerWidth
-	detailPaneEnd := detailPaneStart + c.detailPaneWidth
-
-	switch {
-	case x < listPaneEnd:
+func (c *containersScreen) scrollAt(x, y, delta int) {
+	if c.rects == nil {
+		return
+	}
+	bodyY := y - c.bodyYOffset
+	if bodyY < 0 || bodyY >= c.bodyContentHeight {
+		return
+	}
+	if r := c.rects["list"]; x >= r.X && x < r.X+r.W {
 		if delta > 0 {
 			c.list.MoveDown()
 		} else {
 			c.list.MoveUp()
 		}
-	case x >= detailPaneStart && x < detailPaneEnd:
+		return
+	}
+	if r := c.rects["detail"]; x >= r.X && x < r.X+r.W {
 		c.scrollActiveTab(delta)
 	}
 }
@@ -1404,7 +1496,7 @@ func (c *containersScreen) Handle(root *State, ev flatte.Event, fx flatte.Effect
 
 func (c *containersScreen) handleChar(root *State, fx flatte.Effects[State], r rune) {
 	if r == ':' && !c.focus.Focused(focusFilter) {
-		root.command = newCommand()
+		root.commandModal = newCommand()
 		return
 	}
 	switch c.focus.Index() {
@@ -1512,7 +1604,21 @@ func (c *containersScreen) resumeFollow() {
 	c.logs.GotoBottom()
 }
 
-func (c *containersScreen) View(root *State) string {
+// bodyTree returns the containers screen's pane layout as a builder tree.
+func (c *containersScreen) bodyTree() layout.Node {
+	return layout.Col(
+		layout.Row(
+			layout.Box("list").Width(c.listPaneWidth),
+			layout.Box("div0").Width(dividerWidth),
+			layout.Box("detail").Grow(1),
+			layout.Box("div1").Width(dividerWidth),
+			layout.Box("activity").Width(c.activityPaneWidth),
+		).Grow(1),
+		layout.Box("status").Height(statusLineRows),
+	)
+}
+
+func (c *containersScreen) renderBody(root *State) string {
 	listPane := c.renderListPane()
 	detailPane := c.renderDetailPane()
 	activityPane := c.renderActivityPane()
@@ -1520,8 +1626,8 @@ func (c *containersScreen) View(root *State) string {
 	div1 := c.renderDivider(1)
 	mainRow := lipgloss.JoinHorizontal(lipgloss.Top, listPane, div0, detailPane, div1, activityPane)
 	var statusRow string
-	if root.command != nil {
-		statusRow = root.command.View(c.width)
+	if root.commandModal != nil {
+		statusRow = root.commandModal.View(c.width)
 	} else {
 		statusRow = c.renderStatusLine()
 	}
@@ -1668,7 +1774,14 @@ func (c *containersScreen) renderDetailPane() string {
 		rightPart = tabs + " " + indicator
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
-	headerRow := flatui.ComposeHeader(title, rightPart, detailInnerWidth, pal.accent)
+	headerRow := layout.Render(
+		layout.Row(
+			layout.ContentBox("dtitle", title),
+			layout.Spacer(),
+			layout.ContentBox("dtabs", rightPart),
+		),
+		detailInnerWidth, 1,
+	)
 
 	body := c.renderActiveTab(selected)
 	inner := contentStyle.Render(strings.Join([]string{headerRow, "", body}, "\n"))
@@ -1784,12 +1897,15 @@ var sampleImages = []Image{
 }
 
 type imagesScreen struct {
-	width  int
-	height int
-	focus  flatui.FocusRing
-	list   flatui.List
-	images []Image
-	layout *flatui.SplitLayout
+	width         int
+	height        int
+	bodyYOffset   int
+	focus         flatui.FocusRing
+	list          flatui.List
+	images        []Image
+	listPaneWidth int
+	rects         map[string]layout.Rect
+	drag          *splitDrag
 }
 
 const (
@@ -1802,32 +1918,32 @@ func newImagesScreen() *imagesScreen {
 	s.focus.SetCount(2)
 	s.focus.Select(imgFocusList)
 	s.list.SetCount(len(sampleImages))
-	s.layout = flatui.NewSplitLayout(flatui.DefaultSplitLayoutStyle(),
-		flatui.PaneEntry{
-			ID:       "list",
-			MinWidth: minListWidth,
-			Render:   s.renderImageListContent,
-			OnMouse:  s.handleImageListMouse,
-		},
-		flatui.PaneEntry{
-			ID:       "detail",
-			MinWidth: minDetailWidth,
-			Render:   s.renderImageDetailContent,
-		},
-	)
 	return s
 }
 
-func (i *imagesScreen) layout_(width, height int) {
+func (i *imagesScreen) solveAndSize() {
+	if i.listPaneWidth == 0 {
+		i.listPaneWidth = min(30, max(i.width/3, minListWidth))
+	}
+	tree := layout.Row(
+		layout.Box("list").Width(i.listPaneWidth),
+		layout.Box("div0").Width(dividerWidth),
+		layout.Box("detail").Grow(1),
+	)
+	i.rects = layout.Solve(tree, i.width, i.height)
+	i.list.SetHeight(max(i.height-paneBorderRows-2, 0))
+}
+
+func (i *imagesScreen) layout_(width, height, bodyYOffset int) {
 	i.width, i.height = width, height
+	i.bodyYOffset = bodyYOffset
 	i.focus.SetCount(2)
-	i.layout.Layout(width, height, chromeRowsTop)
-	i.list.SetHeight(max(height-paneBorderRows-2, 0))
+	i.solveAndSize()
 }
 
 func (i *imagesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
 	if m, ok := ev.(flatte.MouseEvent); ok {
-		i.layout.HandleMouse(m)
+		i.handleMouse(m)
 		return
 	}
 	key, ok := ev.(flatte.KeyEvent)
@@ -1861,8 +1977,57 @@ func (i *imagesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]
 	}
 }
 
-func (i *imagesScreen) View(_ *State) string {
-	return i.layout.View()
+func (i *imagesScreen) handleMouse(m flatte.MouseEvent) {
+	bodyY := m.Y - i.bodyYOffset
+	if bodyY < 0 || bodyY >= i.height {
+		return
+	}
+
+	if i.drag != nil {
+		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
+			i.drag = nil
+			return
+		}
+		if m.Action == flatte.MouseMotion {
+			delta := m.X - i.drag.startX
+			newList := i.drag.startWidth + delta
+			maxList := i.width - minDetailWidth - dividerWidth
+			i.listPaneWidth = max(minListWidth, min(newList, maxList))
+			i.solveAndSize()
+			return
+		}
+		return
+	}
+
+	if m.Action == flatte.MousePress {
+		if r := i.rects["div0"]; m.X >= r.X && m.X < r.X+r.W {
+			i.drag = &splitDrag{startX: m.X, startWidth: i.listPaneWidth}
+			return
+		}
+	}
+
+	listR := i.rects["list"]
+	if m.X >= listR.X && m.X < listR.X+listR.W {
+		i.handleImageListMouse(m, m.X-listR.X, bodyY)
+	}
+}
+
+// bodyTree returns the images screen's pane layout as a builder tree.
+func (i *imagesScreen) bodyTree() layout.Node {
+	return layout.Row(
+		layout.Box("list").Width(i.listPaneWidth),
+		layout.Box("div0").Width(dividerWidth),
+		layout.Box("detail").Grow(1),
+	)
+}
+
+func (i *imagesScreen) renderBody() string {
+	listR := i.rects["list"]
+	detailR := i.rects["detail"]
+	listPane := i.renderImageListContent(listR.W, listR.H)
+	div := renderDragDivider(listR.H, i.drag != nil)
+	detailPane := i.renderImageDetailContent(detailR.W, detailR.H)
+	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, div, detailPane)
 }
 
 func (i *imagesScreen) keyHints() string {
@@ -1952,12 +2117,15 @@ var sampleVolumes = []Volume{
 }
 
 type volumesScreen struct {
-	width   int
-	height  int
-	focus   flatui.FocusRing
-	list    flatui.List
-	volumes []Volume
-	layout  *flatui.SplitLayout
+	width         int
+	height        int
+	bodyYOffset   int
+	focus         flatui.FocusRing
+	list          flatui.List
+	volumes       []Volume
+	listPaneWidth int
+	rects         map[string]layout.Rect
+	drag          *splitDrag
 }
 
 const (
@@ -1970,32 +2138,32 @@ func newVolumesScreen() *volumesScreen {
 	s.focus.SetCount(2)
 	s.focus.Select(volFocusList)
 	s.list.SetCount(len(sampleVolumes))
-	s.layout = flatui.NewSplitLayout(flatui.DefaultSplitLayoutStyle(),
-		flatui.PaneEntry{
-			ID:       "list",
-			MinWidth: minListWidth,
-			Render:   s.renderVolumeListContent,
-			OnMouse:  s.handleVolumeListMouse,
-		},
-		flatui.PaneEntry{
-			ID:       "detail",
-			MinWidth: minDetailWidth,
-			Render:   s.renderVolumeDetailContent,
-		},
-	)
 	return s
 }
 
-func (v *volumesScreen) layout_(width, height int) {
+func (v *volumesScreen) solveAndSize() {
+	if v.listPaneWidth == 0 {
+		v.listPaneWidth = min(30, max(v.width/3, minListWidth))
+	}
+	tree := layout.Row(
+		layout.Box("list").Width(v.listPaneWidth),
+		layout.Box("div0").Width(dividerWidth),
+		layout.Box("detail").Grow(1),
+	)
+	v.rects = layout.Solve(tree, v.width, v.height)
+	v.list.SetHeight(max(v.height-paneBorderRows-2, 0))
+}
+
+func (v *volumesScreen) layout_(width, height, bodyYOffset int) {
 	v.width, v.height = width, height
+	v.bodyYOffset = bodyYOffset
 	v.focus.SetCount(2)
-	v.layout.Layout(width, height, chromeRowsTop)
-	v.list.SetHeight(max(height-paneBorderRows-2, 0))
+	v.solveAndSize()
 }
 
 func (v *volumesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State]) {
 	if m, ok := ev.(flatte.MouseEvent); ok {
-		v.layout.HandleMouse(m)
+		v.handleMouse(m)
 		return
 	}
 	key, ok := ev.(flatte.KeyEvent)
@@ -2029,8 +2197,57 @@ func (v *volumesScreen) Handle(_ *State, ev flatte.Event, _ flatte.Effects[State
 	}
 }
 
-func (v *volumesScreen) View(_ *State) string {
-	return v.layout.View()
+func (v *volumesScreen) handleMouse(m flatte.MouseEvent) {
+	bodyY := m.Y - v.bodyYOffset
+	if bodyY < 0 || bodyY >= v.height {
+		return
+	}
+
+	if v.drag != nil {
+		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
+			v.drag = nil
+			return
+		}
+		if m.Action == flatte.MouseMotion {
+			delta := m.X - v.drag.startX
+			newList := v.drag.startWidth + delta
+			maxList := v.width - minDetailWidth - dividerWidth
+			v.listPaneWidth = max(minListWidth, min(newList, maxList))
+			v.solveAndSize()
+			return
+		}
+		return
+	}
+
+	if m.Action == flatte.MousePress {
+		if r := v.rects["div0"]; m.X >= r.X && m.X < r.X+r.W {
+			v.drag = &splitDrag{startX: m.X, startWidth: v.listPaneWidth}
+			return
+		}
+	}
+
+	listR := v.rects["list"]
+	if m.X >= listR.X && m.X < listR.X+listR.W {
+		v.handleVolumeListMouse(m, m.X-listR.X, bodyY)
+	}
+}
+
+// bodyTree returns the volumes screen's pane layout as a builder tree.
+func (v *volumesScreen) bodyTree() layout.Node {
+	return layout.Row(
+		layout.Box("list").Width(v.listPaneWidth),
+		layout.Box("div0").Width(dividerWidth),
+		layout.Box("detail").Grow(1),
+	)
+}
+
+func (v *volumesScreen) renderBody() string {
+	listR := v.rects["list"]
+	detailR := v.rects["detail"]
+	listPane := v.renderVolumeListContent(listR.W, listR.H)
+	div := renderDragDivider(listR.H, v.drag != nil)
+	detailPane := v.renderVolumeDetailContent(detailR.W, detailR.H)
+	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, div, detailPane)
 }
 
 func (v *volumesScreen) keyHints() string {
@@ -2107,17 +2324,103 @@ func (v *volumesScreen) handleVolumeListMouse(m flatte.MouseEvent, localX, local
 }
 
 func main() {
-	state := NewState()
-	err := flatte.Run(context.Background(), flatte.App[State]{
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+	defer signal.Stop(sigCh)
+
+	session := flatte.LoadState(sessionFile, SessionState{})
+	state := newStateFromSession(session)
+
+	err := flatte.Run(ctx, flatte.App[State]{
 		State:  state,
 		Init:   initAsync,
 		Handle: Handle,
 		View:   View,
+		OnExit: func(s *State) {
+			_ = flatte.SaveState(sessionFile, s.toSession())
+		},
 	}, flatte.WithMouse(flatte.MouseModeCellMotion))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+const sessionFile = ".flat-docker-state.gob"
+
+// SessionState is the gob-serializable subset of State that survives
+// restart: active screen, cursor positions, pane widths, filter, command
+// history. Widget objects (List, Viewport, TabBar, etc.) are not serialized —
+// they are recreated fresh on boot and rehydrated from this struct.
+type SessionState struct {
+	Screen          int
+	ContainerCursor int
+	ContainerFilter string
+	ContainerTab    int
+	ContainerListW  int
+	ContainerActW   int
+	ImageCursor     int
+	ImageListW      int
+	VolumeCursor    int
+	VolumeListW     int
+	CmdHistory      []string
+}
+
+func (s *State) toSession() SessionState {
+	return SessionState{
+		Screen:          int(s.screen),
+		ContainerCursor: s.containers.list.Cursor(),
+		ContainerFilter: s.containers.filter.Value,
+		ContainerTab:    int(s.containers.tab),
+		ContainerListW:  s.containers.listPaneWidth,
+		ContainerActW:   s.containers.activityPaneWidth,
+		ImageCursor:     s.images.list.Cursor(),
+		ImageListW:      s.images.listPaneWidth,
+		VolumeCursor:    s.volumes.list.Cursor(),
+		VolumeListW:     s.volumes.listPaneWidth,
+		CmdHistory:      s.cmdHistory,
+	}
+}
+
+func newStateFromSession(ss SessionState) *State {
+	s := NewState()
+	s.screen = screen(ss.Screen)
+	s.cmdHistory = ss.CmdHistory
+	if ss.ContainerListW > 0 {
+		s.containers.listPaneWidth = ss.ContainerListW
+	}
+	if ss.ContainerActW > 0 {
+		s.containers.activityPaneWidth = ss.ContainerActW
+	}
+	s.containers.filter.Value = ss.ContainerFilter
+	s.containers.tab = detailTab(ss.ContainerTab)
+	if ss.ContainerFilter != "" {
+		s.containers.focus.Select(focusList)
+	}
+	if ss.ImageListW > 0 {
+		s.images.listPaneWidth = ss.ImageListW
+	}
+	if ss.VolumeListW > 0 {
+		s.volumes.listPaneWidth = ss.VolumeListW
+	}
+	// Defer cursor restoration until after layout (list count is set then).
+	if ss.ContainerCursor >= 0 {
+		s.containers.pendingCursor = ss.ContainerCursor
+	}
+	if ss.ImageCursor >= 0 {
+		s.images.list.Select(ss.ImageCursor)
+	}
+	if ss.VolumeCursor >= 0 {
+		s.volumes.list.Select(ss.VolumeCursor)
+	}
+	return s
 }
 
 func initAsync(s *State, fx flatte.Effects[State]) {

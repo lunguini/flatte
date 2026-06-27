@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestResizePropagatesBodyDimensionsToEveryScreen(t *testing.T) {
 	s := resizedState(80, 24)
 
 	wantWidth := 80
-	wantHeight := 24 - chromeRowsTop - chromeRowsBottom
+	wantHeight := 24 - s.bodyYOffset - chromeRowsBottom
 	for _, c := range []struct {
 		name string
 		w, h int
@@ -198,7 +199,7 @@ func TestListMovementOnlyWhenListFocused(t *testing.T) {
 	}
 
 	Handle(s, keyTab(false), flatte.Effects[State]{}) // list → detail
-	Handle(s, keyChar('j'), flatte.Effects[State]{}) // detail ignores j
+	Handle(s, keyChar('j'), flatte.Effects[State]{})  // detail ignores j
 	if s.containers.list.Cursor() != startCursor+1 {
 		t.Fatalf("j on detail focus should not move list, cursor = %d", s.containers.list.Cursor())
 	}
@@ -483,7 +484,7 @@ func TestPageKeysDoNothingWhenFilterFocused(t *testing.T) {
 func TestColonOpensCommandBarFromListFocus(t *testing.T) {
 	s := resizedState(80, 24)
 	Handle(s, keyChar(':'), flatte.Effects[State]{})
-	if s.command == nil {
+	if s.commandModal == nil {
 		t.Fatal("command bar not opened after :")
 	}
 }
@@ -492,7 +493,7 @@ func TestColonDoesNotOpenWhenFilterFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusFilter)
 	Handle(s, keyChar(':'), flatte.Effects[State]{})
-	if s.command != nil {
+	if s.commandModal != nil {
 		t.Fatal("command bar opened from filter focus — should have typed into filter instead")
 	}
 	if s.containers.filter.Value != ":" {
@@ -510,8 +511,8 @@ func TestCommandBarCapturesKeysUntilClosed(t *testing.T) {
 	if s.containers.list.Cursor() != listCursorBefore {
 		t.Fatalf("j leaked through to list during command: %d -> %d", listCursorBefore, s.containers.list.Cursor())
 	}
-	if s.command.input.Value != "j" {
-		t.Fatalf("command input = %q, want j", s.command.input.Value)
+	if s.commandModal.input.Value != "j" {
+		t.Fatalf("command input = %q, want j", s.commandModal.input.Value)
 	}
 }
 
@@ -519,7 +520,7 @@ func TestEscClosesCommandBar(t *testing.T) {
 	s := resizedState(80, 24)
 	Handle(s, keyChar(':'), flatte.Effects[State]{})
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
-	if s.command != nil {
+	if s.commandModal != nil {
 		t.Fatal("command bar not closed after Esc")
 	}
 }
@@ -532,7 +533,7 @@ func TestEnterExecutesFilterCommand(t *testing.T) {
 	}
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
-	if s.command != nil {
+	if s.commandModal != nil {
 		t.Fatal("command bar should auto-close after Enter (lazydocker convention)")
 	}
 	if s.containers.filter.Value != "nginx" {
@@ -551,7 +552,7 @@ func TestEnterGotoCommandClosesBar(t *testing.T) {
 	}
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
-	if s.command != nil {
+	if s.commandModal != nil {
 		t.Fatal("command bar should close after :goto")
 	}
 	if s.screen != screenImages {
@@ -573,18 +574,18 @@ func TestCommandHistoryNavigation(t *testing.T) {
 	// Open fresh, press Up — should recall "filter c"
 	Handle(s, keyChar(':'), flatte.Effects[State]{})
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
-	if s.command.input.Value != "filter c" {
-		t.Fatalf("after one Up, input = %q, want 'filter c'", s.command.input.Value)
+	if s.commandModal.input.Value != "filter c" {
+		t.Fatalf("after one Up, input = %q, want 'filter c'", s.commandModal.input.Value)
 	}
 
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
-	if s.command.input.Value != "filter b" {
-		t.Fatalf("after two Up, input = %q, want 'filter b'", s.command.input.Value)
+	if s.commandModal.input.Value != "filter b" {
+		t.Fatalf("after two Up, input = %q, want 'filter b'", s.commandModal.input.Value)
 	}
 
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
-	if s.command.input.Value != "filter c" {
-		t.Fatalf("after Up Up Down, input = %q, want 'filter c'", s.command.input.Value)
+	if s.commandModal.input.Value != "filter c" {
+		t.Fatalf("after Up Up Down, input = %q, want 'filter c'", s.commandModal.input.Value)
 	}
 }
 
@@ -825,7 +826,7 @@ func TestTipForGlyphSetMentionsUpgradeForSafe(t *testing.T) {
 func TestDividerHitDetection(t *testing.T) {
 	s := resizedState(80, 24)
 	c := &s.containers
-	div0X := c.listPaneWidth                                  // list|detail divider
+	div0X := c.listPaneWidth                                    // list|detail divider
 	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth // detail|activity divider
 
 	if got := c.dividerAt(div0X, 5); got != 0 {
@@ -1021,12 +1022,11 @@ func TestClickInsidePaneStillWorksDuringNonDrag(t *testing.T) {
 func TestImagesScreenMouseClickSelectsRow(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
-	// Framework SplitLayout returns pane-local coords (no border offset).
-	// Pane starts at frame Y=chromeRowsTop=2. Title at Y=2, blank at Y=3,
-	// list item 0 at Y=4, item 1 at Y=5.
+	// bodyYOffset is dynamic. List layout: title(0), blank(1), item0(2), item1(3).
+	clickY := s.images.bodyYOffset + 3
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
-		X: 3, Y: 5,
+		X: 3, Y: clickY,
 	}, flatte.Effects[State]{})
 	if s.images.list.Cursor() != 1 {
 		t.Fatalf("images click: cursor = %d, want 1", s.images.list.Cursor())
@@ -1051,10 +1051,9 @@ func TestImagesScreenDragDividerResizes(t *testing.T) {
 	s.screen = screenImages
 	View(s, flatte.RenderContext{Width: 80})
 
-	// Divider is at X = left pane width
-	divX := s.images.layout.PaneWidth(0)
-	startLeft := s.images.layout.PaneWidth(0)
-	startRight := s.images.layout.PaneWidth(1)
+	divX := s.images.listPaneWidth
+	startLeft := s.images.listPaneWidth
+	startRight := s.images.rects["detail"].W
 
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
@@ -1065,11 +1064,11 @@ func TestImagesScreenDragDividerResizes(t *testing.T) {
 		X: divX + 5, Y: 5,
 	}, flatte.Effects[State]{})
 
-	if s.images.layout.PaneWidth(0) != startLeft+5 {
-		t.Fatalf("after drag: left pane %d, want %d", s.images.layout.PaneWidth(0), startLeft+5)
+	if s.images.listPaneWidth != startLeft+5 {
+		t.Fatalf("after drag: left pane %d, want %d", s.images.listPaneWidth, startLeft+5)
 	}
-	if s.images.layout.PaneWidth(1) != startRight-5 {
-		t.Fatalf("after drag: right pane %d, want %d", s.images.layout.PaneWidth(1), startRight-5)
+	if s.images.rects["detail"].W != startRight-5 {
+		t.Fatalf("after drag: right pane %d, want %d", s.images.rects["detail"].W, startRight-5)
 	}
 
 	Handle(s, flatte.MouseEvent{
@@ -1083,9 +1082,10 @@ func TestImagesScreenDragDividerResizes(t *testing.T) {
 func TestVolumesScreenMouseClickSelectsRow(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenVolumes
+	clickY := s.volumes.bodyYOffset + 3
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
-		X: 3, Y: 5,
+		X: 3, Y: clickY,
 	}, flatte.Effects[State]{})
 	if s.volumes.list.Cursor() != 1 {
 		t.Fatalf("volumes click: cursor = %d, want 1", s.volumes.list.Cursor())
@@ -1097,8 +1097,8 @@ func TestVolumesScreenDragDividerResizes(t *testing.T) {
 	s.screen = screenVolumes
 	View(s, flatte.RenderContext{Width: 80})
 
-	divX := s.volumes.layout.PaneWidth(0)
-	startLeft := s.volumes.layout.PaneWidth(0)
+	divX := s.volumes.listPaneWidth
+	startLeft := s.volumes.listPaneWidth
 
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
@@ -1109,8 +1109,8 @@ func TestVolumesScreenDragDividerResizes(t *testing.T) {
 		X: divX - 4, Y: 5,
 	}, flatte.Effects[State]{})
 
-	if s.volumes.layout.PaneWidth(0) != startLeft-4 {
-		t.Fatalf("after drag left: left pane %d, want %d", s.volumes.layout.PaneWidth(0), startLeft-4)
+	if s.volumes.listPaneWidth != startLeft-4 {
+		t.Fatalf("after drag left: left pane %d, want %d", s.volumes.listPaneWidth, startLeft-4)
 	}
 }
 
@@ -1376,29 +1376,29 @@ func TestAppendLiveLogDoesNotTouchOtherContainerBuffers(t *testing.T) {
 func TestStopKeyOpensConfirmModal(t *testing.T) {
 	s := resizedState(80, 24)
 	Handle(s, keyChar('s'), flatte.Effects[State]{})
-	if s.modal == nil {
+	if s.confirmModal == nil {
 		t.Fatal("no modal opened after s")
 	}
-	if s.modal.action != "stop" {
-		t.Fatalf("modal action = %q, want stop", s.modal.action)
+	if s.confirmModal.action != "stop" {
+		t.Fatalf("modal action = %q, want stop", s.confirmModal.action)
 	}
-	if s.modal.targetID != "a1b2c3d4e5" {
-		t.Fatalf("modal targetID = %q, want a1b2c3d4e5", s.modal.targetID)
+	if s.confirmModal.targetID != "a1b2c3d4e5" {
+		t.Fatalf("modal targetID = %q, want a1b2c3d4e5", s.confirmModal.targetID)
 	}
 }
 
 func TestRemoveKeyOpensConfirmModal(t *testing.T) {
 	s := resizedState(80, 24)
 	Handle(s, keyChar('x'), flatte.Effects[State]{})
-	if s.modal == nil || s.modal.action != "remove" {
-		t.Fatalf("after x, modal = %+v, want action=remove", s.modal)
+	if s.confirmModal == nil || s.confirmModal.action != "remove" {
+		t.Fatalf("after x, modal = %+v, want action=remove", s.confirmModal)
 	}
 }
 
 func TestModalCapturesInputUntilClosed(t *testing.T) {
 	s := resizedState(80, 24)
 	Handle(s, keyChar('s'), flatte.Effects[State]{})
-	if s.modal == nil {
+	if s.confirmModal == nil {
 		t.Fatal("modal not opened")
 	}
 
@@ -1415,7 +1415,7 @@ func TestModalConfirmAppliesAction(t *testing.T) {
 	Handle(s, keyChar('s'), flatte.Effects[State]{})
 	Handle(s, keyChar('y'), flatte.Effects[State]{})
 
-	if s.modal != nil {
+	if s.confirmModal != nil {
 		t.Fatal("modal not closed after y")
 	}
 	if s.containers.containers[0].Status != "exited" {
@@ -1429,7 +1429,7 @@ func TestModalCancelDoesNotApplyAction(t *testing.T) {
 	Handle(s, keyChar('s'), flatte.Effects[State]{})
 	Handle(s, keyChar('n'), flatte.Effects[State]{})
 
-	if s.modal != nil {
+	if s.confirmModal != nil {
 		t.Fatal("modal not closed after n")
 	}
 	if s.containers.containers[0].Status != originalStatus {
@@ -1441,7 +1441,7 @@ func TestModalEscapeCloses(t *testing.T) {
 	s := resizedState(80, 24)
 	Handle(s, keyChar('s'), flatte.Effects[State]{})
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
-	if s.modal != nil {
+	if s.confirmModal != nil {
 		t.Fatal("modal not closed after Esc")
 	}
 }
@@ -1502,7 +1502,7 @@ func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 		t.Skipf("pane too narrow for tabs (contentWidth=%d, tabsW=%d)", contentWidth, totalTabsW)
 	}
 	logsX := contentStartX + tabStripLocalStart + flatui.TabLabelWidth("stats") + 1
-	clickY := chromeRowsTop + 1
+	clickY := s.containers.bodyYOffset + 1
 
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
@@ -1759,4 +1759,117 @@ func keyTab(shift bool) flatte.KeyEvent {
 		mod = flatte.ModShift
 	}
 	return flatte.KeyEvent{Key: flatte.KeyTab, Mod: mod}
+}
+
+func TestSessionStateRoundTrip(t *testing.T) {
+	original := resizedState(80, 24)
+	original.screen = screenImages
+	original.containers.listPaneWidth = 35
+	original.containers.activityPaneWidth = 28
+	original.containers.filter.Value = "nginx"
+	original.containers.tab = tabLogs
+	original.containers.list.Select(3)
+	original.images.listPaneWidth = 40
+	original.images.list.Select(2)
+	original.volumes.listPaneWidth = 25
+	original.volumes.list.Select(1)
+	original.cmdHistory = []string{"filter nginx", "stop redis"}
+
+	session := original.toSession()
+
+	if session.Screen != int(screenImages) {
+		t.Fatalf("Screen=%d want %d", session.Screen, screenImages)
+	}
+	if session.ContainerListW != 35 {
+		t.Fatalf("ContainerListW=%d want 35", session.ContainerListW)
+	}
+	if session.ContainerActW != 28 {
+		t.Fatalf("ContainerActW=%d want 28", session.ContainerActW)
+	}
+	if session.ContainerFilter != "nginx" {
+		t.Fatalf("ContainerFilter=%q want %q", session.ContainerFilter, "nginx")
+	}
+	if session.ContainerTab != int(tabLogs) {
+		t.Fatalf("ContainerTab=%d want %d", session.ContainerTab, tabLogs)
+	}
+	if session.ContainerCursor != 3 {
+		t.Fatalf("ContainerCursor=%d want 3", session.ContainerCursor)
+	}
+	if session.ImageListW != 40 || session.ImageCursor != 2 {
+		t.Fatalf("Image: listW=%d cursor=%d want 40,2", session.ImageListW, session.ImageCursor)
+	}
+	if session.VolumeListW != 25 || session.VolumeCursor != 1 {
+		t.Fatalf("Volume: listW=%d cursor=%d want 25,1", session.VolumeListW, session.VolumeCursor)
+	}
+	if len(session.CmdHistory) != 2 {
+		t.Fatalf("CmdHistory len=%d want 2", len(session.CmdHistory))
+	}
+
+	restored := newStateFromSession(session)
+	if restored.screen != screenImages {
+		t.Fatalf("restored screen=%v want images", restored.screen)
+	}
+	if restored.containers.listPaneWidth != 35 {
+		t.Fatalf("restored listW=%d want 35", restored.containers.listPaneWidth)
+	}
+	if restored.containers.activityPaneWidth != 28 {
+		t.Fatalf("restored actW=%d want 28", restored.containers.activityPaneWidth)
+	}
+	if restored.containers.filter.Value != "nginx" {
+		t.Fatalf("restored filter=%q want %q", restored.containers.filter.Value, "nginx")
+	}
+	if restored.containers.tab != tabLogs {
+		t.Fatalf("restored tab=%v want logs", restored.containers.tab)
+	}
+	if restored.images.listPaneWidth != 40 {
+		t.Fatalf("restored imgListW=%d want 40", restored.images.listPaneWidth)
+	}
+	if restored.images.list.Cursor() != 2 {
+		t.Fatalf("restored imgCursor=%d want 2", restored.images.list.Cursor())
+	}
+	if restored.volumes.list.Cursor() != 1 {
+		t.Fatalf("restored volCursor=%d want 1", restored.volumes.list.Cursor())
+	}
+	if len(restored.cmdHistory) != 2 || restored.cmdHistory[0] != "filter nginx" {
+		t.Fatalf("restored cmdHistory=%v", restored.cmdHistory)
+	}
+}
+
+func TestSessionStateGobRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/session.gob"
+
+	original := resizedState(80, 24)
+	original.screen = screenVolumes
+	original.containers.listPaneWidth = 30
+	original.containers.list.Select(2)
+	original.cmdHistory = []string{"test"}
+
+	session := original.toSession()
+	if err := flatte.SaveState(path, session); err != nil {
+		t.Fatalf("SaveState: %v", err)
+	}
+
+	loaded := flatte.LoadState(path, SessionState{})
+	if loaded.Screen != int(screenVolumes) {
+		t.Fatalf("loaded Screen=%d want %d", loaded.Screen, screenVolumes)
+	}
+	if loaded.ContainerListW != 30 {
+		t.Fatalf("loaded ContainerListW=%d want 30", loaded.ContainerListW)
+	}
+	if loaded.ContainerCursor != 2 {
+		t.Fatalf("loaded ContainerCursor=%d want 2", loaded.ContainerCursor)
+	}
+}
+
+func TestSessionStateCorruptFileReturnsDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/corrupt.gob"
+	_ = os.WriteFile(path, []byte("not gob"), 0644)
+
+	loaded := flatte.LoadState(path, SessionState{})
+	// Should get zero-value default, not crash
+	if loaded.Screen != 0 {
+		t.Fatalf("corrupt file: Screen=%d want 0 (default)", loaded.Screen)
+	}
 }
