@@ -8,13 +8,10 @@ import (
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
-// TabBar is a tab-strip component with built-in mouse hit-testing.
-// Call Node() to get a layout.Node for use in layout trees.
-//
-// Colors are set once via WithColors. Uses Powerline glyphs by default;
-// use WithGlyphs for ASCII fallback.
+// TabBar is a tab-strip component. Set colors once via WithColors, then
+// compose it into a layout tree via Layout().
 type TabBar struct {
-	items        []TabItem
+	Items        []TabItem
 	active       int
 	glyphs       TabGlyphs
 	fill         color.Color
@@ -22,73 +19,49 @@ type TabBar struct {
 	barBg        color.Color
 }
 
-// TabItem is one tab in a TabBar.
 type TabItem struct {
 	ID    string
 	Label string
 }
 
-// TabGlyphs holds the left/right edge characters for tab rendering.
-type TabGlyphs struct {
-	Left  string
-	Right string
-}
+type TabGlyphs struct{ Left, Right string }
 
 var TabGlyphsPowerline = TabGlyphs{Left: "\ue0ba", Right: "\ue0bc"}
 var TabGlyphsSafe = TabGlyphs{Left: "[", Right: "]"}
 
-// NewTabBar creates a TabBar with the given items and Powerline glyphs.
 func NewTabBar(items ...TabItem) *TabBar {
-	return &TabBar{items: items, glyphs: TabGlyphsPowerline}
+	return &TabBar{Items: items, glyphs: TabGlyphsPowerline}
 }
 
-// WithGlyphs sets custom edge glyphs.
-func (t *TabBar) WithGlyphs(g TabGlyphs) *TabBar {
-	t.glyphs = g
-	return t
-}
-
-// WithColors sets the fill, inactiveFill, and background colors used by
-// Layout. Call this once during initialization — colors stay fixed for
-// the TabBar's lifetime.
-func (t *TabBar) WithColors(fill, inactiveFill, barBg color.Color) *TabBar {
-	t.fill, t.inactiveFill, t.barBg = fill, inactiveFill, barBg
+func (t *TabBar) WithGlyphs(g TabGlyphs) *TabBar { t.glyphs = g; return t }
+func (t *TabBar) WithColors(f, i, bg color.Color) *TabBar {
+	t.fill, t.inactiveFill, t.barBg = f, i, bg
 	return t
 }
 
 func (t *TabBar) Active() int { return t.active }
 func (t *TabBar) ActiveID() string {
-	if t.active >= 0 && t.active < len(t.items) {
-		return t.items[t.active].ID
+	if t.active >= 0 && t.active < len(t.Items) {
+		return t.Items[t.active].ID
 	}
 	return ""
 }
 func (t *TabBar) SetActive(i int) {
-	if i >= 0 && i < len(t.items) {
+	if i >= 0 && i < len(t.Items) {
 		t.active = i
 	}
 }
-func (t *TabBar) Next() {
-	if len(t.items) > 0 {
-		t.active = (t.active + 1) % len(t.items)
-	}
-}
-func (t *TabBar) Prev() {
-	if len(t.items) > 0 {
-		t.active = (t.active - 1 + len(t.items)) % len(t.items)
-	}
-}
+func (t *TabBar) Next() { t.active = (t.active + 1) % len(t.Items) }
+func (t *TabBar) Prev() { t.active = (t.active - 1 + len(t.Items)) % len(t.Items) }
 
-// Node returns a layout Node whose Layout closure renders the tab strip.
-// Use this in layout trees: Row(title, Spacer(), tabBar.Node()).
-func (t *TabBar) Node() layout.Node {
-	return layout.Node{Layout: func(r layout.Rect) layout.Node {
-		tabs := make([]layout.Node, len(t.items))
-		for i, item := range t.items {
-			tabs[i] = layout.Text(t.renderTab(item, i == t.active))
-		}
-		return layout.Row(tabs...)
-	}}
+// Layout builds the tab strip as a Row of styled Text leaves. The engine
+// positions and sizes it; the widget computes no coordinates.
+func (t *TabBar) Layout() layout.Node {
+	tabs := make([]layout.Node, len(t.Items))
+	for i, item := range t.Items {
+		tabs[i] = layout.Text{String: t.renderTab(item, i == t.active)}
+	}
+	return layout.Row{Children: tabs}
 }
 
 func (t *TabBar) renderTab(item TabItem, active bool) string {
@@ -104,11 +77,9 @@ func (t *TabBar) renderTab(item TabItem, active bool) string {
 	return l + c + r
 }
 
-// HandleMouseAt checks whether localX falls inside any tab. If so, sets
-// that tab active and returns true. localX is relative to the tab strip.
 func (t *TabBar) HandleMouseAt(localX int) bool {
 	x := 0
-	for i, item := range t.items {
+	for i, item := range t.Items {
 		w := TabLabelWidth(item.Label)
 		if localX >= x && localX < x+w {
 			t.SetActive(i)
@@ -119,29 +90,22 @@ func (t *TabBar) HandleMouseAt(localX int) bool {
 	return false
 }
 
-// TabLabelWidth returns the rendered width of a single tab.
-func TabLabelWidth(label string) int {
-	return lipgloss.Width(label) + 6
-}
+func TabLabelWidth(label string) int { return lipgloss.Width(label) + 6 }
 
-// TotalWidth returns the combined rendered width of all tabs.
 func (t *TabBar) TotalWidth() int {
 	w := 0
-	for _, item := range t.items {
+	for _, item := range t.Items {
 		w += TabLabelWidth(item.Label)
 	}
 	return w
 }
 
-// TabStartX returns the X offset where tab i begins within the strip.
 func (t *TabBar) TabStartX(i int) int {
 	x := 0
-	for j := 0; j < i && j < len(t.items); j++ {
-		x += TabLabelWidth(t.items[j].Label)
+	for j := 0; j < i && j < len(t.Items); j++ {
+		x += TabLabelWidth(t.Items[j].Label)
 	}
 	return x
 }
 
-func colorMatching(c color.Color) color.Color {
-	return lipgloss.Color("23")
-}
+func colorMatching(c color.Color) color.Color { return lipgloss.Color("23") }

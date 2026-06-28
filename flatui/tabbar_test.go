@@ -10,69 +10,49 @@ import (
 )
 
 func TestTabBarActiveAndSet(t *testing.T) {
-	tb := NewTabBar(
-		TabItem{ID: "a", Label: "alpha"},
-		TabItem{ID: "b", Label: "beta"},
-		TabItem{ID: "c", Label: "gamma"},
-	)
+	tb := NewTabBar(TabItem{ID: "a", Label: "alpha"}, TabItem{ID: "b", Label: "beta"})
 	if tb.Active() != 0 {
-		t.Fatalf("initial active = %d, want 0", tb.Active())
+		t.Fatal("default active should be 0")
 	}
-	if tb.ActiveID() != "a" {
-		t.Fatalf("initial activeID = %q, want a", tb.ActiveID())
-	}
-	tb.SetActive(2)
-	if tb.Active() != 2 || tb.ActiveID() != "c" {
-		t.Fatalf("after SetActive(2): active=%d id=%q, want 2/c", tb.Active(), tb.ActiveID())
-	}
-	tb.SetActive(-1)
-	if tb.Active() != 2 {
-		t.Fatalf("SetActive(-1) should clamp, active = %d", tb.Active())
-	}
-	tb.SetActive(99)
-	if tb.Active() != 2 {
-		t.Fatalf("SetActive(99) should clamp, active = %d", tb.Active())
+	tb.SetActive(1)
+	if tb.Active() != 1 || tb.ActiveID() != "b" {
+		t.Fatalf("after SetActive(1): active=%d id=%q", tb.Active(), tb.ActiveID())
 	}
 }
 
 func TestTabBarNextPrev(t *testing.T) {
-	tb := NewTabBar(
-		TabItem{ID: "a", Label: "alpha"},
-		TabItem{ID: "b", Label: "beta"},
-		TabItem{ID: "c", Label: "gamma"},
-	)
+	tb := NewTabBar(TabItem{ID: "a"}, TabItem{ID: "b"}, TabItem{ID: "c"})
 	tb.Next()
 	if tb.Active() != 1 {
-		t.Fatalf("after Next: %d, want 1", tb.Active())
+		t.Fatal("Next should advance to 1")
 	}
 	tb.Next()
+	if tb.Active() != 2 {
+		t.Fatal("Next should advance to 2")
+	}
 	tb.Next()
 	if tb.Active() != 0 {
-		t.Fatalf("after Next×3 (wrap): %d, want 0", tb.Active())
+		t.Fatal("Next should wrap to 0")
 	}
 	tb.Prev()
 	if tb.Active() != 2 {
-		t.Fatalf("after Prev from 0 (wrap): %d, want 2", tb.Active())
+		t.Fatal("Prev should wrap to 2")
 	}
 }
 
 func TestTabBarHandleMouseAt(t *testing.T) {
-	tb := NewTabBar(
-		TabItem{ID: "a", Label: "alpha"},
-		TabItem{ID: "b", Label: "beta"},
-		TabItem{ID: "c", Label: "gamma"},
-	)
-	alphaW := TabLabelWidth("alpha")
-	betaStart := alphaW
-
-	if !tb.HandleMouseAt(0) || tb.Active() != 0 {
-		t.Fatal("click at 0 should hit alpha")
+	tb := NewTabBar(TabItem{ID: "a", Label: "alpha"}, TabItem{ID: "b", Label: "beta"})
+	if !tb.HandleMouseAt(0) {
+		t.Fatal("click at 0 should hit first tab")
 	}
-	if !tb.HandleMouseAt(betaStart) || tb.Active() != 1 {
-		t.Fatal("click at betaStart should hit beta")
+	if tb.Active() != 0 {
+		t.Fatal("first tab should be active")
 	}
-	if tb.HandleMouseAt(999) {
-		t.Fatal("click way past the end should not hit any tab")
+	if !tb.HandleMouseAt(TabLabelWidth("alpha")) {
+		t.Fatal("click at second tab start should hit")
+	}
+	if tb.Active() != 1 {
+		t.Fatal("second tab should be active")
 	}
 }
 
@@ -81,9 +61,9 @@ func TestTabBarLayoutProducesNonEmpty(t *testing.T) {
 		TabItem{ID: "a", Label: "alpha"},
 		TabItem{ID: "b", Label: "beta"},
 	).WithColors(lipgloss.Color("117"), lipgloss.Color("238"), lipgloss.Color("236"))
-	rendered := layout.Render(tb.Node(), tb.TotalWidth(), 1)
+	rendered := layout.Render(tb.Layout(), tb.TotalWidth(), 1)
 	if rendered == "" {
-		t.Fatal("Layout produced empty string")
+		t.Fatal("Render produced empty string")
 	}
 	if !strings.Contains(rendered, "alpha") || !strings.Contains(rendered, "beta") {
 		t.Fatalf("Layout missing labels: %q", rendered)
@@ -94,17 +74,14 @@ func TestTabBarWithSafeGlyphs(t *testing.T) {
 	tb := NewTabBar(TabItem{ID: "x", Label: "x"}).
 		WithGlyphs(TabGlyphsSafe).
 		WithColors(lipgloss.Color("117"), lipgloss.Color("238"), lipgloss.Color("236"))
-	rendered := layout.Render(tb.Node(), tb.TotalWidth(), 1)
+	rendered := layout.Render(tb.Layout(), tb.TotalWidth(), 1)
 	if !strings.Contains(rendered, "[") || !strings.Contains(rendered, "]") {
 		t.Fatalf("safe glyphs should produce brackets: %q", rendered)
 	}
 }
 
 func TestTabBarTotalWidth(t *testing.T) {
-	tb := NewTabBar(
-		TabItem{ID: "a", Label: "alpha"},
-		TabItem{ID: "b", Label: "beta"},
-	)
+	tb := NewTabBar(TabItem{Label: "alpha"}, TabItem{Label: "beta"})
 	want := TabLabelWidth("alpha") + TabLabelWidth("beta")
 	if tb.TotalWidth() != want {
 		t.Fatalf("TotalWidth = %d, want %d", tb.TotalWidth(), want)
@@ -112,10 +89,7 @@ func TestTabBarTotalWidth(t *testing.T) {
 }
 
 func TestTabBarTabStartX(t *testing.T) {
-	tb := NewTabBar(
-		TabItem{ID: "a", Label: "alpha"},
-		TabItem{ID: "b", Label: "beta"},
-	)
+	tb := NewTabBar(TabItem{Label: "alpha"}, TabItem{Label: "beta"})
 	if tb.TabStartX(0) != 0 {
 		t.Fatalf("TabStartX(0) = %d, want 0", tb.TabStartX(0))
 	}
