@@ -31,7 +31,7 @@ const (
 func (sc screen) Name() string {
 	switch sc {
 	case screenContainers:
-		return "container"
+		return "containers"
 	case screenImages:
 		return "images"
 	case screenVolumes:
@@ -451,19 +451,21 @@ func (s *State) resize(width, height int) {
 	s.width, s.height = width, height
 	s.headerTabs.SetActive(int(s.screen))
 
-	// Measure the header to determine body Y offset dynamically — if the
-	// title has padding, the header is taller, and the body starts lower.
-	titleStr := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(1, 1).Render("flat-docker")
-	headerMeasured := layout.MeasurePass(layout.Row(
-		layout.Text(titleStr),
-		layout.Spacer(),
-		s.headerTabs.Node(),
-	))
-	headerH := 1
-	if headerMeasured.H.Kind == layout.SizeFixed {
-		headerH = headerMeasured.H.Value
+	// Measure header height dynamically.
+	titleStr := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 0).Render("flat-docker")
+	headerRow := layout.Row{
+		Children: []layout.Node{
+			layout.Text{String: titleStr},
+			layout.NewSpacer(),
+			s.headerTabs.Layout(),
+		},
 	}
-	s.bodyYOffset = headerH + 1 // header rows + 1 separator row
+	_, headerH := headerRow.Size()
+	headerHeight := 1
+	if headerH.Kind == layout.SizeContent || headerH.Kind == layout.SizeFixed {
+		headerHeight = headerH.Value
+	}
+	s.bodyYOffset = headerHeight + 1
 
 	bodyWidth := width
 	bodyHeight := max(height-s.bodyYOffset-chromeRowsBottom, 0)
@@ -481,33 +483,21 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 		height = 24
 	}
 
-	// Build the full-frame tree as a tree of Elements.
-	// Each Element's Layout returns a subtree; the engine renders recursively.
 	children := []layout.Node{
-		Header{state: s}.Node(),
-		Separator{}.Node(),
-		Body{state: s}.Node().Grow(1),
-		Separator{}.Node(),
-		Footer{state: s}.Node(),
+		Header{State: s},
+		Separator{},
+		Body{State: s, NodeBase: layout.NodeBase{H: layout.Grow(1)}},
+		Separator{},
+		Footer{State: s},
 	}
 
-	if s.confirmModal != nil {
-		children = append(children, layout.Node{
-			ID: "modal", Dir: layout.LeafDir,
-			W: layout.Fixed(40), H: layout.Fixed(7),
-			Overlay: true, Bordered: true,
-			Content: renderModal(s.confirmModal),
-		})
-	}
-
-	tree := layout.Col(children...)
-	s.rects = layout.Solve(layout.MeasurePass(tree), width, height)
+	tree := layout.Col{Children: children}
+	s.rects = layout.Solve(tree, width, height)
 	content := layout.Render(tree, width, height)
 
-	// Modal overlay positioned by the solver's Layer pass.
+	// Modal overlay (composited via ultraviolet for proper ANSI handling).
 	if s.confirmModal != nil {
-		mr := s.rects["modal"]
-		content = overlayRect(content, renderModal(s.confirmModal), mr.X, mr.Y, mr.W, mr.H)
+		content = flatui.Overlay(content, renderModal(s.confirmModal))
 	}
 
 	if s.screen == screenContainers {
@@ -593,109 +583,146 @@ func renderModal(m *confirmModel) string {
 		Render(title + body)
 }
 
-// --- Node-producing types for the frame chrome ---
+// --- Node types for the frame chrome (embed layout.NodeBase) ---
 
-// Header renders the tab bar: title left, tabs right.
-type Header struct{ state *State }
-
-func (h Header) Node() layout.Node {
-	return layout.Node{Layout: func(r layout.Rect) layout.Node {
-		h.state.headerTabs.SetActive(int(h.state.screen))
-		title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(1, 1).Render("flat-docker")
-		return layout.Row(
-			layout.Text(title),
-			layout.Spacer(),
-			h.state.headerTabs.Node(),
-		)
-	}}
+type Header struct {
+	layout.NodeBase
+	State *State
 }
 
-// Separator renders a full-width accent-colored line.
-type Separator struct{}
-
-func (Separator) Node() layout.Node {
-	return layout.Node{Layout: func(r layout.Rect) layout.Node {
-		return layout.Text(lipgloss.NewStyle().
-			Width(r.W).Background(pal.accent).
-			Render(strings.Repeat(" ", r.W)))
-	}}
-}
-
-// Footer renders key hints.
-type Footer struct{ state *State }
-
-func (f Footer) Node() layout.Node {
-	return layout.Node{Layout: func(r layout.Rect) layout.Node {
-		var hints string
-		if f.state.commandModal != nil {
-			hints = f.state.commandModal.keyHints()
-		} else {
-			switch f.state.screen {
-			case screenContainers:
-				hints = f.state.containers.keyHints()
-			case screenImages:
-				hints = f.state.images.keyHints()
-			case screenVolumes:
-				hints = f.state.volumes.keyHints()
-			}
+func (h Header) Size() (layout.Size, layout.Size) {
+	w, hh := h.NodeBase.Size()
+	if w.Kind == layout.SizeAuto || hh.Kind == layout.SizeAuto {
+		h.State.headerTabs.SetActive(int(h.State.screen))
+		titleStr := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 0).Render("flat-docker")
+		row := layout.Row{
+			Children: []layout.Node{
+				layout.Text{String: titleStr},
+				layout.NewSpacer(),
+				h.State.headerTabs.Layout(),
+			},
 		}
-		return layout.Text(lipgloss.NewStyle().Foreground(pal.muted).
-			Render(" " + hints + " "))
-	}}
-}
-
-// Body dispatches to the active screen's body rendering.
-type Body struct{ state *State }
-
-func (b Body) Node() layout.Node {
-	return layout.Node{Layout: func(r layout.Rect) layout.Node {
-		switch b.state.screen {
-		case screenContainers:
-			c := &b.state.containers
-			c.width, c.height = r.W, r.H
-			c.solveAndSize()
-			return layout.Col(
-				layout.Row(
-					layout.Text(c.renderListPane()),
-					layout.Text(c.renderDivider(0)),
-					layout.Text(c.renderDetailPane()),
-					layout.Text(c.renderDivider(1)),
-					layout.Text(c.renderActivityPane()),
-				).Grow(1),
-				layout.Text(b.statusOrCommand()),
-			)
-		case screenImages:
-			i := b.state.images
-			i.width, i.height = r.W, r.H
-			i.solveAndSize()
-			listR := i.rects["list"]
-			detailR := i.rects["detail"]
-			return layout.Row(
-				layout.Text(i.renderImageListContent(listR.W, listR.H)),
-				layout.Text(renderDragDivider(listR.H, i.drag != nil)),
-				layout.Text(i.renderImageDetailContent(detailR.W, detailR.H)),
-			)
-		case screenVolumes:
-			v := b.state.volumes
-			v.width, v.height = r.W, r.H
-			v.solveAndSize()
-			listR := v.rects["list"]
-			detailR := v.rects["detail"]
-			return layout.Row(
-				layout.Text(v.renderVolumeListContent(listR.W, listR.H)),
-				layout.Text(renderDragDivider(listR.H, v.drag != nil)),
-				layout.Text(v.renderVolumeDetailContent(detailR.W, detailR.H)),
-			)
+		rw, rh := row.Size()
+		if w.Kind == layout.SizeAuto {
+			w = rw
 		}
-		return layout.Text("")
-	}}
-}
-
-func (b Body) statusOrCommand() string {
-	if b.state.commandModal != nil {
-		return b.state.commandModal.View(b.state.containers.width)
+		if hh.Kind == layout.SizeAuto {
+			hh = rh
+		}
 	}
-	return b.state.containers.renderStatusLine()
+	return w, hh
+}
+
+func (h Header) Render(r layout.Rect) string {
+	h.State.headerTabs.SetActive(int(h.State.screen))
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(0, 0).Render("flat-docker")
+	return layout.Render(layout.Row{
+		Children: []layout.Node{
+			layout.Text{String: title},
+			layout.NewSpacer(),
+			h.State.headerTabs.Layout(),
+		},
+	}, r.W, r.H)
+}
+
+type Separator struct{ layout.NodeBase }
+
+func (s Separator) Size() (layout.Size, layout.Size) {
+	w, h := s.NodeBase.Size()
+	if h.Kind == layout.SizeAuto {
+		h = layout.Fixed(1)
+	}
+	return w, h
+}
+
+func (s Separator) Render(r layout.Rect) string {
+	return lipgloss.NewStyle().Width(r.W).Background(pal.accent).MaxWidth(r.W).
+		Render(strings.Repeat(" ", r.W))
+}
+
+type Footer struct {
+	layout.NodeBase
+	State *State
+}
+
+func (f Footer) Render(r layout.Rect) string {
+	var hints string
+	if f.State.commandModal != nil {
+		hints = f.State.commandModal.keyHints()
+	} else {
+		switch f.State.screen {
+		case screenContainers:
+			hints = f.State.containers.keyHints()
+		case screenImages:
+			hints = f.State.images.keyHints()
+		case screenVolumes:
+			hints = f.State.volumes.keyHints()
+		}
+	}
+	return lipgloss.NewStyle().Width(r.W).Foreground(pal.muted).
+		Render(" " + hints + " ")
+}
+
+type Body struct {
+	layout.NodeBase
+	State *State
+}
+
+func (b Body) Render(r layout.Rect) string {
+	switch b.State.screen {
+	case screenContainers:
+		c := &b.State.containers
+		c.width, c.height = r.W, r.H
+		c.solveAndSize()
+		var statusRow string
+		if b.State.commandModal != nil {
+			statusRow = b.State.commandModal.View(c.width)
+		} else {
+			statusRow = c.renderStatusLine()
+		}
+		return layout.Render(layout.Col{
+			Children: []layout.Node{
+				layout.Row{
+					NodeBase: layout.NodeBase{H: layout.Grow(1)},
+					Children: []layout.Node{
+						layout.Text{String: c.renderListPane()},
+						layout.Text{String: c.renderDivider(0)},
+						layout.Text{String: c.renderDetailPane()},
+						layout.Text{String: c.renderDivider(1)},
+						layout.Text{String: c.renderActivityPane()},
+					},
+				},
+				layout.Text{String: statusRow},
+			},
+		}, r.W, r.H)
+	case screenImages:
+		i := b.State.images
+		i.width, i.height = r.W, r.H
+		i.solveAndSize()
+		listR := i.rects["list"]
+		detailR := i.rects["detail"]
+		return layout.Render(layout.Row{
+			Children: []layout.Node{
+				layout.Text{String: i.renderImageListContent(listR.W, listR.H)},
+				layout.Text{String: renderDragDivider(listR.H, i.drag != nil)},
+				layout.Text{String: i.renderImageDetailContent(detailR.W, detailR.H)},
+			},
+		}, r.W, r.H)
+	case screenVolumes:
+		v := b.State.volumes
+		v.width, v.height = r.W, r.H
+		v.solveAndSize()
+		listR := v.rects["list"]
+		detailR := v.rects["detail"]
+		return layout.Render(layout.Row{
+			Children: []layout.Node{
+				layout.Text{String: v.renderVolumeListContent(listR.W, listR.H)},
+				layout.Text{String: renderDragDivider(listR.H, v.drag != nil)},
+				layout.Text{String: v.renderVolumeDetailContent(detailR.W, detailR.H)},
+			},
+		}, r.W, r.H)
+	}
+	return ""
 }
 
 const (
@@ -948,17 +975,32 @@ func (c *containersScreen) layout(width, height, bodyYOffset int) {
 // widgets from the solved rects. Called from layout() and applyDrag() —
 // the single site for pane geometry derivation, eliminating the duplication
 // that existed between layout() and applyDrag().
+// sizedBox creates a geometry-only leaf with an ID and size constraints.
+func sizedBox(id string, w, h layout.Size) layout.Text {
+	return layout.Text{NodeBase: layout.NodeBase{ID: id, W: w, H: h}}
+}
+
+// paneRow builds the 3-pane containers body layout tree for Solve.
+func containersBodyTree(c *containersScreen) layout.Col {
+	return layout.Col{
+		Children: []layout.Node{
+			layout.Row{
+				NodeBase: layout.NodeBase{H: layout.Grow(1)},
+				Children: []layout.Node{
+					sizedBox("list", layout.Fixed(c.listPaneWidth), layout.Auto()),
+					sizedBox("div0", layout.Fixed(dividerWidth), layout.Auto()),
+					sizedBox("detail", layout.Grow(1), layout.Auto()),
+					sizedBox("div1", layout.Fixed(dividerWidth), layout.Auto()),
+					sizedBox("activity", layout.Fixed(c.activityPaneWidth), layout.Auto()),
+				},
+			},
+			sizedBox("status", layout.Auto(), layout.Fixed(statusLineRows)),
+		},
+	}
+}
+
 func (c *containersScreen) solveAndSize() {
-	tree := layout.Col(
-		layout.Row(
-			layout.Box("list").Width(c.listPaneWidth),
-			layout.Box("div0").Width(dividerWidth),
-			layout.Box("detail").Grow(1),
-			layout.Box("div1").Width(dividerWidth),
-			layout.Box("activity").Width(c.activityPaneWidth),
-		).Grow(1),
-		layout.Box("status").Height(statusLineRows),
-	)
+	tree := containersBodyTree(c)
 	c.rects = layout.Solve(tree, c.width, c.height)
 
 	// Derived dimensions from solved rects.
@@ -1643,36 +1685,6 @@ func (c *containersScreen) resumeFollow() {
 	c.logs.GotoBottom()
 }
 
-// bodyTree returns the containers screen's pane layout as a builder tree.
-func (c *containersScreen) bodyTree() layout.Node {
-	return layout.Col(
-		layout.Row(
-			layout.Box("list").Width(c.listPaneWidth),
-			layout.Box("div0").Width(dividerWidth),
-			layout.Box("detail").Grow(1),
-			layout.Box("div1").Width(dividerWidth),
-			layout.Box("activity").Width(c.activityPaneWidth),
-		).Grow(1),
-		layout.Box("status").Height(statusLineRows),
-	)
-}
-
-func (c *containersScreen) renderBody(root *State) string {
-	listPane := c.renderListPane()
-	detailPane := c.renderDetailPane()
-	activityPane := c.renderActivityPane()
-	div0 := c.renderDivider(0)
-	div1 := c.renderDivider(1)
-	mainRow := lipgloss.JoinHorizontal(lipgloss.Top, listPane, div0, detailPane, div1, activityPane)
-	var statusRow string
-	if root.commandModal != nil {
-		statusRow = root.commandModal.View(c.width)
-	} else {
-		statusRow = c.renderStatusLine()
-	}
-	return strings.Join([]string{mainRow, statusRow}, "\n")
-}
-
 func (c *containersScreen) renderStatusLine() string {
 	if c.statusLine == "" {
 		c.recomputeStatusLine()
@@ -1807,17 +1819,19 @@ func (c *containersScreen) renderDetailPane() string {
 
 	c.detailTabs.SetActive(int(c.tab))
 	indicator := c.renderFollowIndicator()
-	rightChildren := []layout.Node{c.detailTabs.Node()}
+	rightChildren := []layout.Node{c.detailTabs.Layout()}
 	if indicator != "" {
-		rightChildren = append(rightChildren, layout.Text(" "+indicator))
+		rightChildren = append(rightChildren, layout.Text{String: " " + indicator})
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
 	headerRow := layout.Render(
-		layout.Row(
-			layout.Text(title),
-			layout.Spacer(),
-			layout.Row(rightChildren...),
-		),
+		layout.Row{
+			Children: []layout.Node{
+				layout.Text{String: title},
+				layout.NewSpacer(),
+				layout.Row{Children: rightChildren},
+			},
+		},
 		detailInnerWidth, 1,
 	)
 
@@ -1954,11 +1968,13 @@ func (i *imagesScreen) solveAndSize() {
 	if i.listPaneWidth == 0 {
 		i.listPaneWidth = min(30, max(i.width/3, minListWidth))
 	}
-	tree := layout.Row(
-		layout.Box("list").Width(i.listPaneWidth),
-		layout.Box("div0").Width(dividerWidth),
-		layout.Box("detail").Grow(1),
-	)
+	tree := layout.Row{
+		Children: []layout.Node{
+			sizedBox("list", layout.Fixed(i.listPaneWidth), layout.Auto()),
+			sizedBox("div0", layout.Fixed(dividerWidth), layout.Auto()),
+			sizedBox("detail", layout.Grow(1), layout.Auto()),
+		},
+	}
 	i.rects = layout.Solve(tree, i.width, i.height)
 	i.list.SetHeight(max(i.height-paneBorderRows-2, 0))
 }
@@ -2039,24 +2055,6 @@ func (i *imagesScreen) handleMouse(m flatte.MouseEvent) {
 	if m.X >= listR.X && m.X < listR.X+listR.W {
 		i.handleImageListMouse(m, m.X-listR.X, bodyY)
 	}
-}
-
-// bodyTree returns the images screen's pane layout as a builder tree.
-func (i *imagesScreen) bodyTree() layout.Node {
-	return layout.Row(
-		layout.Box("list").Width(i.listPaneWidth),
-		layout.Box("div0").Width(dividerWidth),
-		layout.Box("detail").Grow(1),
-	)
-}
-
-func (i *imagesScreen) renderBody() string {
-	listR := i.rects["list"]
-	detailR := i.rects["detail"]
-	listPane := i.renderImageListContent(listR.W, listR.H)
-	div := renderDragDivider(listR.H, i.drag != nil)
-	detailPane := i.renderImageDetailContent(detailR.W, detailR.H)
-	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, div, detailPane)
 }
 
 func (i *imagesScreen) keyHints() string {
@@ -2174,11 +2172,13 @@ func (v *volumesScreen) solveAndSize() {
 	if v.listPaneWidth == 0 {
 		v.listPaneWidth = min(30, max(v.width/3, minListWidth))
 	}
-	tree := layout.Row(
-		layout.Box("list").Width(v.listPaneWidth),
-		layout.Box("div0").Width(dividerWidth),
-		layout.Box("detail").Grow(1),
-	)
+	tree := layout.Row{
+		Children: []layout.Node{
+			sizedBox("list", layout.Fixed(v.listPaneWidth), layout.Auto()),
+			sizedBox("div0", layout.Fixed(dividerWidth), layout.Auto()),
+			sizedBox("detail", layout.Grow(1), layout.Auto()),
+		},
+	}
 	v.rects = layout.Solve(tree, v.width, v.height)
 	v.list.SetHeight(max(v.height-paneBorderRows-2, 0))
 }
@@ -2259,24 +2259,6 @@ func (v *volumesScreen) handleMouse(m flatte.MouseEvent) {
 	if m.X >= listR.X && m.X < listR.X+listR.W {
 		v.handleVolumeListMouse(m, m.X-listR.X, bodyY)
 	}
-}
-
-// bodyTree returns the volumes screen's pane layout as a builder tree.
-func (v *volumesScreen) bodyTree() layout.Node {
-	return layout.Row(
-		layout.Box("list").Width(v.listPaneWidth),
-		layout.Box("div0").Width(dividerWidth),
-		layout.Box("detail").Grow(1),
-	)
-}
-
-func (v *volumesScreen) renderBody() string {
-	listR := v.rects["list"]
-	detailR := v.rects["detail"]
-	listPane := v.renderVolumeListContent(listR.W, listR.H)
-	div := renderDragDivider(listR.H, v.drag != nil)
-	detailPane := v.renderVolumeDetailContent(detailR.W, detailR.H)
-	return lipgloss.JoinHorizontal(lipgloss.Top, listPane, div, detailPane)
 }
 
 func (v *volumesScreen) keyHints() string {
