@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // Progress is a horizontal percentage indicator. The app owns the percentage
@@ -35,6 +37,11 @@ func (p Progress) Percent() float64 { return p.percent }
 
 // Width returns the bar width in cells.
 func (p Progress) Width() int { return p.width }
+
+// Layout renders the bar as a single Text leaf for composition.
+func (p Progress) Layout() layout.Node {
+	return layout.Text{String: p.View()}
+}
 
 // View renders the progress bar and a rounded percentage label. A zero-width
 // bar still returns the label so compact layouts can show progress.

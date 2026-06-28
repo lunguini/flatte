@@ -1,6 +1,10 @@
 package flatui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/lunguini/flatte/flatui/layout"
+)
 
 // List is selection-and-scroll state over a flat sequence of items. The app
 // owns it (like TextField and Viewport): no goroutines, no key policy. It holds
@@ -13,6 +17,19 @@ type List struct {
 	cursor int
 	offset int
 	height int
+
+	// RenderRow renders one row for Layout(); set by the app. It receives the
+	// item index and whether it is the selected row.
+	RenderRow func(index int, selected bool) string
+}
+
+// Layout renders the visible rows via RenderRow as a single Text leaf. If
+// RenderRow is unset, it renders nothing.
+func (l List) Layout() layout.Node {
+	if l.RenderRow == nil {
+		return layout.Text{}
+	}
+	return layout.Text{String: l.View(l.RenderRow)}
 }
 
 // SetCount sets the number of selectable items, clamping the cursor and scroll.

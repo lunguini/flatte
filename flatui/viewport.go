@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // Viewport is a scrollable window over content. The app owns it (like
@@ -67,6 +69,11 @@ func (v *Viewport) relayout() {
 		}
 	}
 	v.clamp()
+}
+
+// Layout renders the visible slice as a single Text leaf for composition.
+func (v Viewport) Layout() layout.Node {
+	return layout.Text{String: v.View()}
 }
 
 // View returns the visible slice joined by newlines. Lines wider than the

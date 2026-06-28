@@ -140,6 +140,7 @@ flatui
   method List.Count
   method List.Cursor
   method List.Height
+  method List.Layout
   method List.MoveDown
   method List.MoveUp
   method List.Offset
@@ -158,6 +159,7 @@ flatui
   method Paginator.SetTotal
   method Paginator.Total
   method Paginator.View
+  method Progress.Layout
   method Progress.Percent
   method Progress.SetPercent
   method Progress.SetWidth
@@ -276,6 +278,7 @@ flatui
   method Viewport.GotoTop
   method Viewport.HalfPageDown
   method Viewport.HalfPageUp
+  method Viewport.Layout
   method Viewport.LineDown
   method Viewport.LineUp
   method Viewport.Offset
