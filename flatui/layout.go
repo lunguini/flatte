@@ -4,7 +4,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	uv "github.com/charmbracelet/ultraviolet"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const (
@@ -51,30 +52,11 @@ func SubtleWithStyle(text string, style lipgloss.Style) string {
 	return style.Render(text)
 }
 
-// Overlay draws layer centered over base as a cell-buffer composite: both
-// frames are parsed into cells, the layer rectangle covers the base
-// (including padding short layer rows), and the result is serialized back
-// to a styled string.
+// Overlay draws layer centered over base as a cell-buffer composite. It
+// delegates to the layout engine's compositor so there is a single
+// ANSI-aware overlay implementation (see flatui/layout/overlay.go).
 func Overlay(base string, layer string) string {
-	baseStyled := uv.NewStyledString(base)
-	layerStyled := uv.NewStyledString(layer)
-	baseBounds := baseStyled.Bounds()
-	layerBounds := layerStyled.Bounds()
-	if baseBounds.Empty() || layerBounds.Empty() {
-		return base
-	}
-
-	width := max(baseBounds.Dx(), layerBounds.Dx())
-	height := max(baseBounds.Dy(), layerBounds.Dy())
-	canvas := uv.NewScreenBuffer(width, height)
-	baseStyled.Draw(canvas, canvas.Bounds())
-
-	left, top := OverlayOrigin(base, layer)
-	layerArea := uv.Rect(left, top, layerBounds.Dx(), layerBounds.Dy())
-	canvas.FillArea(&uv.EmptyCell, layerArea) // the layer rectangle covers the base
-	layerStyled.Draw(canvas, layerArea)
-
-	return trimTrailingSpace(canvas.Render())
+	return layout.Overlay(base, layer)
 }
 
 // CardOrigin is the cell offset of a Card's first content cell relative
@@ -85,25 +67,10 @@ func CardOrigin() (x, y int) {
 }
 
 // OverlayOrigin returns where Overlay places layer's top-left cell inside
-// the composed frame. Same centering math as Overlay — Overlay calls
-// this, so they cannot drift apart.
+// the composed frame. Delegates to the layout engine so it stays in lockstep
+// with Overlay's centering.
 func OverlayOrigin(base, layer string) (x, y int) {
-	baseBounds := uv.NewStyledString(base).Bounds()
-	layerBounds := uv.NewStyledString(layer).Bounds()
-	if baseBounds.Empty() || layerBounds.Empty() {
-		return 0, 0
-	}
-	width := max(baseBounds.Dx(), layerBounds.Dx())
-	height := max(baseBounds.Dy(), layerBounds.Dy())
-	return max(0, (width-layerBounds.Dx())/2), max(0, (height-layerBounds.Dy())/2)
-}
-
-func trimTrailingSpace(frame string) string {
-	rows := strings.Split(frame, "\n")
-	for i, row := range rows {
-		rows[i] = strings.TrimRight(row, " ")
-	}
-	return strings.Join(rows, "\n")
+	return layout.OverlayOrigin(base, layer)
 }
 
 func FrameWidth(maxWidth int, lines []string) int {
