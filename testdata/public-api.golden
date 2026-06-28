@@ -179,12 +179,13 @@ flatui
   method TabBar.Active
   method TabBar.ActiveID
   method TabBar.HandleMouseAt
+  method TabBar.Layout
   method TabBar.Next
   method TabBar.Prev
-  method TabBar.Render
   method TabBar.SetActive
   method TabBar.TabStartX
   method TabBar.TotalWidth
+  method TabBar.WithColors
   method TabBar.WithGlyphs
   method Table.Cursor
   method Table.Header

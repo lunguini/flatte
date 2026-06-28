@@ -304,7 +304,7 @@ func NewState() *State {
 		flatui.TabItem{ID: "containers", Label: "1 containers"},
 		flatui.TabItem{ID: "images", Label: "2 images"},
 		flatui.TabItem{ID: "volumes", Label: "3 volumes"},
-	).WithGlyphs(pickGlyphs())
+	).WithGlyphs(pickGlyphs()).WithColors(pal.accent, pal.tabBg, pal.bg)
 	return s
 }
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
@@ -453,13 +453,11 @@ func (s *State) resize(width, height int) {
 
 	// Measure the header to determine body Y offset dynamically — if the
 	// title has padding, the header is taller, and the body starts lower.
-	// This replaces the hardcoded chromeRowsTop constant.
 	titleStr := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(1, 1).Render("flat-docker")
-	tabsStr := s.headerTabs.Render(pal.accent, pal.tabBg, pal.bg)
 	headerMeasured := layout.MeasurePass(layout.Row(
-		layout.ContentBox("title", titleStr),
+		layout.Content(titleStr),
 		layout.Spacer(),
-		layout.ContentBox("tabs", tabsStr),
+		layout.El(s.headerTabs),
 	))
 	headerH := 1
 	if headerMeasured.H.Kind == layout.SizeFixed {
@@ -600,11 +598,10 @@ type Header struct{ state *State }
 func (h Header) Layout(_, _ int) layout.Node {
 	h.state.headerTabs.SetActive(int(h.state.screen))
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(1, 1).Render("flat-docker")
-	tabs := h.state.headerTabs.Render(pal.accent, pal.tabBg, pal.bg)
 	return layout.Row(
 		layout.Content(title),
 		layout.Spacer(),
-		layout.Content(tabs),
+		layout.El(h.state.headerTabs),
 	)
 }
 
@@ -898,7 +895,7 @@ func newContainersScreen() containersScreen {
 			flatui.TabItem{ID: "stats", Label: "stats"},
 			flatui.TabItem{ID: "logs", Label: "logs"},
 			flatui.TabItem{ID: "inspect", Label: "inspect"},
-		).WithGlyphs(pickGlyphs()),
+		).WithGlyphs(pickGlyphs()).WithColors(pal.accent, pal.tabBg, pal.bg),
 	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
@@ -1798,18 +1795,17 @@ func (c *containersScreen) renderDetailPane() string {
 	}
 
 	c.detailTabs.SetActive(int(c.tab))
-	tabs := c.detailTabs.Render(pal.accent, pal.tabBg, pal.bg)
 	indicator := c.renderFollowIndicator()
-	rightPart := tabs
+	rightChildren := []layout.Node{layout.El(c.detailTabs)}
 	if indicator != "" {
-		rightPart = tabs + " " + indicator
+		rightChildren = append(rightChildren, layout.Content(" "+indicator))
 	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
 	headerRow := layout.Render(
 		layout.Row(
-			layout.ContentBox("dtitle", title),
+			layout.Content(title),
 			layout.Spacer(),
-			layout.ContentBox("dtabs", rightPart),
+			layout.Row(rightChildren...),
 		),
 		detailInnerWidth, 1,
 	)
@@ -1833,15 +1829,6 @@ func (c *containersScreen) detailScrollbar() string {
 	default:
 		return strings.Repeat(" ", detailInnerHeight)
 	}
-}
-
-func (c *containersScreen) renderTabBar() string {
-	c.detailTabs.SetActive(int(c.tab))
-	bar := c.detailTabs.Render(pal.accent, pal.tabBg, pal.bg)
-	if indicator := c.renderFollowIndicator(); indicator != "" {
-		bar += " " + indicator
-	}
-	return lipgloss.NewStyle().Background(pal.bg).Render(bar)
 }
 
 func (c *containersScreen) renderActiveTab(selected *Container) string {

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 func TestTabBarActiveAndSet(t *testing.T) {
@@ -74,28 +76,25 @@ func TestTabBarHandleMouseAt(t *testing.T) {
 	}
 }
 
-func TestTabBarRenderProducesNonEmpty(t *testing.T) {
+func TestTabBarLayoutProducesNonEmpty(t *testing.T) {
 	tb := NewTabBar(
 		TabItem{ID: "a", Label: "alpha"},
 		TabItem{ID: "b", Label: "beta"},
-	)
-	rendered := tb.Render(lipgloss.Color("117"), lipgloss.Color("238"), lipgloss.Color("236"))
+	).WithColors(lipgloss.Color("117"), lipgloss.Color("238"), lipgloss.Color("236"))
+	rendered := layout.Render(layout.El(tb), tb.TotalWidth(), 1)
 	if rendered == "" {
-		t.Fatal("Render produced empty string")
+		t.Fatal("Layout produced empty string")
 	}
-	// After ANSI strip, both labels should be present
-	stripped := lipgloss.NewStyle().Render(rendered) // strip ANSI via re-render (approximate)
-	if !strings.Contains(stripped, "alpha") || !strings.Contains(stripped, "beta") {
-		// Re-render might not strip; check raw too
-		if !strings.Contains(rendered, "alpha") {
-			t.Fatalf("Render missing 'alpha': %q", rendered)
-		}
+	if !strings.Contains(rendered, "alpha") || !strings.Contains(rendered, "beta") {
+		t.Fatalf("Layout missing labels: %q", rendered)
 	}
 }
 
 func TestTabBarWithSafeGlyphs(t *testing.T) {
-	tb := NewTabBar(TabItem{ID: "x", Label: "x"}).WithGlyphs(TabGlyphsSafe)
-	rendered := tb.Render(lipgloss.Color("117"), lipgloss.Color("238"), lipgloss.Color("236"))
+	tb := NewTabBar(TabItem{ID: "x", Label: "x"}).
+		WithGlyphs(TabGlyphsSafe).
+		WithColors(lipgloss.Color("117"), lipgloss.Color("238"), lipgloss.Color("236"))
+	rendered := layout.Render(layout.El(tb), tb.TotalWidth(), 1)
 	if !strings.Contains(rendered, "[") || !strings.Contains(rendered, "]") {
 		t.Fatalf("safe glyphs should produce brackets: %q", rendered)
 	}
