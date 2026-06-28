@@ -24,11 +24,11 @@ func TestMeasureString(t *testing.T) {
 
 func TestMeasurePassLeafAutoSizes(t *testing.T) {
 	n := MeasurePass(ContentBox("title", "hello"))
-	if n.W.Kind != SizeFixed || n.W.Value != 5 {
-		t.Fatalf("W=%+v want Fixed(5)", n.W)
+	if n.W.Kind != SizeContent || n.W.Value != 5 {
+		t.Fatalf("W=%+v want SizeContent(5)", n.W)
 	}
-	if n.H.Kind != SizeFixed || n.H.Value != 1 {
-		t.Fatalf("H=%+v want Fixed(1)", n.H)
+	if n.H.Kind != SizeContent || n.H.Value != 1 {
+		t.Fatalf("H=%+v want SizeContent(1)", n.H)
 	}
 }
 
@@ -44,11 +44,11 @@ func TestMeasurePassLeafRespectsExplicitSize(t *testing.T) {
 
 func TestMeasurePassLeafWithPadding(t *testing.T) {
 	n := MeasurePass(ContentBox("title", "hello").Padding(1))
-	if n.W.Kind != SizeFixed || n.W.Value != 7 {
-		t.Fatalf("W=%+v want Fixed(7) (5+2*pad)", n.W)
+	if n.W.Kind != SizeContent || n.W.Value != 7 {
+		t.Fatalf("W=%+v want SizeContent(7) (5+2*pad)", n.W)
 	}
-	if n.H.Kind != SizeFixed || n.H.Value != 3 {
-		t.Fatalf("H=%+v want Fixed(3) (1+2*pad)", n.H)
+	if n.H.Kind != SizeContent || n.H.Value != 3 {
+		t.Fatalf("H=%+v want SizeContent(3) (1+2*pad)", n.H)
 	}
 }
 
@@ -58,8 +58,8 @@ func TestMeasurePassRowAutoHeight(t *testing.T) {
 		ContentBox("a", "x"),
 		ContentBox("b", "y\nz"),
 	))
-	if n.H.Kind != SizeFixed || n.H.Value != 2 {
-		t.Fatalf("Row H=%+v want Fixed(2) (max child height)", n.H)
+	if n.H.Kind != SizeContent || n.H.Value != 2 {
+		t.Fatalf("Row H=%+v want SizeContent(2) (max child height)", n.H)
 	}
 }
 
@@ -68,8 +68,8 @@ func TestMeasurePassColAutoHeight(t *testing.T) {
 		ContentBox("a", "x"),
 		ContentBox("b", "y"),
 	))
-	if n.H.Kind != SizeFixed || n.H.Value != 2 {
-		t.Fatalf("Col H=%+v want Fixed(2) (sum child heights)", n.H)
+	if n.H.Kind != SizeContent || n.H.Value != 2 {
+		t.Fatalf("Col H=%+v want SizeContent(2) (sum child heights)", n.H)
 	}
 }
 
@@ -79,8 +79,8 @@ func TestMeasurePassSpacerDoesNotAffectHeight(t *testing.T) {
 		Spacer(),
 		ContentBox("tabs", "tabs"),
 	))
-	if n.H.Kind != SizeFixed || n.H.Value != 1 {
-		t.Fatalf("Row with Spacer H=%+v want Fixed(1)", n.H)
+	if n.H.Kind != SizeContent || n.H.Value != 1 {
+		t.Fatalf("Row with Spacer H=%+v want SizeContent(1)", n.H)
 	}
 }
 

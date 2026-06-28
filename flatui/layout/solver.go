@@ -56,12 +56,12 @@ func solveRow(children []Node, spacing int, inner Rect, out map[string]Rect) {
 		availMain = 0
 	}
 
-	// First pass: Fixed children claim cells; sum Grow weights.
+	// First pass: Fixed/Content children claim cells; sum Grow weights.
 	fixedMain := 0
 	growTotal := 0.0
 	for _, c := range children {
 		switch c.W.Kind {
-		case SizeFixed:
+		case SizeFixed, SizeContent:
 			fixedMain += c.W.Value
 		case SizeGrow:
 			growTotal += c.W.Weight
@@ -78,7 +78,7 @@ func solveRow(children []Node, spacing int, inner Rect, out map[string]Rect) {
 	growUsed := 0
 	for i, c := range children {
 		switch c.W.Kind {
-		case SizeFixed:
+		case SizeFixed, SizeContent:
 			mainSizes[i] = c.W.Value
 		case SizeGrow:
 			if growTotal > 0 {
@@ -119,12 +119,12 @@ func solveCol(children []Node, spacing int, inner Rect, out map[string]Rect) {
 		availMain = 0
 	}
 
-	// First pass: Fixed children claim cells; sum Grow weights.
+	// First pass: Fixed/Content children claim cells; sum Grow weights.
 	fixedMain := 0
 	growTotal := 0.0
 	for _, c := range children {
 		switch c.H.Kind {
-		case SizeFixed:
+		case SizeFixed, SizeContent:
 			fixedMain += c.H.Value
 		case SizeGrow:
 			growTotal += c.H.Weight
@@ -141,7 +141,7 @@ func solveCol(children []Node, spacing int, inner Rect, out map[string]Rect) {
 	growUsed := 0
 	for i, c := range children {
 		switch c.H.Kind {
-		case SizeFixed:
+		case SizeFixed, SizeContent:
 			mainSizes[i] = c.H.Value
 		case SizeGrow:
 			if growTotal > 0 {

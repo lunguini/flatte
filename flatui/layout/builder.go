@@ -28,6 +28,19 @@ func ContentBox(id, content string) Node {
 	return Node{ID: id, Dir: LeafDir, Content: content}
 }
 
+// Content creates an anonymous content leaf — a string at the tree's edge.
+// Auto-sizes to the string's dimensions.
+func Content(s string) Node {
+	return Node{Dir: LeafDir, Content: s}
+}
+
+// El wraps an Element as a layout leaf node. The engine calls the element's
+// Layout method during measure (to discover intrinsic size) and render
+// (with solved dimensions) to obtain and render the element's subtree.
+func El(e Element) Node {
+	return Node{Dir: LeafDir, Element: e}
+}
+
 // Spacer returns a node that grows to fill remaining space. In a Row it
 // pushes subsequent children to the right; in a Col it pushes them down.
 // This is shorthand for Box("").Grow(1).

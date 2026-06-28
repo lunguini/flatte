@@ -37,14 +37,16 @@ func (r Rect) Contains(x, y int) bool {
 type SizeKind int
 
 const (
-	// SizeAuto is the default: on the cross-axis it stretches to fill the
-	// parent; on the main-axis it takes zero cells (Content sizing is a
-	// future phase — for now Auto on the main axis means "take nothing").
+	// SizeAuto is the default: stretches to fill the parent on both axes.
 	SizeAuto SizeKind = iota
-	// SizeFixed is an exact cell count.
+	// SizeFixed is an exact cell count, pinned on both axes.
 	SizeFixed
 	// SizeGrow fills remaining space proportionally by weight.
 	SizeGrow
+	// SizeContent is set by MeasurePass from content measurement.
+	// Behaves as Fixed on the main axis (claims that many cells) but
+	// stretches to fill the parent on the cross axis.
+	SizeContent
 )
 
 // Size is a per-axis size constraint.
@@ -89,7 +91,8 @@ type Node struct {
 	Bordered bool // draw a 1-cell border (reduces inner area)
 	Overlay  bool // viewport-relative overlay (solved in a second pass)
 	Children []Node
-	Content  string // rendered content for leaf nodes (auto-sizes if set)
+	Content  string  // rendered string for content leaves
+	Element  Element // element whose Layout produces a subtree
 }
 
 // innerInset returns the total inset (border + padding) applied to all sides

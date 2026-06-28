@@ -55,10 +55,22 @@ func MeasurePass(n Node) Node {
 	if n.Content != "" && n.Dir == LeafDir {
 		cw, ch := measureString(n.Content)
 		if n.W.Kind == SizeAuto {
-			n.W = Fixed(cw + inset)
+			n.W = Size{Kind: SizeContent, Value: cw + inset}
 		}
 		if n.H.Kind == SizeAuto {
-			n.H = Fixed(ch + inset)
+			n.H = Size{Kind: SizeContent, Value: ch + inset}
+		}
+		return n
+	}
+
+	// Element node: call Layout to get a subtree, measure it for intrinsic size.
+	if n.Element != nil && n.Dir == LeafDir {
+		subtree := MeasurePass(n.Element.Layout(noConstraint, noConstraint))
+		if n.W.Kind == SizeAuto && (subtree.W.Kind == SizeFixed || subtree.W.Kind == SizeContent) {
+			n.W = Size{Kind: SizeContent, Value: subtree.W.Value + inset}
+		}
+		if n.H.Kind == SizeAuto && (subtree.H.Kind == SizeFixed || subtree.H.Kind == SizeContent) {
+			n.H = Size{Kind: SizeContent, Value: subtree.H.Value + inset}
 		}
 		return n
 	}
@@ -69,10 +81,12 @@ func MeasurePass(n Node) Node {
 	}
 
 	// Container auto-sizing: derive from children when main axis is Auto.
+	// Uses SizeContent so the measured size acts as Fixed on the main axis
+	// but stretches on the cross axis.
 	if n.Dir == RowDir && n.W.Kind == SizeAuto {
 		total := 0
 		for i, c := range children {
-			if c.W.Kind == SizeFixed {
+			if c.W.Kind == SizeFixed || c.W.Kind == SizeContent {
 				total += c.W.Value
 			}
 			if i > 0 {
@@ -80,24 +94,24 @@ func MeasurePass(n Node) Node {
 			}
 		}
 		if total > 0 {
-			n.W = Fixed(total + inset)
+			n.W = Size{Kind: SizeContent, Value: total + inset}
 		}
 	}
 	if n.Dir == RowDir && n.H.Kind == SizeAuto {
 		maxH := 0
 		for _, c := range children {
-			if c.H.Kind == SizeFixed && c.H.Value > maxH {
+			if (c.H.Kind == SizeFixed || c.H.Kind == SizeContent) && c.H.Value > maxH {
 				maxH = c.H.Value
 			}
 		}
 		if maxH > 0 {
-			n.H = Fixed(maxH + inset)
+			n.H = Size{Kind: SizeContent, Value: maxH + inset}
 		}
 	}
 	if n.Dir == ColDir && n.H.Kind == SizeAuto {
 		total := 0
 		for i, c := range children {
-			if c.H.Kind == SizeFixed {
+			if c.H.Kind == SizeFixed || c.H.Kind == SizeContent {
 				total += c.H.Value
 			}
 			if i > 0 {
@@ -105,18 +119,18 @@ func MeasurePass(n Node) Node {
 			}
 		}
 		if total > 0 {
-			n.H = Fixed(total + inset)
+			n.H = Size{Kind: SizeContent, Value: total + inset}
 		}
 	}
 	if n.Dir == ColDir && n.W.Kind == SizeAuto {
 		maxW := 0
 		for _, c := range children {
-			if c.W.Kind == SizeFixed && c.W.Value > maxW {
+			if (c.W.Kind == SizeFixed || c.W.Kind == SizeContent) && c.W.Value > maxW {
 				maxW = c.W.Value
 			}
 		}
 		if maxW > 0 {
-			n.W = Fixed(maxW + inset)
+			n.W = Size{Kind: SizeContent, Value: maxW + inset}
 		}
 	}
 
@@ -146,6 +160,10 @@ func renderNode(n Node, r Rect) string {
 	}
 
 	if n.Dir == LeafDir || n.Dir == SlotDir {
+		if n.Element != nil {
+			subtree := MeasurePass(n.Element.Layout(r.W, r.H))
+			return renderNode(subtree, r)
+		}
 		return renderLeaf(n, r)
 	}
 
@@ -198,7 +216,7 @@ func renderRow(children []Node, gap int, inner Rect) string {
 	growTotal := 0.0
 	for _, c := range children {
 		switch c.W.Kind {
-		case SizeFixed:
+		case SizeFixed, SizeContent:
 			fixedMain += c.W.Value
 		case SizeGrow:
 			growTotal += c.W.Weight
@@ -214,7 +232,7 @@ func renderRow(children []Node, gap int, inner Rect) string {
 	growUsed := 0
 	for i, c := range children {
 		switch c.W.Kind {
-		case SizeFixed:
+		case SizeFixed, SizeContent:
 			mainSizes[i] = c.W.Value
 		case SizeGrow:
 			if growTotal > 0 {
@@ -257,7 +275,7 @@ func renderCol(children []Node, gap int, inner Rect) string {
 	growTotal := 0.0
 	for _, c := range children {
 		switch c.H.Kind {
-		case SizeFixed:
+		case SizeFixed, SizeContent:
 			fixedMain += c.H.Value
 		case SizeGrow:
 			growTotal += c.H.Weight
@@ -273,7 +291,7 @@ func renderCol(children []Node, gap int, inner Rect) string {
 	growUsed := 0
 	for i, c := range children {
 		switch c.H.Kind {
-		case SizeFixed:
+		case SizeFixed, SizeContent:
 			mainSizes[i] = c.H.Value
 		case SizeGrow:
 			if growTotal > 0 {
@@ -309,10 +327,18 @@ func applyInsets(content string, outer Rect, inset int) string {
 	return style.Render(content)
 }
 
-// fillRect returns a string of spaces filling the given rect.
+// fillRect returns a string filling the given rect with spaces (or the
+// content padded to fit).
 func fillRect(content string, r Rect) string {
 	if r.W <= 0 || r.H <= 0 {
 		return ""
+	}
+	if content == "" {
+		lines := make([]string, r.H)
+		for i := range lines {
+			lines[i] = strings.Repeat(" ", r.W)
+		}
+		return strings.Join(lines, "\n")
 	}
 	style := lipgloss.NewStyle().Width(r.W).Height(r.H).MaxWidth(r.W).MaxHeight(r.H)
 	return style.Render(content)
