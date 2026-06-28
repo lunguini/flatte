@@ -2,9 +2,10 @@ package flatui
 
 import (
 	"image/color"
-	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // TabBar is a reusable tab-strip component with built-in rendering and
@@ -93,23 +94,28 @@ func TabLabelWidth(label string) int {
 // (no gap between them). The active tab uses fill as its background; inactive
 // tabs use inactiveFill. Text colors are derived from the fills for contrast.
 func (t *TabBar) Render(fill, inactiveFill, barBg color.Color) string {
-	var b strings.Builder
+	tabs := make([]layout.Node, len(t.items))
 	for i, item := range t.items {
 		active := i == t.active
-		var f, text color.Color
-		if active {
-			f = fill
-			text = colorMatching(fill)
-		} else {
-			f = inactiveFill
-			text = lipgloss.Color("245")
-		}
-		l := lipgloss.NewStyle().Foreground(f).Background(barBg).Render(t.glyphs.Left)
-		c := lipgloss.NewStyle().Foreground(text).Background(f).Padding(0, 2).Render(item.Label)
-		r := lipgloss.NewStyle().Foreground(f).Background(barBg).Render(t.glyphs.Right)
-		b.WriteString(l + c + r)
+		tabs[i] = layout.Content(t.renderTab(item, active, fill, inactiveFill, barBg))
 	}
-	return b.String()
+	return layout.Render(layout.Row(tabs...), t.TotalWidth(), 1)
+}
+
+// renderTab produces a single tab: left glyph + padded label + right glyph.
+func (t *TabBar) renderTab(item TabItem, active bool, fill, inactiveFill, barBg color.Color) string {
+	var f, text color.Color
+	if active {
+		f = fill
+		text = colorMatching(fill)
+	} else {
+		f = inactiveFill
+		text = lipgloss.Color("245")
+	}
+	l := lipgloss.NewStyle().Foreground(f).Background(barBg).Render(t.glyphs.Left)
+	c := lipgloss.NewStyle().Foreground(text).Background(f).Padding(0, 2).Render(item.Label)
+	r := lipgloss.NewStyle().Foreground(f).Background(barBg).Render(t.glyphs.Right)
+	return l + c + r
 }
 
 // HandleMouseAt checks whether localX falls inside any tab. If so, sets

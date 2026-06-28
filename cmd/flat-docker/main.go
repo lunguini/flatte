@@ -486,11 +486,11 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	// Build the full-frame tree as a tree of Elements.
 	// Each Element's Layout returns a subtree; the engine renders recursively.
 	children := []layout.Node{
-		layout.El(headerView{state: s}),
-		layout.El(separatorView{}),
-		layout.El(screenBody{state: s}).Grow(1),
-		layout.El(separatorView{}),
-		layout.El(footerView{state: s}),
+		layout.El(Header{state: s}),
+		layout.El(Separator{}),
+		layout.El(Body{state: s}).Grow(1),
+		layout.El(Separator{}),
+		layout.El(Footer{state: s}),
 	}
 
 	if s.confirmModal != nil {
@@ -594,10 +594,10 @@ func renderModal(m *confirmModel) string {
 
 // --- Element types for the frame chrome ---
 
-// headerView renders the tab bar: title left, tabs right.
-type headerView struct{ state *State }
+// Header renders the tab bar: title left, tabs right.
+type Header struct{ state *State }
 
-func (h headerView) Layout(_, _ int) layout.Node {
+func (h Header) Layout(_, _ int) layout.Node {
 	h.state.headerTabs.SetActive(int(h.state.screen))
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(1, 1).Render("flat-docker")
 	tabs := h.state.headerTabs.Render(pal.accent, pal.tabBg, pal.bg)
@@ -608,19 +608,19 @@ func (h headerView) Layout(_, _ int) layout.Node {
 	)
 }
 
-// separatorView renders a full-width accent-colored separator line.
-type separatorView struct{}
+// Separator renders a full-width accent-colored line.
+type Separator struct{}
 
-func (separatorView) Layout(w, _ int) layout.Node {
+func (Separator) Layout(w, _ int) layout.Node {
 	return layout.Content(lipgloss.NewStyle().
 		Width(w).Background(pal.accent).
 		Render(strings.Repeat(" ", w)))
 }
 
-// footerView renders key hints.
-type footerView struct{ state *State }
+// Footer renders key hints.
+type Footer struct{ state *State }
 
-func (f footerView) Layout(_, _ int) layout.Node {
+func (f Footer) Layout(_, _ int) layout.Node {
 	var hints string
 	if f.state.commandModal != nil {
 		hints = f.state.commandModal.keyHints()
@@ -638,11 +638,10 @@ func (f footerView) Layout(_, _ int) layout.Node {
 		Render(" " + hints + " "))
 }
 
-// screenBody dispatches to the active screen's body rendering.
-// Has Grow(1) so Layout is only called during render (not measure).
-type screenBody struct{ state *State }
+// Body dispatches to the active screen's body rendering.
+type Body struct{ state *State }
 
-func (b screenBody) Layout(w, h int) layout.Node {
+func (b Body) Layout(w, h int) layout.Node {
 	switch b.state.screen {
 	case screenContainers:
 		c := &b.state.containers
@@ -684,7 +683,7 @@ func (b screenBody) Layout(w, h int) layout.Node {
 	return layout.Content("")
 }
 
-func (b screenBody) statusOrCommand() string {
+func (b Body) statusOrCommand() string {
 	if b.state.commandModal != nil {
 		return b.state.commandModal.View(b.state.containers.width)
 	}
