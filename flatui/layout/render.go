@@ -64,13 +64,16 @@ func MeasurePass(n Node) Node {
 	}
 
 	// Element node: call Layout to get a subtree, measure it for intrinsic size.
+	// Only needed when W or H is Auto — Grow/Fixed nodes skip the call.
 	if n.Element != nil && n.Dir == LeafDir {
-		subtree := MeasurePass(n.Element.Layout(noConstraint, noConstraint))
-		if n.W.Kind == SizeAuto && (subtree.W.Kind == SizeFixed || subtree.W.Kind == SizeContent) {
-			n.W = Size{Kind: SizeContent, Value: subtree.W.Value + inset}
-		}
-		if n.H.Kind == SizeAuto && (subtree.H.Kind == SizeFixed || subtree.H.Kind == SizeContent) {
-			n.H = Size{Kind: SizeContent, Value: subtree.H.Value + inset}
+		if n.W.Kind == SizeAuto || n.H.Kind == SizeAuto {
+			subtree := MeasurePass(n.Element.Layout(noConstraint, noConstraint))
+			if n.W.Kind == SizeAuto && (subtree.W.Kind == SizeFixed || subtree.W.Kind == SizeContent) {
+				n.W = Size{Kind: SizeContent, Value: subtree.W.Value + inset}
+			}
+			if n.H.Kind == SizeAuto && (subtree.H.Kind == SizeFixed || subtree.H.Kind == SizeContent) {
+				n.H = Size{Kind: SizeContent, Value: subtree.H.Value + inset}
+			}
 		}
 		return n
 	}

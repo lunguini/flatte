@@ -483,54 +483,29 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 		height = 24
 	}
 
-	// Build the full-frame tree via the builder API.
-	// The active screen's body tree is nested inside the chrome.
-	var bodyTree layout.Node
-	switch s.screen {
-	case screenContainers:
-		bodyTree = s.containers.bodyTree()
-	case screenImages:
-		bodyTree = s.images.bodyTree()
-	case screenVolumes:
-		bodyTree = s.volumes.bodyTree()
-	}
-
+	// Build the full-frame tree as a tree of Elements.
+	// Each Element's Layout returns a subtree; the engine renders recursively.
 	children := []layout.Node{
-		layout.Box("header").Height(1),
-		layout.Box("sep1").Height(1),
-		bodyTree,
-		layout.Box("sep2").Height(1),
-		layout.Box("footer").Height(1),
+		layout.El(headerView{state: s}),
+		layout.El(separatorView{}),
+		layout.El(screenBody{state: s}).Grow(1),
+		layout.El(separatorView{}),
+		layout.El(footerView{state: s}),
 	}
 
 	if s.confirmModal != nil {
-		children = append(children, layout.Box("modal").
+		children = append(children, layout.ContentBox("modal",
+			renderModal(s.confirmModal)).
 			Width(40).Height(7).Layer().Border())
 	}
 
 	tree := layout.Col(children...)
-	s.rects = layout.Solve(tree, width, height)
-
-	// Render each section into its solved rect.
-	r := s.rects
-	header := renderTabBar(s, r["header"].W)
-	sep := renderHeaderSeparator(r["sep1"].W)
-	var body string
-	switch s.screen {
-	case screenContainers:
-		body = s.containers.renderBody(s)
-	case screenImages:
-		body = s.images.renderBody()
-	case screenVolumes:
-		body = s.volumes.renderBody()
-	}
-	footer := renderFooter(s, r["footer"].W)
-
-	content := strings.Join([]string{header, sep, body, sep, footer}, "\n")
+	s.rects = layout.Solve(layout.MeasurePass(tree), width, height)
+	content := layout.Render(tree, width, height)
 
 	// Modal overlay positioned by the solver's Layer pass.
 	if s.confirmModal != nil {
-		mr := r["modal"]
+		mr := s.rects["modal"]
 		content = overlayRect(content, renderModal(s.confirmModal), mr.X, mr.Y, mr.W, mr.H)
 	}
 
@@ -617,46 +592,103 @@ func renderModal(m *confirmModel) string {
 		Render(title + body)
 }
 
-func renderTabBar(s *State, width int) string {
-	s.headerTabs.SetActive(int(s.screen))
+// --- Element types for the frame chrome ---
+
+// headerView renders the tab bar: title left, tabs right.
+type headerView struct{ state *State }
+
+func (h headerView) Layout(_, _ int) layout.Node {
+	h.state.headerTabs.SetActive(int(h.state.screen))
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Padding(1, 1).Render("flat-docker")
-	tabs := s.headerTabs.Render(pal.accent, pal.tabBg, pal.bg)
-	// Header is a Row: title left, tabs right. Auto-sizes to content height.
-	// Replaces flatui.ComposeHeader — the Spacer pushes tabs to the right edge.
-	return layout.Render(
-		layout.Row(
-			layout.ContentBox("title", title),
-			layout.Spacer(),
-			layout.ContentBox("tabs", tabs),
-		),
-		width, s.bodyYOffset,
+	tabs := h.state.headerTabs.Render(pal.accent, pal.tabBg, pal.bg)
+	return layout.Row(
+		layout.Content(title),
+		layout.Spacer(),
+		layout.Content(tabs),
 	)
 }
 
-func renderHeaderSeparator(width int) string {
-	return lipgloss.NewStyle().
-		Width(width).
-		Background(pal.accent).
-		Render(strings.Repeat(" ", width))
+// separatorView renders a full-width accent-colored separator line.
+type separatorView struct{}
+
+func (separatorView) Layout(w, _ int) layout.Node {
+	return layout.Content(lipgloss.NewStyle().
+		Width(w).Background(pal.accent).
+		Render(strings.Repeat(" ", w)))
 }
 
-func renderFooter(s *State, width int) string {
-	hints := ""
-	if s.commandModal != nil {
-		hints = s.commandModal.keyHints()
+// footerView renders key hints.
+type footerView struct{ state *State }
+
+func (f footerView) Layout(_, _ int) layout.Node {
+	var hints string
+	if f.state.commandModal != nil {
+		hints = f.state.commandModal.keyHints()
 	} else {
-		switch s.screen {
+		switch f.state.screen {
 		case screenContainers:
-			hints = s.containers.keyHints()
+			hints = f.state.containers.keyHints()
 		case screenImages:
-			hints = s.images.keyHints()
+			hints = f.state.images.keyHints()
 		case screenVolumes:
-			hints = s.volumes.keyHints()
+			hints = f.state.volumes.keyHints()
 		}
 	}
-	help := " " + hints + " "
-	styled := lipgloss.NewStyle().Foreground(pal.muted).Render(help)
-	return styled
+	return layout.Content(lipgloss.NewStyle().Foreground(pal.muted).
+		Render(" " + hints + " "))
+}
+
+// screenBody dispatches to the active screen's body rendering.
+// Has Grow(1) so Layout is only called during render (not measure).
+type screenBody struct{ state *State }
+
+func (b screenBody) Layout(w, h int) layout.Node {
+	switch b.state.screen {
+	case screenContainers:
+		c := &b.state.containers
+		c.width, c.height = w, h
+		c.solveAndSize()
+		return layout.Col(
+			layout.Row(
+				layout.Content(c.renderListPane()),
+				layout.Content(c.renderDivider(0)),
+				layout.Content(c.renderDetailPane()),
+				layout.Content(c.renderDivider(1)),
+				layout.Content(c.renderActivityPane()),
+			).Grow(1),
+			layout.Content(b.statusOrCommand()),
+		)
+	case screenImages:
+		i := b.state.images
+		i.width, i.height = w, h
+		i.solveAndSize()
+		listR := i.rects["list"]
+		detailR := i.rects["detail"]
+		return layout.Row(
+			layout.Content(i.renderImageListContent(listR.W, listR.H)),
+			layout.Content(renderDragDivider(listR.H, i.drag != nil)),
+			layout.Content(i.renderImageDetailContent(detailR.W, detailR.H)),
+		)
+	case screenVolumes:
+		v := b.state.volumes
+		v.width, v.height = w, h
+		v.solveAndSize()
+		listR := v.rects["list"]
+		detailR := v.rects["detail"]
+		return layout.Row(
+			layout.Content(v.renderVolumeListContent(listR.W, listR.H)),
+			layout.Content(renderDragDivider(listR.H, v.drag != nil)),
+			layout.Content(v.renderVolumeDetailContent(detailR.W, detailR.H)),
+		)
+	}
+	return layout.Content("")
+}
+
+func (b screenBody) statusOrCommand() string {
+	if b.state.commandModal != nil {
+		return b.state.commandModal.View(b.state.containers.width)
+	}
+	return b.state.containers.renderStatusLine()
 }
 
 const (
