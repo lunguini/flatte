@@ -8,11 +8,11 @@ import (
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
-// TabBar is a tab-strip Element with built-in mouse hit-testing.
-// Implements layout.Element — use El(tabBar) in layout trees.
+// TabBar is a tab-strip component with built-in mouse hit-testing.
+// Call Node() to get a layout.Node for use in layout trees.
 //
-// Colors are set once via WithColors, not passed per-render. This keeps
-// the Element interface clean: Layout(w, h) Node takes only dimensions.
+// Colors are set once via WithColors. Uses Powerline glyphs by default;
+// use WithGlyphs for ASCII fallback.
 type TabBar struct {
 	items        []TabItem
 	active       int
@@ -79,13 +79,16 @@ func (t *TabBar) Prev() {
 	}
 }
 
-// Layout implements layout.Element. Returns a Row of tab content nodes.
-func (t *TabBar) Layout(_, _ int) layout.Node {
-	tabs := make([]layout.Node, len(t.items))
-	for i, item := range t.items {
-		tabs[i] = layout.Content(t.renderTab(item, i == t.active))
-	}
-	return layout.Row(tabs...)
+// Node returns a layout Node whose Layout closure renders the tab strip.
+// Use this in layout trees: Row(title, Spacer(), tabBar.Node()).
+func (t *TabBar) Node() layout.Node {
+	return layout.Node{Layout: func(r layout.Rect) layout.Node {
+		tabs := make([]layout.Node, len(t.items))
+		for i, item := range t.items {
+			tabs[i] = layout.Text(t.renderTab(item, i == t.active))
+		}
+		return layout.Row(tabs...)
+	}}
 }
 
 func (t *TabBar) renderTab(item TabItem, active bool) string {

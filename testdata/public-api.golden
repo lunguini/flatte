@@ -179,8 +179,8 @@ flatui
   method TabBar.Active
   method TabBar.ActiveID
   method TabBar.HandleMouseAt
-  method TabBar.Layout
   method TabBar.Next
+  method TabBar.Node
   method TabBar.Prev
   method TabBar.SetActive
   method TabBar.TabStartX

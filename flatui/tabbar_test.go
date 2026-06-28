@@ -81,7 +81,7 @@ func TestTabBarLayoutProducesNonEmpty(t *testing.T) {
 		TabItem{ID: "a", Label: "alpha"},
 		TabItem{ID: "b", Label: "beta"},
 	).WithColors(lipgloss.Color("117"), lipgloss.Color("238"), lipgloss.Color("236"))
-	rendered := layout.Render(layout.El(tb), tb.TotalWidth(), 1)
+	rendered := layout.Render(tb.Node(), tb.TotalWidth(), 1)
 	if rendered == "" {
 		t.Fatal("Layout produced empty string")
 	}
@@ -94,7 +94,7 @@ func TestTabBarWithSafeGlyphs(t *testing.T) {
 	tb := NewTabBar(TabItem{ID: "x", Label: "x"}).
 		WithGlyphs(TabGlyphsSafe).
 		WithColors(lipgloss.Color("117"), lipgloss.Color("238"), lipgloss.Color("236"))
-	rendered := layout.Render(layout.El(tb), tb.TotalWidth(), 1)
+	rendered := layout.Render(tb.Node(), tb.TotalWidth(), 1)
 	if !strings.Contains(rendered, "[") || !strings.Contains(rendered, "]") {
 		t.Fatalf("safe glyphs should produce brackets: %q", rendered)
 	}

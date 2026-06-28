@@ -6,6 +6,10 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// noConstraint is passed to Layout during the measure pass to signal
+// "no size limit" — the widget should return its preferred subtree.
+const noConstraint = 1 << 20
+
 // measureString returns the intrinsic dimensions of a rendered string:
 // height = line count, width = widest line (ANSI-aware via lipgloss.Width).
 func measureString(content string) (width, height int) {
@@ -63,11 +67,11 @@ func MeasurePass(n Node) Node {
 		return n
 	}
 
-	// Element node: call Layout to get a subtree, measure it for intrinsic size.
+	// Widget leaf: call Layout to get a subtree, measure it for intrinsic size.
 	// Only needed when W or H is Auto — Grow/Fixed nodes skip the call.
-	if n.Element != nil && n.Dir == LeafDir {
+	if n.Layout != nil && n.Dir == LeafDir {
 		if n.W.Kind == SizeAuto || n.H.Kind == SizeAuto {
-			subtree := MeasurePass(n.Element.Layout(noConstraint, noConstraint))
+			subtree := MeasurePass(n.Layout(Rect{0, 0, noConstraint, noConstraint}))
 			if n.W.Kind == SizeAuto && (subtree.W.Kind == SizeFixed || subtree.W.Kind == SizeContent) {
 				n.W = Size{Kind: SizeContent, Value: subtree.W.Value + inset}
 			}
@@ -163,8 +167,8 @@ func renderNode(n Node, r Rect) string {
 	}
 
 	if n.Dir == LeafDir || n.Dir == SlotDir {
-		if n.Element != nil {
-			subtree := MeasurePass(n.Element.Layout(r.W, r.H))
+		if n.Layout != nil {
+			subtree := MeasurePass(n.Layout(r))
 			return renderNode(subtree, r)
 		}
 		return renderLeaf(n, r)

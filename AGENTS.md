@@ -139,6 +139,17 @@ deterministic (no wall-clock, no randomness in `View`).
   fixed-arity helpers; prefer "here are the building blocks" over "here is
   the one shape I support." When in doubt, leave composition in the app and
   wait for the pattern to repeat.
+- **Push back when there's a simpler way.** When a user proposes an
+  abstraction, evaluate whether an existing type with a field covers the same
+  ground before adding a new type, interface, or wrapper. The layout engine
+  went through five iterations — `Box`, `ContentBox`, `Content`, `Element`
+  interface + `El()`, then back to just `Node` with a `Layout func` field —
+  because each request was implemented incrementally without stepping back to
+  ask "is the overall shape right?" The lesson: when the third leaf
+  constructor appears, stop and unify. One type with optional fields beats
+  three types with overlapping semantics. Be a design partner, not just an
+  implementer — say "there's a simpler way" before building the complex
+  version.
 - **Agent-tractability is a design constraint.** A feature must be a
   local, compiler-visible edit. If adding something requires tracking
   non-local coupling, redesign it.

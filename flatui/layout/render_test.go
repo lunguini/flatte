@@ -23,7 +23,7 @@ func TestMeasureString(t *testing.T) {
 }
 
 func TestMeasurePassLeafAutoSizes(t *testing.T) {
-	n := MeasurePass(ContentBox("title", "hello"))
+	n := MeasurePass(Text("hello"))
 	if n.W.Kind != SizeContent || n.W.Value != 5 {
 		t.Fatalf("W=%+v want SizeContent(5)", n.W)
 	}
@@ -33,7 +33,7 @@ func TestMeasurePassLeafAutoSizes(t *testing.T) {
 }
 
 func TestMeasurePassLeafRespectsExplicitSize(t *testing.T) {
-	n := MeasurePass(ContentBox("title", "hello").Width(20).Height(3))
+	n := MeasurePass(Text("hello").Width(20).Height(3))
 	if n.W.Kind != SizeFixed || n.W.Value != 20 {
 		t.Fatalf("W=%+v want Fixed(20) (explicit)", n.W)
 	}
@@ -43,7 +43,7 @@ func TestMeasurePassLeafRespectsExplicitSize(t *testing.T) {
 }
 
 func TestMeasurePassLeafWithPadding(t *testing.T) {
-	n := MeasurePass(ContentBox("title", "hello").Padding(1))
+	n := MeasurePass(Text("hello").Padding(1))
 	if n.W.Kind != SizeContent || n.W.Value != 7 {
 		t.Fatalf("W=%+v want SizeContent(7) (5+2*pad)", n.W)
 	}
@@ -55,8 +55,8 @@ func TestMeasurePassLeafWithPadding(t *testing.T) {
 func TestMeasurePassRowAutoHeight(t *testing.T) {
 	// Row with two content children: height = max(child heights)
 	n := MeasurePass(Row(
-		ContentBox("a", "x"),
-		ContentBox("b", "y\nz"),
+		Text("x"),
+		Text("y\nz"),
 	))
 	if n.H.Kind != SizeContent || n.H.Value != 2 {
 		t.Fatalf("Row H=%+v want SizeContent(2) (max child height)", n.H)
@@ -65,8 +65,8 @@ func TestMeasurePassRowAutoHeight(t *testing.T) {
 
 func TestMeasurePassColAutoHeight(t *testing.T) {
 	n := MeasurePass(Col(
-		ContentBox("a", "x"),
-		ContentBox("b", "y"),
+		Text("x"),
+		Text("y"),
 	))
 	if n.H.Kind != SizeContent || n.H.Value != 2 {
 		t.Fatalf("Col H=%+v want SizeContent(2) (sum child heights)", n.H)
@@ -75,9 +75,9 @@ func TestMeasurePassColAutoHeight(t *testing.T) {
 
 func TestMeasurePassSpacerDoesNotAffectHeight(t *testing.T) {
 	n := MeasurePass(Row(
-		ContentBox("title", "hello"),
+		Text("hello"),
 		Spacer(),
-		ContentBox("tabs", "tabs"),
+		Text("tabs"),
 	))
 	if n.H.Kind != SizeContent || n.H.Value != 1 {
 		t.Fatalf("Row with Spacer H=%+v want SizeContent(1)", n.H)
@@ -101,9 +101,9 @@ func TestSpacerFillsRemainingWidth(t *testing.T) {
 
 func TestRenderBasicCol(t *testing.T) {
 	tree := Col(
-		ContentBox("header", "HEADER"),
-		ContentBox("body", "BODY"),
-		ContentBox("footer", "FOOTER"),
+		Text("HEADER"),
+		Text("BODY"),
+		Text("FOOTER"),
 	)
 	result := Render(tree, 20, 3)
 
@@ -124,9 +124,9 @@ func TestRenderBasicCol(t *testing.T) {
 
 func TestRenderRowWithSpacer(t *testing.T) {
 	tree := Row(
-		ContentBox("title", "Title"),
+		Text("Title"),
 		Spacer(),
-		ContentBox("tabs", "Tabs"),
+		Text("Tabs"),
 	)
 	result := Render(tree, 20, 1)
 
@@ -149,8 +149,8 @@ func TestRenderRowWithSpacer(t *testing.T) {
 func TestRenderAutoHeightFromContent(t *testing.T) {
 	// A Col with content children: height auto-sizes, no explicit Height needed.
 	tree := Col(
-		ContentBox("a", "AAA"),
-		ContentBox("b", "BBB"),
+		Text("AAA"),
+		Text("BBB"),
 	)
 	result := Render(tree, 10, 5)
 
@@ -168,12 +168,12 @@ func TestRenderAutoHeightFromContent(t *testing.T) {
 
 func TestRenderGrowChildFillsRemaining(t *testing.T) {
 	tree := Col(
-		ContentBox("header", "H"),
+		Text("H"),
 		Row(
 			Box("sidebar").Width(10),
 			Box("content").Grow(1),
 		).Grow(1),
-		ContentBox("footer", "F"),
+		Text("F"),
 	)
 	result := Render(tree, 40, 5)
 
@@ -203,7 +203,7 @@ func TestRenderEmptyContentFillsRect(t *testing.T) {
 
 func TestRenderWithBorder(t *testing.T) {
 	tree := Col(
-		ContentBox("box", "hello").Border(),
+		Text("hello").Border(),
 	)
 	result := Render(tree, 10, 3)
 
@@ -215,13 +215,13 @@ func TestRenderWithBorder(t *testing.T) {
 
 func TestRenderNestedTree(t *testing.T) {
 	tree := Col(
-		ContentBox("header", "HEADER"),
+		Text("HEADER"),
 		Row(
-			ContentBox("left", "L"),
+			Text("L"),
 			Spacer(),
-			ContentBox("right", "R"),
+			Text("R"),
 		),
-		ContentBox("footer", "FOOTER"),
+		Text("FOOTER"),
 	)
 	result := Render(tree, 20, 3)
 

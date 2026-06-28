@@ -79,8 +79,10 @@ const (
 	SlotDir
 )
 
-// Node is a single element in a layout tree. Nodes carry structure,
-// geometry, and optional content for leaf rendering.
+// Node is a single element in a layout tree. There is one type — everything
+// is a Node. Containers (Row/Col) have Children. Text leaves carry Content.
+// Widget leaves carry a Layout closure that produces a subtree at the
+// solved rect. The engine handles all three uniformly.
 type Node struct {
 	ID       string
 	Dir      Direction
@@ -91,8 +93,8 @@ type Node struct {
 	Bordered bool // draw a 1-cell border (reduces inner area)
 	Overlay  bool // viewport-relative overlay (solved in a second pass)
 	Children []Node
-	Content  string  // rendered string for content leaves
-	Element  Element // element whose Layout produces a subtree
+	Content  string            // text leaf: pre-rendered string
+	Layout   func(r Rect) Node // widget leaf: produces subtree at solved rect
 }
 
 // innerInset returns the total inset (border + padding) applied to all sides
