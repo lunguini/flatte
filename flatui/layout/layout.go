@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // --- Geometry types ---
@@ -228,26 +229,46 @@ func fillRectWithBg(content string, r Rect, pad int, c color.Color, bordered boo
 		return ""
 	}
 
+	// Lip Gloss Width/Height are *minimum* total-frame sizes; when
+	// content+padding+border exceed them, MaxWidth/MaxHeight hard-truncate —
+	// eating the bottom/right chrome. Clipping the content to the inner box
+	// first means the frame can never overflow, so borders and padding stay
+	// intact no matter what the caller hands in.
+	inset := pad
+	if bordered {
+		inset++
+	}
+	content = clipToBox(content, r.W-2*inset, r.H-2*inset)
+
 	style := lipgloss.NewStyle().Width(r.W).Height(r.H).MaxWidth(r.W).MaxHeight(r.H)
 	if c != color.Transparent {
 		style = style.Background(c)
 	}
 	if pad > 0 {
-		style = style.Padding(0, pad, pad, pad)
+		style = style.Padding(pad)
 	}
 	if bordered {
 		style = style.Border(lipgloss.RoundedBorder())
 	}
 
-	if content == "" {
-		lines := make([]string, r.H)
-		for i := range lines {
-			lines[i] = strings.Repeat(" ", r.W)
-		}
-		content = strings.Join(lines, "\n")
-	}
-
 	return style.Render(content)
+}
+
+// clipToBox truncates content to at most h lines of w visible columns.
+func clipToBox(s string, w, h int) string {
+	if w <= 0 || h <= 0 {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > h {
+		lines = lines[:h]
+	}
+	for i, line := range lines {
+		if lipgloss.Width(line) > w {
+			lines[i] = ansi.Truncate(line, w, "")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // --- Container interfaces for introspection (Solve, overlay pass) ---
