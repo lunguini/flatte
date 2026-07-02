@@ -37,6 +37,27 @@ func (r Rect) Contains(x, y int) bool {
 	return x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
 }
 
+// Intersect returns the overlapping region of r and s. If they do not overlap,
+// it returns a zero-area rect anchored at the clamped corner. It is used to
+// clamp a child's solved rect to its parent's inner box, so distribution
+// overflow (e.g. two Fixed(8) children in a 10-wide row) can never yield a rect
+// that escapes the parent or the frame — hit-testing trusts these rects.
+func (r Rect) Intersect(s Rect) Rect {
+	x0 := max(r.X, s.X)
+	y0 := max(r.Y, s.Y)
+	x1 := min(r.X+r.W, s.X+s.W)
+	y1 := min(r.Y+r.H, s.Y+s.H)
+	// On no overlap, collapse the origin onto the clamped far edge so the empty
+	// rect still sits inside s rather than reporting an out-of-bounds corner.
+	if x0 > x1 {
+		x0 = x1
+	}
+	if y0 > y1 {
+		y0 = y1
+	}
+	return Rect{x0, y0, x1 - x0, y1 - y0}
+}
+
 type SizeKind int
 
 const (
@@ -64,6 +85,13 @@ const (
 // Grow through the constructors below. SizeContent is produced by Size methods
 // after measuring natural content, preserving the distinction between "caller
 // forced this size" (Fixed) and "this is the content's natural size" (Content).
+//
+// Weight is normally the proportional share a Grow child takes of a container's
+// leftover main-axis space. For overlays it has a second, intentional meaning
+// (see resolveLayerSize): a Grow overlay with Weight>=1 fills the whole
+// viewport, while Weight<1 sizes to that fraction of the viewport. This dual
+// use lets a caller express both "modal that is 60% of the screen"
+// (Grow(0.6)) and "full-screen layer" (Grow(1)) without a separate field.
 type Size struct {
 	Kind   SizeKind
 	Value  int
@@ -88,6 +116,12 @@ func Auto() Size          { return Size{Kind: SizeAuto} }
 //
 // In other words: Size answers "what space do I need or want?", while Render
 // answers "given this exact space, what string do I produce?".
+//
+// Note on cross-axis geometry: a child whose cross-axis Size is not Fixed
+// stretches to fill the parent's cross axis (SizeContent included), so the
+// rect recorded for a one-line ID'd Text in a Row spans the row's full
+// height. That is correct for painting and coarse hit-testing; pin the
+// cross axis with Fixed when a hit target must be exactly content-sized.
 type Node interface {
 	Size() (w, h Size)
 	Render(r Rect) string
@@ -137,6 +171,7 @@ func distributeMain(children []Node, horizontal bool, gap, avail int) []int {
 	sizes := make([]Size, n)
 	fixedSum := 0
 	growSum := 0.0
+	growCount := 0
 	for i, c := range children {
 		cw, ch := c.Size()
 		if horizontal {
@@ -149,7 +184,16 @@ func distributeMain(children []Node, horizontal bool, gap, avail int) []int {
 			fixedSum += sizes[i].Value
 		case SizeGrow:
 			growSum += sizes[i].Weight
+			growCount++
 		}
+	}
+
+	// Degenerate input: grow children exist but their weights sum to zero
+	// (Grow(0) or a zero-value Size{Kind: SizeGrow}). Treat them as equal
+	// weight so the space is shared rather than dropped.
+	equalGrow := growCount > 0 && growSum == 0
+	if equalGrow {
+		growSum = float64(growCount)
 	}
 
 	remaining := avail - fixedSum
@@ -164,22 +208,35 @@ func distributeMain(children []Node, horizontal bool, gap, avail int) []int {
 		case SizeFixed, SizeContent:
 			result[i] = s.Value
 		case SizeGrow:
+			w := s.Weight
+			if equalGrow {
+				w = 1
+			}
 			if growSum > 0 {
-				result[i] = int(float64(remaining) * s.Weight / growSum)
+				result[i] = int(float64(remaining) * w / growSum)
 			}
 			growUsed += result[i]
 		}
 	}
 
-	// Distribute remainder left-to-right to Grow children.
+	// Distribute the rounding remainder to Grow children, round-robin
+	// left-to-right until it is exhausted (deterministic: earlier children win
+	// the extra cell).
 	rem := remaining - growUsed
-	for i, s := range sizes {
-		if rem <= 0 {
-			break
+	for rem > 0 {
+		progressed := false
+		for i, s := range sizes {
+			if rem <= 0 {
+				break
+			}
+			if s.Kind == SizeGrow {
+				result[i]++
+				rem--
+				progressed = true
+			}
 		}
-		if s.Kind == SizeGrow {
-			result[i]++
-			rem--
+		if !progressed {
+			break
 		}
 	}
 	return result
@@ -194,9 +251,11 @@ func crossAxis(s Size, avail int) int {
 	return avail
 }
 
-// measureChildren computes the intrinsic main-axis and cross-axis for
-// a container with Auto sizing.
-func measureChildren(children []Node, horizontal bool, gap int) (main, cross int) {
+// measureChildren computes the intrinsic main-axis and cross-axis for a
+// container with Auto sizing. It also reports whether any child is Grow on the
+// main or cross axis, so a container whose only claim on an axis is "grow" can
+// itself report Grow(1) instead of collapsing to zero.
+func measureChildren(children []Node, horizontal bool, gap int) (main, cross int, mainGrow, crossGrow bool) {
 	for i, c := range children {
 		cw, ch := c.Size()
 		var m, cr Size
@@ -208,8 +267,14 @@ func measureChildren(children []Node, horizontal bool, gap int) (main, cross int
 		if m.Kind == SizeFixed || m.Kind == SizeContent {
 			main += m.Value
 		}
+		if m.Kind == SizeGrow {
+			mainGrow = true
+		}
 		if i > 0 {
 			main += gap
+		}
+		if cr.Kind == SizeGrow {
+			crossGrow = true
 		}
 		if (cr.Kind == SizeFixed || cr.Kind == SizeContent) && cr.Value > cross {
 			cross = cr.Value
@@ -287,51 +352,19 @@ func getChildren(n Node) []Node {
 
 // --- Solve (for hit-testing) ---
 
+// Solve returns the id→rect geometry for a tree without painting. It is the
+// geometry-only mode of the shared walk (buf nil), so its rects are identical
+// to the ones SolveAndCompose records while composing.
 func Solve(root Node, width, height int) map[string]Rect {
 	rects := make(map[string]Rect)
-	solveNode(root, Rect{0, 0, width, height}, rects)
-	// Overlay pass
+	walk(root, Rect{0, 0, width, height}, nil, rects)
+	// Overlay pass: recurse so overlay descendants get rects too, matching
+	// SolveAndCompose's overlay walk for hit-test parity.
 	for _, o := range findOverlays(root) {
 		mr := centerRect(o, width, height)
-		if id := getID(o); id != "" {
-			rects[id] = mr
-		}
+		walk(o, mr, nil, rects)
 	}
 	return rects
-}
-
-func solveNode(n Node, r Rect, out map[string]Rect) {
-	if id := getID(n); id != "" {
-		out[id] = r
-	}
-	children := nonOverlayChildren(getChildren(n))
-	if len(children) == 0 {
-		return
-	}
-	container := n.(childContainer)
-	gap := getGap(n)
-	horizontal := container.IsHorizontal()
-	inset := getInset(n)
-	inner := r.Inset(inset)
-	mainSizes := distributeMain(children, horizontal, gap, mainAvail(inner, horizontal))
-
-	pos := inner.X
-	if !horizontal {
-		pos = inner.Y
-	}
-	for i, c := range children {
-		cw, ch := c.Size()
-		var cr Rect
-		if horizontal {
-			cross := crossAxis(ch, inner.H)
-			cr = Rect{pos, inner.Y, mainSizes[i], cross}
-		} else {
-			cross := crossAxis(cw, inner.W)
-			cr = Rect{inner.X, pos, cross, mainSizes[i]}
-		}
-		solveNode(c, cr, out)
-		pos += mainSizes[i] + gap
-	}
 }
 
 func mainAvail(inner Rect, horizontal bool) int {
@@ -361,9 +394,17 @@ func centerRect(n Node, vpW, vpH int) Rect {
 	return Rect{(vpW - lw) / 2, (vpH - lh) / 2, lw, lh}
 }
 
+// resolveLayerSize maps an overlay layer's one-axis Size to a concrete cell
+// count within the viewport. Fixed and Content are exact sizes clamped to the
+// viewport — Content is a measured natural size, so an overlay whose Size()
+// reports Content (e.g. a Col of measurable children) is content-sized, not
+// stretched. Auto means "no measurable content on this axis" and fills the
+// whole viewport. For Grow, Weight carries a meaning specific to overlays:
+// Weight>=1 means the full viewport and Weight<1 means that fraction of the
+// viewport (see the Size doc for why this dual meaning is intentional).
 func resolveLayerSize(s Size, viewport int) int {
 	switch s.Kind {
-	case SizeFixed:
+	case SizeFixed, SizeContent:
 		if s.Value > viewport {
 			return viewport
 		}
@@ -373,7 +414,7 @@ func resolveLayerSize(s Size, viewport int) int {
 			return viewport
 		}
 		return int(float64(viewport) * s.Weight)
-	default:
+	default: // SizeAuto
 		return viewport
 	}
 }

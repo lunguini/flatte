@@ -100,6 +100,181 @@ func TestSolveAndComposePaintsContainerChrome(t *testing.T) {
 	}
 }
 
+// A child whose distributed rect overflows the parent is clamped to the
+// parent's inner box (d19 H2): two Fixed(8) children in a 10-wide row leave the
+// second child only the remaining 2 columns.
+func TestChildRectClampedToParent(t *testing.T) {
+	tree := Row{Children: []Node{
+		Text{NodeBase: NodeBase{W: Fixed(8), ID: "a"}, String: "a"},
+		Text{NodeBase: NodeBase{W: Fixed(8), ID: "b"}, String: "b"},
+	}}
+	rects := Solve(tree, 10, 1)
+	if a := rects["a"]; a.W != 8 {
+		t.Fatalf("a.W=%d want 8", a.W)
+	}
+	if b := rects["b"]; b.X != 8 || b.W != 2 {
+		t.Fatalf("b=%+v want X=8 W=2 (clamped to frame)", b)
+	}
+}
+
+// No solved rect may escape its parent or the frame, over a handful of
+// deliberately overflowing trees (d19 H2).
+func TestNoRectEscapesFrame(t *testing.T) {
+	const W, H = 12, 6
+	trees := []Node{
+		Row{Children: []Node{
+			Text{NodeBase: NodeBase{W: Fixed(8), ID: "x1"}, String: "x"},
+			Text{NodeBase: NodeBase{W: Fixed(8), ID: "x2"}, String: "x"},
+			Text{NodeBase: NodeBase{W: Fixed(8), ID: "x3"}, String: "x"},
+		}},
+		Col{
+			NodeBase: NodeBase{Bordered: true},
+			Children: []Node{
+				Row{NodeBase: NodeBase{ID: "r"}, Children: []Node{
+					Text{NodeBase: NodeBase{W: Fixed(50), ID: "wide"}, String: "w"},
+				}},
+			},
+		},
+		Col{Children: []Node{
+			Text{NodeBase: NodeBase{H: Fixed(20), ID: "tall"}, String: "t"},
+			Text{NodeBase: NodeBase{H: Fixed(20), ID: "tall2"}, String: "t"},
+		}},
+	}
+	for ti, tr := range trees {
+		for id, r := range Solve(tr, W, H) {
+			if r.X < 0 || r.Y < 0 || r.X+r.W > W || r.Y+r.H > H {
+				t.Fatalf("tree %d: rect %q = %+v escapes frame %dx%d", ti, id, r, W, H)
+			}
+		}
+	}
+}
+
+// Row.Render delegates to the single walk, so its output for a nested tree is
+// byte-identical to SolveAndCompose (d19 H4).
+func TestRowRenderEqualsSolveAndCompose(t *testing.T) {
+	tree := Row{
+		NodeBase: NodeBase{Gap: 1},
+		Children: []Node{
+			Col{Children: []Node{Text{String: "a"}, Text{String: "bb"}}},
+			NewSpacer(),
+			Text{NodeBase: NodeBase{W: Fixed(4)}, String: "R"},
+		},
+	}
+	direct := tree.Render(Rect{0, 0, 20, 3})
+	composed, _ := SolveAndCompose(tree, 20, 3)
+	if direct != composed {
+		t.Fatalf("Row.Render != SolveAndCompose:\n%q\nvs\n%q", direct, composed)
+	}
+}
+
+// A standalone Row.Render containing an overlay child must paint the overlay
+// exactly once — the overlay pass must not run twice through delegation (d19 H4).
+func TestRowRenderOverlayPaintedOnce(t *testing.T) {
+	tree := Row{Children: []Node{
+		Text{String: "base"},
+		Text{NodeBase: NodeBase{Overlay: true, W: Fixed(3), H: Fixed(1)}, String: "OVL"},
+	}}
+	out := ansi.Strip(tree.Render(Rect{0, 0, 12, 3}))
+	if n := strings.Count(out, "OVL"); n != 1 {
+		t.Fatalf("overlay painted %d times, want 1:\n%s", n, out)
+	}
+}
+
+// An ID'd child inside an overlay container is assigned a rect by both Solve
+// and SolveAndCompose, and the two agree (d19 H3).
+func TestOverlayChildRectsRecorded(t *testing.T) {
+	tree := Col{Children: []Node{
+		Text{String: "base"},
+		Col{
+			NodeBase: NodeBase{Overlay: true, W: Fixed(10), H: Fixed(4), ID: "modal"},
+			Children: []Node{
+				Text{NodeBase: NodeBase{ID: "title", H: Fixed(1)}, String: "T"},
+				Text{NodeBase: NodeBase{ID: "content", H: Grow(1)}, String: "C"},
+			},
+		},
+	}}
+	solveRects := Solve(tree, 30, 12)
+	_, composeRects := SolveAndCompose(tree, 30, 12)
+	for _, id := range []string{"modal", "title", "content"} {
+		sr, ok := solveRects[id]
+		if !ok {
+			t.Fatalf("Solve missing rect for %q", id)
+		}
+		if sr != composeRects[id] {
+			t.Fatalf("rect mismatch for %q: solve=%+v compose=%+v", id, sr, composeRects[id])
+		}
+	}
+	// modal centered: (30-10)/2=10, (12-4)/2=4
+	if modal := solveRects["modal"]; modal != (Rect{10, 4, 10, 4}) {
+		t.Fatalf("modal rect = %+v, want {10,4,10,4}", modal)
+	}
+	// title sits at the top-left of the modal interior.
+	if title := solveRects["title"]; title.X != 10 || title.Y != 4 {
+		t.Fatalf("title rect = %+v, want origin at modal top-left", title)
+	}
+}
+
+// A bordered overlay container composed through the tree walk paints all four
+// border sides (d19 H3): it must go through the compositor, not the legacy
+// string path.
+func TestOverlayBorderedPaintsAllSides(t *testing.T) {
+	tree := Col{Children: []Node{
+		Text{String: "base base base base"},
+		Col{
+			NodeBase: NodeBase{Overlay: true, Bordered: true, W: Fixed(8), H: Fixed(4)},
+			Children: []Node{Text{String: "hi"}},
+		},
+	}}
+	composed, _ := SolveAndCompose(tree, 20, 8)
+	stripped := ansi.Strip(composed)
+	for _, corner := range []string{"╭", "╮", "╰", "╯"} {
+		if !strings.Contains(stripped, corner) {
+			t.Fatalf("overlay border missing corner %q:\n%s", corner, stripped)
+		}
+	}
+}
+
+// An overlay sized from measurable content (SizeContent) is content-sized, not
+// stretched to the full viewport (d19 H3).
+func TestContentSizedOverlayNotFullScreen(t *testing.T) {
+	tree := Col{Children: []Node{
+		Text{String: "base"},
+		Col{
+			NodeBase: NodeBase{Overlay: true, ID: "modal"},
+			Children: []Node{Text{String: "hello"}},
+		},
+	}}
+	rects := Solve(tree, 40, 20)
+	modal := rects["modal"]
+	if modal.W >= 40 || modal.H >= 20 {
+		t.Fatalf("content-sized overlay filled the screen: %+v", modal)
+	}
+	if modal.W != 5 || modal.H != 1 {
+		t.Fatalf("modal rect = %+v, want 5x1 (content of \"hello\")", modal)
+	}
+}
+
+// The cells under an overlay's rect that the overlay itself does not paint are
+// cleared, so the base does not bleed through (d19 H3, parity with the string
+// compositor's FillArea).
+func TestOverlayClearsBaseBleedThrough(t *testing.T) {
+	baseStr := strings.TrimRight(strings.Repeat("XXXXXXXXXX\n", 6), "\n")
+	tree := Col{Children: []Node{
+		Text{NodeBase: NodeBase{H: Grow(1)}, String: baseStr},
+		Col{
+			NodeBase: NodeBase{Overlay: true, W: Fixed(6), H: Fixed(3)},
+			Children: []Node{Text{String: "hi"}},
+		},
+	}}
+	composed, _ := SolveAndCompose(tree, 10, 6)
+	lines := strings.Split(ansi.Strip(composed), "\n")
+	// Overlay centered at x=2,y=1,w=6,h=3. The child paints row 1 only; rows
+	// 2 and 3 (columns 2..7) must be cleared, not filled with base 'X'.
+	if got := lines[2][2:8]; strings.Contains(got, "X") {
+		t.Fatalf("base bled through cleared overlay region: row2=%q seg=%q", lines[2], got)
+	}
+}
+
 // Overlay children are painted centered on top and their rect recorded.
 func TestSolveAndComposePaintsOverlay(t *testing.T) {
 	tree := Col{Children: []Node{

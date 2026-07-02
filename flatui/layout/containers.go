@@ -1,7 +1,5 @@
 package layout
 
-import "charm.land/lipgloss/v2"
-
 // Row lays children out horizontally (main axis = width).
 // Embed NodeBase for geometry. Children participate in distribution
 // via their Size() constraints.
@@ -13,40 +11,41 @@ type Row struct {
 func (r Row) Size() (Size, Size) {
 	w, h := r.NodeBase.Size()
 	if w.Kind == SizeAuto || h.Kind == SizeAuto {
-		mainSize, crossSize := measureChildren(r.Children, true, r.Gap)
+		mainSize, crossSize, mainGrow, crossGrow := measureChildren(r.Children, true, r.Gap)
 		inset := 2 * r.innerInset()
-		// Row: main=width, cross=height
-		if w.Kind == SizeAuto && mainSize > 0 {
-			w = Size{Kind: SizeContent, Value: mainSize + inset}
+		// Row: main=width, cross=height. On an Auto axis, prefer measured
+		// content; if there is none but a child grows on that axis, report
+		// Grow(1) so the container does not collapse to zero.
+		if w.Kind == SizeAuto {
+			if mainSize > 0 {
+				w = Size{Kind: SizeContent, Value: mainSize + inset}
+			} else if mainGrow {
+				w = Grow(1)
+			}
 		}
-		if h.Kind == SizeAuto && crossSize > 0 {
-			h = Size{Kind: SizeContent, Value: crossSize + inset}
+		if h.Kind == SizeAuto {
+			if crossSize > 0 {
+				h = Size{Kind: SizeContent, Value: crossSize + inset}
+			} else if crossGrow {
+				h = Grow(1)
+			}
 		}
 	}
 	return w, h
 }
 
+// Render composes the row into a self-contained block sized to rect. It
+// delegates to the single walk via SolveAndCompose (using rect's dimensions at
+// a local origin) so container distribution, chrome, clipping, and overlay
+// compositing all follow one code path. Only the childless case takes the
+// direct fillRect path — which also prevents the walk (whose leaf branch would
+// otherwise Render a container) from recursing.
 func (r Row) Render(rect Rect) string {
-	inset := r.innerInset()
-	inner := rect.Inset(inset)
-	children := nonOverlayChildren(r.Children)
-	if len(children) == 0 {
+	if len(r.Children) == 0 {
 		return fillRect("", rect, r.Pad, r.Bordered)
 	}
-	mainSizes := distributeMain(children, true, r.Gap, inner.W)
-	parts := make([]string, len(children))
-	x := inner.X
-	for i, c := range children {
-		_, ch := c.Size()
-		cross := crossAxis(ch, inner.H)
-		parts[i] = c.Render(Rect{x, inner.Y, mainSizes[i], cross})
-		x += mainSizes[i] + r.Gap
-	}
-	result := lipgloss.JoinHorizontal(lipgloss.Top, parts...)
-	if inset > 0 {
-		result = fillRect(result, rect, r.Pad, r.Bordered)
-	}
-	return result
+	frame, _ := SolveAndCompose(r, rect.W, rect.H)
+	return frame
 }
 
 // Introspection for Solve and overlay pass.
@@ -63,40 +62,38 @@ type Col struct {
 func (c Col) Size() (Size, Size) {
 	w, h := c.NodeBase.Size()
 	if w.Kind == SizeAuto || h.Kind == SizeAuto {
-		mainSize, crossSize := measureChildren(c.Children, false, c.Gap)
+		mainSize, crossSize, mainGrow, crossGrow := measureChildren(c.Children, false, c.Gap)
 		inset := 2 * c.innerInset()
-		// Col: main=height, cross=width
-		if h.Kind == SizeAuto && mainSize > 0 {
-			h = Size{Kind: SizeContent, Value: mainSize + inset}
+		// Col: main=height, cross=width. On an Auto axis, prefer measured
+		// content; if there is none but a child grows on that axis, report
+		// Grow(1) so the container does not collapse to zero.
+		if h.Kind == SizeAuto {
+			if mainSize > 0 {
+				h = Size{Kind: SizeContent, Value: mainSize + inset}
+			} else if mainGrow {
+				h = Grow(1)
+			}
 		}
-		if w.Kind == SizeAuto && crossSize > 0 {
-			w = Size{Kind: SizeContent, Value: crossSize + inset}
+		if w.Kind == SizeAuto {
+			if crossSize > 0 {
+				w = Size{Kind: SizeContent, Value: crossSize + inset}
+			} else if crossGrow {
+				w = Grow(1)
+			}
 		}
 	}
 	return w, h
 }
 
+// Render composes the column into a self-contained block sized to rect,
+// delegating to the single walk via SolveAndCompose. See Row.Render for the
+// rationale, including why the childless case stays on the direct path.
 func (c Col) Render(rect Rect) string {
-	inset := c.innerInset()
-	inner := rect.Inset(inset)
-	children := nonOverlayChildren(c.Children)
-	if len(children) == 0 {
+	if len(c.Children) == 0 {
 		return fillRect("", rect, c.Pad, c.Bordered)
 	}
-	mainSizes := distributeMain(children, false, c.Gap, inner.H)
-	parts := make([]string, len(children))
-	y := inner.Y
-	for i, child := range children {
-		cw, _ := child.Size()
-		cross := crossAxis(cw, inner.W)
-		parts[i] = child.Render(Rect{inner.X, y, cross, mainSizes[i]})
-		y += mainSizes[i] + c.Gap
-	}
-	result := lipgloss.JoinVertical(lipgloss.Top, parts...)
-	if inset > 0 {
-		result = fillRect(result, rect, c.Pad, c.Bordered)
-	}
-	return result
+	frame, _ := SolveAndCompose(c, rect.W, rect.H)
+	return frame
 }
 
 func (c Col) GetChildren() []Node { return c.Children }

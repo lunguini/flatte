@@ -22,40 +22,61 @@ func SolveAndCompose(root Node, width, height int) (string, map[string]Rect) {
 	}
 	buf := uv.NewScreenBuffer(width, height)
 	rects := make(map[string]Rect)
-	composeNode(root, Rect{0, 0, width, height}, buf, rects)
+	walk(root, Rect{0, 0, width, height}, &buf, rects)
 
-	// Overlay pass: centered layers painted on top of the resolved base.
+	// Overlay pass: centered layers composed on top of the resolved base.
+	// Clear the layer's rect first (matching the string compositor's FillArea)
+	// so the base cannot bleed through cells the overlay does not paint, then
+	// recurse through the normal walk so overlay descendants get rects recorded
+	// and container chrome is painted by the compositor rather than the legacy
+	// string path.
 	for _, o := range findOverlays(root) {
 		mr := centerRect(o, width, height)
-		if id := getID(o); id != "" {
-			rects[id] = mr
-		}
-		drawInto(buf, o.Render(mr), mr)
+		buf.FillArea(&uv.EmptyCell, uv.Rect(mr.X, mr.Y, mr.W, mr.H))
+		walk(o, mr, &buf, rects)
 	}
 	return buf.Render(), rects
 }
 
-// composeNode is the shared solve+paint recursion. It mirrors solveNode's
-// distribution so the two stay in lockstep, and additionally paints.
-func composeNode(n Node, r Rect, buf uv.ScreenBuffer, out map[string]Rect) {
+// walk is the single solve+paint traversal shared by Solve and SolveAndCompose.
+// It distributes rects top-down and records every ID'd node's rect. When buf is
+// non-nil it also paints each leaf's Render into the buffer at its solved
+// position (composition); with buf nil it is geometry-only (hit-testing). One
+// distribution computation feeds both, so painted geometry and hit-test
+// geometry cannot drift.
+//
+// Only nodes that are not childContainers (Text, Spacer, widgets) have their
+// Render called here. Containers are distributed structurally and never
+// Render'd by the walk, so Row/Col may delegate their own Render back to
+// SolveAndCompose without risking infinite recursion.
+func walk(n Node, r Rect, buf *uv.ScreenBuffer, out map[string]Rect) {
 	if id := getID(n); id != "" {
 		out[id] = r
 	}
-	children := nonOverlayChildren(getChildren(n))
-	if len(children) == 0 {
+
+	container, isContainer := n.(childContainer)
+	if !isContainer {
 		// Leaf: paint its render at r. drawInto clips to r, so an over-wide or
 		// over-tall string is bounded to the rect it was given.
-		drawInto(buf, n.Render(r), r)
+		if buf != nil {
+			drawInto(*buf, n.Render(r), r)
+		}
 		return
 	}
 
 	// Container: paint its own border/background chrome first (if any), then
 	// paint children on top inside the inset region.
-	if inset := getInset(n); inset > 0 {
-		drawInto(buf, fillRect("", r, getPad(n), isBordered(n)), r)
+	if buf != nil {
+		if inset := getInset(n); inset > 0 {
+			drawInto(*buf, fillRect("", r, getPad(n), isBordered(n)), r)
+		}
 	}
 
-	container := n.(childContainer)
+	children := nonOverlayChildren(container.GetChildren())
+	if len(children) == 0 {
+		return
+	}
+
 	gap := getGap(n)
 	horizontal := container.IsHorizontal()
 	inner := r.Inset(getInset(n))
@@ -75,7 +96,11 @@ func composeNode(n Node, r Rect, buf uv.ScreenBuffer, out map[string]Rect) {
 			cross := crossAxis(cw, inner.W)
 			cr = Rect{inner.X, pos, cross, mainSizes[i]}
 		}
-		composeNode(c, cr, buf, out)
+		// Clamp to the parent's inner box: Fixed/Content children are not shrunk
+		// by distribution, so an overflowing row/col would otherwise place a
+		// child rect past the frame edge.
+		cr = cr.Intersect(inner)
+		walk(c, cr, buf, out)
 		pos += mainSizes[i] + gap
 	}
 }

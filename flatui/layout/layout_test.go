@@ -81,6 +81,48 @@ func TestDeterministicRemainder(t *testing.T) {
 	}
 }
 
+// Grow children whose weights sum to zero (Grow(0)) share space equally rather
+// than collapsing (d19 M2).
+func TestGrowZeroEqualShares(t *testing.T) {
+	tree := Row{Children: []Node{
+		Text{String: "a", NodeBase: NodeBase{W: Grow(0), ID: "a"}},
+		Text{String: "b", NodeBase: NodeBase{W: Grow(0), ID: "b"}},
+	}}
+	rects := Solve(tree, 10, 1)
+	if a := rects["a"]; a.W != 5 {
+		t.Fatalf("a.W=%d want 5 (equal share of 10)", a.W)
+	}
+	if b := rects["b"]; b.W != 5 {
+		t.Fatalf("b.W=%d want 5 (equal share of 10)", b.W)
+	}
+}
+
+// A zero-value Size{Kind: SizeGrow} behaves like Grow(0) — equal share, not a
+// dropped child (d19 M2).
+func TestZeroValueGrowShares(t *testing.T) {
+	tree := Row{Children: []Node{
+		Text{String: "a", NodeBase: NodeBase{W: Size{Kind: SizeGrow}, ID: "a"}},
+		Text{String: "b", NodeBase: NodeBase{W: Size{Kind: SizeGrow}, ID: "b"}},
+	}}
+	rects := Solve(tree, 8, 1)
+	if a, b := rects["a"], rects["b"]; a.W != 4 || b.W != 4 {
+		t.Fatalf("a.W=%d b.W=%d want 4 and 4", a.W, b.W)
+	}
+}
+
+// A Row whose only child is a Spacer (grow on both axes) must not collapse: it
+// should report Grow(1) and receive nonzero height inside a Col (d19 M3).
+func TestRowWithOnlySpacerGetsHeight(t *testing.T) {
+	tree := Col{Children: []Node{
+		Row{NodeBase: NodeBase{ID: "row"}, Children: []Node{NewSpacer()}},
+		Text{NodeBase: NodeBase{ID: "foot", H: Fixed(1)}, String: "f"},
+	}}
+	rects := Solve(tree, 20, 10)
+	if row := rects["row"]; row.H != 9 {
+		t.Fatalf("row.H=%d want 9 (Row with only a Spacer must fill, not collapse)", row.H)
+	}
+}
+
 func TestTextAutoSizes(t *testing.T) {
 	tx := Text{String: "hello"}
 	w, h := tx.Size()
