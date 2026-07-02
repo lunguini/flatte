@@ -59,7 +59,7 @@ func NewState() *State {
 		flatui.TabItem{ID: "containers", Label: "1 containers"},
 		flatui.TabItem{ID: "images", Label: "2 images"},
 		flatui.TabItem{ID: "volumes", Label: "3 volumes"},
-	).WithGlyphs(pickGlyphs()).WithColors(pal.accent, pal.tabBg, pal.bg)
+	).WithGlyphs(pickGlyphs()).WithColors(pal.accent, pal.tabBg, pal.bg).WithID("header")
 	return s
 }
 
@@ -73,19 +73,14 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		return
 	}
 
-	// Header tab mouse clicks — root-level, above screen dispatch.
-	// composeHeader right-aligns the tabs; compute their frame X start.
-	if m, ok := ev.(flatte.MouseEvent); ok && m.Action == flatte.MousePress && m.Y == 0 {
-		totalTabsW := s.headerTabs.TotalWidth()
-		tabStripStart := s.width - totalTabsW
-		if tabStripStart < 0 {
-			tabStripStart = 0
-		}
-		if m.X >= tabStripStart {
-			if s.headerTabs.HandleMouseAt(m.X - tabStripStart) {
-				s.screen = screen(s.headerTabs.Active())
-				return
-			}
+	// Header tab mouse clicks — root-level, above screen dispatch. The header
+	// is a real subtree of the frame, so its per-tab rects live in s.rects;
+	// HitTest maps the click to a tab index with no coordinate math here.
+	if m, ok := ev.(flatte.MouseEvent); ok && m.Action == flatte.MousePress {
+		if idx, ok := s.headerTabs.HitTest(s.rects, m.X, m.Y); ok {
+			s.screen = screen(idx)
+			s.headerTabs.SetActive(idx)
+			return
 		}
 	}
 
@@ -145,13 +140,8 @@ func (s *State) resize(width, height int) {
 	s.width, s.height = width, height
 	s.headerTabs.SetActive(int(s.screen))
 
-	// Measure header height dynamically.
-	_, headerH := Header{State: s}.Size()
-	headerHeight := 1
-	if headerH.Kind == layout.SizeContent || headerH.Kind == layout.SizeFixed {
-		headerHeight = headerH.Value
-	}
-	s.bodyYOffset = headerHeight
+	// Header height = content row + enabled border rules.
+	s.bodyYOffset = headerHeight(s)
 
 	body := s.bodyRect()
 	s.containers.initLayout(body.W, body.H, s.bodyYOffset)
@@ -223,7 +213,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	}
 
 	tree := layout.Col{Children: []layout.Node{
-		Header{State: s},
+		headerNode(s),
 		s.activeBody(status),
 		Separator{},
 		Footer{State: s},
@@ -254,7 +244,12 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 		Title:   "flat-docker — " + s.screen.Name(),
 	}
 	if s.commandModal != nil {
-		frame.Cursor = commandCursor(content, s.commandModal)
+		if r, ok := s.rects["status"]; ok {
+			frame.Cursor = &flatte.Cursor{
+				X: r.X + s.commandModal.cursorFrameX(),
+				Y: r.Y,
+			}
+		}
 	}
 	return frame
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -13,90 +14,76 @@ import (
 // (separator + footer/help line), both anchored to the bottom.
 const chromeRowsBottom = 2
 
-// --- Node types for the frame chrome (embed layout.NodeBase) ---
+// --- Frame chrome as plain layout subtrees ---
 
-type Header struct {
-	layout.NodeBase
-	State *State
-}
-
-func (h Header) Size() (layout.Size, layout.Size) {
-	w, hh := h.NodeBase.Size()
-	if w.Kind == layout.SizeAuto || hh.Kind == layout.SizeAuto {
-		h.State.headerTabs.SetActive(int(h.State.screen))
-		row := h.row()
-		rw, rh := row.Size()
-		if w.Kind == layout.SizeAuto {
-			w = rw
-		}
-		if hh.Kind == layout.SizeAuto {
-			hh = rh
-			if h.State.headerBorder.Top {
-				hh.Value++
-			}
-			if h.State.headerBorder.Bottom {
-				hh.Value++
-			}
-		}
-	}
-	return w, hh
-}
-
-func (h Header) Render(r layout.Rect) string {
-	h.State.headerTabs.SetActive(int(h.State.screen))
-
-	row := h.row()
-
-	contentHeight := r.H
-	if h.State.headerBorder.Top {
-		contentHeight--
-	}
-	if h.State.headerBorder.Bottom {
-		contentHeight--
-	}
-	if contentHeight < 1 {
-		contentHeight = 1
-	}
-	content, _ := layout.SolveAndCompose(row, r.W-headerBorderHorizontalWidth(h.State.headerBorder), contentHeight)
-	return renderBorderedHeader(content, r.W, h.State.headerBorder)
-}
-
-func (h Header) row() layout.Row {
-	title := lipgloss.NewStyle().Bold(true).Background(pal.bg).Foreground(pal.accent).Padding(0, 0).
+// headerNode builds the header as a real subtree of the frame tree: a content
+// row (title, spacer, tab strip) optionally sandwiched between top/bottom
+// border rules. Because it lives directly in the frame tree, the single frame
+// solve records each tab's rect into s.rects for hit-testing — no nested solve
+// that discards geometry, no manual coordinate math.
+func headerNode(s *State) layout.Node {
+	title := lipgloss.NewStyle().Bold(true).Background(pal.bg).Foreground(pal.accent).
 		Render("flat-docker")
 
-	return layout.Row{
+	content := layout.Row{
 		Children: []layout.Node{
 			layout.Text{String: title},
 			layout.NewSpacer().WithBackground(pal.bg),
-			h.State.headerTabs.Layout(),
+			s.headerTabs.Layout(),
 		},
 	}
-}
 
-func renderBorderedHeader(content string, width int, border flatui.TabBarBorder) string {
-	if !headerBorderEnabled(border) {
+	b := s.headerBorder
+	if !b.Top && !b.Bottom {
 		return content
 	}
-	innerWidth := width - headerBorderHorizontalWidth(border)
-	if innerWidth < 0 {
-		innerWidth = 0
+
+	style := headerBorderStyle(b)
+	children := make([]layout.Node, 0, 3)
+	if b.Top {
+		children = append(children, headerRule{glyph: style.Top, color: b.Color})
 	}
-	style := lipgloss.NewStyle().
-		Width(innerWidth).
-		BorderStyle(headerBorderStyle(border)).
-		BorderTop(border.Top).
-		BorderRight(border.Right).
-		BorderBottom(border.Bottom).
-		BorderLeft(border.Left)
-	if border.Color != nil {
-		style = style.BorderForeground(border.Color)
+	children = append(children, content)
+	if b.Bottom {
+		children = append(children, headerRule{glyph: style.Bottom, color: b.Color})
 	}
-	return style.Render(content)
+	return layout.Col{Children: children}
 }
 
-func headerBorderEnabled(border flatui.TabBarBorder) bool {
-	return border.Top || border.Right || border.Bottom || border.Left
+// headerHeight is the header subtree's row count: one content row plus each
+// enabled horizontal border rule. resize uses it to place the body.
+func headerHeight(s *State) int {
+	h := 1
+	if s.headerBorder.Top {
+		h++
+	}
+	if s.headerBorder.Bottom {
+		h++
+	}
+	return h
+}
+
+// headerRule is a full-width horizontal border line reproducing what a
+// Lip Gloss top/bottom border draws — a leaf so the solver owns its rect.
+type headerRule struct {
+	layout.NodeBase
+	glyph string
+	color color.Color
+}
+
+func (h headerRule) Size() (layout.Size, layout.Size) {
+	return layout.Auto(), layout.Fixed(1)
+}
+
+func (h headerRule) Render(r layout.Rect) string {
+	if r.W <= 0 {
+		return ""
+	}
+	style := lipgloss.NewStyle()
+	if h.color != nil {
+		style = style.Foreground(h.color)
+	}
+	return style.Render(strings.Repeat(h.glyph, r.W))
 }
 
 func headerBorderStyle(border flatui.TabBarBorder) lipgloss.Border {
@@ -104,17 +91,6 @@ func headerBorderStyle(border flatui.TabBarBorder) lipgloss.Border {
 		return lipgloss.InnerHalfBlockBorder()
 	}
 	return border.Style
-}
-
-func headerBorderHorizontalWidth(border flatui.TabBarBorder) int {
-	w := 0
-	if border.Left {
-		w++
-	}
-	if border.Right {
-		w++
-	}
-	return w
 }
 
 type Separator struct{ layout.NodeBase }

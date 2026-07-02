@@ -113,7 +113,6 @@ flatui
   func CardWithStyle
   func ContentWidth
   func FrameWidth
-  func Mark
   func NewProgress
   func NewSpinner
   func NewStopwatch
@@ -125,7 +124,6 @@ flatui
   func OverlayOrigin
   func Subtle
   func SubtleWithStyle
-  func TabLabelWidth
   func Title
   func TitleWithStyle
   method FocusRing.Count
@@ -166,8 +164,6 @@ flatui
   method Progress.View
   method Progress.ViewWithStyle
   method Progress.Width
-  method Rect.Contains
-  method Rect.Local
   method Spinner.Frame
   method Spinner.Tick
   method Spinner.View
@@ -180,16 +176,15 @@ flatui
   method Stopwatch.Toggle
   method TabBar.Active
   method TabBar.ActiveID
-  method TabBar.HandleMouseAt
+  method TabBar.HitTest
   method TabBar.Layout
   method TabBar.Next
   method TabBar.Prev
   method TabBar.SetActive
-  method TabBar.TabStartX
-  method TabBar.TotalWidth
   method TabBar.WithBorder
   method TabBar.WithColors
   method TabBar.WithGlyphs
+  method TabBar.WithID
   method Table.Cursor
   method Table.Header
   method Table.HeaderWithStyle
@@ -304,7 +299,6 @@ flatui
   method ZoneScanner.In
   method ZoneScanner.Rect
   method ZoneScanner.Reset
-  method ZoneScanner.Scan
   method ZoneScanner.Set
   type CardStyle
   type Column

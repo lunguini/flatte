@@ -1,29 +1,11 @@
 package flatui
 
-// Rect is a cell-space rectangle. X/Y are zero-based absolute frame
-// coordinates; Width/Height must be positive to contain points.
-type Rect struct {
-	X, Y          int
-	Width, Height int
-}
+import "github.com/lunguini/flatte/flatui/layout"
 
-// Contains reports whether x,y falls inside r's half-open bounds.
-func (r Rect) Contains(x, y int) bool {
-	return r.Width > 0 &&
-		r.Height > 0 &&
-		x >= r.X &&
-		y >= r.Y &&
-		x < r.X+r.Width &&
-		y < r.Y+r.Height
-}
-
-// Local converts absolute x,y to coordinates relative to r.
-func (r Rect) Local(x, y int) (localX, localY int, ok bool) {
-	if !r.Contains(x, y) {
-		return 0, 0, false
-	}
-	return x - r.X, y - r.Y, true
-}
+// Rect is a cell-space rectangle: the same type the layout engine solves, so
+// hit regions and solved geometry share one representation. X/Y are zero-based
+// absolute frame coordinates; W/H must be positive to contain points.
+type Rect = layout.Rect
 
 // ZoneMap stores app-measured hit regions. It does not scan rendered output or
 // own input policy; apps register rectangles from their layout calculations.
@@ -78,10 +60,10 @@ func (z ZoneMap) At(x, y int) (string, bool) {
 // rectangle.
 func (z ZoneMap) Local(id string, x, y int) (localX, localY int, ok bool) {
 	rect, ok := z.Rect(id)
-	if !ok {
+	if !ok || !rect.Contains(x, y) {
 		return 0, 0, false
 	}
-	return rect.Local(x, y)
+	return x - rect.X, y - rect.Y, true
 }
 
 func (z *ZoneMap) ensure() {

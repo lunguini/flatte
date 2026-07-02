@@ -1,129 +1,84 @@
 package flatui
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
-func TestZoneScannerFindsSingleLineMark(t *testing.T) {
-	s := NewZoneScanner()
-	frame := "hello " + Mark("btn", "click me") + " world"
-	s.Scan(frame)
+func TestZoneScannerSetAndRect(t *testing.T) {
+	z := NewZoneScanner()
+	z.Set("btn", Rect{X: 6, Y: 0, W: 8, H: 1})
 
-	rect, ok := s.Rect("btn")
+	rect, ok := z.Rect("btn")
 	if !ok {
 		t.Fatal("btn zone not found")
 	}
-	if rect.X != 6 || rect.Y != 0 || rect.Width != 8 || rect.Height != 1 {
+	if rect.X != 6 || rect.Y != 0 || rect.W != 8 || rect.H != 1 {
 		t.Fatalf("btn rect = %+v, want {6,0,8,1}", rect)
 	}
 }
 
-func TestZoneScannerAtReturnsMark(t *testing.T) {
-	s := NewZoneScanner()
-	frame := Mark("left", "L") + "|" + Mark("right", "R")
-	s.Scan(frame)
+func TestZoneScannerAtFindsContainingZone(t *testing.T) {
+	z := NewZoneScanner()
+	z.Set("left", Rect{X: 0, Y: 0, W: 1, H: 1})
+	z.Set("right", Rect{X: 2, Y: 0, W: 1, H: 1})
 
-	if id, _ := s.At(0, 0); id != "left" {
+	if id, _ := z.At(0, 0); id != "left" {
 		t.Errorf("At(0,0) = %q, want left", id)
 	}
-	if id, _ := s.At(2, 0); id != "right" {
+	if id, _ := z.At(2, 0); id != "right" {
 		t.Errorf("At(2,0) = %q, want right", id)
 	}
-	if _, ok := s.At(1, 0); ok {
-		t.Error("At(1,0) should not be inside a zone")
+	if _, ok := z.At(1, 0); ok {
+		t.Error("At(1,0) should not be inside any zone")
 	}
 }
 
-func TestZoneScannerHandlesAnsiInsideContent(t *testing.T) {
-	s := NewZoneScanner()
-	styled := "\x1b[31mred\x1b[0m text"
-	frame := Mark("zone", styled)
-	s.Scan(frame)
+func TestZoneScannerAtReturnsLastInserted(t *testing.T) {
+	z := NewZoneScanner()
+	z.Set("back", Rect{X: 0, Y: 0, W: 10, H: 10})
+	z.Set("front", Rect{X: 2, Y: 2, W: 4, H: 4})
 
-	rect, ok := s.Rect("zone")
-	if !ok {
-		t.Fatal("zone not found")
+	// Both contain (3,3); the later Set wins.
+	if id, _ := z.At(3, 3); id != "front" {
+		t.Errorf("At(3,3) = %q, want front (last inserted)", id)
 	}
-	if rect.Width != 8 {
-		t.Fatalf("width = %d, want 8 (ANSI does not advance x); rect %+v", rect.Width, rect)
+	// Only back contains (0,0).
+	if id, _ := z.At(0, 0); id != "back" {
+		t.Errorf("At(0,0) = %q, want back", id)
 	}
 }
 
-func TestZoneScannerLaterMarkWins(t *testing.T) {
-	s := NewZoneScanner()
-	frame := Mark("a", "xxxxx") + "\n" + Mark("b", "xxx")
-	s.Scan(frame)
-
-	if id, _ := s.At(2, 0); id != "a" {
-		t.Errorf("At(2,0) = %q, want a", id)
-	}
-	if id, _ := s.At(0, 1); id != "b" {
-		t.Errorf("At(0,1) = %q, want b", id)
+func TestZoneScannerReSetKeepsOrder(t *testing.T) {
+	z := NewZoneScanner()
+	z.Set("a", Rect{X: 0, Y: 0, W: 10, H: 10})
+	z.Set("b", Rect{X: 0, Y: 0, W: 10, H: 10})
+	// Re-Set a: it must not jump ahead of b in hit priority.
+	z.Set("a", Rect{X: 0, Y: 0, W: 10, H: 10})
+	if id, _ := z.At(1, 1); id != "b" {
+		t.Errorf("At(1,1) = %q, want b (re-Set must not change order)", id)
 	}
 }
 
-func TestZoneScannerSequentialNonOverlapping(t *testing.T) {
-	s := NewZoneScanner()
-	frame := Mark("a", "xxxxx") + Mark("b", "xxx")
-	s.Scan(frame)
-
-	if id, _ := s.At(2, 0); id != "a" {
-		t.Errorf("At(2,0) = %q, want a (a covers 0-4)", id)
+func TestZoneScannerReset(t *testing.T) {
+	z := NewZoneScanner()
+	z.Set("a", Rect{X: 0, Y: 0, W: 4, H: 4})
+	z.Reset()
+	if _, ok := z.Rect("a"); ok {
+		t.Fatal("Reset should clear all zones")
 	}
-	if id, _ := s.At(6, 0); id != "b" {
-		t.Errorf("At(6,0) = %q, want b (b covers 5-7)", id)
-	}
-}
-
-func TestZoneScannerHandlesMultibyteContent(t *testing.T) {
-	s := NewZoneScanner()
-	frame := Mark("emoji", "● ● ●")
-	s.Scan(frame)
-
-	rect, ok := s.Rect("emoji")
-	if !ok {
-		t.Fatal("emoji zone not found")
-	}
-	if rect.Width != 5 {
-		t.Fatalf("width = %d, want 5 (3 dots + 2 spaces)", rect.Width)
+	if _, ok := z.At(1, 1); ok {
+		t.Fatal("Reset should leave no hittable zones")
 	}
 }
 
-func TestZoneScannerEmptyMark(t *testing.T) {
-	s := NewZoneScanner()
-	frame := "before" + Mark("empty", "") + "after"
-	s.Scan(frame)
-
-	rect, ok := s.Rect("empty")
-	if !ok {
-		t.Fatal("empty zone not registered")
+func TestZoneScannerIn(t *testing.T) {
+	z := NewZoneScanner()
+	z.Set("box", Rect{X: 10, Y: 3, W: 6, H: 2})
+	if !z.In("box", 12, 4) {
+		t.Error("In(box,12,4) should be true")
 	}
-	if rect.Width != 0 {
-		t.Fatalf("empty zone width = %d, want 0", rect.Width)
+	if z.In("box", 0, 0) {
+		t.Error("In(box,0,0) should be false")
 	}
-}
-
-func TestZoneScannerSurvivesWrappedContent(t *testing.T) {
-	s := NewZoneScanner()
-	frame := "first\n" + Mark("wrapped", "ab\ncd") + "\nlast"
-	s.Scan(frame)
-
-	rect, ok := s.Rect("wrapped")
-	if !ok {
-		t.Fatal("wrapped zone not found")
-	}
-	if rect.Height != 2 {
-		t.Fatalf("height = %d, want 2 (wrapped across line)", rect.Height)
-	}
-}
-
-func TestMarkIsInvisible(t *testing.T) {
-	marked := Mark("id", "content")
-	if strings.Contains(marked, "content") == false {
-		t.Fatal("content must be preserved inside Mark")
-	}
-	if !strings.HasPrefix(marked, zoneMarkStart) {
-		t.Fatalf("Mark should start with zone marker prefix; got %q", marked[:20])
+	if z.In("missing", 12, 4) {
+		t.Error("In on unknown id should be false")
 	}
 }

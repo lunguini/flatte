@@ -86,10 +86,10 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 func modelListZone(s *State) flatui.Rect {
 	x, y := flatui.CardOrigin()
 	return flatui.Rect{
-		X:      x,
-		Y:      y + listTopLine,
-		Width:  modelListWidth(s),
-		Height: len(s.models),
+		X: x,
+		Y: y + listTopLine,
+		W: modelListWidth(s),
+		H: len(s.models),
 	}
 }
 

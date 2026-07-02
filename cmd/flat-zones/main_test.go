@@ -57,11 +57,11 @@ func TestResizeDistributesPanelZones(t *testing.T) {
 
 	left, _ := s.zones.Rect(logsZone)
 	right, _ := s.zones.Rect(metricsZone)
-	if left.Width != right.Width {
-		t.Fatalf("panel widths = %d,%d want equal", left.Width, right.Width)
+	if left.W != right.W {
+		t.Fatalf("panel widths = %d,%d want equal", left.W, right.W)
 	}
-	if right.X != left.X+left.Width+panelGap {
-		t.Fatalf("right.X = %d, want %d", right.X, left.X+left.Width+panelGap)
+	if right.X != left.X+left.W+panelGap {
+		t.Fatalf("right.X = %d, want %d", right.X, left.X+left.W+panelGap)
 	}
 }
 

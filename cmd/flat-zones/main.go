@@ -41,16 +41,16 @@ func (s *State) layout(width int) {
 
 	s.zones.Clear()
 	s.zones.Set(logsZone, flatui.Rect{
-		X:      originX,
-		Y:      originY + panelTop,
-		Width:  panelWidth,
-		Height: panelRows,
+		X: originX,
+		Y: originY + panelTop,
+		W: panelWidth,
+		H: panelRows,
 	})
 	s.zones.Set(metricsZone, flatui.Rect{
-		X:      originX + panelWidth + panelGap,
-		Y:      originY + panelTop,
-		Width:  panelWidth,
-		Height: panelRows,
+		X: originX + panelWidth + panelGap,
+		Y: originY + panelTop,
+		W: panelWidth,
+		H: panelRows,
 	})
 }
 
@@ -84,8 +84,8 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	left, _ := s.zones.Rect(logsZone)
 	right, _ := s.zones.Rect(metricsZone)
-	leftRows := panel(logsZone, "event stream", left.Width, s.selected == logsZone)
-	rightRows := panel(metricsZone, "dashboards", right.Width, s.selected == metricsZone)
+	leftRows := panel(logsZone, "event stream", left.W, s.selected == logsZone)
+	rightRows := panel(metricsZone, "dashboards", right.W, s.selected == metricsZone)
 
 	lines := []string{
 		flatui.Title("Flat Zones"),

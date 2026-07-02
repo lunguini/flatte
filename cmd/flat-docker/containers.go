@@ -161,7 +161,7 @@ func newContainersScreen() containersScreen {
 			flatui.TabItem{ID: "stats", Label: "stats"},
 			flatui.TabItem{ID: "logs", Label: "logs"},
 			flatui.TabItem{ID: "inspect", Label: "inspect"},
-		).WithGlyphs(pickGlyphs()).WithColors(pal.accent, pal.tabBg, pal.bg),
+		).WithGlyphs(pickGlyphs()).WithColors(pal.accent, pal.tabBg, pal.bg).WithID(detailTabsID),
 	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
@@ -169,6 +169,10 @@ func newContainersScreen() containersScreen {
 }
 
 const statusLineRows = 1
+
+// detailTabsID is the layout ID of the detail pane's tab strip, shared by the
+// bar's WithID and the strip-rect it is hit-tested against.
+const detailTabsID = "detailtabs"
 
 // initLayout sets body dimensions and the user-owned pane widths. It does not
 // solve geometry — that happens in adopt, fed by the single frame solve (View)
@@ -243,6 +247,30 @@ func (p containerListPane) Render(r layout.Rect) string {
 		return ""
 	}
 	return p.screen.renderListPane(r)
+}
+
+// listHeaderLines is the count of rows renderListPane draws before the first
+// list row: the filter line plus a blank separator row.
+const listHeaderLines = 2
+
+// rowRects returns the absolute hit rectangle for each visible list row, in the
+// same coordinates renderListPane paints them. Keeping this next to Render means
+// one type owns both paint and geometry, so they can't drift.
+func (p containerListPane) rowRects(r layout.Rect) []layout.Rect {
+	if p.screen == nil || r.W == 0 {
+		return nil
+	}
+	c := p.screen
+	rowX := r.X + panePadding
+	rowW := max(r.W-paneBorderCols-1, 1) // matches renderListPane's listInnerWidth
+	offset := c.list.Offset()
+	end := min(offset+c.listHeight, c.list.Count())
+	rects := make([]layout.Rect, 0, max(end-offset, 0))
+	for i := offset; i < end; i++ {
+		y := r.Y + listHeaderLines + (i - offset)
+		rects = append(rects, layout.Rect{X: rowX, Y: y, W: rowW, H: 1})
+	}
+	return rects
 }
 
 type containerDetailPane struct {
@@ -380,24 +408,39 @@ func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	c.registerListZones()
 }
 
-// registerListZones feeds list-row hit rects to the zone scanner from the
-// solved list-pane geometry. The frame is composited through a cell buffer,
-// which drops the inline zone markers Mark once embedded, so row zones are
-// derived from coordinates instead of scanned from the rendered string.
+// registerListZones feeds list-row hit rects to the zone scanner. The row
+// geometry is owned by containerListPane (the type that also paints the rows),
+// so paint and hit-testing can't drift. The frame is composited through a cell
+// buffer, so zones are derived from coordinates, not scanned from the string.
 func (c *containersScreen) registerListZones() {
 	c.zones.Reset()
-	listRect := c.rects["list"]
-	if listRect.W == 0 {
-		return
-	}
-	rowX := listRect.X + panePadding
-	rowW := max(listRect.W-paneBorderCols-1, 1) // matches listInnerWidth
-	const listHeaderLines = 2                   // filter line + blank row
+	pane := newContainerListPane(c)
 	offset := c.list.Offset()
-	end := min(offset+c.listHeight, c.list.Count())
-	for i := offset; i < end; i++ {
-		y := listRect.Y + listHeaderLines + (i - offset)
-		c.zones.Set("list:"+strconv.Itoa(i), flatui.Rect{X: rowX, Y: y, Width: rowW, Height: 1})
+	for i, rect := range pane.rowRects(c.rects["list"]) {
+		c.zones.Set("list:"+strconv.Itoa(offset+i), rect)
+	}
+}
+
+// detailTabStripRects returns the detail tab strip's absolute rect keyed by its
+// layout ID. The strip is right-aligned in the pane's content header row (the
+// same placement renderDetailPane composes), and its width is the strip's own
+// natural layout size — so the per-label math stays private to the widget.
+func (c *containersScreen) detailTabStripRects() map[string]layout.Rect {
+	detailRect := c.rects["detail"]
+	stripW, _ := c.detailTabs.Layout().Size()
+	contentStartX := detailRect.X + panePadding
+	contentWidth := detailRect.W - paneBorderCols
+	localStart := contentWidth - stripW.Value
+	if localStart < 0 || detailRect.W == 0 {
+		return nil
+	}
+	return map[string]layout.Rect{
+		detailTabsID: {
+			X: contentStartX + localStart,
+			Y: detailRect.Y,
+			W: stripW.Value,
+			H: 1,
+		},
 	}
 }
 
@@ -444,9 +487,8 @@ func (c *containersScreen) applyDrag(root *State, currentX int) {
 	c.detailTabs.SetActive(int(c.tab))
 }
 
-// registerTabZones was removed — detail tabs now use the tabBar component
-// with built-in mouse support. Hit-testing is via HandleMouseAt, not
-// manual ZoneMap rectangles. See handleMouse for the click routing.
+// Detail tab hit-testing goes through detailTabStripRects + TabBar.HitTest —
+// solved geometry, not manual ZoneMap rectangles. See handleMouse for routing.
 
 // dividerAt reports which divider (0 or 1) is at the given frame
 // coordinates, using the absolute solved rects for hit-testing.
@@ -534,23 +576,14 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		return
 	}
 
-	// Detail tab clicks via tabBar component, using solved rect positions.
-	detailRect := c.rects["detail"]
-	detailContentStartX := detailRect.X + panePadding
-	detailContentWidth := detailRect.W - paneBorderCols
-	if m.Y == c.bodyYOffset && m.X >= detailContentStartX {
-		totalTabsW := c.detailTabs.TotalWidth()
-		tabStripStart := detailContentWidth - totalTabsW
-		if tabStripStart < 0 {
-			tabStripStart = 0
-		}
-		localX := m.X - detailContentStartX
-		if localX >= tabStripStart {
-			if c.detailTabs.HandleMouseAt(localX - tabStripStart) {
-				c.tab = detailTab(c.detailTabs.Active())
-				return
-			}
-		}
+	// Detail tab clicks. The detail pane composes its own header row internally
+	// (it is a leaf), so per-tab rects aren't in the frame geometry; instead we
+	// hand HitTest the tab strip's absolute rect and let it map the click via
+	// its private label-width math. The strip is right-aligned in the pane's
+	// content, matching renderDetailPane.
+	if idx, ok := c.detailTabs.HitTest(c.detailTabStripRects(), m.X, m.Y); ok {
+		c.setTab(detailTab(idx))
+		return
 	}
 
 	// Auto-zones for list rows
@@ -812,11 +845,19 @@ func sampleLogs(ct Container) string {
 }
 
 func (c *containersScreen) prevTab() {
-	c.tab = (c.tab - 1 + 3) % 3
+	c.setTab((c.tab - 1 + 3) % 3)
 }
 
 func (c *containersScreen) nextTab() {
-	c.tab = (c.tab + 1) % 3
+	c.setTab((c.tab + 1) % 3)
+}
+
+// setTab is the single write site for the active detail tab. It keeps the tab
+// strip's highlight in sync here (in the Handle path) so no Render method has
+// to mutate the bar to sync it.
+func (c *containersScreen) setTab(t detailTab) {
+	c.tab = t
+	c.detailTabs.SetActive(int(t))
 }
 
 func (c *containersScreen) selected() *Container {
@@ -1112,7 +1153,6 @@ func (c *containersScreen) renderDetailPane(r layout.Rect) string {
 		return paneStyle(r.W, r.H, c.focus.Focused(focusDetail), false).Render(empty)
 	}
 
-	c.detailTabs.SetActive(int(c.tab))
 	indicator := c.renderFollowIndicator()
 	rightChildren := []layout.Node{c.detailTabs.Layout()}
 	if indicator != "" {

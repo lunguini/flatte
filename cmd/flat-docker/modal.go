@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	uv "github.com/charmbracelet/ultraviolet"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
@@ -139,6 +138,7 @@ func (m *commandModel) execute(s *State, _ flatte.Effects[State], line string) {
 			s.containers.pushActivity("→   unknown screen: " + args[0])
 			return
 		}
+		s.headerTabs.SetActive(int(s.screen))
 	case "help":
 		s.containers.pushActivity("→   filter <text> | stop | remove | goto <screen> | stream | help")
 	case "stream":
@@ -229,65 +229,6 @@ func (s *State) openConfirm(action string, ct *Container) {
 		targetID:   ct.ID,
 		targetName: ct.Name,
 	}
-}
-
-func commandCursor(content string, m *commandModel) *flatte.Cursor {
-	const marker = "\x1b[1m\x1b[38;5;117m:\x1b[0m "
-	stripped := flatestStripAnsi(content)
-	for y, line := range strings.Split(stripped, "\n") {
-		idx := strings.Index(line, ":")
-		if idx < 0 {
-			continue
-		}
-		if !looksLikeCommandBar(line) {
-			continue
-		}
-		return &flatte.Cursor{
-			X: idx + 2 + m.input.CursorColumn(),
-			Y: y,
-		}
-	}
-	return nil
-}
-
-func flatestStripAnsi(s string) string {
-	return lipgloss.NewStyle().Render(s)
-}
-
-// overlayRect composites layer on top of base at the solver-specified (x,y).
-// This is the rendering counterpart of the builder's Layer node — the solver
-// positions the overlay, this function paints it.
-func overlayRect(base, layer string, x, y, _, _ int) string {
-	baseStyled := uv.NewStyledString(base)
-	layerStyled := uv.NewStyledString(layer)
-	baseBounds := baseStyled.Bounds()
-	if baseBounds.Empty() {
-		return base
-	}
-	canvas := uv.NewScreenBuffer(baseBounds.Dx(), baseBounds.Dy())
-	baseStyled.Draw(canvas, canvas.Bounds())
-	layerBounds := layerStyled.Bounds()
-	if !layerBounds.Empty() {
-		area := uv.Rect(x, y, layerBounds.Dx(), layerBounds.Dy())
-		canvas.FillArea(&uv.EmptyCell, area)
-		layerStyled.Draw(canvas, area)
-	}
-	return trimTrailingSpaceRect(canvas.Render())
-}
-
-func trimTrailingSpaceRect(s string) string {
-	rows := strings.Split(s, "\n")
-	for i, row := range rows {
-		rows[i] = strings.TrimRight(row, " \t")
-	}
-	return strings.Join(rows, "\n")
-}
-
-func looksLikeCommandBar(line string) bool {
-	// The command bar always sits on the dark bg (status line area).
-	// After ANSI strip, an empty command bar is ": type a command (try :help)"
-	// and a populated one is ": <input>".
-	return strings.HasPrefix(strings.TrimLeft(line, " "), ":")
 }
 
 func renderModal(m *confirmModel) string {

@@ -85,8 +85,7 @@ func TestNonGlobalKeyFallsThroughToActiveScreen(t *testing.T) {
 func TestHeaderBorderSpansFullHeaderWidth(t *testing.T) {
 	s := resizedState(80, 24)
 
-	_, headerH := Header{State: s}.Size()
-	rendered := Header{State: s}.Render(layout.Rect{W: 80, H: headerH.Value})
+	rendered, _ := layout.SolveAndCompose(headerNode(s), 80, headerHeight(s))
 	lines := strings.Split(ansi.Strip(rendered), "\n")
 	if len(lines) < 2 {
 		t.Fatalf("header rendered %d lines, want at least 2:\n%s", len(lines), rendered)
@@ -1175,24 +1174,30 @@ func TestVolumesScreenDragDividerResizes(t *testing.T) {
 
 // --- Header tab mouse clicks (via tabBar component) ---
 
+// clickTabCenter clicks the middle of the tab rect the frame solve recorded for
+// id, returning the click X for diagnostics.
+func clickTabCenter(t *testing.T, s *State, id string) int {
+	t.Helper()
+	View(s, flatte.RenderContext{Width: 80})
+	r, ok := s.rects[id]
+	if !ok {
+		t.Fatalf("no solved rect for tab %q; rects=%v", id, s.rects)
+	}
+	clickX := r.X + r.W/2
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress, Button: flatte.MouseLeft,
+		X: clickX, Y: r.Y,
+	}, flatte.Effects[State]{})
+	return clickX
+}
+
 func TestHeaderTabMouseClickSwitchesScreen(t *testing.T) {
 	s := resizedState(80, 24)
 	if s.screen != screenContainers {
 		t.Fatal("should start on containers")
 	}
 
-	// Tabs are right-aligned via composeHeader. Compute their frame X.
-	totalTabsW := flatui.TabLabelWidth("1 containers") + flatui.TabLabelWidth("2 images") + flatui.TabLabelWidth("3 volumes")
-	tabStripStart := 80 - totalTabsW
-	// "2 images" is the second tab; click inside it.
-	imagesTabStart := tabStripStart + flatui.TabLabelWidth("1 containers")
-	clickX := imagesTabStart + 1
-
-	Handle(s, flatte.MouseEvent{
-		Action: flatte.MousePress, Button: flatte.MouseLeft,
-		X: clickX, Y: 0,
-	}, flatte.Effects[State]{})
-
+	clickX := clickTabCenter(t, s, "header:images")
 	if s.screen != screenImages {
 		t.Fatalf("after header click on images tab at X=%d: screen = %v, want images", clickX, s.screen)
 	}
@@ -1201,16 +1206,7 @@ func TestHeaderTabMouseClickSwitchesScreen(t *testing.T) {
 func TestHeaderTabMouseClickOnThirdTab(t *testing.T) {
 	s := resizedState(80, 24)
 
-	totalTabsW := flatui.TabLabelWidth("1 containers") + flatui.TabLabelWidth("2 images") + flatui.TabLabelWidth("3 volumes")
-	tabStripStart := 80 - totalTabsW
-	volumesTabStart := tabStripStart + flatui.TabLabelWidth("1 containers") + flatui.TabLabelWidth("2 images")
-	clickX := volumesTabStart + 1
-
-	Handle(s, flatte.MouseEvent{
-		Action: flatte.MousePress, Button: flatte.MouseLeft,
-		X: clickX, Y: 0,
-	}, flatte.Effects[State]{})
-
+	clickX := clickTabCenter(t, s, "header:volumes")
 	if s.screen != screenVolumes {
 		t.Fatalf("after header click on volumes tab at X=%d: screen = %v, want volumes", clickX, s.screen)
 	}
@@ -1602,23 +1598,32 @@ func TestMouseClickListRowSelectsIt(t *testing.T) {
 	}
 }
 
+// detailLogsClickX computes the frame X of the detail "logs" tab from the same
+// solved geometry the code hit-tests against: the strip is right-aligned in the
+// detail pane content, and per-tab offsets come from each tab's natural layout
+// width (via the public Layout().Size()), so no retired label-width helper.
+func detailLogsClickX(s *State) (int, bool) {
+	stripW, _ := s.containers.detailTabs.Layout().Size()
+	statsW, _ := flatui.NewTabBar(flatui.TabItem{Label: "stats"}).WithGlyphs(pickGlyphs()).Layout().Size()
+	contentStartX := s.containers.listPaneWidth + dividerWidth + 1
+	contentWidth := s.containers.detailPaneWidth - paneBorderCols
+	localStart := contentWidth - stripW.Value
+	if localStart < 0 {
+		return 0, false
+	}
+	// +1 steps past the logs tab's leading edge glyph into its label band.
+	return contentStartX + localStart + statsW.Value + 1, true
+}
+
 func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
 	View(s, flatte.RenderContext{Width: 80})
 
-	// composeHeader right-aligns tabs. Compute the tab strip's frame X:
-	// detail content starts at listPaneWidth + dividerWidth + 1.
-	// Tab strip local start = contentWidth - totalTabsWidth.
-	// "logs" is the second tab; click at tabStripStart + flatui.TabLabelWidth("stats") + 1.
-	contentStartX := s.containers.listPaneWidth + dividerWidth + 1
-	contentWidth := s.containers.detailPaneWidth - paneBorderCols
-	totalTabsW := flatui.TabLabelWidth("stats") + flatui.TabLabelWidth("logs") + flatui.TabLabelWidth("inspect")
-	tabStripLocalStart := contentWidth - totalTabsW
-	if tabStripLocalStart < 0 {
-		t.Skipf("pane too narrow for tabs (contentWidth=%d, tabsW=%d)", contentWidth, totalTabsW)
+	logsX, ok := detailLogsClickX(s)
+	if !ok {
+		t.Skip("pane too narrow for tabs")
 	}
-	logsX := contentStartX + tabStripLocalStart + flatui.TabLabelWidth("stats") + 1
-	clickY := s.containers.bodyYOffset + 1
+	clickY := s.containers.bodyYOffset
 
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
@@ -1646,15 +1651,14 @@ func TestMouseClickDetailTabUsesRenderedRow(t *testing.T) {
 	if renderedY < 0 {
 		t.Fatalf("could not find rendered detail tab row:\n%s", ansi.Strip(frame.Content))
 	}
-
-	contentStartX := s.containers.listPaneWidth + dividerWidth + 1
-	contentWidth := s.containers.detailPaneWidth - paneBorderCols
-	totalTabsW := flatui.TabLabelWidth("stats") + flatui.TabLabelWidth("logs") + flatui.TabLabelWidth("inspect")
-	tabStripLocalStart := contentWidth - totalTabsW
-	if tabStripLocalStart < 0 {
-		t.Skipf("pane too narrow for tabs (contentWidth=%d, tabsW=%d)", contentWidth, totalTabsW)
+	if renderedY != s.containers.bodyYOffset {
+		t.Fatalf("detail tab row at y=%d, bodyYOffset=%d — strip rect Y would miss", renderedY, s.containers.bodyYOffset)
 	}
-	logsX := contentStartX + tabStripLocalStart + flatui.TabLabelWidth("stats") + 1
+
+	logsX, ok := detailLogsClickX(s)
+	if !ok {
+		t.Skip("pane too narrow for tabs")
+	}
 
 	Handle(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
