@@ -187,6 +187,7 @@ flatui
   method TabBar.SetActive
   method TabBar.TabStartX
   method TabBar.TotalWidth
+  method TabBar.WithBorder
   method TabBar.WithColors
   method TabBar.WithGlyphs
   method Table.Cursor
@@ -302,7 +303,9 @@ flatui
   method ZoneScanner.At
   method ZoneScanner.In
   method ZoneScanner.Rect
+  method ZoneScanner.Reset
   method ZoneScanner.Scan
+  method ZoneScanner.Set
   type CardStyle
   type Column
   type FocusRing
@@ -320,6 +323,7 @@ flatui
   type Spinner
   type Stopwatch
   type TabBar
+  type TabBarBorder
   type TabGlyphs
   type TabItem
   type Table

@@ -105,6 +105,23 @@ func (z *ZoneScanner) record(id string, x1, y1, x2, y2 int) {
 	z.rects[id] = rect
 }
 
+// Reset clears all zones. Use before repopulating from geometry each frame.
+func (z *ZoneScanner) Reset() {
+	z.order = z.order[:0]
+	clear(z.rects)
+}
+
+// Set registers id at rect r, replacing any existing rect for id. Unlike Scan,
+// this feeds the scanner from solved layout geometry instead of inline string
+// markers — required when the frame is composited through a cell buffer, which
+// does not preserve the invisible zone markers Mark embeds in a string.
+func (z *ZoneScanner) Set(id string, r Rect) {
+	if _, exists := z.rects[id]; !exists {
+		z.order = append(z.order, id)
+	}
+	z.rects[id] = r
+}
+
 func (z ZoneScanner) At(x, y int) (string, bool) {
 	for i := len(z.order) - 1; i >= 0; i-- {
 		id := z.order[i]

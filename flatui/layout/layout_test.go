@@ -20,7 +20,7 @@ func TestColFixedGrowFixed(t *testing.T) {
 		t.Fatalf("expected 0 rects, got %d", len(rects))
 	}
 	// Should render
-	result := Render(tree, 80, 24)
+	result, _ := SolveAndCompose(tree, 80, 24)
 	if result == "" {
 		t.Fatal("empty render")
 	}
@@ -33,7 +33,7 @@ func TestRowFixedGrow(t *testing.T) {
 			Text{String: "content", NodeBase: NodeBase{W: Grow(1)}},
 		},
 	}
-	result := Render(tree, 80, 10)
+	result, _ := SolveAndCompose(tree, 80, 10)
 	lines := strings.Split(result, "\n")
 	if len(lines) == 0 {
 		t.Fatal("empty output")
@@ -157,7 +157,7 @@ func TestNestedRender(t *testing.T) {
 			Text{String: "FOOTER"},
 		},
 	}
-	result := Render(tree, 20, 3)
+	result, _ := SolveAndCompose(tree, 20, 3)
 	lines := strings.Split(result, "\n")
 	if len(lines) < 3 {
 		t.Fatalf("got %d lines want >=3", len(lines))
@@ -207,7 +207,7 @@ func TestRenderWithGrowBody(t *testing.T) {
 			Text{String: "F", NodeBase: NodeBase{H: Fixed(1)}},
 		},
 	}
-	result := Render(tree, 10, 5)
+	result, _ := SolveAndCompose(tree, 10, 5)
 	lines := strings.Split(result, "\n")
 	if len(lines) != 5 {
 		t.Fatalf("got %d lines want 5", len(lines))
@@ -322,7 +322,7 @@ func TestCustomWidgetInTree(t *testing.T) {
 			testWidget{content: "grows", NodeBase: NodeBase{H: Grow(1)}},
 		},
 	}
-	result := Render(tree, 20, 3)
+	result, _ := SolveAndCompose(tree, 20, 3)
 	if !strings.Contains(result, "widget!") {
 		t.Fatalf("missing widget!: %q", result)
 	}
@@ -350,7 +350,7 @@ func TestWidgetInRowWithSpacer(t *testing.T) {
 			testWidget{content: "RIGHT", NodeBase: NodeBase{ID: "right"}},
 		},
 	}
-	result := Render(tree, 30, 1)
+	result, _ := SolveAndCompose(tree, 30, 1)
 	lines := strings.Split(result, "\n")
 	line := lines[0]
 	if !strings.Contains(line, "LEFT") || !strings.Contains(line, "RIGHT") {
@@ -386,7 +386,7 @@ func TestRenderProducesCorrectHeight(t *testing.T) {
 			Text{String: "c", NodeBase: NodeBase{H: Fixed(1)}},
 		},
 	}
-	result := Render(tree, 10, 10)
+	result, _ := SolveAndCompose(tree, 10, 10)
 	lines := strings.Split(result, "\n")
 	if len(lines) != 10 {
 		t.Fatalf("got %d lines want 10", len(lines))

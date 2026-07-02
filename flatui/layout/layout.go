@@ -18,6 +18,7 @@
 package layout
 
 import (
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -38,12 +39,30 @@ func (r Rect) Contains(x, y int) bool {
 type SizeKind int
 
 const (
-	SizeAuto    SizeKind = iota // stretch on cross-axis, zero on main
-	SizeFixed                   // exact cell count, pinned on both axes
-	SizeGrow                    // proportional fill of remaining space
-	SizeContent                 // measured — Fixed on main axis, stretches on cross
+	// SizeAuto is the default "no explicit claim" input. If a node can measure
+	// natural content on an auto axis, its Size method should return
+	// SizeContent. If it cannot, auto contributes zero on the parent's main
+	// axis and stretches on the cross axis.
+	SizeAuto SizeKind = iota
+
+	// SizeFixed is an exact caller-specified cell count.
+	SizeFixed
+
+	// SizeGrow takes a weighted share of the parent's remaining main-axis
+	// space after fixed/content children are allocated.
+	SizeGrow
+
+	// SizeContent is a measured natural size, not usually a caller-authored
+	// mode. Text and containers return it when an auto axis can be measured
+	// from content or children. It behaves like fixed on the parent's main
+	// axis, while still stretching on the cross axis.
+	SizeContent
 )
 
+// Size is a one-axis layout constraint. Callers normally set Auto, Fixed, or
+// Grow through the constructors below. SizeContent is produced by Size methods
+// after measuring natural content, preserving the distinction between "caller
+// forced this size" (Fixed) and "this is the content's natural size" (Content).
 type Size struct {
 	Kind   SizeKind
 	Value  int
@@ -54,8 +73,20 @@ func Fixed(n int) Size    { return Size{Kind: SizeFixed, Value: n} }
 func Grow(w float64) Size { return Size{Kind: SizeGrow, Weight: w} }
 func Auto() Size          { return Size{Kind: SizeAuto} }
 
-// --- Node interface ---
-
+// Node is the primitive layout contract. Implementations should keep the two
+// methods separate:
+//
+//   - Size declares layout intent for each axis. It may return caller-authored
+//     constraints from NodeBase (Auto, Fixed, Grow), or measured natural
+//     content as SizeContent. It must not depend on a final Rect, because the
+//     parent calls Size before it knows the child's allocation.
+//
+//   - Render draws the node inside the already-solved Rect. It should fill,
+//     clip, wrap, border, or join content to fit that rect, but it should not
+//     choose its own position or size in the parent.
+//
+// In other words: Size answers "what space do I need or want?", while Render
+// answers "given this exact space, what string do I produce?".
 type Node interface {
 	Size() (w, h Size)
 	Render(r Rect) string
@@ -83,6 +114,9 @@ func (n NodeBase) innerInset() int {
 	}
 	return s
 }
+
+func (n NodeBase) pad() int       { return n.Pad }
+func (n NodeBase) bordered() bool { return n.Bordered }
 
 // --- Distribution helpers (shared by Row and Col) ---
 
@@ -186,36 +220,34 @@ func measureChildren(children []Node, horizontal bool, gap int) (main, cross int
 // --- Rendering helpers ---
 
 func fillRect(content string, r Rect, pad int, bordered bool) string {
+	return fillRectWithBg(content, r, pad, color.Transparent, bordered)
+}
+
+func fillRectWithBg(content string, r Rect, pad int, c color.Color, bordered bool) string {
 	if r.W <= 0 || r.H <= 0 {
 		return ""
 	}
-	if content == "" {
-		lines := make([]string, r.H)
-		for i := range lines {
-			lines[i] = strings.Repeat(" ", r.W)
-		}
-		return strings.Join(lines, "\n")
-	}
+
 	style := lipgloss.NewStyle().Width(r.W).Height(r.H).MaxWidth(r.W).MaxHeight(r.H)
+	if c != color.Transparent {
+		style = style.Background(c)
+	}
 	if pad > 0 {
 		style = style.Padding(0, pad, pad, pad)
 	}
 	if bordered {
 		style = style.Border(lipgloss.RoundedBorder())
 	}
-	return style.Render(content)
-}
 
-// Render is the entry point: tree in, composed string out.
-func Render(n Node, width, height int) string {
-	base := n.Render(Rect{0, 0, width, height})
-
-	// Second pass: overlay nodes composited on top.
-	for _, o := range findOverlays(n) {
-		mr := centerRect(o, width, height)
-		base = compositeAt(base, o.Render(mr), mr.X, mr.Y)
+	if content == "" {
+		lines := make([]string, r.H)
+		for i := range lines {
+			lines[i] = strings.Repeat(" ", r.W)
+		}
+		content = strings.Join(lines, "\n")
 	}
-	return base
+
+	return style.Render(content)
 }
 
 // --- Container interfaces for introspection (Solve, overlay pass) ---

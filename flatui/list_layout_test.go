@@ -18,7 +18,7 @@ func TestListLayoutUsesRenderRow(t *testing.T) {
 		}
 		return "  row" + strconv.Itoa(i)
 	}
-	out := layout.Render(l.Layout(), 20, 3)
+	out, _ := layout.SolveAndCompose(l.Layout(), 20, 3)
 	if !strings.Contains(out, "> row0") || !strings.Contains(out, "  row1") {
 		t.Fatalf("list layout wrong:\n%s", out)
 	}

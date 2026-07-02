@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 func resizedState(width, height int) *State {
@@ -80,6 +82,53 @@ func TestNonGlobalKeyFallsThroughToActiveScreen(t *testing.T) {
 	}
 }
 
+func TestHeaderBorderSpansFullHeaderWidth(t *testing.T) {
+	s := resizedState(80, 24)
+
+	_, headerH := Header{State: s}.Size()
+	rendered := Header{State: s}.Render(layout.Rect{W: 80, H: headerH.Value})
+	lines := strings.Split(ansi.Strip(rendered), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("header rendered %d lines, want at least 2:\n%s", len(lines), rendered)
+	}
+	if !strings.Contains(lines[0], "flat-docker") || !strings.Contains(lines[0], "containers") {
+		t.Fatalf("header title/tabs missing from first line: %q", lines[0])
+	}
+	if got, want := lipgloss.Width(lines[1]), 80; got != want {
+		t.Fatalf("header border width = %d, want %d; line=%q", got, want, lines[1])
+	}
+	if got, want := strings.Count(lines[1], "▀"), 80; got != want {
+		t.Fatalf("header border cells = %d, want %d; line=%q", got, want, lines[1])
+	}
+}
+
+func TestBodyYOffsetMatchesRenderedBodyStart(t *testing.T) {
+	s := resizedState(80, 24)
+	frame := View(s, flatte.RenderContext{Width: 80})
+
+	lines := strings.Split(ansi.Strip(frame.Content), "\n")
+	renderedY := -1
+	for y, line := range lines {
+		if strings.Contains(line, "stats") && strings.Contains(line, "logs") {
+			renderedY = y
+			break
+		}
+	}
+	if renderedY < 0 {
+		t.Fatalf("could not find rendered body header row:\n%s", ansi.Strip(frame.Content))
+	}
+	if renderedY != s.bodyYOffset {
+		t.Fatalf("rendered body starts at y=%d, bodyYOffset=%d", renderedY, s.bodyYOffset)
+	}
+}
+
+func TestSeparatorClaimsRenderedHeight(t *testing.T) {
+	_, h := (Separator{}).Size()
+	if h.Kind != layout.SizeFixed || h.Value != 1 {
+		t.Fatalf("separator height = %+v, want fixed 1", h)
+	}
+}
+
 func TestViewTitleReflectsActiveScreen(t *testing.T) {
 	s := resizedState(80, 24)
 
@@ -106,6 +155,16 @@ func TestViewRendersSharedChromeAndActiveScreenBody(t *testing.T) {
 	}
 	if !strings.Contains(content, "1/2/3 switch") {
 		t.Fatalf("footer missing in:\n%s", content)
+	}
+}
+
+func TestFooterClaimsRenderedHeight(t *testing.T) {
+	w, h := (Footer{State: resizedState(80, 24)}).Size()
+	if w.Kind != layout.SizeAuto {
+		t.Fatalf("footer width = %+v, want auto", w)
+	}
+	if h.Kind != layout.SizeFixed || h.Value != 1 {
+		t.Fatalf("footer height = %+v, want fixed 1", h)
 	}
 }
 
@@ -1215,6 +1274,63 @@ func TestStatsTabShowsCPUMemBars(t *testing.T) {
 	if !strings.Contains(content, "CPU") || !strings.Contains(content, "MEM") {
 		t.Fatalf("stats tab missing CPU/MEM in:\n%s", content)
 	}
+	for _, want := range []string{"status:", "image:", "nginx:1.25"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("stats tab missing %q in:\n%s", want, content)
+		}
+	}
+}
+
+func TestContainerDetailPaneRendersFromAllocatedRect(t *testing.T) {
+	s := resizedState(100, 28)
+	c := &s.containers
+	c.tab = tabStats
+	c.detailPaneWidth = 10
+	c.bodyContentHeight = 4
+
+	rendered := c.renderDetailPane(layout.Rect{W: 42, H: 12})
+	lines := strings.Split(rendered, "\n")
+	if got, want := len(lines), 12; got != want {
+		t.Fatalf("rendered height = %d, want %d:\n%s", got, want, rendered)
+	}
+	for i, line := range lines {
+		if got, want := ansi.StringWidth(line), 42; got != want {
+			t.Fatalf("line %d width = %d, want %d: %q", i, got, want, line)
+		}
+	}
+	stripped := ansi.Strip(rendered)
+	if !strings.Contains(stripped, "status:") || !strings.Contains(stripped, "image:") {
+		t.Fatalf("expected stats body to fit allocated rect:\n%s", stripped)
+	}
+}
+
+func TestContainersBodyTreeUsesConceptNodes(t *testing.T) {
+	s := resizedState(100, 28)
+	c := &s.containers
+	tree := containersBodyTree(c, func(layout.Rect) string { return "" })
+
+	row, ok := tree.Children[0].(layout.Row)
+	if !ok {
+		t.Fatalf("first body child = %T, want layout.Row", tree.Children[0])
+	}
+	if _, ok := row.Children[0].(containerListPane); !ok {
+		t.Fatalf("list child = %T, want containerListPane", row.Children[0])
+	}
+	if d, ok := row.Children[1].(containerDivider); !ok || d.index != 0 {
+		t.Fatalf("first divider = %#v, want containerDivider index 0", row.Children[1])
+	}
+	if _, ok := row.Children[2].(containerDetailPane); !ok {
+		t.Fatalf("detail child = %T, want containerDetailPane", row.Children[2])
+	}
+	if d, ok := row.Children[3].(containerDivider); !ok || d.index != 1 {
+		t.Fatalf("second divider = %#v, want containerDivider index 1", row.Children[3])
+	}
+	if _, ok := row.Children[4].(containerActivityPane); !ok {
+		t.Fatalf("activity child = %T, want containerActivityPane", row.Children[4])
+	}
+	if _, ok := tree.Children[1].(containerStatusRow); !ok {
+		t.Fatalf("status child = %T, want containerStatusRow", tree.Children[1])
+	}
 }
 
 func TestLogsTabShowsLogLines(t *testing.T) {
@@ -1512,6 +1628,42 @@ func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 
 	if s.containers.tab != tabLogs {
 		t.Fatalf("click at (%d,%d): tab = %v, want logs", logsX, clickY, s.containers.tab)
+	}
+}
+
+func TestMouseClickDetailTabUsesRenderedRow(t *testing.T) {
+	s := resizedState(80, 24)
+	frame := View(s, flatte.RenderContext{Width: 80})
+
+	lines := strings.Split(ansi.Strip(frame.Content), "\n")
+	renderedY := -1
+	for y, line := range lines {
+		if strings.Contains(line, "stats") && strings.Contains(line, "logs") {
+			renderedY = y
+			break
+		}
+	}
+	if renderedY < 0 {
+		t.Fatalf("could not find rendered detail tab row:\n%s", ansi.Strip(frame.Content))
+	}
+
+	contentStartX := s.containers.listPaneWidth + dividerWidth + 1
+	contentWidth := s.containers.detailPaneWidth - paneBorderCols
+	totalTabsW := flatui.TabLabelWidth("stats") + flatui.TabLabelWidth("logs") + flatui.TabLabelWidth("inspect")
+	tabStripLocalStart := contentWidth - totalTabsW
+	if tabStripLocalStart < 0 {
+		t.Skipf("pane too narrow for tabs (contentWidth=%d, tabsW=%d)", contentWidth, totalTabsW)
+	}
+	logsX := contentStartX + tabStripLocalStart + flatui.TabLabelWidth("stats") + 1
+
+	Handle(s, flatte.MouseEvent{
+		Action: flatte.MousePress,
+		Button: flatte.MouseLeft,
+		X:      logsX, Y: renderedY,
+	}, flatte.Effects[State]{})
+
+	if s.containers.tab != tabLogs {
+		t.Fatalf("click at rendered tab row (%d,%d): tab = %v, want logs", logsX, renderedY, s.containers.tab)
 	}
 }
 

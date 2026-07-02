@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -35,14 +36,25 @@ func (t Text) Render(r Rect) string {
 // Spacer fills remaining space. Grows on both axes.
 type Spacer struct {
 	NodeBase
+	bg color.Color
 }
 
-func NewSpacer() Spacer {
-	return Spacer{NodeBase: NodeBase{W: Grow(1), H: Grow(1)}}
+func NewSpacer() *Spacer {
+	return &Spacer{
+		NodeBase: NodeBase{
+			W: Grow(1),
+			H: Grow(1),
+		},
+	}
 }
 
-func (s Spacer) Render(r Rect) string {
-	return fillRect("", r, 0, false)
+func (s *Spacer) WithBackground(c color.Color) *Spacer {
+	s.bg = c
+	return s
+}
+
+func (s *Spacer) Render(r Rect) string {
+	return fillRectWithBg("", r, 0, s.bg, false)
 }
 
 // --- helpers ---

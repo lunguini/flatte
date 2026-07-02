@@ -79,20 +79,22 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 
 func buildTree(s *State) layout.Node {
 	children := []layout.Node{
-		layout.Box("header").Height(3).Border(),
-		layout.Row(
-			layout.Box("sidebar").Width(20),
-			layout.Box("content").Grow(1),
-		).Grow(1),
-		layout.Box("footer").Height(1),
+		layout.Text{NodeBase: layout.NodeBase{ID: "header", H: layout.Fixed(3), Bordered: true}},
+		layout.Row{
+			NodeBase: layout.NodeBase{H: layout.Grow(1)},
+			Children: []layout.Node{
+				layout.Text{NodeBase: layout.NodeBase{ID: "sidebar", W: layout.Fixed(20)}},
+				layout.Text{NodeBase: layout.NodeBase{ID: "content", W: layout.Grow(1)}},
+			},
+		},
+		layout.Text{NodeBase: layout.NodeBase{ID: "footer", H: layout.Fixed(1)}},
 	}
-
 	if s.ShowModal {
-		children = append(children, layout.Box("modal").
-			Width(40).Height(10).Layer().Border())
+		children = append(children, layout.Text{NodeBase: layout.NodeBase{
+			ID: "modal", W: layout.Fixed(40), H: layout.Fixed(10), Overlay: true, Bordered: true,
+		}})
 	}
-
-	return layout.Col(children...)
+	return layout.Col{Children: children}
 }
 
 func renderBlocks(rects map[string]layout.Rect, w, h, cursor int) string {
