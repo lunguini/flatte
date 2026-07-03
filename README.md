@@ -89,6 +89,9 @@ func main() {
 - `github.com/lunguini/flatte/flatui` - stateful UI helpers such as `TextField`,
   `Textarea`, `Viewport`, `List`, `Table`, `Tree`, `FocusRing`, `Paginator`,
   `Progress`, `Spinner`, `Timer`, and `Stopwatch`.
+- `github.com/lunguini/flatte/flatui/layout` - flexbox-style layout engine
+  (`Row`, `Col`, `Text`, `Spacer`) that solves a frame tree once into composed
+  content plus per-ID rects for geometry-based hit-testing.
 - `github.com/lunguini/flatte/flatest` - deterministic app driver, golden
   assertions, frame rendering, and replay helpers.
 

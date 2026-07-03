@@ -34,6 +34,13 @@ go run ./flat-pages
 | `flat-tree` | `flatui.Tree`, search field, focus ring, keymap footer |
 | `flat-workspace` | Capstone composition: tree, search, table, viewport, progress, focus, grouped help |
 
+## Layout Engine
+
+| Sample | Demonstrates |
+|---|---|
+| `flat-layout` | `flatui/layout` validation harness: builds a `Col`/`Row`/`Text` tree, `layout.Solve`s it, paints the solved rects, and toggles an `Overlay: true` modal |
+| `flat-docker` | Flagship dogfood: three screens under one frame tree solved once via `layout.SolveAndCompose`; geometry hit-testing for header tabs (`TabBar.WithID`/`HitTest`), rows, and dividers; drag-resizable panes; command bar; confirm modal |
+
 ## Widgets
 
 | Sample | Demonstrates |

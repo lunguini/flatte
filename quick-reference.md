@@ -59,6 +59,122 @@ Use these names for every app:
 | Modal overlay | `flatui.Overlay` | `cmd/flat-modal` |
 | Basic card layout | `flatui.Card`, `flatui.CardBodyWidth`, `flatui.CardBodyHeight` | most samples |
 | Styled local composition | Lip Gloss v2 + `flatui` styled methods | `cmd/flat-style`, `cmd/flat-workspace` |
+| Flexbox-style frame tree | `flatui/layout` (`Row`, `Col`, `Text`, `Spacer`) | `cmd/flat-layout`, `cmd/flat-docker` |
+
+## Layout Engine
+
+`github.com/lunguini/flatte/flatui/layout` is a flexbox-style engine for
+building a whole frame as a tree of nodes, solving it once, and reusing the
+solved rectangles for hit-testing. Import it as `layout`.
+
+### The Node contract
+
+Every visual thing is a `layout.Node` with two methods:
+
+```go
+type Node interface {
+	Size() (w, h Size) // constraints handed to the parent's distribution
+	Render(r Rect) string // draw inside the already-solved rect
+}
+```
+
+`Size` declares intent per axis; `Render` fills the exact `Rect` the parent
+assigned. `Render` never chooses its own position or size. Concrete nodes embed
+`NodeBase` for shared geometry and add their own fields.
+
+### NodeBase fields
+
+| Field | Type | Meaning |
+|---|---|---|
+| `W`, `H` | `Size` | Per-axis constraint (default `Auto`). |
+| `Pad` | `int` | Inner padding on all sides. |
+| `Gap` | `int` | Space between children (containers). |
+| `Bordered` | `bool` | Draw a rounded border; adds one inset cell per side. |
+| `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). |
+| `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
+| `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Bordered` fill; layout inset still comes from `Pad`/`Bordered`. |
+
+### Size kinds
+
+| Constructor | Kind | Meaning on the main axis |
+|---|---|---|
+| `layout.Auto()` | `SizeAuto` | No explicit claim; measurable nodes report their natural size instead. |
+| `layout.Fixed(n)` | `SizeFixed` | Exactly `n` cells. |
+| `layout.Grow(w)` | `SizeGrow` | Weighted share of leftover space; `w` is the weight relative to sibling grows. |
+
+`SizeContent` is produced internally when an `Auto` axis measures natural
+content (e.g. `Text`); callers do not author it. On the cross axis, anything but
+`Fixed` stretches to fill the parent — pin a hit target's cross axis with
+`Fixed` when it must be exactly content-sized.
+
+`Grow` weight has a second meaning for overlays: `Grow(0.6)` sizes the overlay
+to 60% of the viewport on that axis, while `Grow(1)` (weight >= 1) fills the
+whole viewport.
+
+### Containers and leaves
+
+| Node | Role |
+|---|---|
+| `layout.Row{Children: ...}` | Distribute children horizontally (main axis = width). |
+| `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
+| `layout.Text{String: ...}` | Leaf carrying a pre-rendered string; auto-sizes to it. |
+| `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
+
+### Solving a frame
+
+| Call | Returns | Use |
+|---|---|---|
+| `layout.SolveAndCompose(root, w, h)` | `(content string, rects map[string]Rect)` | The frame path: one pass distributes rects and paints leaves into a cell buffer, so geometry and pixels cannot drift. Put `content` in `flatte.Frame`; keep `rects` for hit-testing. |
+| `layout.Solve(root, w, h)` | `map[string]Rect` | Geometry only, no painting. Use to warm hit-test rects for a subtree that is not the frame this pass. |
+
+`Rect` (`layout.Rect`, aliased as `flatui.Rect`) is `{X, Y, W, H}` in absolute
+frame cells, with `Contains`, `Inset`, and `Intersect`.
+
+### Overlays
+
+Set `Overlay: true` on a node (or a container) to make it a centered layer. It
+is skipped in the base distribution, then composed on top: its rect is cleared
+and the node is recursed so descendants still get rects recorded. Overlay axis
+size comes from `Fixed`/`Content` (exact, clamped to the viewport), `Auto`
+(fills the viewport), or `Grow` (viewport fraction, per the weight rule above).
+`layout.Overlay(base, layer)` is the standalone string compositor that centers
+one rendered block over another with correct ANSI handling.
+
+### Widgets in a layout tree
+
+Several widgets expose `Layout() layout.Node`, so they slot straight into a
+frame tree instead of being rendered and positioned by hand:
+
+| Widget | `Layout()` produces |
+|---|---|
+| `flatui.TabBar` | A `Row` of tab leaves (or one bordered `Text`); tags rects when `WithID` is set. |
+| `flatui.List` | A `Text` leaf of the visible rows via `RenderRow`. |
+| `flatui.Viewport` | A `Text` leaf of the visible slice. |
+| `flatui.Progress` | A `Text` leaf of the bar. |
+
+### Geometry-based hit-testing
+
+Because `SolveAndCompose` records every ID'd node's rect, mouse routing is a
+map lookup — no coordinate math in app code. For tabs:
+
+```go
+// Build once; WithID tags the strip and each tab with a layout ID.
+s.tabs = flatui.NewTabBar(items...).WithID("header")
+
+// In View: the tab strip is a real child of the frame tree.
+tree := layout.Col{Children: []layout.Node{s.tabs.Layout(), body, footer}}
+content, rects := layout.SolveAndCompose(tree, w, h)
+s.rects = rects // stash for Handle
+
+// In Handle: map a click to a tab index using the solved rects.
+if idx, ok := s.tabs.HitTest(s.rects, m.X, m.Y); ok {
+	s.tabs.SetActive(idx)
+}
+```
+
+For app-defined regions (rows, dividers), give the nodes IDs and look their
+rects up in the returned map directly, or feed rects into a `flatui.ZoneScanner`
+(`Reset`, then `Set(id, rect)` each frame, then `At(x, y)`) or `flatui.ZoneMap`.
 
 ## Async And Effects
 
