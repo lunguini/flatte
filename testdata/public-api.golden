@@ -337,6 +337,48 @@ flatui
   var SpinnerLine
   var TabGlyphsPowerline
   var TabGlyphsSafe
+flatui/layout
+  const SizeAuto
+  const SizeContent
+  const SizeFixed
+  const SizeGrow
+  func Auto
+  func Fixed
+  func Grow
+  func NewSpacer
+  func Overlay
+  func OverlayOrigin
+  func Solve
+  func SolveAndCompose
+  method Col.GetChildren
+  method Col.GetGap
+  method Col.IsHorizontal
+  method Col.Render
+  method Col.Size
+  method NodeBase.GetID
+  method NodeBase.IsOverlay
+  method NodeBase.Size
+  method Rect.Contains
+  method Rect.Inset
+  method Rect.Intersect
+  method Row.GetChildren
+  method Row.GetGap
+  method Row.IsHorizontal
+  method Row.Render
+  method Row.Size
+  method Spacer.Render
+  method Spacer.WithBackground
+  method Text.Render
+  method Text.Size
+  type Col
+  type Node
+  type NodeBase
+  type Rect
+  type Row
+  type Size
+  type SizeKind
+  type Spacer
+  type Text
 flatest
   func AssertFrames
   func AssertGolden

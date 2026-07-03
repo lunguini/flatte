@@ -38,6 +38,7 @@ func collectPublicAPI(t *testing.T) []string {
 	}{
 		{"flatte", "."},
 		{"flatui", "flatui"},
+		{"flatui/layout", filepath.Join("flatui", "layout")},
 		{"flatest", "flatest"},
 	}
 	var out []string
