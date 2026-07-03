@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type confirmModel struct {
@@ -231,13 +231,69 @@ func (s *State) openConfirm(action string, ct *Container) {
 	}
 }
 
-func renderModal(m *confirmModel) string {
-	title := fmt.Sprintf(" %s container ", m.action)
-	body := fmt.Sprintf("\n  %s %s?\n\n  y confirm   n/esc cancel\n", m.action, m.targetName)
-	return lipgloss.NewStyle().
-		Width(40).
-		Padding(0, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("203")).
-		Render(title + body)
+// modalWidth is the confirm modal's fixed total width (including its border).
+const modalWidth = 40
+
+// modalNode builds the confirm dialog as a centered overlay subtree. The engine
+// finds it via Overlay:true, clears its rect, and composes it on top of the base
+// frame in the single frame walk — no post-hoc string compositing. Bordered
+// declares the 1-cell inset for the styled frame; Chrome paints that frame (a
+// rounded red border with a title bar) under the body Text children.
+func modalNode(m *confirmModel) layout.Node {
+	body := lipgloss.NewStyle().Foreground(pal.text).
+		Render("  " + m.action + " " + m.targetName + "?")
+	yKey := lipgloss.NewStyle().Bold(true).Foreground(pal.good).Render("y")
+	nKey := lipgloss.NewStyle().Bold(true).Foreground(pal.bad).Render("n/esc")
+	hints := lipgloss.NewStyle().Foreground(pal.muted).Render("  ") +
+		yKey + lipgloss.NewStyle().Foreground(pal.muted).Render(" confirm    ") +
+		nKey + lipgloss.NewStyle().Foreground(pal.muted).Render(" cancel")
+
+	blank := func() layout.Node {
+		return layout.Text{NodeBase: layout.NodeBase{H: layout.Fixed(1)}}
+	}
+	return layout.Col{
+		NodeBase: layout.NodeBase{
+			ID:       "modal",
+			Overlay:  true,
+			Bordered: true,
+			W:        layout.Fixed(modalWidth),
+			Chrome:   modalChrome(m.action),
+		},
+		Children: []layout.Node{
+			blank(),
+			layout.Text{NodeBase: layout.NodeBase{ID: "modal:body", H: layout.Fixed(1)}, String: body},
+			blank(),
+			layout.Text{NodeBase: layout.NodeBase{ID: "modal:hints", H: layout.Fixed(1)}, String: hints},
+			blank(),
+		},
+	}
+}
+
+// modalChrome paints the modal's rounded border in the alert color with the
+// action embedded as a title in the top border rule. It is painted at the
+// node's full rect under the body children; the side/corner glyphs it draws sit
+// in the Bordered inset the children never reach, so they survive.
+func modalChrome(action string) func(layout.Rect) string {
+	return func(r layout.Rect) string {
+		if r.W < 4 || r.H < 2 {
+			return ""
+		}
+		border := lipgloss.NewStyle().Foreground(pal.bad)
+		title := lipgloss.NewStyle().Bold(true).Foreground(pal.bad).
+			Render(" " + action + " container ")
+		trail := r.W - 2 - lipgloss.Width(title) - 1 // after "╭─" + title, before "╮"
+		if trail < 0 {
+			trail = 0
+		}
+		top := border.Render("╭─") + title + border.Render(strings.Repeat("─", trail)+"╮")
+		side := border.Render("│") + strings.Repeat(" ", r.W-2) + border.Render("│")
+		bottom := border.Render("╰" + strings.Repeat("─", r.W-2) + "╯")
+		rows := make([]string, r.H)
+		rows[0] = top
+		for i := 1; i < r.H-1; i++ {
+			rows[i] = side
+		}
+		rows[r.H-1] = bottom
+		return strings.Join(rows, "\n")
+	}
 }

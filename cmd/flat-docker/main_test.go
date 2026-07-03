@@ -1309,8 +1309,9 @@ func TestContainersBodyTreeUsesConceptNodes(t *testing.T) {
 	if !ok {
 		t.Fatalf("first body child = %T, want layout.Row", tree.Children[0])
 	}
-	if _, ok := row.Children[0].(containerListPane); !ok {
-		t.Fatalf("list child = %T, want containerListPane", row.Children[0])
+	listCol, ok := row.Children[0].(layout.Col)
+	if !ok || listCol.ID != "list" {
+		t.Fatalf("list child = %#v, want layout.Col with ID \"list\"", row.Children[0])
 	}
 	if d, ok := row.Children[1].(containerDivider); !ok || d.index != 0 {
 		t.Fatalf("first divider = %#v, want containerDivider index 0", row.Children[1])
@@ -1572,6 +1573,32 @@ func TestModalRendersAsOverlayOverBase(t *testing.T) {
 	// Base content still present underneath
 	if !strings.Contains(content, "1 containers") {
 		t.Fatalf("base tab label missing under modal in:\n%s", content)
+	}
+}
+
+// The modal is a real overlay node: the frame solve records its rect (and its
+// children's), centered in the frame at the fixed modal width.
+func TestModalOverlayRecordsCenteredRects(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	View(s, flatte.RenderContext{Width: 80})
+
+	mr, ok := s.rects["modal"]
+	if !ok {
+		t.Fatal("modal rect not recorded by the frame solve")
+	}
+	if mr.W != modalWidth {
+		t.Fatalf("modal width = %d, want %d", mr.W, modalWidth)
+	}
+	if wantX := (80 - modalWidth) / 2; mr.X != wantX {
+		t.Fatalf("modal X = %d, want centered %d", mr.X, wantX)
+	}
+	body, ok := s.rects["modal:body"]
+	if !ok {
+		t.Fatal("modal body rect not recorded")
+	}
+	if !mr.Contains(body.X, body.Y) {
+		t.Fatalf("modal body rect %+v outside modal %+v", body, mr)
 	}
 }
 

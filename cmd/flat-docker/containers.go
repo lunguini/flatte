@@ -230,47 +230,54 @@ func (c *containersScreen) injectStreamDemo(id string) {
 	}
 }
 
-type containerListPane struct {
-	layout.NodeBase
-	screen *containersScreen
-}
-
-func newContainerListPane(c *containersScreen) containerListPane {
-	return containerListPane{
-		NodeBase: layout.NodeBase{ID: "list", W: layout.Fixed(c.listPaneWidth), H: layout.Auto()},
-		screen:   c,
-	}
-}
-
-func (p containerListPane) Render(r layout.Rect) string {
-	if p.screen == nil {
-		return ""
-	}
-	return p.screen.renderListPane(r)
-}
-
-// listHeaderLines is the count of rows renderListPane draws before the first
+// listHeaderLines is the count of rows the list pane draws before the first
 // list row: the filter line plus a blank separator row.
 const listHeaderLines = 2
 
-// rowRects returns the absolute hit rectangle for each visible list row, in the
-// same coordinates renderListPane paints them. Keeping this next to Render means
-// one type owns both paint and geometry, so they can't drift.
-func (p containerListPane) rowRects(r layout.Rect) []layout.Rect {
-	if p.screen == nil || r.W == 0 {
-		return nil
-	}
-	c := p.screen
-	rowX := r.X + panePadding
-	rowW := max(r.W-paneBorderCols-1, 1) // matches renderListPane's listInnerWidth
+// blankSpace reserves layout space without painting anything. It lets the list
+// subtree offset its rows (past the filter/separator header and the left pad)
+// while the pane's Chrome paints those reserved regions underneath.
+type blankSpace struct{ layout.NodeBase }
+
+func (blankSpace) Render(layout.Rect) string { return "" }
+
+// listNode builds the list pane as a real subtree: a Chrome-painted frame
+// (filter line, separator, scrollbar, padding — reproducing renderListPane's
+// non-row cells) with one ID'd Text per visible row composed on top. The row
+// nodes give the frame solve authoritative per-row rects, so hit-testing reads
+// rects["list:i"] instead of a parallel rowRects computation.
+func (c *containersScreen) listNode() layout.Node {
+	listInnerWidth := max(c.listPaneWidth-paneBorderCols-1, 1)
 	offset := c.list.Offset()
 	end := min(offset+c.listHeight, c.list.Count())
-	rects := make([]layout.Rect, 0, max(end-offset, 0))
+	rows := make([]layout.Node, 0, max(end-offset, 0))
 	for i := offset; i < end; i++ {
-		y := r.Y + listHeaderLines + (i - offset)
-		rects = append(rects, layout.Rect{X: rowX, Y: y, W: rowW, H: 1})
+		rows = append(rows, layout.Text{
+			NodeBase: layout.NodeBase{ID: "list:" + strconv.Itoa(i), H: layout.Fixed(1)},
+			String:   c.renderListRow(i, i == c.list.Cursor()),
+		})
 	}
-	return rects
+	return layout.Col{
+		NodeBase: layout.NodeBase{
+			ID:     "list",
+			W:      layout.Fixed(c.listPaneWidth),
+			H:      layout.Auto(),
+			Chrome: c.renderListChrome,
+		},
+		Children: []layout.Node{
+			blankSpace{layout.NodeBase{H: layout.Fixed(listHeaderLines)}},
+			layout.Row{
+				NodeBase: layout.NodeBase{H: layout.Grow(1)},
+				Children: []layout.Node{
+					blankSpace{layout.NodeBase{W: layout.Fixed(panePadding)}},
+					layout.Col{
+						NodeBase: layout.NodeBase{W: layout.Fixed(listInnerWidth)},
+						Children: rows,
+					},
+				},
+			},
+		},
+	}
 }
 
 type containerDetailPane struct {
@@ -358,7 +365,7 @@ func containersBodyTree(c *containersScreen, status func(layout.Rect) string) la
 			layout.Row{
 				NodeBase: layout.NodeBase{H: layout.Grow(1)},
 				Children: []layout.Node{
-					newContainerListPane(c),
+					c.listNode(),
 					newContainerDivider(c, 0),
 					newContainerDetailPane(c),
 					newContainerDivider(c, 1),
@@ -408,16 +415,16 @@ func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	c.registerListZones()
 }
 
-// registerListZones feeds list-row hit rects to the zone scanner. The row
-// geometry is owned by containerListPane (the type that also paints the rows),
-// so paint and hit-testing can't drift. The frame is composited through a cell
-// buffer, so zones are derived from coordinates, not scanned from the string.
+// registerListZones feeds list-row hit rects to the zone scanner straight from
+// the frame-solved geometry. Each visible row is an ID'd node ("list:i"), so its
+// rect is recorded by the single frame walk — paint and hit-testing read the
+// same rects and can't drift.
 func (c *containersScreen) registerListZones() {
 	c.zones.Reset()
-	pane := newContainerListPane(c)
-	offset := c.list.Offset()
-	for i, rect := range pane.rowRects(c.rects["list"]) {
-		c.zones.Set("list:"+strconv.Itoa(offset+i), rect)
+	for id, rect := range c.rects {
+		if strings.HasPrefix(id, "list:") {
+			c.zones.Set(id, rect)
+		}
 	}
 }
 
@@ -1095,7 +1102,45 @@ func (c *containersScreen) keyHints() string {
 	return "1/2/3 switch  q quit"
 }
 
-func (c *containersScreen) renderListPane(r layout.Rect) string {
+// renderListRow renders one list row exactly as the pane always has (status
+// glyph, selection marker, name). It is the per-row node's paint, called from
+// listNode with the absolute item index.
+func (c *containersScreen) renderListRow(idx int, selected bool) string {
+	if idx < 0 || idx >= len(c.filtered) {
+		return ""
+	}
+	ct := c.containers[c.filtered[idx]]
+	marker := "  "
+	if selected {
+		marker = "> "
+	}
+	statusColor := pal.good
+	if ct.Status != "running" {
+		statusColor = pal.bad
+	}
+	statusIcon := lipgloss.NewStyle().Foreground(statusColor).Render("●")
+	if ct.Status != "running" {
+		statusIcon = lipgloss.NewStyle().Foreground(pal.muted).Render("○")
+	}
+	name := ct.Name
+	if selected {
+		name = lipgloss.NewStyle().Bold(true).Foreground(pal.text).Render(name)
+	}
+	return statusIcon + marker + name
+}
+
+// renderListChrome paints the pane frame — filter line, blank separator,
+// scrollbar column, and padding — with a blank row area. The per-row Text
+// children (see listNode) compose the rows on top of that blank area, so the
+// non-row cells come from the same lipgloss pipeline the pane always used and
+// stay byte-identical. When nothing matches, the frame carries the placeholder
+// itself (there are no row children to draw it).
+func (c *containersScreen) renderListChrome(r layout.Rect) string {
+	rows := ""
+	if c.list.Count() == 0 {
+		rows = lipgloss.NewStyle().Foreground(pal.muted).Render("  (no matches)")
+	}
+
 	listInnerWidth := max(r.W-paneBorderCols-1, 1) // -1 for scrollbar
 	listInnerHeight := max(r.H-paneBorderRows, 0)
 	contentStyle := lipgloss.NewStyle().Width(listInnerWidth).Height(listInnerHeight)
@@ -1108,34 +1153,7 @@ func (c *containersScreen) renderListPane(r layout.Rect) string {
 		filterLine = lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(filterLine)
 	}
 
-	listContent := c.list.View(func(idx int, selected bool) string {
-		if idx < 0 || idx >= len(c.filtered) {
-			return ""
-		}
-		ct := c.containers[c.filtered[idx]]
-		marker := "  "
-		if selected {
-			marker = "> "
-		}
-		statusColor := pal.good
-		if ct.Status != "running" {
-			statusColor = pal.bad
-		}
-		statusIcon := lipgloss.NewStyle().Foreground(statusColor).Render("●")
-		if ct.Status != "running" {
-			statusIcon = lipgloss.NewStyle().Foreground(pal.muted).Render("○")
-		}
-		name := ct.Name
-		if selected {
-			name = lipgloss.NewStyle().Bold(true).Foreground(pal.text).Render(name)
-		}
-		return statusIcon + marker + name
-	})
-	if listContent == "" {
-		listContent = lipgloss.NewStyle().Foreground(pal.muted).Render("  (no matches)")
-	}
-
-	inner := contentStyle.Render(filterLine + "\n\n" + listContent)
+	inner := contentStyle.Render(filterLine + "\n\n" + rows)
 	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), listInnerHeight)
 	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
 	combined := withScrollbar(inner, barStyled)

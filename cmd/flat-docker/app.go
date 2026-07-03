@@ -212,12 +212,19 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 		return s.containers.renderStatusLine(r.W)
 	}
 
-	tree := layout.Col{Children: []layout.Node{
+	children := []layout.Node{
 		headerNode(s),
 		s.activeBody(status),
 		Separator{},
 		Footer{State: s},
-	}}
+	}
+	// The confirm dialog is a centered overlay node appended to the frame tree:
+	// the single SolveAndCompose walk clears its rect and composes it over the
+	// base, and records its rects — no separate string-overlay pass.
+	if s.confirmModal != nil {
+		children = append(children, modalNode(s.confirmModal))
+	}
+	tree := layout.Col{Children: children}
 
 	// One top-to-bottom pass resolves the whole frame — header, panes,
 	// dividers, status, footer — in absolute coordinates AND paints it into a
@@ -232,11 +239,6 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 		s.images.adopt(s.rects)
 	case screenVolumes:
 		s.volumes.adopt(s.rects)
-	}
-
-	// Modal overlay (composited via ultraviolet for proper ANSI handling).
-	if s.confirmModal != nil {
-		content = flatui.Overlay(content, renderModal(s.confirmModal))
 	}
 
 	frame := flatte.Frame{
