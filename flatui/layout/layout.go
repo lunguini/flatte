@@ -136,6 +136,15 @@ type NodeBase struct {
 	Bordered bool
 	Overlay  bool
 	ID       string
+
+	// Chrome, when set on a container, paints the node's own decoration
+	// (styled border, background, title) instead of the default Pad/Bordered
+	// fill. It receives the node's full solved rect and is painted before
+	// (under) the children. It does not change the layout inset: Pad and
+	// Bordered still declare the space the chrome occupies, so children are
+	// placed inside that inset regardless of what Chrome draws. Leaves ignore
+	// it — a leaf's Render owns all of its pixels already.
+	Chrome func(r Rect) string
 }
 
 func (n NodeBase) Size() (Size, Size) { return n.W, n.H }
@@ -150,8 +159,9 @@ func (n NodeBase) innerInset() int {
 	return s
 }
 
-func (n NodeBase) pad() int       { return n.Pad }
-func (n NodeBase) bordered() bool { return n.Bordered }
+func (n NodeBase) pad() int                  { return n.Pad }
+func (n NodeBase) bordered() bool            { return n.Bordered }
+func (n NodeBase) chrome() func(Rect) string { return n.Chrome }
 
 // --- Distribution helpers (shared by Row and Col) ---
 

@@ -100,3 +100,112 @@ func TestOverflowingContentKeepsBorder(t *testing.T) {
 			strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// boxChrome is a test chrome painter: a '#' frame filled with '.' rows.
+func boxChrome(r Rect) string {
+	if r.W < 2 || r.H < 2 {
+		return ""
+	}
+	top := strings.Repeat("#", r.W)
+	mid := "#" + strings.Repeat(".", r.W-2) + "#"
+	rows := make([]string, r.H)
+	rows[0] = top
+	for i := 1; i < r.H-1; i++ {
+		rows[i] = mid
+	}
+	rows[r.H-1] = top
+	return strings.Join(rows, "\n")
+}
+
+// A container with Chrome paints the custom decoration instead of the default
+// Pad/Bordered fill; children still land inside the Pad/Bordered inset, on top
+// of the chrome.
+func TestCustomChromeReplacesDefaultPaint(t *testing.T) {
+	tree := Col{
+		NodeBase: NodeBase{Bordered: true, Chrome: boxChrome},
+		Children: []Node{Text{String: "hi"}},
+	}
+	composed, _ := SolveAndCompose(tree, 8, 4)
+	// The child Text fills its full inner rect (styled spaces), covering the
+	// chrome's '.' fill on its row; the border frame and the un-childed inner
+	// row reveal the chrome.
+	want := []string{
+		"########",
+		"#hi    #",
+		"#......#",
+		"########",
+	}
+	if got := stripLines(composed); !reflect.DeepEqual(got, want) {
+		t.Fatalf("custom chrome:\n%s\nwant:\n%s",
+			strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// Chrome is painted even when the node declares no inset (Pad 0, unbordered):
+// children then cover it at the full rect, and uncovered cells reveal it.
+func TestCustomChromeWithZeroInset(t *testing.T) {
+	tree := Col{
+		NodeBase: NodeBase{Chrome: boxChrome},
+		Children: []Node{Text{NodeBase: NodeBase{H: Fixed(1)}, String: "hi"}},
+	}
+	composed, _ := SolveAndCompose(tree, 6, 3)
+	got := stripLines(composed)
+	// Row 0 is the child — a Text fills its whole rect (styled spaces), so it
+	// covers the chrome's top edge; rows 1-2 reveal the chrome underneath.
+	want := []string{
+		"hi",
+		"#....#",
+		"######",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("zero-inset chrome:\n%s\nwant:\n%s",
+			strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// An overlay container with Chrome renders its decoration through the overlay
+// pass, and its children get rects.
+func TestOverlayContainerWithChrome(t *testing.T) {
+	tree := Col{Children: []Node{
+		Text{String: strings.Repeat("b\n", 4) + "b"},
+		Col{
+			NodeBase: NodeBase{Overlay: true, W: Fixed(6), H: Fixed(4), Bordered: true, Chrome: boxChrome},
+			Children: []Node{Text{NodeBase: NodeBase{ID: "modal-body"}, String: "hi"}},
+		},
+	}}
+	composed, rects := SolveAndCompose(tree, 12, 6)
+	stripped := rawLines(composed)
+	found := false
+	for _, line := range stripped {
+		if strings.Contains(line, "#hi....#"[0:3]) || strings.Contains(line, "#hi") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("overlay chrome+child not painted:\n%s", strings.Join(stripped, "\n"))
+	}
+	body, ok := rects["modal-body"]
+	if !ok {
+		t.Fatal("overlay child rect not recorded")
+	}
+	// The 6x4 layer centers at (3,1) in 12x6; its bordered inset starts the
+	// inner box at (4,2), and the content-sized Text claims one row of it.
+	if body != (Rect{4, 2, 4, 1}) {
+		t.Fatalf("overlay child rect = %+v, want {4 2 4 1}", body)
+	}
+}
+
+// A childless container with Chrome renders the chrome from the string path
+// too (Row/Col.Render delegate consistency).
+func TestCustomChromeChildlessStringPath(t *testing.T) {
+	c := Col{NodeBase: NodeBase{Chrome: boxChrome}}
+	want := []string{
+		"######",
+		"#....#",
+		"######",
+	}
+	if got := stripLines(c.Render(Rect{0, 0, 6, 3})); !reflect.DeepEqual(got, want) {
+		t.Fatalf("childless chrome string path:\n%s\nwant:\n%s",
+			strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

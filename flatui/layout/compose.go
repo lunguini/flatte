@@ -65,9 +65,13 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, out map[string]Rect) {
 	}
 
 	// Container: paint its own border/background chrome first (if any), then
-	// paint children on top inside the inset region.
+	// paint children on top inside the inset region. A custom Chrome painter
+	// replaces the default Pad/Bordered fill and is painted even with zero
+	// inset; the layout inset itself still comes from Pad/Bordered only.
 	if buf != nil {
-		if inset := getInset(n); inset > 0 {
+		if ch := getChrome(n); ch != nil {
+			drawInto(*buf, ch(r), r)
+		} else if inset := getInset(n); inset > 0 {
 			drawInto(*buf, fillRect("", r, getPad(n), isBordered(n)), r)
 		}
 	}
@@ -130,4 +134,12 @@ func isBordered(n Node) bool {
 		return b.bordered()
 	}
 	return false
+}
+
+func getChrome(n Node) func(Rect) string {
+	type chromer interface{ chrome() func(Rect) string }
+	if c, ok := n.(chromer); ok {
+		return c.chrome()
+	}
+	return nil
 }

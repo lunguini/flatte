@@ -42,6 +42,9 @@ func (r Row) Size() (Size, Size) {
 // otherwise Render a container) from recursing.
 func (r Row) Render(rect Rect) string {
 	if len(r.Children) == 0 {
+		if r.Chrome != nil {
+			return r.Chrome(rect)
+		}
 		return fillRect("", rect, r.Pad, r.Bordered)
 	}
 	frame, _ := SolveAndCompose(r, rect.W, rect.H)
@@ -90,6 +93,9 @@ func (c Col) Size() (Size, Size) {
 // rationale, including why the childless case stays on the direct path.
 func (c Col) Render(rect Rect) string {
 	if len(c.Children) == 0 {
+		if c.Chrome != nil {
+			return c.Chrome(rect)
+		}
 		return fillRect("", rect, c.Pad, c.Bordered)
 	}
 	frame, _ := SolveAndCompose(c, rect.W, rect.H)
