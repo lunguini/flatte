@@ -104,6 +104,7 @@ func exportedGenDeclItems(decl *ast.GenDecl) []string {
 		case *ast.TypeSpec:
 			if s.Name.IsExported() {
 				items = append(items, "type "+s.Name.Name)
+				items = append(items, exportedFieldItems(s)...)
 			}
 		case *ast.ValueSpec:
 			kind := strings.ToLower(decl.Tok.String())
@@ -115,6 +116,45 @@ func exportedGenDeclItems(decl *ast.GenDecl) []string {
 		}
 	}
 	return items
+}
+
+// exportedFieldItems lists an exported struct type's exported fields
+// (including embedded ones), so field renames and additions are locked by
+// the snapshot just like methods — NodeBase.Chrome and the Pad* fields are
+// public API even though no function signature mentions them.
+func exportedFieldItems(spec *ast.TypeSpec) []string {
+	st, ok := spec.Type.(*ast.StructType)
+	if !ok || st.Fields == nil {
+		return nil
+	}
+	var items []string
+	for _, f := range st.Fields.List {
+		if len(f.Names) == 0 {
+			// Embedded field: its name is the (possibly qualified) type name.
+			if name := embeddedFieldName(f.Type); name != "" && ast.IsExported(name) {
+				items = append(items, "field "+spec.Name.Name+"."+name)
+			}
+			continue
+		}
+		for _, name := range f.Names {
+			if name.IsExported() {
+				items = append(items, "field "+spec.Name.Name+"."+name.Name)
+			}
+		}
+	}
+	return items
+}
+
+func embeddedFieldName(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name
+	case *ast.StarExpr:
+		return embeddedFieldName(e.X)
+	case *ast.SelectorExpr:
+		return e.Sel.Name
+	}
+	return ""
 }
 
 func receiverTypeName(fields *ast.FieldList) string {

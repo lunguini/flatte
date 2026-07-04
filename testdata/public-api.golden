@@ -34,6 +34,40 @@ flatte
   const MouseRight
   const MouseWheelDown
   const MouseWheelUp
+  field App.Handle
+  field App.Init
+  field App.OnExit
+  field App.State
+  field App.Tracer
+  field App.View
+  field ClipboardEvent.Text
+  field Cursor.Style
+  field Cursor.X
+  field Cursor.Y
+  field CursorStyle.Blink
+  field CursorStyle.Color
+  field CursorStyle.Shape
+  field Effects.Context
+  field Effects.Updates
+  field FileSelection.Err
+  field FileSelection.Path
+  field FocusEvent.Focused
+  field Frame.Content
+  field Frame.Cursor
+  field Frame.Title
+  field KeyEvent.Key
+  field KeyEvent.Mod
+  field KeyEvent.Rune
+  field MouseEvent.Action
+  field MouseEvent.Button
+  field MouseEvent.Mod
+  field MouseEvent.X
+  field MouseEvent.Y
+  field PasteEvent.Text
+  field RenderContext.ColorProfile
+  field RenderContext.Width
+  field ResizeEvent.Height
+  field ResizeEvent.Width
   func ApplyUpdate
   func Async
   func Cancel
@@ -106,6 +140,49 @@ flatte
 flatui
   const KeyMapFull
   const KeyMapShort
+  field CardStyle.BorderForeground
+  field CardStyle.Container
+  field Column.Title
+  field Column.Width
+  field KeyBinding.Disabled
+  field KeyBinding.Help
+  field KeyBinding.Keys
+  field KeyGroup.Bindings
+  field KeyGroup.Title
+  field KeyMapOptions.Mode
+  field KeyMapOptions.Width
+  field List.RenderRow
+  field ProgressStyle.Empty
+  field ProgressStyle.Filled
+  field ProgressStyle.Label
+  field TabBar.Items
+  field TabBarBorder.Bottom
+  field TabBarBorder.Color
+  field TabBarBorder.Left
+  field TabBarBorder.Right
+  field TabBarBorder.Style
+  field TabBarBorder.Top
+  field TabGlyphs.Left
+  field TabGlyphs.Right
+  field TabItem.ID
+  field TabItem.Label
+  field TableStyle.Active
+  field TableStyle.Header
+  field TableStyle.Row
+  field TextField.Cursor
+  field TextField.Value
+  field TextPosition.Col
+  field TextPosition.Row
+  field TextRange.End
+  field TextRange.Start
+  field TreeNode.Children
+  field TreeNode.ID
+  field TreeNode.Label
+  field TreeRow.Depth
+  field TreeRow.Expandable
+  field TreeRow.Expanded
+  field TreeRow.ID
+  field TreeRow.Label
   func Card
   func CardBodyHeight
   func CardBodyWidth
@@ -342,6 +419,32 @@ flatui/layout
   const SizeContent
   const SizeFixed
   const SizeGrow
+  field Col.Children
+  field Col.NodeBase
+  field NodeBase.Bordered
+  field NodeBase.Chrome
+  field NodeBase.Gap
+  field NodeBase.H
+  field NodeBase.ID
+  field NodeBase.Overlay
+  field NodeBase.Pad
+  field NodeBase.PadBottom
+  field NodeBase.PadLeft
+  field NodeBase.PadRight
+  field NodeBase.PadTop
+  field NodeBase.W
+  field Rect.H
+  field Rect.W
+  field Rect.X
+  field Rect.Y
+  field Row.Children
+  field Row.NodeBase
+  field Size.Kind
+  field Size.Value
+  field Size.Weight
+  field Spacer.NodeBase
+  field Text.NodeBase
+  field Text.String
   func Auto
   func Fixed
   func Grow
@@ -380,6 +483,9 @@ flatui/layout
   type Spacer
   type Text
 flatest
+  field Recorder.Steps
+  field Step.Event
+  field Step.Update
   func AssertFrames
   func AssertGolden
   func AssertGoldenFrame
