@@ -28,20 +28,33 @@ func (c *fakeClock) Tick(ctx context.Context, interval time.Duration, cb func(ti
 }
 
 // advance moves time forward, firing each live ticker once per whole
-// interval elapsed. Cancelled tickers are skipped and dropped.
+// interval elapsed. Cancelled tickers are skipped and dropped — including a
+// ticker that cancels itself mid-burst, which stops firing immediately.
+//
+// Callbacks may register new tickers (the "cancel + re-arm an Every from
+// inside a fold" pattern): iteration runs over a snapshot while Tick appends
+// to a fresh slice, so registrations made during an advance are kept but do
+// not fire until the next advance — they were born "now" and no time has
+// passed for them yet.
 func (c *fakeClock) advance(d time.Duration) {
 	c.now = c.now.Add(d)
-	live := c.tickers[:0]
-	for _, t := range c.tickers {
+	snapshot := c.tickers
+	c.tickers = nil // Tick calls from callbacks land here
+	var live []*fakeTicker
+	for _, t := range snapshot {
 		if t.ctx.Err() != nil {
 			continue
 		}
 		t.acc += d
-		for t.interval > 0 && t.acc >= t.interval {
+		for t.interval > 0 && t.acc >= t.interval && t.ctx.Err() == nil {
 			t.acc -= t.interval
 			t.cb(c.now)
 		}
-		live = append(live, t)
+		if t.ctx.Err() == nil {
+			live = append(live, t)
+		}
 	}
-	c.tickers = live
+	// Survivors keep their original order, followed by tickers registered
+	// during this advance.
+	c.tickers = append(live, c.tickers...)
 }

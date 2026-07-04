@@ -49,6 +49,11 @@ func Exec[S any](fx Effects[S], name string, cmd *exec.Cmd, fold func(*S, error)
 // Every sends a named update on a fixed interval until the loop context is
 // cancelled. Timing comes from the Clock (real ticker by default; a fake
 // clock drives it deterministically under test).
+//
+// Every has no name-based cancellation of its own — Cancel only stops
+// Latest work. To stop or re-arm a ticker (pause/resume, changing the
+// interval), start it through a Scope (ScopeEvery) and cancel the scope;
+// flat-game dogfoods exactly this for pause/resume/restart.
 func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) {
 	clk := fx.clock
 	if clk == nil {
@@ -120,7 +125,9 @@ func Latest[S, T any](fx Effects[S], name string, work func(context.Context) (T,
 	})
 }
 
-// Cancel stops in-flight Latest work under name, if any.
+// Cancel stops in-flight Latest work under name, if any. It does not affect
+// Every tickers — those stop through the Scope that started them (see
+// Every's doc).
 func Cancel[S any](fx Effects[S], name string) {
 	if fx.latest == nil {
 		return
