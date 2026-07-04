@@ -76,7 +76,7 @@ func TestHelpLinePinnedToBottom(t *testing.T) {
 
 func TestProgressUsesWorkPanelWidth(t *testing.T) {
 	s := ready()
-	_, centerOuter, _ := layoutWidths(86)
+	_, centerOuter, _ := columnWidths(86)
 	if got, want := s.progress.Width(), centerOuter-12; got != want {
 		t.Fatalf("progress width = %d, want work content width minus label = %d", got, want)
 	}

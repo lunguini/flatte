@@ -33,7 +33,7 @@ go run ./flat-pages
 | `flat-pages` | Multi-screen navigation with a screen enum |
 | `flat-modal` | Overlay/modal state without a modal manager |
 | `flat-tree` | `flatui.Tree`, search field, focus ring, keymap footer |
-| `flat-workspace` | Capstone composition: tree, search, table, viewport, progress, focus, grouped help |
+| `flat-workspace` | Capstone: three-pane layout-engine composition (tree, search, table, viewport, progress) with focus ring, grouped help, and a cursor placed from solved rects |
 
 ## Layout Engine
 
