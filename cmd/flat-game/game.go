@@ -74,8 +74,8 @@ type State struct {
 
 	// live game — unexported, so gob ignores it
 	snake     []point
-	dir       direction // committed heading, applied each step
-	nextDir   direction // buffered turn: at most one applied per step
+	dir       direction   // committed heading, applied each step
+	dirQueue  []direction // buffered turns (≤2), applied one per step
 	food      point
 	score     int
 	foodEaten int
@@ -110,7 +110,7 @@ func (s *State) reset() {
 	cx, cy := gridW/2, gridH/2
 	s.snake = []point{{cx, cy}, {cx - 1, cy}, {cx - 2, cy}}
 	s.dir = dirRight
-	s.nextDir = dirRight
+	s.dirQueue = nil
 	s.score = 0
 	s.foodEaten = 0
 	s.level = 1
@@ -153,8 +153,11 @@ func (s *State) onTick() {
 // step advances the snake one cell, applying the buffered turn, and resolves
 // food and collisions.
 func (s *State) step() {
-	// Apply the buffered turn (already validated against reversal on input).
-	s.dir = s.nextDir
+	// Apply one buffered turn (already validated against reversal on input).
+	if len(s.dirQueue) > 0 {
+		s.dir = s.dirQueue[0]
+		s.dirQueue = s.dirQueue[1:]
+	}
 
 	v := s.dir.vec()
 	head := s.snake[0]
@@ -225,8 +228,20 @@ func (s *State) placeFood() {
 // a no-op. Only the latest valid request survives to the next step, so at most
 // one turn applies per step.
 func (s *State) steer(d direction) {
-	if d == s.dir || d == s.dir.opposite() {
+	// Validate against the EFFECTIVE heading — the last queued turn if any,
+	// else the committed direction. A fast second press within one tick
+	// (up then left while moving right) must queue behind the first turn,
+	// not be dropped as a "reversal" of a heading the snake is about to
+	// leave. Two queued turns is a full tick of lookahead; further presses
+	// in the same window are ignored.
+	eff := s.dir
+	if n := len(s.dirQueue); n > 0 {
+		eff = s.dirQueue[n-1]
+	}
+	if d == eff || d == eff.opposite() {
 		return
 	}
-	s.nextDir = d
+	if len(s.dirQueue) < 2 {
+		s.dirQueue = append(s.dirQueue, d)
+	}
 }

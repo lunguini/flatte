@@ -11,9 +11,13 @@ import (
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
-// Frame geometry. The board pane is fixed; the side panel takes the rest.
+// Frame geometry. The board pane is fixed on BOTH axes: its border is the
+// collision wall, so it must hug the grid exactly — a pane that stretched
+// with the terminal would draw walls the snake dies before reaching. The
+// side panel matches the board's height for a flush layout.
 const (
 	boardPaneW = gridW*cellW + 2 // +2 for the pane border
+	boardPaneH = gridH + 2       // +2 for the pane border
 	frameW     = 80
 	frameH     = 24
 	overlayW   = 34
@@ -36,6 +40,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	boardPane := layout.Col{
 		NodeBase: layout.NodeBase{
 			W:        layout.Fixed(boardPaneW),
+			H:        layout.Fixed(boardPaneH),
 			Bordered: true,
 			Chrome:   borderChrome(boardTitle, pal.accent),
 		},
@@ -45,6 +50,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	panel := layout.Col{
 		NodeBase: layout.NodeBase{
 			W:        layout.Grow(1),
+			H:        layout.Fixed(boardPaneH),
 			Bordered: true,
 			Chrome:   borderChrome("STATS", pal.panel),
 		},
@@ -53,7 +59,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 
 	children := []layout.Node{
 		layout.Row{
-			NodeBase: layout.NodeBase{H: layout.Grow(1)},
+			NodeBase: layout.NodeBase{H: layout.Fixed(boardPaneH)},
 			Children: []layout.Node{boardPane, panel},
 		},
 	}
