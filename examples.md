@@ -16,6 +16,7 @@ go run ./flat-pages
 | `flat-stream` | `flatte.Stream`, cancellation-aware stream source, deterministic stream tests |
 | `flat-search` | `flatte.Latest`, stale result suppression, cancellable search |
 | `flat-chat` | `flatte.WithInline`, `fx.Print`/`fx.Printf`, native terminal scrollback |
+| `flat-game` | Real-time Snake: `flatte.ScopeEvery` tick pipeline with `Scope.Cancel` named ticker cancellation (pause/resume/restart), seeded-RNG deterministic state, `Chrome` board/panel panes, `Overlay` pause and game-over modals, `SaveState` high score |
 
 ## Inputs And Editing
 

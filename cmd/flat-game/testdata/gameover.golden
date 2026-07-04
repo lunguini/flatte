@@ -1,0 +1,25 @@
+╭─ SNAKE  score 6  lvl 2 ────────────────────────────╮╭─ STATS ────────────────╮
+│                                                    ││                        │
+│                                                    ││ score  6               │
+│                                                    ││ high   10              │
+│                                                    ││                        │
+│                                                    ││ level  2 / 8           │
+│                                                    ││ speed  200ms           │
+│                                                    ││ length 3               │
+│                      ╭─ GAME OVER ────────────────────╮tate  game over       │
+│                      │                                │                      │
+│                      │         final score 6          │↑↓→ move              │
+│                      │         high score 10          │asd move              │
+│                      │                                │ pause                │
+│                      │       r restart   q quit       │ restart              │
+│                      │                                │ quit                 │
+│                      ╰────────────────────────────────╯                      │
+│                                                    ││                        │
+│                                                    ││                        │
+│                                                    ││                        │
+│                                                    ││                        │
+│                                                    ││                        │
+│                                                    ││                        │
+│                      ◆                             ││                        │
+╰────────────────────────────────────────────────────╯╰────────────────────────╯
+[title flat-game — game over]
