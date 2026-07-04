@@ -88,6 +88,7 @@ assigned. `Render` never chooses its own position or size. Concrete nodes embed
 |---|---|---|
 | `W`, `H` | `Size` | Per-axis constraint (default `Auto`). |
 | `Pad` | `int` | Inner padding on all sides. |
+| `PadTop`/`PadRight`/`PadBottom`/`PadLeft` | `int` | Per-side padding added on top of `Pad` (inside the border) — for asymmetric insets like "header rows + left pad only". |
 | `Gap` | `int` | Space between children (containers). |
 | `Bordered` | `bool` | Draw a rounded border; adds one inset cell per side. |
 | `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). |

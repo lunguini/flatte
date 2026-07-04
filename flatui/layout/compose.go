@@ -71,8 +71,8 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, out map[string]Rect) {
 	if buf != nil {
 		if ch := getChrome(n); ch != nil {
 			drawInto(*buf, ch(r), r)
-		} else if inset := getInset(n); inset > 0 {
-			drawInto(*buf, fillRect("", r, getPad(n), isBordered(n)), r)
+		} else if getInsetSides(n).any() {
+			drawInto(*buf, fillRect("", r, getPadSides(n), isBordered(n)), r)
 		}
 	}
 
@@ -83,7 +83,7 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, out map[string]Rect) {
 
 	gap := getGap(n)
 	horizontal := container.IsHorizontal()
-	inner := r.Inset(getInset(n))
+	inner := r.insetBy(getInsetSides(n))
 	mainSizes := distributeMain(children, horizontal, gap, mainAvail(inner, horizontal))
 
 	pos := inner.X
@@ -118,14 +118,14 @@ func drawInto(buf uv.ScreenBuffer, s string, r Rect) {
 	uv.NewStyledString(s).Draw(buf, uv.Rect(r.X, r.Y, r.W, r.H))
 }
 
-// getPad / isBordered read chrome fields off a node's NodeBase for the
-// container chrome paint. They mirror the innerInset accounting.
-func getPad(n Node) int {
-	type padder interface{ pad() int }
+// getPadSides / isBordered read chrome fields off a node's NodeBase for the
+// container chrome paint. They mirror the insetSides accounting.
+func getPadSides(n Node) sides {
+	type padder interface{ padSides() sides }
 	if p, ok := n.(padder); ok {
-		return p.pad()
+		return p.padSides()
 	}
-	return 0
+	return sides{}
 }
 
 func isBordered(n Node) bool {

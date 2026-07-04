@@ -234,20 +234,14 @@ func (c *containersScreen) injectStreamDemo(id string) {
 // list row: the filter line plus a blank separator row.
 const listHeaderLines = 2
 
-// blankSpace reserves layout space without painting anything. It lets the list
-// subtree offset its rows (past the filter/separator header and the left pad)
-// while the pane's Chrome paints those reserved regions underneath.
-type blankSpace struct{ layout.NodeBase }
-
-func (blankSpace) Render(layout.Rect) string { return "" }
-
 // listNode builds the list pane as a real subtree: a Chrome-painted frame
 // (filter line, separator, scrollbar, padding — reproducing renderListPane's
 // non-row cells) with one ID'd Text per visible row composed on top. The row
 // nodes give the frame solve authoritative per-row rects, so hit-testing reads
-// rects["list:i"] instead of a parallel rowRects computation.
+// rects["list:i"] instead of a parallel rowRects computation. Per-side padding
+// keeps the rows out of the regions the Chrome paints: the filter/separator
+// header rows on top, the left pad, and the right pad + scrollbar column.
 func (c *containersScreen) listNode() layout.Node {
-	listInnerWidth := max(c.listPaneWidth-paneBorderCols-1, 1)
 	offset := c.list.Offset()
 	end := min(offset+c.listHeight, c.list.Count())
 	rows := make([]layout.Node, 0, max(end-offset, 0))
@@ -259,24 +253,15 @@ func (c *containersScreen) listNode() layout.Node {
 	}
 	return layout.Col{
 		NodeBase: layout.NodeBase{
-			ID:     "list",
-			W:      layout.Fixed(c.listPaneWidth),
-			H:      layout.Auto(),
-			Chrome: c.renderListChrome,
+			ID:       "list",
+			W:        layout.Fixed(c.listPaneWidth),
+			H:        layout.Auto(),
+			Chrome:   c.renderListChrome,
+			PadTop:   listHeaderLines,
+			PadLeft:  panePadding,
+			PadRight: panePadding + 1, // right pad + scrollbar column
 		},
-		Children: []layout.Node{
-			blankSpace{layout.NodeBase{H: layout.Fixed(listHeaderLines)}},
-			layout.Row{
-				NodeBase: layout.NodeBase{H: layout.Grow(1)},
-				Children: []layout.Node{
-					blankSpace{layout.NodeBase{W: layout.Fixed(panePadding)}},
-					layout.Col{
-						NodeBase: layout.NodeBase{W: layout.Fixed(listInnerWidth)},
-						Children: rows,
-					},
-				},
-			},
-		},
+		Children: rows,
 	}
 }
 

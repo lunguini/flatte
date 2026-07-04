@@ -209,3 +209,70 @@ func TestCustomChromeChildlessStringPath(t *testing.T) {
 			strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// Per-side padding: PadLeft/PadTop offset content on exactly that side, and
+// Size claims exactly the padded axes (d21/d03 extraction trigger, fired by
+// flat-docker's list pane and flat-workspace's panes).
+func TestPerSidePaddingPositionsContent(t *testing.T) {
+	leaf := Text{NodeBase: NodeBase{PadLeft: 2, PadTop: 1}, String: "hi"}
+
+	w, h := leaf.Size()
+	if w.Value != 2+2 || h.Value != 1+1 {
+		t.Fatalf("Size = %dx%d, want 4x2 (content plus left/top pads)", w.Value, h.Value)
+	}
+
+	lines := rawLines(leaf.Render(Rect{0, 0, 6, 3}))
+	if strings.TrimRight(lines[0], " ") != "" {
+		t.Fatalf("row 0 should be top padding, got %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "  hi") {
+		t.Fatalf("row 1 should be \"  hi\", got %q", lines[1])
+	}
+}
+
+// Per-side padding on a container insets children on exactly the padded
+// sides, in both the geometry and the composed output; Pad and Bordered
+// still add symmetrically on top of it.
+func TestContainerPerSidePaddingInsetsChildren(t *testing.T) {
+	tree := Col{
+		NodeBase: NodeBase{Bordered: true, PadLeft: 1, PadTop: 2},
+		Children: []Node{Text{NodeBase: NodeBase{ID: "row"}, String: "x"}},
+	}
+	composed, rects := SolveAndCompose(tree, 8, 6)
+
+	// border(1)+PadLeft(1) = X 2; border(1)+PadTop(2) = Y 3.
+	r, ok := rects["row"]
+	if !ok {
+		t.Fatal("child rect not recorded")
+	}
+	if r.X != 2 || r.Y != 3 {
+		t.Fatalf("child rect = %+v, want X=2 Y=3", r)
+	}
+	// right/bottom have only the border inset: inner W = 8-1-2 = 5, H = 6-3-1 = 2.
+	if r.W != 5 {
+		t.Fatalf("child width = %d, want 5 (right side pads only the border)", r.W)
+	}
+	lines := stripLines(composed)
+	if len(lines) < 4 || !strings.HasPrefix(lines[3], "│ x") {
+		t.Fatalf("child glyph should sit at row 3 col 2 inside the border:\n%s",
+			strings.Join(lines, "\n"))
+	}
+}
+
+// The string render path honors per-side padding identically to compose.
+func TestPerSidePaddingStringPathMatchesCompose(t *testing.T) {
+	tree := Col{
+		NodeBase: NodeBase{PadTop: 1, PadLeft: 3},
+		Children: []Node{Text{String: "hi"}},
+	}
+	composed, _ := SolveAndCompose(tree, 8, 3)
+	direct := tree.Render(Rect{0, 0, 8, 3})
+	got, want := stripLines(direct), stripLines(composed)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("string path:\n%s\ncompose path:\n%s",
+			strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if len(want) < 2 || !strings.HasPrefix(want[1], "   hi") {
+		t.Fatalf("child should sit at row 1 col 3:\n%s", strings.Join(want, "\n"))
+	}
+}

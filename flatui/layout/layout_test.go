@@ -342,19 +342,19 @@ func (w testWidget) Size() (Size, Size) {
 	w2, h := w.NodeBase.Size()
 	if w2.Kind == SizeAuto || h.Kind == SizeAuto {
 		mw, mh := measureString(w.content)
-		inset := 2 * w.innerInset()
+		inset := w.insetSides()
 		if w2.Kind == SizeAuto {
-			w2 = Size{Kind: SizeContent, Value: mw + inset}
+			w2 = Size{Kind: SizeContent, Value: mw + inset.horiz()}
 		}
 		if h.Kind == SizeAuto {
-			h = Size{Kind: SizeContent, Value: mh + inset}
+			h = Size{Kind: SizeContent, Value: mh + inset.vert()}
 		}
 	}
 	return w2, h
 }
 
 func (w testWidget) Render(r Rect) string {
-	return fillRect(w.content, r, w.Pad, w.Bordered)
+	return fillRect(w.content, r, w.padSides(), w.Bordered)
 }
 
 func TestCustomWidgetInTree(t *testing.T) {

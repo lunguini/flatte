@@ -18,19 +18,19 @@ func (t Text) Size() (Size, Size) {
 	w, h := t.NodeBase.Size()
 	if w.Kind == SizeAuto || h.Kind == SizeAuto {
 		mw, mh := measureString(t.String)
-		inset := 2 * t.innerInset()
+		inset := t.insetSides()
 		if w.Kind == SizeAuto {
-			w = Size{Kind: SizeContent, Value: mw + inset}
+			w = Size{Kind: SizeContent, Value: mw + inset.horiz()}
 		}
 		if h.Kind == SizeAuto {
-			h = Size{Kind: SizeContent, Value: mh + inset}
+			h = Size{Kind: SizeContent, Value: mh + inset.vert()}
 		}
 	}
 	return w, h
 }
 
 func (t Text) Render(r Rect) string {
-	return fillRect(t.String, r, t.Pad, t.Bordered)
+	return fillRect(t.String, r, t.padSides(), t.Bordered)
 }
 
 // Spacer fills remaining space. Grows on both axes.
@@ -54,7 +54,7 @@ func (s *Spacer) WithBackground(c color.Color) *Spacer {
 }
 
 func (s *Spacer) Render(r Rect) string {
-	return fillRectWithBg("", r, 0, s.bg, false)
+	return fillRectWithBg("", r, sides{}, s.bg, false)
 }
 
 // --- helpers ---

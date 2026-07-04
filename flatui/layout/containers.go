@@ -12,20 +12,20 @@ func (r Row) Size() (Size, Size) {
 	w, h := r.NodeBase.Size()
 	if w.Kind == SizeAuto || h.Kind == SizeAuto {
 		mainSize, crossSize, mainGrow, crossGrow := measureChildren(r.Children, true, r.Gap)
-		inset := 2 * r.innerInset()
+		inset := r.insetSides()
 		// Row: main=width, cross=height. On an Auto axis, prefer measured
 		// content; if there is none but a child grows on that axis, report
 		// Grow(1) so the container does not collapse to zero.
 		if w.Kind == SizeAuto {
 			if mainSize > 0 {
-				w = Size{Kind: SizeContent, Value: mainSize + inset}
+				w = Size{Kind: SizeContent, Value: mainSize + inset.horiz()}
 			} else if mainGrow {
 				w = Grow(1)
 			}
 		}
 		if h.Kind == SizeAuto {
 			if crossSize > 0 {
-				h = Size{Kind: SizeContent, Value: crossSize + inset}
+				h = Size{Kind: SizeContent, Value: crossSize + inset.vert()}
 			} else if crossGrow {
 				h = Grow(1)
 			}
@@ -45,7 +45,7 @@ func (r Row) Render(rect Rect) string {
 		if r.Chrome != nil {
 			return r.Chrome(rect)
 		}
-		return fillRect("", rect, r.Pad, r.Bordered)
+		return fillRect("", rect, r.padSides(), r.Bordered)
 	}
 	frame, _ := SolveAndCompose(r, rect.W, rect.H)
 	return frame
@@ -66,20 +66,20 @@ func (c Col) Size() (Size, Size) {
 	w, h := c.NodeBase.Size()
 	if w.Kind == SizeAuto || h.Kind == SizeAuto {
 		mainSize, crossSize, mainGrow, crossGrow := measureChildren(c.Children, false, c.Gap)
-		inset := 2 * c.innerInset()
+		inset := c.insetSides()
 		// Col: main=height, cross=width. On an Auto axis, prefer measured
 		// content; if there is none but a child grows on that axis, report
 		// Grow(1) so the container does not collapse to zero.
 		if h.Kind == SizeAuto {
 			if mainSize > 0 {
-				h = Size{Kind: SizeContent, Value: mainSize + inset}
+				h = Size{Kind: SizeContent, Value: mainSize + inset.vert()}
 			} else if mainGrow {
 				h = Grow(1)
 			}
 		}
 		if w.Kind == SizeAuto {
 			if crossSize > 0 {
-				w = Size{Kind: SizeContent, Value: crossSize + inset}
+				w = Size{Kind: SizeContent, Value: crossSize + inset.horiz()}
 			} else if crossGrow {
 				w = Grow(1)
 			}
@@ -96,7 +96,7 @@ func (c Col) Render(rect Rect) string {
 		if c.Chrome != nil {
 			return c.Chrome(rect)
 		}
-		return fillRect("", rect, c.Pad, c.Bordered)
+		return fillRect("", rect, c.padSides(), c.Bordered)
 	}
 	frame, _ := SolveAndCompose(c, rect.W, rect.H)
 	return frame

@@ -33,6 +33,11 @@ func (r Rect) Inset(n int) Rect {
 	return Rect{r.X + n, r.Y + n, r.W - 2*n, r.H - 2*n}
 }
 
+// insetBy shrinks r by a per-side inset.
+func (r Rect) insetBy(s sides) Rect {
+	return Rect{r.X + s.left, r.Y + s.top, r.W - s.horiz(), r.H - s.vert()}
+}
+
 func (r Rect) Contains(x, y int) bool {
 	return x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
 }
@@ -137,6 +142,12 @@ type NodeBase struct {
 	Overlay  bool
 	ID       string
 
+	// PadTop/PadRight/PadBottom/PadLeft add per-side padding on top of the
+	// symmetric Pad (and inside the border, when Bordered). Extracted after
+	// two panes needed asymmetric insets: horizontal-only padding and
+	// "no top pad, one-row bottom pad" cannot be said with Pad alone.
+	PadTop, PadRight, PadBottom, PadLeft int
+
 	// Chrome, when set on a container, paints the node's own decoration
 	// (styled border, background, title) instead of the default Pad/Bordered
 	// fill. It receives the node's full solved rect and is painted before
@@ -151,15 +162,36 @@ func (n NodeBase) Size() (Size, Size) { return n.W, n.H }
 func (n NodeBase) GetID() string      { return n.ID }
 func (n NodeBase) IsOverlay() bool    { return n.Overlay }
 
-func (n NodeBase) innerInset() int {
-	s := n.Pad
+// sides is a per-side cell count (padding or full inset), clockwise from top.
+type sides struct{ top, right, bottom, left int }
+
+func (s sides) any() bool  { return s.top > 0 || s.right > 0 || s.bottom > 0 || s.left > 0 }
+func (s sides) horiz() int { return s.left + s.right }
+func (s sides) vert() int  { return s.top + s.bottom }
+
+// padSides is the node's padding per side: symmetric Pad plus the per-side
+// extras (border excluded).
+func (n NodeBase) padSides() sides {
+	return sides{
+		top:    n.Pad + n.PadTop,
+		right:  n.Pad + n.PadRight,
+		bottom: n.Pad + n.PadBottom,
+		left:   n.Pad + n.PadLeft,
+	}
+}
+
+// insetSides is the full per-side layout inset: padding plus the border cell.
+func (n NodeBase) insetSides() sides {
+	s := n.padSides()
 	if n.Bordered {
-		s++
+		s.top++
+		s.right++
+		s.bottom++
+		s.left++
 	}
 	return s
 }
 
-func (n NodeBase) pad() int                  { return n.Pad }
 func (n NodeBase) bordered() bool            { return n.Bordered }
 func (n NodeBase) chrome() func(Rect) string { return n.Chrome }
 
@@ -295,11 +327,11 @@ func measureChildren(children []Node, horizontal bool, gap int) (main, cross int
 
 // --- Rendering helpers ---
 
-func fillRect(content string, r Rect, pad int, bordered bool) string {
+func fillRect(content string, r Rect, pad sides, bordered bool) string {
 	return fillRectWithBg(content, r, pad, color.Transparent, bordered)
 }
 
-func fillRectWithBg(content string, r Rect, pad int, c color.Color, bordered bool) string {
+func fillRectWithBg(content string, r Rect, pad sides, c color.Color, bordered bool) string {
 	if r.W <= 0 || r.H <= 0 {
 		return ""
 	}
@@ -311,16 +343,19 @@ func fillRectWithBg(content string, r Rect, pad int, c color.Color, bordered boo
 	// intact no matter what the caller hands in.
 	inset := pad
 	if bordered {
-		inset++
+		inset.top++
+		inset.right++
+		inset.bottom++
+		inset.left++
 	}
-	content = clipToBox(content, r.W-2*inset, r.H-2*inset)
+	content = clipToBox(content, r.W-inset.horiz(), r.H-inset.vert())
 
 	style := lipgloss.NewStyle().Width(r.W).Height(r.H).MaxWidth(r.W).MaxHeight(r.H)
 	if c != color.Transparent {
 		style = style.Background(c)
 	}
-	if pad > 0 {
-		style = style.Padding(pad)
+	if pad.any() {
+		style = style.Padding(pad.top, pad.right, pad.bottom, pad.left)
 	}
 	if bordered {
 		style = style.Border(lipgloss.RoundedBorder())
@@ -446,10 +481,10 @@ func getGap(n Node) int {
 	return 0
 }
 
-func getInset(n Node) int {
-	type inser interface{ innerInset() int }
+func getInsetSides(n Node) sides {
+	type inser interface{ insetSides() sides }
 	if ins, ok := n.(inser); ok {
-		return ins.innerInset()
+		return ins.insetSides()
 	}
-	return 0
+	return sides{}
 }
