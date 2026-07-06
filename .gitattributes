@@ -3,3 +3,7 @@
 # committed as plaintext.
 .docs/** filter=git-crypt diff=git-crypt
 .specs/** filter=git-crypt diff=git-crypt
+
+# Golden snapshots are byte-compared by tests; never let a CRLF checkout
+# (e.g. Windows CI runners) rewrite their line endings.
+*.golden -text
