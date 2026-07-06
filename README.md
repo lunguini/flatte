@@ -1,5 +1,9 @@
 # Flatte
 
+[![ci](https://github.com/lunguini/flatte/actions/workflows/ci.yml/badge.svg)](https://github.com/lunguini/flatte/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/lunguini/flatte.svg)](https://pkg.go.dev/github.com/lunguini/flatte)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Flatte is a Go TUI foundation built around one mutable state struct, direct
 state mutation, and pure full-frame rendering. It is intentionally not a
 Bubble Tea clone: apps do not define messages, commands, or component update
@@ -125,3 +129,7 @@ go run ./flat-workspace
 - [Quick Reference](quick-reference.md) maps common TUI needs to Flatte APIs.
 - [Examples](examples.md) maps every sample app to the capability it
   demonstrates.
+- [Contributing](CONTRIBUTING.md) covers Conventional Commits, the quality
+  bar, and the golden-snapshot policy.
+- [Changelog](CHANGELOG.md) is generated from commit messages on each
+  release.
