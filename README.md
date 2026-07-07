@@ -10,11 +10,12 @@ state mutation, and pure views. It is intentionally not a Bubble Tea clone:
 apps do not define messages, commands, or component update trees. State lives
 in your app, `Handle` mutates it, and `View` renders it.
 
-[![flat-docker, a Flatte sample app, running in the terminal](docs/demo.gif)](https://flatte.lunguini.com)
+[![A montage of Flatte sample apps running in the terminal](docs/demo.gif)](https://flatte.lunguini.com)
 
-<sub>Above: [`cmd/flat-docker`](cmd/flat-docker) — a Docker-style TUI with a live
-stats/logs detail pane, a `:` command palette, and confirm modals, built from the
-primitives below. **[Try Flatte live in your browser →](https://flatte.lunguini.com)**</sub>
+<sub>A glimpse of the [sample apps](examples.md) — Snake, a Docker-style TUI,
+a three-pane workspace, styling, tables, progress — all built from the
+primitives below. **[Try Flatte live in your browser →](https://flatte.lunguini.com)**
+· regenerate the reel with [`cmd/record-demo.sh`](cmd/record-demo.sh).</sub>
 
 The module path is currently:
 
