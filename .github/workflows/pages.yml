@@ -1,0 +1,54 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/flat-landing/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            cmd/go.sum
+      - uses: acifani/setup-tinygo@v2
+        with:
+          tinygo-version: "0.41.1"
+      - name: Build WASM
+        working-directory: cmd
+        run: |
+          tinygo build -target=wasm -o flat-landing/web/flat-landing.wasm ./flat-landing
+          cp "$(tinygo env TINYGOROOT)/targets/wasm_exec.js" flat-landing/web/wasm_exec.js
+      # The CNAME file in web/ is uploaded with the artifact so the custom
+      # domain survives every redeploy (Actions deploys have no branch to
+      # commit it back to).
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: cmd/flat-landing/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
