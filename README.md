@@ -3,6 +3,7 @@
 [![ci](https://github.com/lunguini/flatte/actions/workflows/ci.yml/badge.svg)](https://github.com/lunguini/flatte/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/lunguini/flatte.svg)](https://pkg.go.dev/github.com/lunguini/flatte)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-flatte.lunguini.com-66d9b8?logo=webassembly&logoColor=white)](https://flatte.lunguini.com)
 
 Flatte is a Go TUI foundation built around one mutable state struct, direct
 state mutation, and pure views. It is intentionally not a Bubble Tea clone:
