@@ -124,6 +124,27 @@ go run ./flat-pages
 go run ./flat-workspace
 ```
 
+## Thanks
+
+Flatte stands on a lot of excellent open-source work:
+
+- **[Charm](https://charm.sh)** — Flatte is the deliberate inverse of
+  [Bubble Tea](https://github.com/charmbracelet/bubbletea), but it happily
+  reuses Charm's MIT-licensed substrate:
+  [Lip Gloss](https://github.com/charmbracelet/lipgloss) for styling,
+  [Ultraviolet](https://github.com/charmbracelet/ultraviolet) for input parsing
+  and cell-buffer rendering, and [`x/ansi`](https://github.com/charmbracelet/x)
+  and [`colorprofile`](https://github.com/charmbracelet/colorprofile)
+  underneath. Bubble Tea also serves as our honest benchmark — the
+  `cmd/bubble-*` comparison apps keep our claims grounded. Thank you, Charm
+  team.
+- **[rivo/uniseg](https://github.com/rivo/uniseg)** for correct Unicode
+  grapheme segmentation, so cursors and widths behave.
+- **The [Go](https://go.dev) team** for the language, `golang.org/x/term`, and
+  first-class WebAssembly support.
+- **[TinyGo](https://tinygo.org)** for the compact WASM build that powers the
+  browser demo in `cmd/flat-landing`.
+
 ## Further Reading
 
 - [Quick Reference](quick-reference.md) maps common TUI needs to Flatte APIs.
