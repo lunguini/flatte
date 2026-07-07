@@ -1,12 +1,12 @@
 # Flatte Development Guide
 
 Flatte (package `flatte`, module path `github.com/lunguini/flatte`) is a
-full-frame functional TUI foundation for Go: single mutable state struct,
-`View` as a pure function of state, direct mutation instead of TEA message
-dispatch, async funneled through named `StateUpdate`s onto a single-writer
-loop. It is the deliberate inverse of Bubble Tea while reusing Charm's MIT
-substrate (Lip Gloss v2 for styling; ultraviolet for input parsing and
-cell-buffer rendering, wrapped behind Flatte APIs).
+functional TUI foundation for Go: single mutable state struct, `View` as a pure
+function of state, direct mutation instead of TEA message dispatch, async
+funneled through named `StateUpdate`s onto a single-writer loop. It is the
+deliberate inverse of Bubble Tea while reusing Charm's MIT substrate (Lip Gloss
+v2 for styling; ultraviolet for input parsing and cell-buffer rendering,
+wrapped behind Flatte APIs).
 
 ## Mission and quality bar (read this first)
 
@@ -113,6 +113,13 @@ deterministic (no wall-clock, no randomness in `View`).
   Bubble Tea v1/v2 comparison apps. They are the benchmark; keep them
   compiling, don't "improve" them beyond parity with their Flatte
   counterparts.
+- Sample/app frame composition should use `flatui/layout` by default. For
+  anything beyond a trivial one-line frame, build a `layout.Node` tree and
+  call `layout.SolveAndCompose`; do not hand-roll column splits, border/padding
+  subtraction, joined panels, or frame-wide clipping with ad hoc Lip Gloss
+  string composition. Manual string composition is acceptable only for tiny
+  leaf content inside a layout node, or when a sample is explicitly dogfooding
+  raw Lip Gloss behavior.
 
 ## Principles (the short version — full rationale in the design doc)
 

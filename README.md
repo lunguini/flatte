@@ -5,9 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Flatte is a Go TUI foundation built around one mutable state struct, direct
-state mutation, and pure full-frame rendering. It is intentionally not a
-Bubble Tea clone: apps do not define messages, commands, or component update
-trees. State lives in your app, `Handle` mutates it, and `View` renders it.
+state mutation, and pure views. It is intentionally not a Bubble Tea clone:
+apps do not define messages, commands, or component update trees. State lives
+in your app, `Handle` mutates it, and `View` renders it.
 
 The module path is currently:
 

@@ -38,6 +38,8 @@ Use these names for every app:
 | Window size | handle `flatte.ResizeEvent` |
 | Keyboard | type switch to `flatte.KeyEvent` |
 | Mouse | `flatte.WithMouse(...)` plus `flatte.MouseEvent` |
+| Inline (non-fullscreen) mode | `flatte.WithInline()` |
+| Handle Ctrl+C yourself | `flatte.WithoutDefaultQuit()` |
 
 ## Choose The Right Helper
 
@@ -57,6 +59,7 @@ Use these names for every app:
 | Countdown / stopwatch state | `flatui.Timer`, `flatui.Stopwatch` | `cmd/flat-timer` |
 | Click regions | `flatui.ZoneMap` | `cmd/flat-zones`, `cmd/flat-spike` |
 | Modal overlay | `flatui.Overlay` | `cmd/flat-modal` |
+| Clickable tab strip | `flatui.TabBar` | `cmd/flat-docker` |
 | Basic card layout | `flatui.Card`, `flatui.CardBodyWidth`, `flatui.CardBodyHeight` | most samples |
 | Styled local composition | Lip Gloss v2 + `flatui` styled methods | `cmd/flat-style`, `cmd/flat-workspace` |
 | Flexbox-style frame tree | `flatui/layout` (`Row`, `Col`, `Text`, `Spacer`) | `cmd/flat-layout`, `cmd/flat-docker` |
@@ -182,10 +185,12 @@ rects up in the returned map directly, or feed rects into a `flatui.ZoneScanner`
 | If you need... | Use... | Notes |
 |---|---|---|
 | One async request | `flatte.Go(fx, name, work, fold)` | Work runs off-loop; fold mutates state on-loop. |
-| Periodic ticks | `flatte.Every(fx, name, interval, fold)` | App owns pause/reset policy. |
-| Long-running source | `flatte.Stream(fx, name, source, fold)` | Source receives `context.Context` and `send(value)`. |
+| Periodic ticks | `flatte.Every(fx, name, interval, fold)` | App owns pause/reset policy. Runs for the loop's lifetime — if it must stop before quit, use `ScopeEvery` instead. |
+| Long-running source | `flatte.Stream(fx, name, source, fold)` | Source receives `context.Context` and `send(value)`. Same lifetime caveat as `Every`. |
 | Latest request wins | `flatte.Latest(fx, name, work, fold)` | Cancels and drops stale results by name. |
-| Cancel latest request | `flatte.Cancel(fx, name)` | Use when input clears or screen changes. |
+| Cancel latest request | `flatte.Cancel(fx, name)` | Only cancels work started with `Latest`. It does **not** stop `Every`/`Stream`/`Go` — for those, use a `Scope`. |
+| Cancellable group of work | `flatte.NewScope(fx, name)` + `flatte.ScopeGo`/`ScopeStream`/`ScopeEvery` | `scope.Cancel()` stops everything started through the scope (e.g. pause/restart a game tick — `cmd/flat-game`). Create a fresh scope to start again. |
+| Persist state across runs | `flatte.SaveState(path, s)` / `flatte.LoadState(path, defaultState)` | Gob-encoded snapshot (e.g. high scores — `cmd/flat-game`). |
 | Print above inline frame | `fx.Print(...)` / `fx.Printf(...)` | Requires `flatte.WithInline()`. |
 | Shell out to editor/tool | `flatte.Exec(fx, name, cmd, fold)` | Releases terminal, runs command, restores. |
 | File picker | `flatte.SelectFile(fx, name, cmd, fold)` | App chooses command; `cmd/flat-file-select` shows platform picker selection. |
@@ -256,6 +261,7 @@ case flatte.ResizeEvent:
 | Test frames | `flatest.AssertGoldenFrame` |
 | Test frame sequences | `flatest.AssertFrames` |
 | Strip ANSI for assertions | `flatest.CleanFrame` |
+| Record/replay an event script | `flatest.Recorder` + `flatest.Replay` |
 
 ## Rules Of Thumb
 

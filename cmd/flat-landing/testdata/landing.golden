@@ -1,0 +1,28 @@
+  Flatte  Build TUIs like Go programs
+  Direct mutation. Full-frame views. Deterministic tests. Browser WASM.
+  ────────────────────────────────────────────────────────────────────────────
+
+  [  Overview  ][  Components  ][  Architecture  ]
+
+  ╭──────────────────────╮  ╭──────────────────────────────────╮  ╭──────────────────────╮
+  │ Component catalog    │  │ TextField                        │  │ Why Flatte           │
+  │ search: type / to se │  │ INPUT                            │  │ A Go-native TUI      │
+  │ ▸ TextField          │  │ Grapheme-correct single-line     │  │ loop: mutate one     │
+  │   Textarea           │  │ input with app-owned focus       │  │ state struct, render │
+  │   List               │  │ policy.                          │  │ one frame, test the  │
+  │   Table              │  │                                  │  │ same flow without a  │
+  │   Tree               │  │ TextField stores plain Go state: │  │ terminal.            │
+  │   Viewport           │  │ Value, Cursor, and optional sele │  │                      │
+  │   Progress           │  │ ction. Apps decide when keys edi │  │ TinyGo first         │
+  │   Spinner            │  │ t it, where the cursor lands, an │  │ The same app core    │
+  │   Timer              │  │ d how the field is styled.       │  │ builds to terminal   │
+  │   TabBar             │  │                                  │  │ and browser WASM.    │
+  │   Layout             │  │                                  │  │                      │
+  │                      │  │                                  │  │                      │
+  │                      │  │                                  │  │                      │
+  │                      │  │                                  │  │                      │
+  │                      │  │                                  │  │                      │
+  │                      │  │                                  │  │                      │
+  ╰──────────────────────╯  ╰──────────────────────────────────╯  ╰──────────────────────╯
+
+  tab Overview  / search  tab switch  j/k move  wheel scroll  q quit

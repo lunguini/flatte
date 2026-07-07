@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flatte</title>
+    <meta
+      name="description"
+      content="Flatte — a Go-native TUI foundation. Mutate your state, handle events directly, render one frame. Running live in your browser via WebAssembly."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="backdrop" aria-hidden="true">
+      <div class="backdrop-grid"></div>
+      <div class="backdrop-aurora"></div>
+      <div class="backdrop-grain"></div>
+    </div>
+
+    <main class="page">
+      <header class="site-header" aria-label="Flatte">
+        <a class="brand" href="/" aria-label="Flatte home">
+          <span class="brand-mark">flatte</span><span class="brand-cursor" aria-hidden="true"></span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a class="nav-link" href="https://github.com/lunguini/flatte#readme" target="_blank" rel="noreferrer">docs</a>
+          <a
+            class="nav-link nav-link--icon github-link"
+            href="https://github.com/lunguini/flatte"
+            aria-label="Flatte on GitHub"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.02c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.08 1.83 2.82 1.3 3.51.99.11-.78.42-1.3.76-1.6-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.43 11.43 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.49 5.92.43.37.82 1.1.82 2.22v3.3c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"
+              />
+            </svg>
+          </a>
+        </nav>
+      </header>
+
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">Go-native terminal UI · running live in this browser</p>
+        <h1 id="page-title">
+          Build TUIs<br />like <span class="accent">ordinary Go</span>.
+        </h1>
+        <p class="lede">
+          Mutate one state struct. Handle events directly. Render one frame.
+          No <code>Msg</code>/<code>Cmd</code>/<code>Update</code> loop, no
+          message plumbing — just the program you'd write anyway.
+        </p>
+        <ul class="reasons" aria-label="Why Flatte">
+          <li><span class="reasons-key">state</span> is your struct</li>
+          <li><span class="reasons-key">view</span> is a pure function</li>
+          <li><span class="reasons-key">async</span> is one named update</li>
+        </ul>
+        <div class="cta-row">
+          <a class="cta cta--primary" href="https://github.com/lunguini/flatte" target="_blank" rel="noreferrer">
+            View on GitHub <span aria-hidden="true">↗</span>
+          </a>
+          <a class="cta cta--ghost" href="https://github.com/lunguini/flatte#readme" target="_blank" rel="noreferrer">
+            Read the docs
+          </a>
+        </div>
+      </section>
+
+      <section class="terminal" aria-label="Live Flatte demo">
+        <div class="terminal-bar">
+          <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="terminal-title">flat-landing · showcase</span>
+          <span class="live-badge"><span class="live-dot" aria-hidden="true"></span>live · wasm</span>
+        </div>
+        <pre id="frame" class="frame" tabindex="0" aria-live="polite" aria-label="Interactive Flatte terminal application"><span class="boot"><span class="boot-line"><span class="boot-cursor"></span> flatte · compiling WebAssembly<span class="boot-dots"></span></span>
+<span class="boot-sub">the same Go core that renders to your terminal</span></span></pre>
+        <div class="hint-bar" aria-hidden="true">
+          <span class="hint"><kbd>/</kbd> search</span>
+          <span class="hint"><kbd>tab</kbd> switch</span>
+          <span class="hint"><kbd>j</kbd><kbd>k</kbd> move</span>
+          <span class="hint"><kbd>scroll</kbd> detail</span>
+          <span class="hint"><kbd>q</kbd> quit</span>
+          <span class="hint hint--note">click the pane, then type</span>
+        </div>
+      </section>
+
+      <section class="compare" aria-labelledby="compare-title">
+        <div class="compare-head">
+          <h2 id="compare-title">Same modal. Half the ceremony.</h2>
+          <p>
+            A background ticker plus a keypress — the exact
+            <code>cmd/bubble-modal</code> and <code>cmd/flat-modal</code>
+            samples in this repo, side by side.
+          </p>
+        </div>
+        <div class="compare-grid">
+          <figure class="code code--before">
+            <figcaption>
+              <span class="code-tag">Bubble Tea</span>
+              <span class="code-file">bubble-modal/main.go</span>
+            </figcaption>
+            <pre><code><span class="c">// a message type, just to say "time passed"</span>
+<span class="k">type</span> <span class="t">tickMsg</span> <span class="k">struct</span>{}
+
+<span class="k">func</span> (m <span class="t">Model</span>) <span class="fn">Update</span>(msg tea.Msg) (tea.Model, tea.Cmd) {
+    <span class="k">switch</span> msg.(<span class="k">type</span>) {
+    <span class="k">case</span> <span class="t">tickMsg</span>:
+        m.ticks<span class="o">++</span>
+        <span class="k">return</span> m, <span class="fn">tickCmd</span>()   <span class="c">// reschedule via Cmd</span>
+    <span class="k">case</span> tea.KeyMsg:
+        <span class="k">return</span> m.<span class="fn">updateKey</span>(msg) <span class="c">// (Model, Cmd)</span>
+    }
+    <span class="k">return</span> m, <span class="nil">nil</span>          <span class="c">// copy back the model</span>
+}</code></pre>
+          </figure>
+          <figure class="code code--after">
+            <figcaption>
+              <span class="code-tag code-tag--accent">Flatte</span>
+              <span class="code-file">flat-modal/main.go</span>
+            </figcaption>
+            <pre><code><span class="c">// no message type — just a named update</span>
+<span class="k">func</span> <span class="fn">applyTick</span>(s <span class="o">*</span><span class="t">State</span>, _ time.Time) {
+    s.ticks<span class="o">++</span>                    <span class="c">// mutate in place</span>
+}
+
+<span class="k">func</span> <span class="fn">Init</span>(s <span class="o">*</span><span class="t">State</span>, fx flatte.Effects[<span class="t">State</span>]) {
+    flatte.<span class="fn">Every</span>(fx, <span class="s">"tick"</span>, ival, applyTick)
+}
+
+<span class="k">func</span> <span class="fn">Handle</span>(s <span class="o">*</span><span class="t">State</span>, ev flatte.Event, fx …) {
+    <span class="k">if</span> key.Key <span class="o">==</span> flatte.KeyEnter {
+        s.modalOpen <span class="o">=</span> <span class="nil">true</span>       <span class="c">// no return, no Cmd</span>
+    }
+}</code></pre>
+          </figure>
+        </div>
+        <ul class="compare-notes">
+          <li><span>−</span> no <code>Msg</code> types, no <code>(Model, Cmd)</code> returns</li>
+          <li><span>−</span> no copying state back out of every handler</li>
+          <li><span class="plus">+</span> async is one named, self-applying update</li>
+        </ul>
+      </section>
+
+      <section class="pillars" aria-label="How Flatte works">
+        <article class="pillar">
+          <span class="pillar-index">01</span>
+          <h2>Direct mutation</h2>
+          <p>
+            <code>Handle(state, event)</code> writes to your struct in place.
+            No dispatch, no reducer, no round trip through a message type.
+          </p>
+        </article>
+        <article class="pillar">
+          <span class="pillar-index">02</span>
+          <h2>Pure views</h2>
+          <p>
+            <code>View(state)</code> returns a <code>Frame</code>. Same input,
+            same pixels — every screen is a golden snapshot you can test.
+          </p>
+        </article>
+        <article class="pillar">
+          <span class="pillar-index">03</span>
+          <h2>One writer loop</h2>
+          <p>
+            Async work is a goroutine that sends one named
+            <code>StateUpdate</code> back. No mutexes, no goroutine-per-widget.
+          </p>
+        </article>
+      </section>
+
+      <footer class="site-footer">
+        <span>Flatte · <code>github.com/lunguini/flatte</code></span>
+        <span class="site-footer-note">The same Go core renders to your terminal and to this page via WebAssembly.</span>
+      </footer>
+    </main>
+
+    <script src="./wasm_exec.js"></script>
+    <script>
+      const frame = document.getElementById("frame");
+      const fail = (msg) => {
+        frame.classList.add("frame--error");
+        frame.innerHTML =
+          '<span class="boot-sub">' +
+          msg +
+          " You can still run it in your terminal:</span>\n\n" +
+          "  go run github.com/lunguini/flatte/cmd/flat-landing";
+      };
+
+      if (typeof WebAssembly === "undefined" || typeof Go === "undefined") {
+        fail("This browser can’t run the WebAssembly demo.");
+      } else {
+        const go = new Go();
+        const wasmURL = "./flat-landing.wasm?v=20260707-input";
+        const boot = (async () => {
+          try {
+            const result = await WebAssembly.instantiateStreaming(
+              fetch(wasmURL),
+              go.importObject,
+            );
+            return result.instance;
+          } catch {
+            // Some hosts serve .wasm without the required MIME type; fall back
+            // to non-streaming instantiation.
+            const bytes = await (await fetch(wasmURL)).arrayBuffer();
+            const result = await WebAssembly.instantiate(bytes, go.importObject);
+            return result.instance;
+          }
+        })();
+        boot
+          .then((instance) => go.run(instance))
+          .catch(() => fail("The demo failed to load."));
+      }
+    </script>
+  </body>
+</html>
