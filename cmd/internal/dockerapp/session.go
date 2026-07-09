@@ -1,4 +1,4 @@
-package main
+package dockerapp
 
 const sessionFile = ".flat-docker-state.gob"
 

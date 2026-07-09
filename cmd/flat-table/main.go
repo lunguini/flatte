@@ -8,6 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/lunguini/flatte/cmd/internal/brand"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 )
@@ -126,7 +128,7 @@ func headerStyle() lipgloss.Style {
 }
 
 func activeStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("229"))
+	return lipgloss.NewStyle().Bold(true).Foreground(brand.Teal)
 }
 
 func main() {

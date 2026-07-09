@@ -8,9 +8,17 @@
   --frame-bg: #080b10;
   --border: #1c232c;
   --border-soft: #141a21;
-  --accent: #66d9b8;
-  --accent-2: #7cc4ff;
-  --accent-glow: rgb(102 217 184 / 40%);
+
+  /* Flatte brand palette */
+  --flatte-teal: #30c2b8;
+  --flatte-pink: #ef227d;
+  --flatte-magenta: #852467;
+  --flatte-purple: #3c0956;
+  --flatte-blue: #49819a;
+
+  --accent: var(--flatte-teal);
+  --accent-2: var(--flatte-pink);
+  --accent-glow: rgb(48 194 184 / 40%);
   --mono:
     "JetBrains Mono", "Berkeley Mono", ui-monospace, SFMono-Regular, Menlo,
     Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -72,7 +80,7 @@ body {
   background:
     radial-gradient(38rem 24rem at 22% -6%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
     radial-gradient(34rem 22rem at 84% 4%, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 62%),
-    radial-gradient(50rem 34rem at 50% 40%, color-mix(in srgb, #123 55%, transparent), transparent 70%);
+    radial-gradient(50rem 34rem at 50% 40%, color-mix(in srgb, var(--flatte-purple) 50%, transparent), transparent 70%);
   filter: blur(8px);
   animation: aurora-shift 18s ease-in-out infinite alternate;
 }
@@ -127,12 +135,19 @@ body {
 .brand {
   display: inline-flex;
   align-items: baseline;
-  gap: 2px;
+  gap: 8px;
   color: var(--text);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-decoration: none;
+}
+
+.brand-logo {
+  width: 26px;
+  height: 26px;
+  align-self: center;
+  display: block;
 }
 
 .brand-mark::before {
@@ -314,7 +329,7 @@ body {
 
 .cta--primary {
   color: #04120d;
-  background: linear-gradient(180deg, #7fe8c6, var(--accent));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 60%, #fff), var(--accent));
   box-shadow: 0 12px 34px -12px var(--accent-glow);
 }
 
@@ -684,7 +699,7 @@ kbd {
 
 /* lightweight token colors for the hand-tagged snippets */
 .code .k {
-  color: #ff9ec7;
+  color: var(--accent-2);
 }
 .code .t {
   color: var(--accent-2);
@@ -700,10 +715,10 @@ kbd {
   font-style: italic;
 }
 .code .o {
-  color: #ff9ec7;
+  color: var(--accent-2);
 }
 .code .nil {
-  color: #ff9ec7;
+  color: var(--accent-2);
 }
 
 .compare-notes {
@@ -728,9 +743,9 @@ kbd {
   place-items: center;
   width: 18px;
   height: 18px;
-  color: #ff9ec7;
+  color: var(--accent-2);
   border-radius: 5px;
-  background: color-mix(in srgb, #ff9ec7 14%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
 }
 
 .compare-notes .plus {

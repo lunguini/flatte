@@ -1,28 +1,28 @@
-  Flatte  Build TUIs like Go programs
-  Direct mutation. Full-frame views. Deterministic tests. Browser WASM.
-  ────────────────────────────────────────────────────────────────────────────
+  Game   App                                                          Flatte   Layout   UI 
 
-  [  Overview  ][  Components  ][  Architecture  ]
+ ╭────────────────────────────────────────────────────────────────────────────────────────╮
+ │ What Flatte is                                                                         │
+ │                                                                                        │
+ │ Flatte is a Go-native TUI foundation. You keep one mutable state struct, mutate it     │
+ │ directly in Handle, and render one pure frame in View — no Msg/Cmd/Update loop, no     │
+ │ message plumbing.                                                                      │
+ │                                                                                        │
+ │ state   is your struct — the single source of truth                                    │
+ │ view    is a pure function: state in, frame out                                        │
+ │ async   is one named, self-applying update                                             │
+ │                                                                                        │
+ │ Everything on these tabs — the snake game, the docker TUI, this text — is one          │
+ │ Flatte app hosting others. Apps compose because they are just State + Handle +         │
+ │ View.                                                                                  │
+ │                                                                                        │
+ │ → Ctrl+←/→ or click a tab to explore                                                   │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ ╰────────────────────────────────────────────────────────────────────────────────────────╯
 
-  ╭──────────────────────╮  ╭──────────────────────────────────╮  ╭──────────────────────╮
-  │ Component catalog    │  │ TextField                        │  │ Why Flatte           │
-  │ search: type / to se │  │ INPUT                            │  │ A Go-native TUI      │
-  │ ▸ TextField          │  │ Grapheme-correct single-line     │  │ loop: mutate one     │
-  │   Textarea           │  │ input with app-owned focus       │  │ state struct, render │
-  │   List               │  │ policy.                          │  │ one frame, test the  │
-  │   Table              │  │                                  │  │ same flow without a  │
-  │   Tree               │  │ TextField stores plain Go state: │  │ terminal.            │
-  │   Viewport           │  │ Value, Cursor, and optional sele │  │                      │
-  │   Progress           │  │ ction. Apps decide when keys edi │  │ TinyGo first         │
-  │   Spinner            │  │ t it, where the cursor lands, an │  │ The same app core    │
-  │   Timer              │  │ d how the field is styled.       │  │ builds to terminal   │
-  │   TabBar             │  │                                  │  │ and browser WASM.    │
-  │   Layout             │  │                                  │  │                      │
-  │                      │  │                                  │  │                      │
-  │                      │  │                                  │  │                      │
-  │                      │  │                                  │  │                      │
-  │                      │  │                                  │  │                      │
-  │                      │  │                                  │  │                      │
-  ╰──────────────────────╯  ╰──────────────────────────────────╯  ╰──────────────────────╯
-
-  tab Overview  / search  tab switch  j/k move  wheel scroll  q quit
+ ▚ Flatte · direct mutation, pure views, no messages  Ctrl+←/→ tabs · click to switch

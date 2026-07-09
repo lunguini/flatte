@@ -1,4 +1,4 @@
-package main
+package snakeapp
 
 import (
 	"image/color"
@@ -6,6 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/lunguini/flatte/cmd/internal/brand"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -24,15 +25,15 @@ type palette struct {
 
 func defaultPalette() palette {
 	return palette{
-		accent:  lipgloss.Color("45"),  // cyan
-		panel:   lipgloss.Color("240"), // grey
+		accent:  brand.Teal, // board frame + titles
+		panel:   brand.Blue, // side panel frame
 		text:    lipgloss.Color("252"),
 		muted:   lipgloss.Color("245"),
-		bad:     lipgloss.Color("203"),
+		bad:     brand.Pink,            // game-over frame
 		boardBg: lipgloss.Color("234"), // near-black board
-		body:    lipgloss.Color("35"),  // green
+		body:    lipgloss.Color("35"),  // green (iconic snake)
 		head:    lipgloss.Color("47"),  // bright green
-		food:    lipgloss.Color("203"), // coral
+		food:    brand.Pink,            // food glyph
 	}
 }
 

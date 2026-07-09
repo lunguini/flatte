@@ -8,6 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/lunguini/flatte/cmd/internal/brand"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 )
@@ -134,7 +136,7 @@ func fit(s string, width int) string {
 func panelStyle(active bool) lipgloss.Style {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	if active {
-		return style.Bold(true).Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57"))
+		return style.Bold(true).Foreground(brand.Teal).Background(lipgloss.Color("57"))
 	}
 	return style.Background(lipgloss.Color("235"))
 }

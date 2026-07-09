@@ -1,4 +1,4 @@
-package main
+package dockerapp
 
 import (
 	"context"
@@ -786,6 +786,23 @@ func scopedLogLine(id string, seq int) string {
 		msg = fmt.Sprintf("req=%d src=%s msg=upstream timeout after 30s — retrying with exponential backoff (attempt %d)", seq, id[:8], seq/4+1)
 	}
 	return styledLogLine(ts, level, msg)
+}
+
+// hostAdvanceLogs is the fx-free equivalent of the ScopeStream log feed, for
+// when the app is hosted and the async engine is not running (e.g. browser
+// WASM in the landing showcase). It appends one synthetic log line for the
+// selected container, following selection like startScopedLogs does.
+func (c *containersScreen) hostAdvanceLogs() {
+	ct := c.selected()
+	if ct == nil {
+		c.logTarget = ""
+		return
+	}
+	if c.liveLogs == nil {
+		c.liveLogs = make(map[string][]string)
+	}
+	c.logTarget = ct.ID
+	c.appendLiveLog(ct.ID, scopedLogLine(ct.ID, len(c.liveLogs[ct.ID])))
 }
 
 func (c *containersScreen) appendLiveLog(id, line string) {

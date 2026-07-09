@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/cmd/internal/brand"
 	"github.com/lunguini/flatte/flatui"
 )
 
@@ -165,7 +167,7 @@ func itemStyle() lipgloss.Style {
 func activeStyle() lipgloss.Style {
 	return lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("229"))
+		Foreground(brand.Teal)
 }
 
 func selectedStyle() lipgloss.Style {
@@ -175,7 +177,7 @@ func selectedStyle() lipgloss.Style {
 
 func errorStyle() lipgloss.Style {
 	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("203"))
+		Foreground(brand.Pink)
 }
 
 func loadModels(s *State, fx flatte.Effects[State]) {

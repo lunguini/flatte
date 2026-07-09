@@ -1,4 +1,4 @@
-package main
+package snakeapp
 
 import (
 	"math/rand/v2"
@@ -83,6 +83,7 @@ type State struct {
 	over      bool
 	paused    bool
 	stepAccum int // base ticks accumulated toward the next snake step
+	elapsedMs int // real milliseconds accumulated toward the next base tick (host-driven mode)
 
 	seed uint64
 	rng  *rand.Rand

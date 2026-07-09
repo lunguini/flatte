@@ -1,4 +1,4 @@
-package main
+package dockerapp
 
 import (
 	"image/color"
@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/lunguini/flatte/cmd/internal/brand"
 	"github.com/lunguini/flatte/flatui"
 )
 
@@ -24,12 +25,12 @@ type palette struct {
 
 func defaultPalette() palette {
 	return palette{
-		accent: lipgloss.Color("117"),
-		panel:  lipgloss.Color("240"),
+		accent: brand.Teal,
+		panel:  brand.Blue,
 		muted:  lipgloss.Color("245"),
 		text:   lipgloss.Color("252"),
-		good:   lipgloss.Color("114"),
-		bad:    lipgloss.Color("203"),
+		good:   brand.Teal,
+		bad:    brand.Pink,
 		bg:     lipgloss.Color("236"),
 		tabBg:  lipgloss.Color("238"),
 		dark:   lipgloss.Color("23"),

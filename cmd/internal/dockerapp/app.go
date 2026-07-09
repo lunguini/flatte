@@ -1,4 +1,4 @@
-package main
+package dockerapp
 
 import (
 	"github.com/lunguini/flatte"

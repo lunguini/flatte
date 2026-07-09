@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/flatte.svg" width="120" height="120" alt="Flatte logo" />
+</p>
+
 # Flatte
 
 [![ci](https://github.com/lunguini/flatte/actions/workflows/ci.yml/badge.svg)](https://github.com/lunguini/flatte/actions/workflows/ci.yml)

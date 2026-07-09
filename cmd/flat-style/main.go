@@ -9,6 +9,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/lunguini/flatte/cmd/internal/brand"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 )
@@ -91,10 +93,10 @@ func defaultPalette() palette {
 		base:     lipgloss.Color("252"),
 		muted:    lipgloss.Color("245"),
 		panel:    lipgloss.Color("238"),
-		accent:   lipgloss.Color("117"),
+		accent:   brand.Teal,
 		good:     lipgloss.Color("114"),
 		warn:     lipgloss.Color("222"),
-		bad:      lipgloss.Color("203"),
+		bad:      brand.Pink,
 		selected: lipgloss.Color("229"),
 	}
 }

@@ -8,6 +8,7 @@
       name="description"
       content="Flatte — a Go-native TUI foundation. Mutate your state, handle events directly, render one frame. Running live in your browser via WebAssembly."
     />
+    <link rel="icon" type="image/svg+xml" href="./flatte.svg" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -20,6 +21,7 @@
     <main class="page">
       <header class="site-header" aria-label="Flatte">
         <a class="brand" href="./" aria-label="Flatte home">
+          <img class="brand-logo" src="./flatte.svg" alt="" width="26" height="26" />
           <span class="brand-mark">flatte</span><span class="brand-cursor" aria-hidden="true"></span>
         </a>
         <nav class="site-nav" aria-label="Primary">
@@ -174,7 +176,7 @@
       </footer>
     </main>
 
-    <script src="./wasm_exec.js"></script>
+    <script src="./wasm_exec.js?v=20260709-charw"></script>
     <script>
       const frame = document.getElementById("frame");
       const fail = (msg) => {
@@ -190,7 +192,7 @@
         fail("This browser can’t run the WebAssembly demo.");
       } else {
         const go = new Go();
-        const wasmURL = "./flat-landing.wasm?v=20260707-input";
+        const wasmURL = "./flat-landing.wasm?v=20260709-charw";
         const boot = (async () => {
           try {
             const result = await WebAssembly.instantiateStreaming(

@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/cmd/internal/brand"
 	"github.com/lunguini/flatte/flatui"
 )
 
@@ -276,7 +278,7 @@ func renderSelection(text string, selected bool) string {
 	}
 	return lipgloss.NewStyle().
 		Foreground(lipgloss.Color("16")).
-		Background(lipgloss.Color("229")).
+		Background(brand.Teal).
 		Render(text)
 }
 

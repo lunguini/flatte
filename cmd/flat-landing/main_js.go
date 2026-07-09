@@ -5,6 +5,7 @@ package main
 import (
 	"strings"
 	"syscall/js"
+	"time"
 
 	"github.com/lunguini/flatte"
 )
@@ -21,7 +22,8 @@ func main() {
 
 	state := NewState()
 	if tab, ok := tabFromHash(); ok {
-		state.activeTab = tab
+		state.phase = phaseShell
+		state.active = tab
 	}
 	render := func() {
 		state.layout(browserColumns(surface), browserRows(surface))
@@ -76,20 +78,29 @@ func main() {
 		return nil
 	})
 	hashchange := js.FuncOf(func(this js.Value, args []js.Value) any {
-		if tab, ok := tabFromHash(); ok && tab != state.activeTab {
-			state.activeTab = tab
-			state.searching = false
+		if tab, ok := tabFromHash(); ok && tab != state.active {
+			state.phase = phaseShell
+			state.active = tab
 			render()
 		}
 		return nil
 	})
-	browserCallbacks = append(browserCallbacks, keydown, resize, click, wheel, hashchange)
+	// Animation loop: the intro banner, the hosted game/app, and the UI-tab
+	// preview widgets all advance one host tick per frame. Flatte's async engine
+	// does not run under WASM, so this setInterval is the sole timing source.
+	tick := js.FuncOf(func(this js.Value, args []js.Value) any {
+		Tick(state, time.Now())
+		render()
+		return nil
+	})
+	browserCallbacks = append(browserCallbacks, keydown, resize, click, wheel, hashchange, tick)
 
 	js.Global().Call("addEventListener", "keydown", keydown)
 	js.Global().Call("addEventListener", "resize", resize)
 	js.Global().Call("addEventListener", "hashchange", hashchange)
 	surface.Call("addEventListener", "click", click)
 	surface.Call("addEventListener", "wheel", wheel)
+	js.Global().Call("setInterval", tick, 120)
 	render()
 	surface.Call("focus")
 
@@ -100,8 +111,8 @@ func main() {
 // the page can deep-link into a view. Unknown fragments report false.
 func tabFromHash() (landingTab, bool) {
 	hash := strings.TrimPrefix(js.Global().Get("location").Get("hash").String(), "#")
-	for i, tab := range landingTabs {
-		if tab.ID == hash {
+	for i, id := range tabIDs {
+		if id == hash {
 			return landingTab(i), true
 		}
 	}
@@ -111,10 +122,10 @@ func tabFromHash() (landingTab, bool) {
 // syncHash mirrors the active tab back into the URL fragment via replaceState
 // (which does not fire hashchange, so there is no feedback loop).
 func syncHash(s *State) {
-	if int(s.activeTab) >= len(landingTabs) {
+	if int(s.active) >= len(tabIDs) {
 		return
 	}
-	id := landingTabs[s.activeTab].ID
+	id := tabIDs[s.active]
 	loc := js.Global().Get("location")
 	if strings.TrimPrefix(loc.Get("hash").String(), "#") == id {
 		return
@@ -199,7 +210,7 @@ func browserMetrics(surface js.Value) (contentWidth, lineHeight, charWidth float
 	if !ok || lineHeight <= 0 {
 		lineHeight = fontSize * 1.18
 	}
-	charWidth = measureCharacterWidth(surface, style)
+	charWidth = measureCharacterWidth(surface)
 	if charWidth <= 0 {
 		charWidth = fontSize * 0.62
 	}
@@ -220,17 +231,29 @@ func verticalPadding(surface js.Value) float64 {
 	return top + bottom
 }
 
-func measureCharacterWidth(surface, style js.Value) float64 {
+// measureCharacterWidth returns the pixel advance of one monospace cell by
+// measuring a probe span appended *inside* the frame surface, so it inherits the
+// exact font-family, font-size, and letter-spacing of the rendered text. An
+// earlier version set the probe's `font` from getComputedStyle's shorthand
+// (often returned empty) on a span in document.body, which fell back to a
+// proportional font and skewed the horizontal cell mapping — clicks drifted on
+// the column axis while rows (read from line-height directly) stayed correct.
+func measureCharacterWidth(surface js.Value) float64 {
+	const samples = 100
 	doc := js.Global().Get("document")
 	probe := doc.Call("createElement", "span")
-	probe.Get("style").Set("position", "absolute")
-	probe.Get("style").Set("visibility", "hidden")
-	probe.Get("style").Set("whiteSpace", "pre")
-	probe.Get("style").Set("font", style.Call("getPropertyValue", "font").String())
-	probe.Set("textContent", strings.Repeat("0", 64))
-	doc.Get("body").Call("appendChild", probe)
-	width := probe.Call("getBoundingClientRect").Get("width").Float() / 64
-	doc.Get("body").Call("removeChild", probe)
+	ps := probe.Get("style")
+	ps.Set("position", "absolute")
+	ps.Set("visibility", "hidden")
+	ps.Set("whiteSpace", "pre")
+	ps.Set("left", "-9999px")
+	ps.Set("top", "0")
+	ps.Set("padding", "0")
+	ps.Set("border", "0")
+	probe.Set("textContent", strings.Repeat("0", samples))
+	surface.Call("appendChild", probe)
+	width := probe.Call("getBoundingClientRect").Get("width").Float() / samples
+	surface.Call("removeChild", probe)
 	return width
 }
 
