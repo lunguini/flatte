@@ -134,7 +134,7 @@ body {
 
 .brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 2px;
   color: var(--text);
   font-size: 15px;
@@ -154,7 +154,6 @@ body {
 .brand-cursor {
   width: 8px;
   height: 15px;
-  translate: 0 2px;
   background: var(--accent);
   box-shadow: 0 0 10px var(--accent-glow);
   animation: blink 1.1s steps(1) infinite;
