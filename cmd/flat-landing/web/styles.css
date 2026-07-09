@@ -135,7 +135,7 @@ body {
 .brand {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px;
   color: var(--text);
   font-size: 15px;
   font-weight: 700;
@@ -148,11 +148,7 @@ body {
   height: 26px;
   align-self: center;
   display: block;
-}
-
-.brand-mark::before {
-  content: "▚ ";
-  color: var(--accent);
+  margin-right: 6px;
 }
 
 .brand-cursor {
