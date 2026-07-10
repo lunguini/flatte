@@ -153,9 +153,8 @@ Flatte stands on a lot of excellent open-source work:
 - **[rivo/uniseg](https://github.com/rivo/uniseg)** for correct Unicode
   grapheme segmentation, so cursors and widths behave.
 - **The [Go](https://go.dev) team** for the language, `golang.org/x/term`, and
-  first-class WebAssembly support.
-- **[TinyGo](https://tinygo.org)** for the compact WASM build that powers the
-  browser demo in `cmd/flat-landing`.
+  first-class WebAssembly support that powers the browser demo in
+  `cmd/flat-landing`.
 
 ## Further Reading
 

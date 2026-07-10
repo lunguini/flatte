@@ -32,7 +32,19 @@ func main() {
 		if frame.Title != "" {
 			doc.Set("title", frame.Title)
 		}
-		syncHash(state)
+	}
+	// handleEvent applies an event, repaints, and mirrors the active tab into the
+	// URL fragment only when the tab actually changed. The initial paint, resize,
+	// and the animation tick never touch the URL, and merely dismissing the intro
+	// (a phase change, not a tab change) leaves it alone — so loading the root
+	// page keeps it at "/" instead of auto-appending "#game".
+	handleEvent := func(ev flatte.Event) {
+		before := state.active
+		Handle(state, ev, flatte.Effects[State]{})
+		render()
+		if state.active != before {
+			syncHash(state)
+		}
 	}
 
 	keydown := js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -44,8 +56,7 @@ func main() {
 			return nil
 		}
 		args[0].Call("preventDefault")
-		Handle(state, ev, flatte.Effects[State]{})
-		render()
+		handleEvent(ev)
 		return nil
 	})
 	resize := js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -59,8 +70,7 @@ func main() {
 		}
 		surface.Call("focus")
 		x, y := browserCell(surface, args[0])
-		Handle(state, flatte.MouseEvent{X: x, Y: y, Button: flatte.MouseLeft, Action: flatte.MousePress}, flatte.Effects[State]{})
-		render()
+		handleEvent(flatte.MouseEvent{X: x, Y: y, Button: flatte.MouseLeft, Action: flatte.MousePress})
 		return nil
 	})
 	wheel := js.FuncOf(func(this js.Value, args []js.Value) any {

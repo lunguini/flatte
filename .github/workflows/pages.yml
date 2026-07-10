@@ -28,14 +28,16 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/go.sum
-      - uses: acifani/setup-tinygo@v2
-        with:
-          tinygo-version: "0.41.1"
       - name: Build WASM
         working-directory: cmd
+        # Built with the standard Go toolchain (not TinyGo): its mature garbage
+        # collector is required — TinyGo's GC deadlocks the asyncify scheduler
+        # when a hosted app allocates during a JS callback. The wasm is shipped
+        # gzip-compressed and decompressed in the browser via DecompressionStream.
         run: |
-          tinygo build -target=wasm -o flat-landing/web/flat-landing.wasm ./flat-landing
-          cp "$(tinygo env TINYGOROOT)/targets/wasm_exec.js" flat-landing/web/wasm_exec.js
+          GOOS=js GOARCH=wasm go build -o flat-landing/web/flat-landing.wasm ./flat-landing
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" flat-landing/web/wasm_exec.js
+          gzip -9 -f flat-landing/web/flat-landing.wasm
       # The CNAME file in web/ is uploaded with the artifact so the custom
       # domain survives every redeploy (Actions deploys have no branch to
       # commit it back to).

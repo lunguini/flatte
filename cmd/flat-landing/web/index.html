@@ -176,7 +176,7 @@
       </footer>
     </main>
 
-    <script src="./wasm_exec.js?v=20260709-charw"></script>
+    <script src="./wasm_exec.js?v=20260710-stdgo"></script>
     <script>
       const frame = document.getElementById("frame");
       const fail = (msg) => {
@@ -188,27 +188,35 @@
           "  go run github.com/lunguini/flatte/cmd/flat-landing";
       };
 
+      // The wasm ships gzip-compressed (flat-landing.wasm.gz). We decompress it
+      // in the browser with DecompressionStream, then hand the inflated stream
+      // to instantiateStreaming with the required application/wasm type. This
+      // keeps the transfer ~1.5 MB regardless of the host's own compression.
+      const loadWasm = async (go) => {
+        const wasmURL = "./flat-landing.wasm.gz?v=20260710-stdgo";
+        const resp = await fetch(wasmURL);
+        if (!resp.ok) throw new Error("fetch " + resp.status);
+        if (typeof DecompressionStream !== "undefined" && resp.body) {
+          const inflated = resp.body.pipeThrough(new DecompressionStream("gzip"));
+          const wasmResp = new Response(inflated, {
+            headers: { "Content-Type": "application/wasm" },
+          });
+          const result = await WebAssembly.instantiateStreaming(
+            wasmResp,
+            go.importObject,
+          );
+          return result.instance;
+        }
+        // Fallback for browsers without DecompressionStream: inflate via a
+        // Response round-trip is unavailable, so bail to the terminal hint.
+        throw new Error("no DecompressionStream");
+      };
+
       if (typeof WebAssembly === "undefined" || typeof Go === "undefined") {
         fail("This browser can’t run the WebAssembly demo.");
       } else {
         const go = new Go();
-        const wasmURL = "./flat-landing.wasm?v=20260709-charw";
-        const boot = (async () => {
-          try {
-            const result = await WebAssembly.instantiateStreaming(
-              fetch(wasmURL),
-              go.importObject,
-            );
-            return result.instance;
-          } catch {
-            // Some hosts serve .wasm without the required MIME type; fall back
-            // to non-streaming instantiation.
-            const bytes = await (await fetch(wasmURL)).arrayBuffer();
-            const result = await WebAssembly.instantiate(bytes, go.importObject);
-            return result.instance;
-          }
-        })();
-        boot
+        loadWasm(go)
           .then((instance) => go.run(instance))
           .catch(() => fail("The demo failed to load."));
       }

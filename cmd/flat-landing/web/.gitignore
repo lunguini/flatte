@@ -1,3 +1,4 @@
 # Build artifacts — produced by the build steps in README.md, not committed.
 flat-landing.wasm
+flat-landing.wasm.gz
 wasm_exec.js
