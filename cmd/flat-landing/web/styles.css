@@ -349,6 +349,7 @@ body {
 /* ---------------------------------------------------------------- terminal */
 
 .terminal {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--edge);
   background: color-mix(in srgb, var(--frame-bg) 88%, transparent);
@@ -831,4 +832,192 @@ kbd {
   .pillar {
     transition: none;
   }
+}
+
+/* ---- Snake leaderboard overlay (browser-only; see leaderboard_js.go) ---- */
+
+.lb-open {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font:
+    600 12px/1 var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--frame-bg) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.lb-open:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--frame-bg));
+}
+
+.lb {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(4 6 9 / 68%);
+  backdrop-filter: blur(3px);
+}
+
+.lb[hidden],
+.lb-open[hidden],
+.lb-submit[hidden] {
+  display: none;
+}
+
+.lb-card {
+  width: min(420px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px 18px;
+  color: var(--text);
+  font: 13px/1.5 var(--mono);
+  background: linear-gradient(180deg, var(--bg-2), var(--frame-bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 10px;
+  box-shadow: 0 30px 80px -30px rgb(0 0 0 / 85%);
+  overflow: hidden;
+}
+
+.lb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lb-title {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.lb-close {
+  padding: 2px 8px;
+  font: 14px/1 var(--mono);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.lb-close:hover {
+  color: var(--text);
+  border-color: var(--accent-2);
+}
+
+.lb-score {
+  margin: 0;
+  color: var(--text);
+}
+
+.lb-form {
+  display: flex;
+  gap: 8px;
+}
+
+.lb-name {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  color: var(--text);
+  font: 13px/1 var(--mono);
+  background: var(--frame-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.lb-name:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.lb-send {
+  padding: 8px 14px;
+  font:
+    600 13px/1 var(--mono);
+  color: var(--bg);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.lb-send:hover {
+  filter: brightness(1.1);
+}
+
+.lb-send:disabled {
+  filter: grayscale(0.6) brightness(0.8);
+  cursor: default;
+}
+
+.lb-status {
+  margin: 0;
+  min-height: 1.2em;
+  color: var(--accent-2);
+  font-size: 12px;
+}
+
+.lb-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  border-top: 1px solid var(--border-soft);
+}
+
+.lb-list li {
+  display: grid;
+  grid-template-columns: 2.2em 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.lb-rank {
+  color: var(--faint);
+  text-align: right;
+}
+
+.lb-who {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-pts {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.lb-empty {
+  display: block;
+  padding: 12px 2px;
+  color: var(--muted);
+  text-align: center;
 }

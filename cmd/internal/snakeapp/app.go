@@ -1,6 +1,7 @@
 package snakeapp
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/lunguini/flatte"
@@ -33,6 +34,27 @@ func TickElapsed(s *State, d time.Duration) {
 // Init arms the game ticker once the loop is running.
 func Init(s *State, fx flatte.Effects[State]) {
 	s.startTicker(fx)
+}
+
+// Over reports whether the current game has ended — the moment a host would
+// offer to submit the run to a leaderboard.
+func Over(s *State) bool { return s.game.Over }
+
+// Score is the current game score.
+func Score(s *State) int { return s.game.Score }
+
+// Submission returns everything a leaderboard needs to verify this run without
+// trusting a client-reported score: the seed as a decimal string (a uint64 seed
+// can exceed a JS number's safe integer range) and the accepted-turn log as
+// [move, dir] pairs. It mirrors the wire shape the verifier expects, so a host
+// can forward it verbatim.
+func Submission(s *State) (seed string, inputs [][2]int) {
+	seed = strconv.FormatUint(s.game.Seed(), 10)
+	inputs = make([][2]int, len(s.game.Inputs))
+	for i, in := range s.game.Inputs {
+		inputs[i] = [2]int{in.Move, int(in.Dir)}
+	}
+	return seed, inputs
 }
 
 // startTicker cancels any existing ticker and arms a fresh ScopeEvery under a

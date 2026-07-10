@@ -33,6 +33,23 @@ python3 -m http.server 8080
 
 Open `http://localhost:8080`.
 
+## Leaderboard (optional)
+
+The Game tab can post scores to a shared Snake leaderboard. It's **off by
+default**: the page runs unchanged with no badge and no network. To enable it,
+deploy the Cloudflare Worker in [`../../../leaderboard`](../../../leaderboard)
+and set its origin in `index.html`:
+
+```js
+window.FLATTE_LEADERBOARD_URL = "https://flatte-leaderboard.<subdomain>.workers.dev";
+```
+
+The browser submits only the game **seed** and its log of accepted turns; the
+Worker replays that log through the same simulation the game runs and takes the
+replayed score as authoritative, so scores can't be faked. The UI is a
+browser-only DOM overlay (`leaderboard_js.go`) — the shared Flatte core never
+touches the network.
+
 ## Notes
 
 - **Loading / fallback:** the frame shows a boot line until the module runs. If

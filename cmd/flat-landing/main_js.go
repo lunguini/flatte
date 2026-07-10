@@ -25,6 +25,9 @@ func main() {
 		state.phase = phaseShell
 		state.active = tab
 	}
+	// The leaderboard is a browser-only DOM overlay; it reads the hosted game off
+	// each frame and never touches the shared Flatte core.
+	lb := newLeaderboard(state)
 	render := func() {
 		state.layout(browserColumns(surface), browserRows(surface))
 		frame := View(state, flatte.RenderContext{Width: state.width})
@@ -32,6 +35,7 @@ func main() {
 		if frame.Title != "" {
 			doc.Set("title", frame.Title)
 		}
+		lb.afterFrame(state)
 	}
 	// handleEvent applies an event, repaints, and mirrors the active tab into the
 	// URL fragment only when the tab actually changed. The initial paint, resize,
@@ -51,6 +55,11 @@ func main() {
 		if len(args) == 0 {
 			return nil
 		}
+		// While the leaderboard dialog is open, let the browser deliver keys to
+		// its input (don't preventDefault, don't steer the snake).
+		if lb.blocking() {
+			return nil
+		}
 		ev, ok := browserKeyEvent(args[0])
 		if !ok {
 			return nil
@@ -65,7 +74,7 @@ func main() {
 		return nil
 	})
 	click := js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) == 0 {
+		if len(args) == 0 || lb.blocking() {
 			return nil
 		}
 		surface.Call("focus")
@@ -74,7 +83,7 @@ func main() {
 		return nil
 	})
 	wheel := js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) == 0 {
+		if len(args) == 0 || lb.blocking() {
 			return nil
 		}
 		args[0].Call("preventDefault")

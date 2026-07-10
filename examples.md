@@ -17,7 +17,7 @@ go run ./flat-pages
 | `flat-search` | `flatte.Latest`, stale result suppression, cancellable search |
 | `flat-chat` | `flatte.WithInline`, `fx.Print`/`fx.Printf`, native terminal scrollback |
 | `flat-game` | Real-time Snake: `flatte.ScopeEvery` tick pipeline with `Scope.Cancel` named ticker cancellation (pause/resume/restart), seeded-RNG deterministic state, `Chrome` board/panel panes, `Overlay` pause and game-over modals, `SaveState` high score |
-| `flat-landing` | Interactive WASM landing showcase: one Flatte app core running in terminal and browser, with tabs, searchable component catalog, viewport detail pane, layout rects, keyboard/mouse input, and a gzip-compressed standard Go WASM build |
+| `flat-landing` | Interactive WASM landing showcase: one Flatte app core running in terminal and browser, with tabs, searchable component catalog, viewport detail pane, layout rects, keyboard/mouse input, and a gzip-compressed standard Go WASM build. The browser build can post to an optional shared Snake leaderboard (see `leaderboard/`) that verifies each score by replaying the run server-side |
 
 ## Inputs And Editing
 

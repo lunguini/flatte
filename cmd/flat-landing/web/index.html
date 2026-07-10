@@ -84,6 +84,36 @@
           <span class="hint"><kbd>q</kbd> quit</span>
           <span class="hint hint--note">click the pane, then type</span>
         </div>
+
+        <!-- Snake leaderboard overlay. Structure only; behavior + fetch live in
+             leaderboard_js.go, gated on window.FLATTE_LEADERBOARD_URL. -->
+        <button type="button" id="lb-open" class="lb-open" hidden>🏆 Leaderboard</button>
+        <div id="lb" class="lb" hidden>
+          <div class="lb-card" role="dialog" aria-label="Snake leaderboard" aria-modal="true">
+            <div class="lb-head">
+              <span class="lb-title">🏆 Snake Leaderboard</span>
+              <button type="button" id="lb-close" class="lb-close" aria-label="Close">✕</button>
+            </div>
+            <div id="lb-submit" class="lb-submit" hidden>
+              <p id="lb-score" class="lb-score"></p>
+              <div class="lb-form">
+                <input
+                  id="lb-name"
+                  class="lb-name"
+                  type="text"
+                  maxlength="24"
+                  placeholder="your name"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-label="Your name"
+                />
+                <button type="button" id="lb-send" class="lb-send">Submit</button>
+              </div>
+              <p id="lb-status" class="lb-status" role="status" aria-live="polite"></p>
+            </div>
+            <ol id="lb-list" class="lb-list"></ol>
+          </div>
+        </div>
       </section>
 
       <section class="compare" aria-labelledby="compare-title">
@@ -176,6 +206,14 @@
       </footer>
     </main>
 
+    <script>
+      // Shared Snake leaderboard endpoint (Cloudflare Worker). Set this to your
+      // deployed Worker's origin to enable the board — e.g.
+      // "https://flatte-leaderboard.<subdomain>.workers.dev". Leave empty and
+      // the demo runs unchanged with the leaderboard dormant (no badge, no
+      // network). No trailing slash.
+      window.FLATTE_LEADERBOARD_URL = "";
+    </script>
     <script src="./wasm_exec.js?v=20260710-stdgo"></script>
     <script>
       const frame = document.getElementById("frame");
