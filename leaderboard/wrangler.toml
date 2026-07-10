@@ -1,0 +1,24 @@
+# Cloudflare Worker config for the Flatte Snake leaderboard.
+#
+# Before first deploy:
+#   1. wrangler kv namespace create LEADERBOARD_KV
+#      -> paste the printed id below (and a preview_id for `wrangler dev`).
+#   2. npm run build:wasm   # compiles src/snake-verify.wasm from the Go source
+#   3. wrangler deploy
+name = "flatte-leaderboard"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+# Bundle the verifier as a compiled WebAssembly.Module import.
+[[rules]]
+type = "CompiledWasm"
+globs = ["**/*.wasm"]
+
+# The whole leaderboard is one value in this namespace, under the key "board".
+[[kv_namespaces]]
+binding = "LEADERBOARD_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+preview_id = "REPLACE_WITH_KV_PREVIEW_ID"
+
+[observability]
+enabled = true

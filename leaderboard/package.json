@@ -1,0 +1,16 @@
+{
+  "name": "flatte-leaderboard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker + KV shared leaderboard for the Flatte Snake demo, with deterministic wasm replay verification.",
+  "scripts": {
+    "build:wasm": "cd ../cmd && ./snake-verify/build.sh \"$PWD/../leaderboard/src/snake-verify.wasm\"",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "npm run build:wasm && node --test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

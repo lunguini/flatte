@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/cmd/internal/snakesim"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -16,8 +17,8 @@ import (
 // with the terminal would draw walls the snake dies before reaching. The
 // side panel matches the board's height for a flush layout.
 const (
-	boardPaneW = gridW*cellW + 2 // +2 for the pane border
-	boardPaneH = gridH + 2       // +2 for the pane border
+	boardPaneW = snakesim.GridW*cellW + 2 // +2 for the pane border
+	boardPaneH = snakesim.GridH + 2       // +2 for the pane border
 	frameW     = 80
 	frameH     = 24
 	overlayW   = 34
@@ -36,7 +37,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 		h = frameH
 	}
 
-	boardTitle := fmt.Sprintf("SNAKE  score %d  lvl %d", s.score, s.level)
+	boardTitle := fmt.Sprintf("SNAKE  score %d  lvl %d", s.game.Score, s.game.Level)
 	boardPane := layout.Col{
 		NodeBase: layout.NodeBase{
 			W:        layout.Fixed(boardPaneW),
@@ -66,17 +67,17 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	if s.paused {
 		children = append(children, pauseOverlay())
 	}
-	if s.over {
+	if s.game.Over {
 		children = append(children, gameOverOverlay(s))
 	}
 
 	content, _ := layout.SolveAndCompose(layout.Col{Children: children}, w, h)
 
-	title := fmt.Sprintf("flat-game — level %d", s.level)
+	title := fmt.Sprintf("flat-game — level %d", s.game.Level)
 	if s.paused {
 		title = "flat-game — paused"
 	}
-	if s.over {
+	if s.game.Over {
 		title = "flat-game — game over"
 	}
 	return flatte.Frame{Content: content, Title: title}
@@ -86,35 +87,35 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 // cells of cellW columns. View stays a pure function of state — no randomness,
 // no wall clock.
 func (s *State) renderBoard() string {
-	occupied := make(map[point]int, len(s.snake)) // point -> index in snake
-	for i, p := range s.snake {
+	occupied := make(map[snakesim.Point]int, len(s.game.Snake)) // point -> index in snake
+	for i, p := range s.game.Snake {
 		occupied[p] = i
 	}
-	head := s.snake[0]
+	head := s.game.Snake[0]
 
 	var b strings.Builder
-	for y := 0; y < gridH; y++ {
-		for x := 0; x < gridW; x++ {
-			p := point{x, y}
+	for y := 0; y < snakesim.GridH; y++ {
+		for x := 0; x < snakesim.GridW; x++ {
+			p := snakesim.Point{X: x, Y: y}
 			switch {
 			case p == head:
 				b.WriteString(headCell)
 			case occupiedContains(occupied, p):
 				b.WriteString(bodyCell)
-			case p == s.food:
+			case p == s.game.Food:
 				b.WriteString(foodCell)
 			default:
 				b.WriteString(emptyCell)
 			}
 		}
-		if y < gridH-1 {
+		if y < snakesim.GridH-1 {
 			b.WriteByte('\n')
 		}
 	}
 	return b.String()
 }
 
-func occupiedContains(m map[point]int, p point) bool {
+func occupiedContains(m map[snakesim.Point]int, p snakesim.Point) bool {
 	_, ok := m[p]
 	return ok
 }
@@ -137,7 +138,7 @@ func (s *State) panelLines() []layout.Node {
 
 	status := "playing"
 	switch {
-	case s.over:
+	case s.game.Over:
 		status = "game over"
 	case s.paused:
 		status = "paused"
@@ -145,12 +146,12 @@ func (s *State) panelLines() []layout.Node {
 
 	return []layout.Node{
 		blank(),
-		label("score  ", fmt.Sprintf("%d", s.score)),
+		label("score  ", fmt.Sprintf("%d", s.game.Score)),
 		label("high   ", fmt.Sprintf("%d", s.HighScore)),
 		blank(),
-		label("level  ", fmt.Sprintf("%d / %d", s.level, maxLevel)),
+		label("level  ", fmt.Sprintf("%d / %d", s.game.Level, snakesim.MaxLevel)),
 		label("speed  ", fmt.Sprintf("%dms", s.moveIntervalMs())),
-		label("length ", fmt.Sprintf("%d", len(s.snake))),
+		label("length ", fmt.Sprintf("%d", len(s.game.Snake))),
 		label("state  ", status),
 		blank(),
 		help("←↑↓→", "move"),
@@ -176,12 +177,12 @@ func pauseOverlay() layout.Node {
 
 func gameOverOverlay(s *State) layout.Node {
 	final := "new high score!"
-	if s.score < s.HighScore {
+	if s.game.Score < s.HighScore {
 		final = fmt.Sprintf("high score %d", s.HighScore)
 	}
 	return overlayBox("GAME OVER", pal.bad, []string{
 		"",
-		center(fmt.Sprintf("final score %d", s.score)),
+		center(fmt.Sprintf("final score %d", s.game.Score)),
 		center(final),
 		"",
 		center("r restart   q quit"),

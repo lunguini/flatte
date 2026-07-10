@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/cmd/internal/snakesim"
 )
 
 // NewGame builds a fresh playing state with a seeded RNG. Tests pass a fixed
@@ -70,7 +71,7 @@ func (s *State) handleKey(key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 
 	// While the game-over overlay is up, only r/q act.
-	if s.over {
+	if s.game.Over {
 		if key.Key == flatte.KeyCharacter && (key.Rune == 'r' || key.Rune == 'R') {
 			s.restart(fx)
 		}
@@ -79,23 +80,23 @@ func (s *State) handleKey(key flatte.KeyEvent, fx flatte.Effects[State]) {
 
 	switch key.Key {
 	case flatte.KeyUp:
-		s.steer(dirUp)
+		s.game.Steer(snakesim.Up)
 	case flatte.KeyDown:
-		s.steer(dirDown)
+		s.game.Steer(snakesim.Down)
 	case flatte.KeyLeft:
-		s.steer(dirLeft)
+		s.game.Steer(snakesim.Left)
 	case flatte.KeyRight:
-		s.steer(dirRight)
+		s.game.Steer(snakesim.Right)
 	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'w', 'W':
-			s.steer(dirUp)
+			s.game.Steer(snakesim.Up)
 		case 's', 'S':
-			s.steer(dirDown)
+			s.game.Steer(snakesim.Down)
 		case 'a', 'A':
-			s.steer(dirLeft)
+			s.game.Steer(snakesim.Left)
 		case 'd', 'D':
-			s.steer(dirRight)
+			s.game.Steer(snakesim.Right)
 		case 'p', 'P':
 			s.togglePause(fx)
 		case 'r', 'R':

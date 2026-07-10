@@ -1,0 +1,4 @@
+node_modules/
+.wrangler/
+# Built from the Go source by `npm run build:wasm`; never hand-edit or commit.
+src/snake-verify.wasm

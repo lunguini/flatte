@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/cmd/internal/snakesim"
 	"github.com/lunguini/flatte/flatest"
 )
 
@@ -27,7 +28,7 @@ func driver(seed uint64) *flatest.Driver[State] {
 	}, frameW)
 }
 
-func headOf(d *flatest.Driver[State]) point { return d.State().snake[0] }
+func headOf(d *flatest.Driver[State]) snakesim.Point { return d.State().game.Snake[0] }
 
 // --- Movement ---
 
@@ -35,10 +36,10 @@ func TestSnakeMovesRightOnTick(t *testing.T) {
 	d := driver(1)
 	start := headOf(d)
 	d.Advance(move1)
-	if got := headOf(d); got != (point{start.x + 1, start.y}) {
-		t.Fatalf("after one move: head = %v, want %v", got, point{start.x + 1, start.y})
+	if got := headOf(d); got != (snakesim.Point{X: start.X + 1, Y: start.Y}) {
+		t.Fatalf("after one move: head = %v, want %v", got, snakesim.Point{X: start.X + 1, Y: start.Y})
 	}
-	if l := len(d.State().snake); l != 3 {
+	if l := len(d.State().game.Snake); l != 3 {
 		t.Fatalf("length changed without food: %d, want 3", l)
 	}
 }
@@ -59,8 +60,8 @@ func TestSteeringAppliesOnNextTick(t *testing.T) {
 	start := headOf(d)
 	d.Send(keyChar('s')) // down
 	d.Advance(move1)
-	if got := headOf(d); got != (point{start.x, start.y + 1}) {
-		t.Fatalf("after steer down + tick: head = %v, want %v", got, point{start.x, start.y + 1})
+	if got := headOf(d); got != (snakesim.Point{X: start.X, Y: start.Y + 1}) {
+		t.Fatalf("after steer down + tick: head = %v, want %v", got, snakesim.Point{X: start.X, Y: start.Y + 1})
 	}
 }
 
@@ -69,8 +70,8 @@ func TestReversingIntoSelfIsIgnored(t *testing.T) {
 	start := headOf(d)
 	d.Send(keyChar('a')) // left is the reverse of the initial right heading
 	d.Advance(move1)
-	if got := headOf(d); got != (point{start.x + 1, start.y}) {
-		t.Fatalf("reversal should be ignored; head = %v, want %v", got, point{start.x + 1, start.y})
+	if got := headOf(d); got != (snakesim.Point{X: start.X + 1, Y: start.Y}) {
+		t.Fatalf("reversal should be ignored; head = %v, want %v", got, snakesim.Point{X: start.X + 1, Y: start.Y})
 	}
 }
 
@@ -84,13 +85,13 @@ func TestFastDoubleTurnQueuesBothTurns(t *testing.T) {
 	d.Send(flatte.KeyEvent{Key: flatte.KeyUp})
 	d.Send(flatte.KeyEvent{Key: flatte.KeyLeft})
 	d.Advance(move1)
-	if got := headOf(d); got != (point{start.x, start.y - 1}) {
-		t.Fatalf("first queued turn (up) should apply; head = %v, want %v", got, point{start.x, start.y - 1})
+	if got := headOf(d); got != (snakesim.Point{X: start.X, Y: start.Y - 1}) {
+		t.Fatalf("first queued turn (up) should apply; head = %v, want %v", got, snakesim.Point{X: start.X, Y: start.Y - 1})
 	}
 	d.Advance(move1)
-	if got := headOf(d); got != (point{start.x - 1, start.y - 1}) {
+	if got := headOf(d); got != (snakesim.Point{X: start.X - 1, Y: start.Y - 1}) {
 		t.Fatalf("second queued turn (left) should apply next tick; head = %v, want %v",
-			got, point{start.x - 1, start.y - 1})
+			got, snakesim.Point{X: start.X - 1, Y: start.Y - 1})
 	}
 }
 
@@ -102,13 +103,13 @@ func TestQueuedReversalIsStillIgnored(t *testing.T) {
 	d.Send(flatte.KeyEvent{Key: flatte.KeyUp})
 	d.Send(flatte.KeyEvent{Key: flatte.KeyDown})
 	d.Advance(move1)
-	if got := headOf(d); got != (point{start.x, start.y - 1}) {
-		t.Fatalf("queued turn (up) should apply; head = %v, want %v", got, point{start.x, start.y - 1})
+	if got := headOf(d); got != (snakesim.Point{X: start.X, Y: start.Y - 1}) {
+		t.Fatalf("queued turn (up) should apply; head = %v, want %v", got, snakesim.Point{X: start.X, Y: start.Y - 1})
 	}
 	d.Advance(move1)
-	if got := headOf(d); got != (point{start.x, start.y - 2}) {
+	if got := headOf(d); got != (snakesim.Point{X: start.X, Y: start.Y - 2}) {
 		t.Fatalf("reversal of the queued turn must be dropped; head = %v, want %v",
-			got, point{start.x, start.y - 2})
+			got, snakesim.Point{X: start.X, Y: start.Y - 2})
 	}
 }
 
@@ -116,61 +117,65 @@ func TestQueuedReversalIsStillIgnored(t *testing.T) {
 
 // feedAhead places food directly in front of the head and steps into it.
 func feedAhead(s *State) {
-	v := s.dir.vec()
-	s.food = point{s.snake[0].x + v.x, s.snake[0].y + v.y}
-	s.step()
+	v := s.game.Dir.Vec()
+	s.game.Food = snakesim.Point{X: s.game.Snake[0].X + v.X, Y: s.game.Snake[0].Y + v.Y}
+	s.game.Step()
 }
 
 func TestEatingFoodGrowsAndScores(t *testing.T) {
 	s := newGame(7)
-	before := len(s.snake)
+	before := len(s.game.Snake)
 	feedAhead(s)
-	if got := len(s.snake); got != before+1 {
+	if got := len(s.game.Snake); got != before+1 {
 		t.Fatalf("length after eating = %d, want %d", got, before+1)
 	}
-	if s.foodEaten != 1 {
-		t.Fatalf("foodEaten = %d, want 1", s.foodEaten)
+	if s.game.FoodEaten != 1 {
+		t.Fatalf("foodEaten = %d, want 1", s.game.FoodEaten)
 	}
-	if s.score != s.level {
-		t.Fatalf("score = %d, want level %d", s.score, s.level)
+	if s.game.Score != s.game.Level {
+		t.Fatalf("score = %d, want level %d", s.game.Score, s.game.Level)
 	}
-	if s.over {
+	if s.game.Over {
 		t.Fatal("eating food should not end the game")
 	}
-	for _, p := range s.snake {
-		if p == s.food {
-			t.Fatalf("respawned food %v lands on the snake", s.food)
+	for _, p := range s.game.Snake {
+		if p == s.game.Food {
+			t.Fatalf("respawned food %v lands on the snake", s.game.Food)
 		}
 	}
 }
 
 func TestFiveFoodRaisesLevelAndSpeed(t *testing.T) {
 	s := newGame(9)
-	for i := 0; i < foodPerLevel; i++ {
+	for i := 0; i < snakesim.FoodPerLevel; i++ {
 		feedAhead(s)
 	}
-	if s.level != 2 {
-		t.Fatalf("after %d food: level = %d, want 2", foodPerLevel, s.level)
+	if s.game.Level != 2 {
+		t.Fatalf("after %d food: level = %d, want 2", snakesim.FoodPerLevel, s.game.Level)
 	}
 	if got := s.moveIntervalMs(); got != startMoveMs-stepMoveMs {
 		t.Fatalf("level 2 move interval = %dms, want %dms", got, startMoveMs-stepMoveMs)
 	}
-	if s.score != 6 { // four foods at level 1 + one at level 2
-		t.Fatalf("score after 5 food = %d, want 6", s.score)
+	if s.game.Score != 6 { // four foods at level 1 + one at level 2
+		t.Fatalf("score after 5 food = %d, want 6", s.game.Score)
 	}
 }
 
 func TestHighScoreUpdatesWhenBeaten(t *testing.T) {
-	s := newGame(4)
-	s.HighScore = 2
+	d := driver(4)
+	d.State().HighScore = 2
+	// Drive three foods through the ticker so onTick updates HighScore.
 	for i := 0; i < 3; i++ {
-		feedAhead(s)
+		s := d.State()
+		v := s.game.Dir.Vec()
+		s.game.Food = snakesim.Point{X: s.game.Snake[0].X + v.X, Y: s.game.Snake[0].Y + v.Y}
+		d.Advance(move1)
 	}
-	if s.score != 3 {
-		t.Fatalf("score = %d, want 3", s.score)
+	if d.State().game.Score != 3 {
+		t.Fatalf("score = %d, want 3", d.State().game.Score)
 	}
-	if s.HighScore != 3 {
-		t.Fatalf("high score = %d, want it raised to 3", s.HighScore)
+	if d.State().HighScore != 3 {
+		t.Fatalf("high score = %d, want it raised to 3", d.State().HighScore)
 	}
 }
 
@@ -178,10 +183,10 @@ func TestHighScoreUpdatesWhenBeaten(t *testing.T) {
 
 func TestWallCollisionEndsGame(t *testing.T) {
 	s := newGame(1)
-	s.snake = []point{{gridW - 1, 5}, {gridW - 2, 5}, {gridW - 3, 5}}
-	s.dir = dirRight
-	s.step()
-	if !s.over {
+	s.game.Snake = []snakesim.Point{{X: snakesim.GridW - 1, Y: 5}, {X: snakesim.GridW - 2, Y: 5}, {X: snakesim.GridW - 3, Y: 5}}
+	s.game.Dir = snakesim.Right
+	s.game.Step()
+	if !s.game.Over {
 		t.Fatal("moving into the right wall should end the game")
 	}
 }
@@ -189,11 +194,11 @@ func TestWallCollisionEndsGame(t *testing.T) {
 func TestSelfCollisionEndsGame(t *testing.T) {
 	s := newGame(1)
 	// A square loop; turning down from the head runs into a non-tail body cell.
-	s.snake = []point{{5, 5}, {5, 6}, {6, 6}, {6, 5}}
-	s.dir, s.dirQueue = dirRight, []direction{dirDown}
-	s.food = point{0, 0} // not adjacent, so this is not an eat
-	s.step()
-	if !s.over {
+	s.game.Snake = []snakesim.Point{{X: 5, Y: 5}, {X: 5, Y: 6}, {X: 6, Y: 6}, {X: 6, Y: 5}}
+	s.game.Dir, s.game.DirQueue = snakesim.Right, []snakesim.Direction{snakesim.Down}
+	s.game.Food = snakesim.Point{X: 0, Y: 0} // not adjacent, so this is not an eat
+	s.game.Step()
+	if !s.game.Over {
 		t.Fatal("moving into the snake's own body should end the game")
 	}
 }
@@ -201,11 +206,11 @@ func TestSelfCollisionEndsGame(t *testing.T) {
 func TestMovingIntoVacatingTailIsSafe(t *testing.T) {
 	s := newGame(1)
 	// Head about to enter the tail cell, which vacates this step — legal.
-	s.snake = []point{{5, 5}, {5, 6}, {6, 6}, {6, 5}}
-	s.dir, s.dirQueue = dirUp, []direction{dirRight} // {5,5} -> {6,5} (the tail)
-	s.food = point{0, 0}
-	s.step()
-	if s.over {
+	s.game.Snake = []snakesim.Point{{X: 5, Y: 5}, {X: 5, Y: 6}, {X: 6, Y: 6}, {X: 6, Y: 5}}
+	s.game.Dir, s.game.DirQueue = snakesim.Up, []snakesim.Direction{snakesim.Right} // {5,5} -> {6,5} (the tail)
+	s.game.Food = snakesim.Point{X: 0, Y: 0}
+	s.game.Step()
+	if s.game.Over {
 		t.Fatal("moving into the vacating tail cell should be safe")
 	}
 }
@@ -221,10 +226,10 @@ func TestHigherLevelMovesFasterPerWindow(t *testing.T) {
 		t.Fatalf("level 1 should not complete a move in %dms", startMoveMs-stepMoveMs)
 	}
 	// At level 2 the same window is exactly one move.
-	d.State().level = 2
+	d.State().game.Level = 2
 	d.State().stepAccum = 0
 	d.Advance(time.Duration(startMoveMs-stepMoveMs) * time.Millisecond)
-	if got := headOf(d); got != (point{start.x + 1, start.y}) {
+	if got := headOf(d); got != (snakesim.Point{X: start.X + 1, Y: start.Y}) {
 		t.Fatalf("level 2 should complete one move in %dms; head = %v", startMoveMs-stepMoveMs, got)
 	}
 }
@@ -247,8 +252,8 @@ func TestPauseStopsTicksThenResumeContinues(t *testing.T) {
 		t.Fatal("second p should resume")
 	}
 	d.Advance(move1)
-	if got := headOf(d); got != (point{start.x + 1, start.y}) {
-		t.Fatalf("resumed game should move: head = %v, want %v", got, point{start.x + 1, start.y})
+	if got := headOf(d); got != (snakesim.Point{X: start.X + 1, Y: start.Y}) {
+		t.Fatalf("resumed game should move: head = %v, want %v", got, snakesim.Point{X: start.X + 1, Y: start.Y})
 	}
 }
 
@@ -259,28 +264,28 @@ func TestRestartResetsButKeepsHighScore(t *testing.T) {
 	// Drive into the top wall to end the game deterministically.
 	d.Send(flatte.KeyEvent{Key: flatte.KeyUp})
 	d.Advance(40 * move1)
-	if !d.State().over {
+	if !d.State().game.Over {
 		t.Fatalf("expected game over after steering into the top wall; head=%v", headOf(d))
 	}
 	d.State().HighScore = 99
 
 	d.Send(keyChar('r'))
 	st := d.State()
-	if st.over || st.paused {
+	if st.game.Over || st.paused {
 		t.Fatal("restart should clear over/paused")
 	}
-	if st.score != 0 || st.level != 1 || len(st.snake) != 3 {
-		t.Fatalf("restart board not reset: score=%d level=%d len=%d", st.score, st.level, len(st.snake))
+	if st.game.Score != 0 || st.game.Level != 1 || len(st.game.Snake) != 3 {
+		t.Fatalf("restart board not reset: score=%d level=%d len=%d", st.game.Score, st.game.Level, len(st.game.Snake))
 	}
 	if st.HighScore != 99 {
 		t.Fatalf("restart lost the high score: %d, want 99", st.HighScore)
 	}
-	if st.snake[0] != (point{gridW / 2, gridH / 2}) {
-		t.Fatalf("restart head = %v, want board center", st.snake[0])
+	if st.game.Snake[0] != (snakesim.Point{X: snakesim.GridW / 2, Y: snakesim.GridH / 2}) {
+		t.Fatalf("restart head = %v, want board center", st.game.Snake[0])
 	}
 	// The ticker was re-armed, so play continues.
 	d.Advance(move1)
-	if st.snake[0] == (point{gridW / 2, gridH / 2}) {
+	if st.game.Snake[0] == (snakesim.Point{X: snakesim.GridW / 2, Y: snakesim.GridH / 2}) {
 		t.Fatal("restarted game did not resume ticking")
 	}
 }
@@ -300,10 +305,10 @@ func TestQuitKeys(t *testing.T) {
 
 func TestGameOverIgnoresSteeringButAcceptsRestart(t *testing.T) {
 	s := newGame(1)
-	s.over = true
+	s.game.Over = true
 	fx := flatte.NewEffects[State](context.Background(), nil, func() {})
 	Handle(s, keyChar('w'), fx) // steering ignored while over
-	if len(s.dirQueue) != 0 {
+	if len(s.game.DirQueue) != 0 {
 		t.Fatal("steering should be ignored on the game-over screen")
 	}
 }
@@ -313,15 +318,21 @@ func TestGameOverIgnoresSteeringButAcceptsRestart(t *testing.T) {
 func TestSaveStatePersistsOnlyHighScore(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/state.gob"
-	if err := flatte.SaveState(path, State{HighScore: 42, score: 7, level: 5}); err != nil {
+	// A live game with a fully populated board. Only HighScore is exported, so
+	// gob must persist that and drop the unexported *snakesim.Game entirely.
+	s := newGame(1)
+	s.game.Score = 7
+	s.game.Level = 5
+	s.HighScore = 42
+	if err := flatte.SaveState(path, *s); err != nil {
 		t.Fatal(err)
 	}
 	got := flatte.LoadState(path, State{})
 	if got.HighScore != 42 {
 		t.Fatalf("loaded HighScore = %d, want 42", got.HighScore)
 	}
-	if got.score != 0 || got.level != 0 {
-		t.Fatalf("unexported game fields should not persist: score=%d level=%d", got.score, got.level)
+	if got.game != nil {
+		t.Fatalf("unexported game field should not persist, got %+v", got.game)
 	}
 }
 
@@ -339,16 +350,16 @@ func goldenFrames() []struct {
 
 	moved := newGame(42)
 	for i := 0; i < 3; i++ {
-		moved.step() // three cells right (no food eaten)
+		moved.game.Step() // three cells right (no food eaten)
 	}
-	moved.steer(dirDown)
-	moved.step()
-	moved.step() // then two cells down: an L-shaped body
+	moved.game.Steer(snakesim.Down)
+	moved.game.Step()
+	moved.game.Step() // then two cells down: an L-shaped body
 
 	over := newGame(42)
-	over.over = true
-	over.score = 6
-	over.level = 2
+	over.game.Over = true
+	over.game.Score = 6
+	over.game.Level = 2
 	over.HighScore = 10
 
 	paused := newGame(42)
@@ -384,7 +395,7 @@ func TestBoardBorderMatchesPlayArea(t *testing.T) {
 	content := stripAnsi(View(s, flatte.RenderContext{Width: frameW}).Content)
 	lines := strings.Split(content, "\n")
 
-	bottom := gridH + 1 // top border + gridH grid rows
+	bottom := snakesim.GridH + 1 // top border + gridH grid rows
 	if len(lines) <= bottom {
 		t.Fatalf("frame has %d lines, want at least %d", len(lines), bottom+1)
 	}
