@@ -35,26 +35,38 @@ Workers Free gives 100k requests/day and 10 ms CPU per request; KV Free gives
 NFC-normalized, stripped of control/zero-width characters, whitespace-collapsed,
 and capped at 24 code points; empty becomes `anonymous`.
 
-## Setup
+## Deploy (GitHub Actions — no local tooling)
+
+Deployment runs in CI (`.github/workflows/leaderboard.yml`): the runner builds
+the verifier wasm from the Go source, runs the tests, and deploys with
+Cloudflare's official action. You never install npm, Node, or Wrangler locally.
+
+One-time setup:
+
+1. Create a KV namespace (dashboard → Workers & Pages → KV, or `wrangler kv
+   namespace create LEADERBOARD_KV` from anywhere with Wrangler) and put its id
+   (and a `preview_id`) into `wrangler.toml`.
+2. Add repo secrets `CLOUDFLARE_API_TOKEN` (permissions: *Workers Scripts:Edit*
+   and *Workers KV Storage:Edit*) and `CLOUDFLARE_ACCOUNT_ID`.
+
+Then every push to `main` under `leaderboard/**`, `cmd/snake-verify/**`, or
+`cmd/internal/snakesim/**` deploys — or trigger it manually from the Actions
+tab. After the first deploy, set `window.FLATTE_LEADERBOARD_URL` in
+`../cmd/flat-landing/web/index.html` to the Worker's origin.
+
+## Local (optional)
+
+npm is **only** a convenience for `wrangler dev` and is not required for build,
+test, or deploy. Build and test need nothing but TinyGo and Node:
 
 ```bash
-npm install
-wrangler kv namespace create LEADERBOARD_KV          # prod id
-wrangler kv namespace create LEADERBOARD_KV --preview # preview id (for `wrangler dev`)
-# paste both ids into wrangler.toml
-npm run build:wasm   # compiles src/snake-verify.wasm from the Go source (needs TinyGo)
-npm run dev          # local: http://localhost:8787/api/leaderboard
-npm run deploy
+# build the verifier wasm (from the repo's cmd/ dir)
+(cd ../cmd && ./snake-verify/build.sh "$PWD/../leaderboard/src/snake-verify.wasm")
+# run the tests — Node ships `node --test`; the tests have zero dependencies
+node --test
 ```
 
-Point the landing page at the deployed Worker URL (see
-`../cmd/flat-landing/web`).
-
-## Tests
-
-```bash
-npm test   # builds the wasm, then runs node --test
-```
+For a local dev server, `npm install && npm run dev` uses Wrangler's miniflare.
 
 `test/logic.test.mjs` checks the board helpers and drives the **real** verifier
 wasm through the same seam the Worker uses, asserting the replayed scores match

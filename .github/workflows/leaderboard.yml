@@ -1,0 +1,64 @@
+name: leaderboard
+
+# Deploys the Snake leaderboard Worker. The runner builds the verifier wasm from
+# the Go source (so the artifact is never committed), gates on the Node tests,
+# then deploys with Cloudflare's official action. Nothing here runs on your
+# machine — no local npm/Node/Wrangler needed.
+#
+# One-time setup (in the Cloudflare dashboard / repo settings):
+#   1. Create a KV namespace and put its id (+ preview_id) in
+#      leaderboard/wrangler.toml.
+#   2. Add repo secrets CLOUDFLARE_API_TOKEN (Workers Scripts:Edit + Workers
+#      KV Storage:Edit) and CLOUDFLARE_ACCOUNT_ID.
+# After the first deploy, set window.FLATTE_LEADERBOARD_URL in
+# cmd/flat-landing/web/index.html to the Worker's origin.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "leaderboard/**"
+      - "cmd/snake-verify/**"
+      - "cmd/internal/snakesim/**"
+      - ".github/workflows/leaderboard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leaderboard
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            cmd/go.sum
+      - uses: acifani/setup-tinygo@v2
+        with:
+          tinygo-version: "0.41.1"
+
+      - name: Build verifier wasm
+        working-directory: cmd
+        run: ./snake-verify/build.sh "$GITHUB_WORKSPACE/leaderboard/src/snake-verify.wasm"
+
+      # Gate: the real wasm must replay the Go-generated fixtures to the exact
+      # scores, and the board helpers must pass. Node ships with the runner and
+      # the tests have no dependencies, so there is no install step.
+      - name: Test
+        working-directory: leaderboard
+        run: node --test
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: leaderboard
