@@ -121,7 +121,9 @@ func main() {
 	surface.Call("addEventListener", "wheel", wheel)
 	js.Global().Call("setInterval", tick, 120)
 	render()
-	surface.Call("focus")
+	// Focus the surface so keys work immediately, but preventScroll so the page
+	// loads at the top (hero first) instead of jumping down into the terminal.
+	surface.Call("focus", map[string]any{"preventScroll": true})
 
 	select {}
 }
