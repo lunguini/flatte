@@ -866,6 +866,12 @@ kbd {
   background: color-mix(in srgb, var(--accent) 16%, var(--frame-bg));
 }
 
+/* The badge floats over the bottom-right hint. When it's showing (Game tab),
+   hide the "click the pane, then type" note it would otherwise overlap. */
+.terminal:has(> .lb-open:not([hidden])) .hint--note {
+  display: none;
+}
+
 .lb {
   position: absolute;
   inset: 0;
