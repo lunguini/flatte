@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -207,8 +208,21 @@ func TestBasicSelectorBlankInputCancels(t *testing.T) {
 	}
 }
 
+// paddedEchoCommand builds a FLAT_FILE_SELECTOR value that prints path with a
+// leading space, so a test can prove the selection is trimmed. The value is
+// executed through a shell — `sh -c`, or `cmd /C` on Windows — so it has to be
+// written in that platform's dialect: there is no printf on a stock Windows
+// runner, and cmd's echo preserves everything after the single space that
+// delimits it, which supplies the padding under test.
+func paddedEchoCommand(path string) string {
+	if runtime.GOOS == "windows" {
+		return "echo  " + path
+	}
+	return "printf ' " + path + "\n'"
+}
+
 func TestOpenSelectorCapturesSelectedPathThroughRun(t *testing.T) {
-	t.Setenv("FLAT_FILE_SELECTOR", "printf ' ./picked.txt\n'")
+	t.Setenv("FLAT_FILE_SELECTOR", paddedEchoCommand("./picked.txt"))
 	state := NewState()
 	settled := make(chan struct{})
 	state.settled = settled
