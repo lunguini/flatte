@@ -358,27 +358,57 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	// handing the terminal away (the subprocess must own stdin) and start
 	// a fresh incarnation afterwards. stop blocks until no goroutine can
 	// touch the input source anymore (a Close racing a blocked read is a
-	// data race).
+	// data race) — but only when the read was actually interrupted.
+	//
+	// Not every input source has an interruptible read. The substrate falls
+	// back to an uncancelable reader when it cannot do better (a pipe on
+	// Windows, notably, which is what the tests and any piped stdin use),
+	// and there Cancel reports false and leaves the pending Read parked in
+	// the syscall until the source sends or closes. Such a pipeline cannot
+	// be torn down at all: cancelling its context would stop event delivery
+	// while the goroutine stayed parked on the source, and a replacement
+	// pipeline would then race the parked one for the same bytes — input
+	// after a resume would go to a reader nobody is listening to.
+	//
+	// So stop reports whether it actually tore the pipeline down, and the
+	// caller restarts only what really stopped. An uncancelable pipeline is
+	// left running across the release/restore cycle and keeps delivering to
+	// the same channel. The cost is that a subprocess does not exclusively
+	// own stdin during exec/suspend on such a source — unavoidable without
+	// hanging, and not reachable on a real console, where the substrate has
+	// a cancelable reader and Cancel reports true.
 	type inputPipeline struct {
 		events <-chan inputResult
-		stop   func()
+		stop   func() bool
 	}
 	startInput := func() inputPipeline {
 		inputCtx, cancelCtx := context.WithCancel(runCtx)
 		eventSource := io.Reader(in)
-		cancelRead := func() {}
+		cancelRead := func() bool { return false }
 		if cancelable, err := uv.NewCancelReader(in); err == nil {
 			eventSource = cancelable
-			cancelRead = func() { _ = cancelable.Cancel() }
+			cancelRead = cancelable.Cancel
 		}
 		events, done := readInput(inputCtx, eventSource)
-		return inputPipeline{events: events, stop: func() {
+		return inputPipeline{events: events, stop: func() bool {
+			// Cancel first: it is the only way to learn whether this
+			// pipeline can be stopped, and the answer decides whether the
+			// context may be cancelled at all. The interrupted read makes
+			// the stream fail, and cancelCtx releases the goroutine if it
+			// is mid-send with that error.
+			if !cancelRead() {
+				return false
+			}
 			cancelCtx()
-			cancelRead()
 			<-done
+			return true
 		}}
 	}
 	pipe := startInput()
+	// inputStopped tracks whether the last stop actually tore the pipeline
+	// down, so restoreTerminal knows whether to start a fresh one or keep
+	// using the surviving one.
+	inputStopped := false
 	defer func() {
 		cancel()
 		pipe.stop()
@@ -490,7 +520,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	// terminal may have been resized while we were away, and no SIGWINCH
 	// was delivered to us.
 	releaseTerminal := func() {
-		pipe.stop()
+		inputStopped = pipe.stop()
 		resetCursorStyle()
 		_, _ = renderer.WriteString(resetModes(cfg))
 		_, _ = renderer.WriteString("\x1b[?25h")
@@ -522,7 +552,13 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			screenWidth, screenHeight = 0, 0
 		}
 		enterRenderer()
-		pipe = startInput()
+		// Only a pipeline that really stopped needs replacing. A surviving
+		// one is still reading the same source into the same channel; a
+		// second reader on top of it would steal the bytes.
+		if inputStopped {
+			pipe = startInput()
+			inputStopped = false
+		}
 		forceRepaint = true
 		width, height := terminalSize(out)
 		resizeEvent := Event(ResizeEvent{Width: width, Height: height})

@@ -2,6 +2,8 @@ module github.com/lunguini/flatte
 
 go 1.25.0
 
+toolchain go1.25.12
+
 require (
 	charm.land/lipgloss/v2 v2.0.4
 	github.com/charmbracelet/colorprofile v0.4.3
