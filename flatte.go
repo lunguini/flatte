@@ -358,7 +358,16 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	// handing the terminal away (the subprocess must own stdin) and start
 	// a fresh incarnation afterwards. stop blocks until no goroutine can
 	// touch the input source anymore (a Close racing a blocked read is a
-	// data race).
+	// data race) — but only when the read was actually interrupted.
+	//
+	// Not every input source has an interruptible read. The substrate falls
+	// back to an uncancelable reader when it cannot do better (a pipe on
+	// Windows, notably, which is what the tests and any piped stdin use),
+	// and there Cancel reports false and leaves the pending Read parked in
+	// the syscall until the writer sends or closes. Joining that goroutine
+	// would hang Run forever, so the cancel result decides whether we wait:
+	// a parked reader owns nothing but the already-abandoned input source
+	// and unblocks on its own once the source does.
 	type inputPipeline struct {
 		events <-chan inputResult
 		stop   func()
@@ -366,16 +375,17 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	startInput := func() inputPipeline {
 		inputCtx, cancelCtx := context.WithCancel(runCtx)
 		eventSource := io.Reader(in)
-		cancelRead := func() {}
+		cancelRead := func() bool { return false }
 		if cancelable, err := uv.NewCancelReader(in); err == nil {
 			eventSource = cancelable
-			cancelRead = func() { _ = cancelable.Cancel() }
+			cancelRead = cancelable.Cancel
 		}
 		events, done := readInput(inputCtx, eventSource)
 		return inputPipeline{events: events, stop: func() {
 			cancelCtx()
-			cancelRead()
-			<-done
+			if cancelRead() {
+				<-done
+			}
 		}}
 	}
 	pipe := startInput()

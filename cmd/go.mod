@@ -2,6 +2,8 @@ module github.com/lunguini/flatte/cmd
 
 go 1.25.0
 
+toolchain go1.25.12
+
 require (
 	charm.land/bubbletea/v2 v2.0.7
 	charm.land/lipgloss/v2 v2.0.4
