@@ -4,6 +4,16 @@ Generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [release-please](https://github.com/googleapis/release-please); entries
 below the first release are automated.
 
+## [0.1.1](https://github.com/lunguini/flatte/compare/v0.1.0...v0.1.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* **flat-file-select:** write the selector test in the platform's shell dialect ([d4d128d](https://github.com/lunguini/flatte/commit/d4d128d909557d46ff2d4f1729bbc44c95d9f059))
+* reuse the input pipeline when it cannot be stopped ([711aa9b](https://github.com/lunguini/flatte/commit/711aa9b962d3c73c37f4a1950a35968cc9caabd9))
+* unblock Run when the input read cannot be cancelled, patch stdlib vuln ([93d227e](https://github.com/lunguini/flatte/commit/93d227edd04290d6446d81b729b795028f2b5563))
+* unblock Run when the input read cannot be cancelled, patch stdlib vuln ([b71fd23](https://github.com/lunguini/flatte/commit/b71fd23707f6f8eda090d9a95af8cf044e72c254))
+
 ## 0.1.0 (2026-07-18)
 
 
