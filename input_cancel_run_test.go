@@ -3,9 +3,102 @@ package flatte
 import (
 	"bytes"
 	"context"
+	"io"
 	"testing"
 	"time"
 )
+
+// scriptedReader is an uncancelable input source that can still deliver: Read
+// parks until a chunk is pushed. Like blockingReader it is not an *os.File, so
+// it takes the substrate's uncancelable fallback path on every platform.
+type scriptedReader struct {
+	chunks chan []byte
+	rest   []byte
+}
+
+func newScriptedReader() *scriptedReader {
+	return &scriptedReader{chunks: make(chan []byte, 4)}
+}
+
+func (r *scriptedReader) Read(p []byte) (int, error) {
+	if len(r.rest) == 0 {
+		chunk, ok := <-r.chunks
+		if !ok {
+			return 0, io.EOF
+		}
+		r.rest = chunk
+	}
+	n := copy(p, r.rest)
+	r.rest = r.rest[n:]
+	return n, nil
+}
+
+func (r *scriptedReader) send(t *testing.T, s string) {
+	t.Helper()
+	select {
+	case r.chunks <- []byte(s):
+	case <-time.After(2 * time.Second):
+		t.Fatalf("input %q was never consumed", s)
+	}
+}
+
+// Suspend releases the terminal and restores it, which stops and restarts the
+// input pipeline. A pipeline that could not be stopped must be *reused* rather
+// than replaced: its goroutine is still parked in Read on the source, so a
+// second pipeline on top of it would race the parked one for the same bytes
+// and the key pressed after resume would go to a reader nobody is listening
+// to. This is what kept the exec/suspend/select-file tests failing on Windows
+// after the cancel-join fix.
+func TestRunReusesUncancelableInputAcrossSuspend(t *testing.T) {
+	in := newScriptedReader()
+	defer close(in.chunks)
+
+	suspended := make(chan struct{})
+	fakeSuspend := func() { close(suspended) }
+
+	state := testState{}
+	var out bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(context.Background(), App[testState]{
+			State: &state,
+			Handle: func(s *testState, ev Event, fx Effects[testState]) {
+				key, ok := ev.(KeyEvent)
+				if !ok || key.Key != KeyCharacter {
+					return
+				}
+				switch key.Rune {
+				case 'x':
+					fx.Suspend()
+				case 'q':
+					fx.Quit()
+				}
+			},
+			View: func(s *testState, ctx RenderContext) Frame {
+				return Frame{Content: "suspendable"}
+			},
+		}, WithInput(in), WithOutput(&out), withSuspendProcess(fakeSuspend))
+	}()
+
+	in.send(t, "x")
+	select {
+	case <-suspended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for suspendProcess")
+	}
+
+	// 'q' lands after the release/restore cycle: it can only be seen if the
+	// surviving pipeline still feeds the loop.
+	in.send(t, "q")
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("input after resume never reached the app: the uncancelable pipeline was replaced instead of reused")
+	}
+}
 
 // blockingReader is an input source with no interruptible read: it parks in
 // Read until released. It is deliberately not an *os.File, so the substrate
