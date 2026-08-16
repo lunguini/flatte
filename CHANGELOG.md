@@ -9,7 +9,6 @@ below the first release are automated.
 
 ### Build System
 
-* **deps:** refresh Go modules and CI actions ([22582d2](https://github.com/lunguini/flatte/commit/22582d2f199c4213a5609839a5127c35a9229846))
 * **deps:** refresh Go modules and CI actions ([5362e69](https://github.com/lunguini/flatte/commit/5362e6956f8af5b12fabde60bb1a261e14298444))
 * make dependency bumps release-driving ([#14](https://github.com/lunguini/flatte/issues/14)) ([a40ec67](https://github.com/lunguini/flatte/commit/a40ec67a1dbc0b951c4b2438e4f99bfe9c14cc27))
 
