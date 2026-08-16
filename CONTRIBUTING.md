@@ -24,6 +24,13 @@ release-please — a `feat` commit produces a minor bump, a `fix` a patch,
 and a breaking change a major bump (pre-1.0: minor). Write the subject as
 the changelog line a user should read.
 
+Dependency updates use `deps`, which is also release-driving: a module bump
+changes the versions a consumer of the library resolves through minimal
+version selection, so it belongs in the changelog and earns a patch release.
+Keep `ci` for GitHub Actions bumps — those change nothing a consumer can
+observe, and `ci` is hidden from the changelog and does not trigger a
+release. Dependabot is configured to use these prefixes automatically.
+
 ## Repository layout
 
 Two Go modules:
