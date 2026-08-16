@@ -1,9 +1,14 @@
 version: 2
 updates:
+  # Module bumps change what a consumer of the library resolves through MVS,
+  # so they are release-worthy: the `deps` prefix is a user-facing type in
+  # release-please-config.json and cuts a patch release.
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       go-deps:
         patterns: ["*"]
@@ -11,10 +16,17 @@ updates:
     directory: /cmd
     schedule:
       interval: weekly
+    commit-message:
+      prefix: deps
     groups:
       go-deps:
         patterns: ["*"]
+  # Action bumps change nothing a consumer can observe, so they use `ci`,
+  # which is hidden and does not trigger a release. Without this they would
+  # default to `build(deps)` and cut a release for a CI-only change.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: ci
