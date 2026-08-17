@@ -41,6 +41,21 @@ Use these names for every app:
 | Inline (non-fullscreen) mode | `flatte.WithInline()` |
 | Handle Ctrl+C yourself | `flatte.WithoutDefaultQuit()` |
 
+`Run` treats context cancellation, input EOF, and `fx.Quit()` as clean
+shutdown and returns `nil` for those paths. It still restores terminal state
+before returning; `OnExit` runs during cleanup, before that restoration, so
+applications that report persistence failures should capture them in `OnExit`
+and print them after `Run` returns. A context cancellation is not returned as
+`context.Canceled`.
+
+Input limitations are explicit: F1–F12 key presses are supported, but key
+release events and terminal capability/keyboard-enhancement reports are not
+currently delivered. IME/composite key text is reduced to its first rune.
+`WithInline()` and mouse reporting are mutually exclusive and return
+`flatte.ErrInlineMouseUnsupported` from `Run`. Resize events use `SIGWINCH` on
+Unix and ultraviolet Windows console events on a real console; cross-compiled
+or piped Windows tests do not verify live console resizing.
+
 ## Choose The Right Helper
 
 | If you need... | Use... | Sample |
@@ -58,7 +73,7 @@ Use these names for every app:
 | Loading animation | `flatui.Spinner` | `cmd/flat-spinner` |
 | Countdown / stopwatch state | `flatui.Timer`, `flatui.Stopwatch` | `cmd/flat-timer` |
 | Click regions | `flatui.ZoneMap` | `cmd/flat-zones`, `cmd/flat-spike` |
-| Modal overlay | `flatui.Overlay` | `cmd/flat-modal` |
+| Modal overlay | `layout.NodeBase{Overlay: true}` | `cmd/flat-docker` |
 | Clickable tab strip | `flatui.TabBar` | `cmd/flat-docker` |
 | Basic card layout | `flatui.Card`, `flatui.CardBodyWidth`, `flatui.CardBodyHeight` | most samples |
 | Styled local composition | Lip Gloss v2 + `flatui` styled methods | `cmd/flat-style`, `cmd/flat-workspace` |
@@ -81,9 +96,11 @@ type Node interface {
 }
 ```
 
-`Size` declares intent per axis; `Render` fills the exact `Rect` the parent
-assigned. `Render` never chooses its own position or size. Concrete nodes embed
-`NodeBase` for shared geometry and add their own fields.
+`Size` declares intent per axis; `Render` receives the exact `Rect` the parent
+assigned and draws only inside it. A leaf may under-fill its rect; the
+compositor clips overflow and leaves uncovered parent pixels visible. `Render`
+never chooses its own position or size. Concrete nodes embed `NodeBase` for
+shared geometry and add their own fields.
 
 ### NodeBase fields
 
@@ -129,7 +146,8 @@ whole viewport.
 | Call | Returns | Use |
 |---|---|---|
 | `layout.SolveAndCompose(root, w, h)` | `(content string, rects map[string]Rect)` | The frame path: one pass distributes rects and paints leaves into a cell buffer, so geometry and pixels cannot drift. Put `content` in `flatte.Frame`; keep `rects` for hit-testing. |
-| `layout.Solve(root, w, h)` | `map[string]Rect` | Geometry only, no painting. Use to warm hit-test rects for a subtree that is not the frame this pass. |
+| `layout.Solve(root, w, h)` | `map[string]Rect` | Geometry only, no painting. Run it from event-time reflow to prepare hit-testing before the next event. |
+| `layout.SolveWithDiagnostics` / `SolveAndComposeWithDiagnostics` | rects/content plus duplicate-ID reports | Opt-in diagnostics for repeated non-empty IDs; existing calls retain last-ID-wins behavior. |
 
 `Rect` (`layout.Rect`, aliased as `flatui.Rect`) is `{X, Y, W, H}` in absolute
 frame cells, with `Contains`, `Inset`, and `Intersect`.
@@ -141,8 +159,8 @@ is skipped in the base distribution, then composed on top: its rect is cleared
 and the node is recursed so descendants still get rects recorded. Overlay axis
 size comes from `Fixed`/`Content` (exact, clamped to the viewport), `Auto`
 (fills the viewport), or `Grow` (viewport fraction, per the weight rule above).
-`layout.Overlay(base, layer)` is the standalone string compositor that centers
-one rendered block over another with correct ANSI handling.
+`layout.Overlay(base, layer)` is a lower-level string compositor for tiny local
+blocks. Prefer an overlay node when composing an app frame.
 
 ### Widgets in a layout tree
 
@@ -165,10 +183,16 @@ map lookup — no coordinate math in app code. For tabs:
 // Build once; WithID tags the strip and each tab with a layout ID.
 s.tabs = flatui.NewTabBar(items...).WithID("header")
 
-// In View: the tab strip is a real child of the frame tree.
-tree := layout.Col{Children: []layout.Node{s.tabs.Layout(), body, footer}}
-content, rects := layout.SolveAndCompose(tree, w, h)
-s.rects = rects // stash for Handle
+// Use one tree builder for event-time geometry and read-only rendering.
+func (s *State) tree() layout.Node {
+	return layout.Col{Children: []layout.Node{s.tabs.Layout(), body, footer}}
+}
+
+// In Handle, after ResizeEvent or any mutation that changes geometry:
+s.rects = layout.Solve(s.tree(), s.width, s.height)
+
+// In View: compose the same prepared tree without mutating state.
+content, _ := layout.SolveAndCompose(s.tree(), s.width, s.height)
 
 // In Handle: map a click to a tab index using the solved rects.
 if idx, ok := s.tabs.HitTest(s.rects, m.X, m.Y); ok {
@@ -176,26 +200,33 @@ if idx, ok := s.tabs.HitTest(s.rects, m.X, m.Y); ok {
 }
 ```
 
-For app-defined regions (rows, dividers), give the nodes IDs and look their
-rects up in the returned map directly, or feed rects into a `flatui.ZoneScanner`
-(`Reset`, then `Set(id, rect)` each frame, then `At(x, y)`) or `flatui.ZoneMap`.
+For app-defined regions (rows, dividers), give nodes IDs and look their rects
+up directly, or feed rects into `flatui.ZoneMap` (`Clear`, then `Set(id, rect)`,
+then `At(x, y)`). `ZoneScanner` remains as deprecated compatibility API.
 
 ## Async And Effects
+
+Application code should use the helpers below. Deprecated `Async` is a raw
+channel compatibility bridge scheduled for removal in the next breaking
+pre-1.0 minor. `NewHarnessEffects` and `NewHarnessEffectsQueue` are test-only
+construction seams for external deterministic harnesses, not app APIs; they
+will be reviewed for consolidation or relocation before 1.0.
 
 | If you need... | Use... | Notes |
 |---|---|---|
 | One async request | `flatte.Go(fx, name, work, fold)` | Work runs off-loop; fold mutates state on-loop. |
-| Periodic ticks | `flatte.Every(fx, name, interval, fold)` | App owns pause/reset policy. Runs for the loop's lifetime — if it must stop before quit, use `ScopeEvery` instead. |
+| Custom state update | `fx.Send(update)` | Off-loop escape hatch; may block for backpressure and returns false when cancelled or not configured. Handle/View/folds must not call it. |
+| Periodic ticks | `flatte.Every(fx, name, interval, fold)` | Returns `ErrInvalidInterval` for a non-positive interval. App owns pause/reset policy. Runs for the loop's lifetime — if it must stop before quit, use `ScopeEvery` instead. |
 | Long-running source | `flatte.Stream(fx, name, source, fold)` | Source receives `context.Context` and `send(value)`. Same lifetime caveat as `Every`. |
 | Latest request wins | `flatte.Latest(fx, name, work, fold)` | Cancels and drops stale results by name. |
 | Cancel latest request | `flatte.Cancel(fx, name)` | Only cancels work started with `Latest`. It does **not** stop `Every`/`Stream`/`Go` — for those, use a `Scope`. |
-| Cancellable group of work | `flatte.NewScope(fx, name)` + `flatte.ScopeGo`/`ScopeStream`/`ScopeEvery` | `scope.Cancel()` stops everything started through the scope (e.g. pause/restart a game tick — `cmd/flat-game`). Create a fresh scope to start again. |
-| Persist state across runs | `flatte.SaveState(path, s)` / `flatte.LoadState(path, defaultState)` | Gob-encoded snapshot (e.g. high scores — `cmd/flat-game`). |
+| Cancellable group of work | `flatte.NewScope(fx, name)` + `flatte.ScopeGo`/`ScopeStream`/`ScopeEvery` | `ScopeEvery` returns `ErrInvalidInterval` for a non-positive interval. `scope.Cancel()` stops everything started through the scope (e.g. pause/restart a game tick — `cmd/flat-game`). Create a fresh scope to start again. |
+| Persist state across runs | `flatte.SaveState(path, s)` / `flatte.LoadState(path, defaultState)` | Gob-encoded snapshot (e.g. high scores — `cmd/flat-game`). Use `LoadStateWithError` when missing/corrupt state must be distinguished from a valid zero value. |
 | Print above inline frame | `fx.Print(...)` / `fx.Printf(...)` | Requires `flatte.WithInline()`. |
 | Shell out to editor/tool | `flatte.Exec(fx, name, cmd, fold)` | Releases terminal, runs command, restores. |
 | File picker | `flatte.SelectFile(fx, name, cmd, fold)` | App chooses command; `cmd/flat-file-select` shows platform picker selection. |
 | Clipboard write/read | `fx.SetClipboard`, `fx.ReadClipboard`, `flatte.ClipboardEvent` | Reads are best-effort; unsupported terminals may never answer. |
-| Suspend | `fx.Suspend()` | Unix job-control when supported; no-op elsewhere. |
+| Suspend | `fx.Suspend()` | Releases and restores terminal state; Unix sends job-control suspend when supported. Apps should not assume a process stop on platforms without job control. |
 
 ## Navigation Recipes
 
@@ -262,6 +293,15 @@ case flatte.ResizeEvent:
 | Test frame sequences | `flatest.AssertFrames` |
 | Strip ANSI for assertions | `flatest.CleanFrame` |
 | Record/replay an event script | `flatest.Recorder` + `flatest.Replay` |
+
+`flatest.Driver` is a deterministic logic harness, not a terminal emulator.
+It drains queued updates synchronously to completion, whereas `Run` drains a
+bounded snapshot per paint; compare converged state and frames, not redraw
+cadence. `Driver.Frame` uses a fixed width and a zero-value color profile, and
+does not model the renderer, terminal input/signals, or capability actions such
+as suspend, exec, clipboard, and inline scrollback. `Recorder` stores event and
+update names, not update payloads or `Settle`/`Advance` cadence; use `Driver`
+directly for supersession and timing scenarios.
 
 ## Rules Of Thumb
 

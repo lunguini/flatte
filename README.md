@@ -98,6 +98,35 @@ func main() {
   key policy.
 - Tests use normal field assertions plus `flatest` golden/harness helpers.
 
+## Current terminal input scope
+
+Flatte currently delivers key presses (including F1–F12), paste, focus,
+mouse, clipboard, and resize events through its closed `Event` set. Key
+release events and terminal capability/keyboard-enhancement reports are not
+delivered. Composite or IME text is currently reduced to the first rune of a
+key event. `PasteEvent` preserves multi-rune pasted strings, but it is not an
+IME substitute; applications requiring composition must wait for a dedicated
+text-input API.
+
+Inline rendering cannot be combined with mouse reporting: `Run` returns
+`ErrInlineMouseUnsupported`. Inline frames can move as scrollback is printed,
+so Flatte does not claim frame-relative mouse coordinates in that mode.
+
+`ResizeEvent` is emitted initially. On Unix, later terminal resizes arrive via
+`SIGWINCH`; on Windows, ultraviolet receives console window-size events from a
+real Windows console. The repository's Windows checks compile and run tests,
+but piped input is not evidence of live console-resize behavior; verify that
+path in an actual Windows console before relying on it operationally.
+
+The repository includes an opt-in real-console gate. In PowerShell on Windows,
+build the test binary, run it directly, and resize the console once:
+
+```powershell
+go test -c -o flatte-resize-smoke.exe .
+$env:FLATTE_WINDOWS_RESIZE_TTY = "1"
+.\flatte-resize-smoke.exe -test.run TestWindowsConsoleResizeTTY -test.v
+```
+
 ## Packages
 
 - `github.com/lunguini/flatte` (`flatte`) - runtime, events, effects, frame,
@@ -165,3 +194,24 @@ Flatte stands on a lot of excellent open-source work:
   bar, and the golden-snapshot policy.
 - [Changelog](CHANGELOG.md) is generated from commit messages on each
   release.
+
+## Compatibility and current limits
+
+Flatte is pre-1.0. The public packages follow Go module versioning, and
+breaking API changes are called out in the changelog; the API snapshot test is
+a regression guard, not a promise that every 0.x release is source-compatible.
+Ultraviolet and Lip Gloss are implementation dependencies: applications use
+Flatte's events, frames, and layout types rather than substrate types.
+
+`Async` is a deprecated raw-channel compatibility bridge and is planned for
+removal in the next pre-1.0 minor release that accepts breaking changes; use
+`Go` or off-loop `Effects.Send`. `NewHarnessEffects` and
+`NewHarnessEffectsQueue` are exported only so external deterministic harnesses
+can construct effects without a `flatte`/`flatest` import cycle. They are not
+application APIs and will be reviewed for relocation or consolidation before
+1.0.
+
+See [Current terminal input scope](#current-terminal-input-scope) for the
+current input and resize limitations. Apps should size scrollable content with
+`flatui.Viewport` and use `layout.SolveAndCompose` when they need frame geometry
+for hit-testing.
