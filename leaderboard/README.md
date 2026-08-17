@@ -12,8 +12,9 @@ faked high score would have to be a genuinely reachable game.
 Workers Free gives 100k requests/day and 10 ms CPU per request; KV Free gives
 100k reads, **1,000 writes/day**, and 1 write/s per key. So:
 
-- **Verification is a synchronous wasm replay** of a ~1 KB log — well under
-  10 ms, and the module is instantiated once per isolate (zero imports).
+- **Verification is a synchronous wasm replay** of the fixed public challenge
+  (`seed = "1"`) with hard caps of 2,048 turns, 8,192 simulation steps, and a
+  16 KiB streamed request body. The module is instantiated once per isolate.
 - **The whole board is one KV value** (`board`). `GET` is edge-cached, and a
   submission only **writes** when the score actually makes the top `N`
   (`BOARD_SIZE`, default 50), so ordinary play never touches the write budget.
@@ -28,10 +29,12 @@ Workers Free gives 100k requests/day and 10 ms CPU per request; KV Free gives
 | `GET` | `/api/leaderboard` | — | `{ board: [{name, score, at}] }` (cached ~10 s) |
 | `POST` | `/api/score` | `{ name, seed, inputs }` | `{ ok, score, rank, board }` |
 
-`seed` is a **decimal string** (a uint64 seed can exceed
-`Number.MAX_SAFE_INTEGER`). `inputs` is the accepted-turn log, either
+`seed` must be the public challenge string **`"1"`**; the Worker rejects other
+seeds. `inputs` is the accepted-turn log, either
 `[[move, dir], …]` (compact) or `[{move, dir}, …]`; `dir` is `0=Up 1=Down
-2=Left 3=Right`. The server ignores any client-sent score. Names are
+2=Left 3=Right`. At most 2,048 turns and move index 8,192 are accepted, and
+the request body is limited to 16 KiB. The server ignores any client-sent
+score. Names are
 NFC-normalized, stripped of control/zero-width characters, whitespace-collapsed,
 and capped at 24 code points; empty becomes `anonymous`.
 
