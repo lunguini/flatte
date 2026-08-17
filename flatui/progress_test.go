@@ -1,6 +1,7 @@
 package flatui
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -28,6 +29,28 @@ func TestProgressClampsPercent(t *testing.T) {
 	p.SetPercent(140)
 	if got, want := p.View(), "█████  100%"; got != want {
 		t.Fatalf("overfull percent View() = %q, want %q", got, want)
+	}
+}
+
+func TestProgressSetPercentNormalizesNaNAndClampsInfinities(t *testing.T) {
+	cases := []struct {
+		name string
+		set  float64
+		want float64
+	}{
+		{name: "nan", set: math.NaN(), want: 0},
+		{name: "negative infinity", set: math.Inf(-1), want: 0},
+		{name: "positive infinity", set: math.Inf(1), want: 100},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var p Progress
+			p.SetPercent(tc.set)
+			if got := p.Percent(); got != tc.want {
+				t.Fatalf("Percent() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

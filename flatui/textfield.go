@@ -11,8 +11,10 @@ import (
 // TextField is a single-line editable string. Cursor is a byte offset into
 // Value; the movement and edit methods keep it on a grapheme-cluster boundary
 // so multi-rune clusters (combining marks, ZWJ emoji, regional-indicator flags)
-// are treated as indivisible units and never split. clampCursor additionally
-// guards against a manually-set offset landing inside a UTF-8 rune.
+// are treated as indivisible units and never split. SetCursor and the edit
+// methods preserve the byte-offset API while normalizing offsets to grapheme
+// boundaries; clampCursor additionally guards against a manually-set offset
+// landing inside a UTF-8 rune.
 type TextField struct {
 	Value           string
 	Cursor          int
@@ -205,6 +207,26 @@ func (f *TextField) clampCursor() {
 	for f.Cursor > 0 && f.Cursor < len(f.Value) && !utf8.RuneStart(f.Value[f.Cursor]) {
 		f.Cursor--
 	}
+	f.Cursor = graphemeBoundaryAtOrBefore(f.Value, f.Cursor)
+}
+
+// graphemeBoundaryAtOrBefore returns pos when it is a grapheme boundary, or
+// the start of the containing cluster when pos falls inside one. The result
+// is always a byte offset into s and is clamped to [0,len(s)].
+func graphemeBoundaryAtOrBefore(s string, pos int) int {
+	if pos <= 0 {
+		return 0
+	}
+	if pos >= len(s) {
+		return len(s)
+	}
+	// nextGraphemeBoundary is strict (it returns the end of the cluster that
+	// contains pos), so asking about the preceding byte distinguishes an exact
+	// boundary from an offset inside the preceding cluster.
+	if nextGraphemeBoundary(s, pos-1) == pos {
+		return pos
+	}
+	return prevGraphemeBoundary(s, pos)
 }
 
 // prevGraphemeBoundary returns the byte offset of the grapheme-cluster boundary

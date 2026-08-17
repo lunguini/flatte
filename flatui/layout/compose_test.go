@@ -45,6 +45,37 @@ func TestSolveAndComposeGlyphs(t *testing.T) {
 	}
 }
 
+func TestSolveWithDiagnosticsReportsDuplicateIDsInTraversalOrder(t *testing.T) {
+	tree := Col{Children: []Node{
+		Text{NodeBase: NodeBase{ID: "same", H: Fixed(1)}, String: "a"},
+		Text{NodeBase: NodeBase{H: Fixed(1)}, String: "empty"},
+		Text{NodeBase: NodeBase{ID: "same", H: Fixed(1)}, String: "b"},
+		Text{NodeBase: NodeBase{ID: "same", H: Fixed(1)}, String: "c"},
+	}}
+	rects, diagnostics := SolveWithDiagnostics(tree, 10, 4)
+	if len(diagnostics) != 2 || diagnostics[0].ID != "same" || diagnostics[1].ID != "same" {
+		t.Fatalf("diagnostics = %#v, want two same-ID reports in traversal order", diagnostics)
+	}
+	if diagnostics[0].FirstRect.Y != 0 || diagnostics[0].Duplicate.Y != 2 || diagnostics[1].Duplicate.Y != 3 {
+		t.Fatalf("diagnostic rects = %#v, want y 0->2 and 0->3", diagnostics)
+	}
+	if rects["same"].Y != 3 {
+		t.Fatalf("duplicate map winner = %#v, want last node", rects["same"])
+	}
+}
+
+func TestSolveAndComposeWithDiagnosticsMatchesWrapper(t *testing.T) {
+	tree := Text{NodeBase: NodeBase{ID: "one"}, String: "x"}
+	want, wantRects := SolveAndCompose(tree, 4, 1)
+	got, gotRects, diagnostics := SolveAndComposeWithDiagnostics(tree, 4, 1)
+	if got != want || len(diagnostics) != 0 {
+		t.Fatalf("extended compose = %q, diagnostics %#v; wrapper = %q", got, diagnostics, want)
+	}
+	if gotRects["one"] != wantRects["one"] {
+		t.Fatalf("rect mismatch: got %#v want %#v", gotRects, wantRects)
+	}
+}
+
 // The id→rect map from a single compose pass must equal a standalone Solve, so
 // hit-test geometry and painted geometry are provably the same.
 func TestSolveAndComposeRectsMatchSolve(t *testing.T) {
@@ -291,5 +322,43 @@ func TestSolveAndComposePaintsOverlay(t *testing.T) {
 	}
 	if mr.W != 4 || mr.H != 1 {
 		t.Fatalf("overlay rect = %+v, want 4x1 centered", mr)
+	}
+}
+
+// An overlay at the root has no base-pass pixels: it is painted exactly once
+// at its centered layer rect. Before the root guard, the children were painted
+// once at (0,0) and again at the centered position.
+func TestRootOverlayPaintedOnceAtCenter(t *testing.T) {
+	tree := Col{
+		NodeBase: NodeBase{Overlay: true, W: Fixed(6), H: Fixed(3)},
+		Children: []Node{Text{String: "ROOT"}},
+	}
+	composed, _ := SolveAndCompose(tree, 16, 5)
+	lines := strings.Split(ansi.Strip(composed), "\n")
+	if len(lines) < 2 || !strings.Contains(lines[1], "     ROOT") {
+		t.Fatalf("root overlay not centered:\n%s", ansi.Strip(composed))
+	}
+	if n := strings.Count(ansi.Strip(composed), "ROOT"); n != 1 {
+		t.Fatalf("root overlay painted %d times, want 1:\n%s", n, ansi.Strip(composed))
+	}
+}
+
+// A nested overlay under an overlay root is still composed once by the
+// separate overlay pass, while the root's ordinary child remains underneath.
+func TestNestedOverlayUnderRootPaintedOnce(t *testing.T) {
+	tree := Col{
+		NodeBase: NodeBase{Overlay: true, W: Fixed(8), H: Fixed(3)},
+		Children: []Node{
+			Text{String: "ROOT"},
+			Text{NodeBase: NodeBase{Overlay: true, W: Fixed(4), H: Fixed(1)}, String: "NEST"},
+		},
+	}
+	composed, _ := SolveAndCompose(tree, 20, 7)
+	stripped := ansi.Strip(composed)
+	if n := strings.Count(stripped, "ROOT"); n != 1 {
+		t.Fatalf("root content painted %d times, want 1:\n%s", n, stripped)
+	}
+	if n := strings.Count(stripped, "NEST"); n != 1 {
+		t.Fatalf("nested overlay painted %d times, want 1:\n%s", n, stripped)
 	}
 }

@@ -48,6 +48,50 @@ func TestTextFieldSetCursorClampsToRuneBoundary(t *testing.T) {
 	}
 }
 
+func TestTextFieldSetCursorClampsToGraphemeBoundary(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  string
+		cursor int
+		want   int
+	}{
+		{
+			name:   "combining mark",
+			value:  "a\u0301b",
+			cursor: len("a"),
+			want:   0,
+		},
+		{
+			name:   "zwj emoji",
+			value:  "x👩‍💻y",
+			cursor: len("x👩"),
+			want:   len("x"),
+		},
+		{
+			name:   "regional indicator flag",
+			value:  "x🇺🇳y",
+			cursor: len("x🇺"),
+			want:   len("x"),
+		},
+		{
+			name:   "cluster end remains a boundary",
+			value:  "a\u0301b",
+			cursor: len("a\u0301"),
+			want:   len("a\u0301"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			field := TextField{Value: tc.value}
+			field.SetCursor(tc.cursor)
+			if field.Cursor != tc.want {
+				t.Fatalf("Cursor = %d, want %d", field.Cursor, tc.want)
+			}
+		})
+	}
+}
+
 func TestTextFieldMovesAndDeletesByGraphemeCluster(t *testing.T) {
 	// "a" + combining acute (U+0301) forms ONE grapheme cluster (two runes,
 	// three bytes), then "bc". Movement and deletion must treat the cluster as

@@ -46,9 +46,10 @@ type Textarea struct {
 // SetValue replaces the content (split on newlines) and resets the cursor.
 func (t *Textarea) SetValue(s string) {
 	t.lines = strings.Split(s, "\n")
-	t.row, t.col, t.goalCol, t.offset, t.xOffset = 0, 0, 0, 0, 0
+	t.row, t.col, t.goalCol, t.offset, t.xOffset, t.wrapOffset = 0, 0, 0, 0, 0, 0
 	t.ClearSelection()
 	t.ensure()
+	t.keepVisible()
 }
 
 // Value returns the content joined by newlines.

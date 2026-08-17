@@ -74,8 +74,18 @@ func (t *TabBar) SetActive(i int) {
 		t.active = i
 	}
 }
-func (t *TabBar) Next() { t.active = (t.active + 1) % len(t.Items) }
-func (t *TabBar) Prev() { t.active = (t.active - 1 + len(t.Items)) % len(t.Items) }
+func (t *TabBar) Next() {
+	if len(t.Items) == 0 {
+		return
+	}
+	t.active = (t.active + 1) % len(t.Items)
+}
+func (t *TabBar) Prev() {
+	if len(t.Items) == 0 {
+		return
+	}
+	t.active = (t.active - 1 + len(t.Items)) % len(t.Items)
+}
 
 // Layout builds the tab strip as a Row of styled Text leaves. The engine
 // positions and sizes it; the widget computes no coordinates. When WithID was
@@ -156,10 +166,18 @@ func (t *TabBar) HitTest(rects map[string]layout.Rect, x, y int) (int, bool) {
 	if !ok || !strip.Contains(x, y) {
 		return -1, false
 	}
-	localX := x - strip.X - t.border.leadingWidth()
+	left, right := t.border.leadingWidth(), t.border.trailingWidth()
+	top, bottom := t.border.topHeight(), t.border.bottomHeight()
+	localX := x - strip.X - left
+	localY := y - strip.Y - top
+	contentWidth := strip.W - left - right
+	contentHeight := strip.H - top - bottom
+	if localX < 0 || localX >= contentWidth || localY < 0 || localY >= contentHeight {
+		return -1, false
+	}
 	px := 0
 	for i, item := range t.Items {
-		w := tabLabelWidth(item.Label)
+		w := t.tabWidth(item)
 		if localX >= px && localX < px+w {
 			return i, true
 		}
@@ -168,9 +186,17 @@ func (t *TabBar) HitTest(rects map[string]layout.Rect, x, y int) (int, bool) {
 	return -1, false
 }
 
-// tabLabelWidth is the rendered width of one tab: the label plus the two-cell
-// side padding and the two edge glyphs.
-func tabLabelWidth(label string) int { return lipgloss.Width(label) + 6 }
+// tabWidth is measured from the rendered tab so arbitrary glyph widths and
+// the label's actual Lip Gloss padding stay in sync with HitTest geometry.
+func (t *TabBar) tabWidth(item TabItem) int {
+	return lipgloss.Width(t.renderTab(item, false))
+}
+
+// tabLabelWidth is the default-glyph width retained for callers and tests that
+// need to describe the natural width of a default tab.
+func tabLabelWidth(label string) int {
+	return lipgloss.Width(TabGlyphsPowerline.Left) + lipgloss.Width(label) + 4 + lipgloss.Width(TabGlyphsPowerline.Right)
+}
 
 // activeTabText is the label color on an active tab's fill. A computed
 // contrast color is the eventual fix if themes need it; today every palette
@@ -189,8 +215,29 @@ func (b TabBarBorder) style() lipgloss.Border {
 }
 
 func (b TabBarBorder) leadingWidth() int {
-	if b.Left {
-		return 1
+	if !b.Left {
+		return 0
+	}
+	return b.style().GetLeftSize()
+}
+
+func (b TabBarBorder) trailingWidth() int {
+	if !b.Right {
+		return 0
+	}
+	return b.style().GetRightSize()
+}
+
+func (b TabBarBorder) topHeight() int {
+	if b.Top {
+		return b.style().GetTopSize()
+	}
+	return 0
+}
+
+func (b TabBarBorder) bottomHeight() int {
+	if b.Bottom {
+		return b.style().GetBottomSize()
 	}
 	return 0
 }

@@ -32,7 +32,10 @@ func compositeAt(base, layer string, x, y int) string {
 	layerStyled := uv.NewStyledString(layer)
 	bb := baseStyled.Bounds()
 	if bb.Empty() {
-		return base
+		// There is no canvas to composite onto. Returning the layer directly
+		// preserves its ANSI styling and its natural cell dimensions; returning
+		// base here silently dropped a non-empty layer.
+		return layer
 	}
 	lb := layerStyled.Bounds()
 	w := max(bb.Dx(), lb.Dx())

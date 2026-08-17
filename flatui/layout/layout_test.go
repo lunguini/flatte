@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"math"
 	"strings"
 	"testing"
 )
@@ -413,11 +414,111 @@ func TestRectContains(t *testing.T) {
 	}
 }
 
+func TestRectIntersectAndContainsDoNotOverflow(t *testing.T) {
+	max := int(^uint(0) >> 1)
+	r := Rect{X: max - 1, Y: max - 1, W: max, H: max}
+	if !r.Contains(max-1, max-1) {
+		t.Fatal("rect should contain its origin even when its far edge saturates")
+	}
+	if r.Contains(-1, max-1) {
+		t.Fatal("rect should not wrap around into negative coordinates")
+	}
+	i := r.Intersect(Rect{X: max - 2, Y: max - 2, W: 2, H: 2})
+	if i.X != max-1 || i.Y != max-1 || i.W != 1 || i.H != 1 {
+		t.Fatalf("intersection=%+v want clamped one-cell overlap", i)
+	}
+	parent := Rect{X: 10, Y: 10, W: 5, H: 5}
+	if got := (Rect{X: -10, Y: -10, W: 2, H: 2}).Intersect(parent); got != (Rect{X: 10, Y: 10}) {
+		t.Fatalf("disjoint-before intersection=%+v want empty rect at parent origin", got)
+	}
+	if got := (Rect{X: max - 1, Y: max - 1, W: max, H: max}).Intersect(parent); got != (Rect{X: 15, Y: 15}) {
+		t.Fatalf("disjoint-after intersection=%+v want empty rect at parent far corner", got)
+	}
+}
+
+func TestMaxIntFixedClaimsStayWithinFrame(t *testing.T) {
+	max := int(^uint(0) >> 1)
+	tree := Row{Children: []Node{
+		Text{NodeBase: NodeBase{W: Size{Kind: SizeFixed, Value: max}, ID: "a"}},
+		Text{NodeBase: NodeBase{W: Size{Kind: SizeFixed, Value: max}, ID: "b"}},
+	}}
+	rects := Solve(tree, 10, 1)
+	for _, id := range []string{"a", "b"} {
+		r := rects[id]
+		if r.X < 0 || r.X+r.W > 10 || r.W < 0 {
+			t.Fatalf("rect[%q]=%+v escapes frame", id, r)
+		}
+	}
+}
+
+func TestHugeGrowWeightsStayWithinFrame(t *testing.T) {
+	max := math.MaxFloat64
+	tree := Row{Children: []Node{
+		Text{NodeBase: NodeBase{W: Grow(max), ID: "a"}},
+		Text{NodeBase: NodeBase{W: Grow(max), ID: "b"}},
+		Text{NodeBase: NodeBase{W: Grow(max), ID: "c"}},
+	}}
+	rects := Solve(tree, 10, 1)
+	if got := rects["a"].W + rects["b"].W + rects["c"].W; got != 10 {
+		t.Fatalf("grow widths sum=%d want 10", got)
+	}
+	for _, id := range []string{"a", "b", "c"} {
+		r := rects[id]
+		if r.X < 0 || r.X+r.W > 10 || r.W < 0 {
+			t.Fatalf("rect[%q]=%+v escapes frame", id, r)
+		}
+	}
+}
+
 func TestRectInset(t *testing.T) {
 	r := Rect{0, 0, 80, 24}.Inset(2)
 	if r != (Rect{2, 2, 76, 20}) {
 		t.Fatalf("inset=%+v", r)
 	}
+}
+
+func TestInvalidNumericLayoutInputsNormalizeDeterministically(t *testing.T) {
+	t.Run("constructors", func(t *testing.T) {
+		if got := Fixed(-3); got.Value != 0 {
+			t.Fatalf("Fixed(-3) = %+v, want zero cells", got)
+		}
+		for _, weight := range []float64{-1, math.NaN(), math.Inf(1), math.Inf(-1)} {
+			if got := Grow(weight); got.Weight != 0 {
+				t.Fatalf("Grow(%v) = %+v, want zero-weight fallback", weight, got)
+			}
+		}
+	})
+
+	t.Run("direct sizes and negative gap", func(t *testing.T) {
+		root := Row{NodeBase: NodeBase{Gap: -4}, Children: []Node{
+			Text{NodeBase: NodeBase{ID: "fixed", W: Size{Kind: SizeFixed, Value: -5}}},
+			Text{NodeBase: NodeBase{ID: "nan", W: Size{Kind: SizeGrow, Weight: math.NaN()}}},
+			Text{NodeBase: NodeBase{ID: "inf", W: Size{Kind: SizeGrow, Weight: math.Inf(1)}}},
+		}}
+		rects := Solve(root, 8, 1)
+		if got := rects["fixed"].W; got != 0 {
+			t.Fatalf("negative fixed width = %d, want 0", got)
+		}
+		if got := rects["nan"].W; got != 4 {
+			t.Fatalf("NaN grow width = %d, want equal-share 4", got)
+		}
+		if got := rects["inf"].W; got != 4 {
+			t.Fatalf("Inf grow width = %d, want equal-share 4", got)
+		}
+		if rects["inf"].X != 4 {
+			t.Fatalf("negative gap moved second grow child to x=%d, want 4", rects["inf"].X)
+		}
+	})
+
+	t.Run("oversized and negative padding", func(t *testing.T) {
+		root := Col{NodeBase: NodeBase{Pad: -2, PadLeft: 20, PadTop: 20}, Children: []Node{
+			Text{NodeBase: NodeBase{ID: "child"}, String: "x"},
+		}}
+		r := Solve(root, 5, 3)["child"]
+		if r.W != 0 || r.H != 0 || r.X != 5 || r.Y != 3 {
+			t.Fatalf("oversized padding child rect = %+v, want empty rect at far corner", r)
+		}
+	})
 }
 
 func TestRenderProducesCorrectHeight(t *testing.T) {

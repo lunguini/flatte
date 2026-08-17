@@ -48,6 +48,15 @@ func TestTabBarNextPrev(t *testing.T) {
 	}
 }
 
+func TestTabBarNextPrevEmptyIsInert(t *testing.T) {
+	tb := NewTabBar()
+	tb.Next()
+	tb.Prev()
+	if tb.Active() != 0 || tb.ActiveID() != "" {
+		t.Fatalf("empty tabbar after Next and Prev = active %d id %q, want 0 and empty", tb.Active(), tb.ActiveID())
+	}
+}
+
 func TestTabBarHitTestPerTabRects(t *testing.T) {
 	tb := NewTabBar(
 		TabItem{ID: "a", Label: "alpha"},
@@ -98,6 +107,36 @@ func TestTabBarHitTestStripFallback(t *testing.T) {
 	// A point past alpha's band lands on beta.
 	if i, ok := tb.HitTest(rects, 10+tabLabelWidth("alpha")+1, 0); !ok || i != 1 {
 		t.Fatalf("fallback hit tab b = %d,%v want 1,true", i, ok)
+	}
+}
+
+func TestTabBarHitTestStripFallbackUsesGlyphWidths(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		glyph TabGlyphs
+	}{
+		{name: "wide", glyph: TabGlyphs{Left: "界", Right: "界界"}},
+		{name: "empty", glyph: TabGlyphs{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tb := NewTabBar(
+				TabItem{ID: "a", Label: "alpha"},
+				TabItem{ID: "b", Label: "beta"},
+			).WithGlyphs(tc.glyph).WithID("strip")
+			strip := layout.Rect{X: 10, Y: 2, W: layoutWidth(tb), H: 1}
+			rects := map[string]layout.Rect{"strip": strip}
+
+			firstWidth := lipgloss.Width(tc.glyph.Left) + lipgloss.Width("alpha") + 4 + lipgloss.Width(tc.glyph.Right)
+			if got := strip.W; got < firstWidth {
+				t.Fatalf("strip width = %d, want at least first tab width %d", got, firstWidth)
+			}
+			if i, ok := tb.HitTest(rects, strip.X+firstWidth-1, strip.Y); !ok || i != 0 {
+				t.Fatalf("last cell of first tab = %d,%v want 0,true", i, ok)
+			}
+			if i, ok := tb.HitTest(rects, strip.X+firstWidth, strip.Y); !ok || i != 1 {
+				t.Fatalf("first cell of second tab = %d,%v want 1,true", i, ok)
+			}
+		})
 	}
 }
 
@@ -206,5 +245,67 @@ func TestTabBarSideBordersAffectWidthAndHitTesting(t *testing.T) {
 	}
 	if i, ok := tb.HitTest(rects, 1, 0); !ok || i != 0 {
 		t.Fatalf("first content cell after left border = %d,%v want 0,true", i, ok)
+	}
+}
+
+func TestTabBarHitTestFallbackRespectsBorderGeometry(t *testing.T) {
+	border := lipgloss.Border{
+		Top: "══", Bottom: "══", Left: "██", Right: "██",
+		TopLeft: "██", TopRight: "██", BottomLeft: "██", BottomRight: "██",
+	}
+	tb := NewTabBar(TabItem{ID: "a", Label: "alpha"}).
+		WithGlyphs(TabGlyphs{}).
+		WithID("strip").
+		WithBorder(TabBarBorder{Style: border, Top: true, Right: true, Bottom: true, Left: true})
+	strip := layout.Rect{X: 10, Y: 2, W: layoutWidth(tb), H: 3}
+	rects := map[string]layout.Rect{"strip": strip}
+	left, right := border.GetLeftSize(), border.GetRightSize()
+
+	if _, ok := tb.HitTest(rects, strip.X+left-1, strip.Y+1); ok {
+		t.Fatal("left border cells should not hit the first tab")
+	}
+	if i, ok := tb.HitTest(rects, strip.X+left, strip.Y+1); !ok || i != 0 {
+		t.Fatalf("first content cell after wide left border = %d,%v want 0,true", i, ok)
+	}
+	if _, ok := tb.HitTest(rects, strip.X+strip.W-right, strip.Y+1); ok {
+		t.Fatal("right border cells should not hit the last tab")
+	}
+	if _, ok := tb.HitTest(rects, strip.X+left, strip.Y); ok {
+		t.Fatal("top border cells should not hit a tab")
+	}
+	if _, ok := tb.HitTest(rects, strip.X+left, strip.Y+strip.H-1); ok {
+		t.Fatal("bottom border cells should not hit a tab")
+	}
+}
+
+func TestTabBarHitTestFallbackUsesThickTopAndBottomBorders(t *testing.T) {
+	border := lipgloss.Border{
+		Top: "界", Bottom: "界", Left: "│", Right: "│",
+		TopLeft: "界", TopRight: "界", BottomLeft: "界", BottomRight: "界",
+	}
+	tb := NewTabBar(TabItem{ID: "a", Label: "alpha"}).
+		WithGlyphs(TabGlyphs{}).
+		WithID("strip").
+		WithBorder(TabBarBorder{Style: border, Top: true, Right: true, Bottom: true, Left: true})
+	top, bottom := border.GetTopSize(), border.GetBottomSize()
+	strip := layout.Rect{X: 10, Y: 2, W: layoutWidth(tb), H: top + 1 + bottom}
+	if top < 2 || bottom < 2 {
+		t.Fatalf("test border sizes top=%d bottom=%d; want thick border", top, bottom)
+	}
+	rects := map[string]layout.Rect{"strip": strip}
+	for row := 0; row < top; row++ {
+		if _, ok := tb.HitTest(rects, strip.X+1, strip.Y+row); ok {
+			t.Fatalf("top border row %d was treated as a tab hit", row)
+		}
+	}
+	left := border.GetLeftSize()
+	if i, ok := tb.HitTest(rects, strip.X+left, strip.Y+top); !ok || i != 0 {
+		t.Fatalf("content row hit=%d,%v want 0,true", i, ok)
+	}
+	for row := 0; row < bottom; row++ {
+		y := strip.Y + top + 1 + row
+		if _, ok := tb.HitTest(rects, strip.X+left, y); ok {
+			t.Fatalf("bottom border row %d was treated as a tab hit", row)
+		}
 	}
 }

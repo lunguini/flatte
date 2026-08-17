@@ -421,6 +421,9 @@ flatui/layout
   const SizeGrow
   field Col.Children
   field Col.NodeBase
+  field DuplicateIDDiagnostic.Duplicate
+  field DuplicateIDDiagnostic.FirstRect
+  field DuplicateIDDiagnostic.ID
   field NodeBase.Bordered
   field NodeBase.Chrome
   field NodeBase.Gap
@@ -453,6 +456,8 @@ flatui/layout
   func OverlayOrigin
   func Solve
   func SolveAndCompose
+  func SolveAndComposeWithDiagnostics
+  func SolveWithDiagnostics
   method Col.GetChildren
   method Col.GetGap
   method Col.IsHorizontal
@@ -474,6 +479,7 @@ flatui/layout
   method Text.Render
   method Text.Size
   type Col
+  type DuplicateIDDiagnostic
   type Node
   type NodeBase
   type Rect

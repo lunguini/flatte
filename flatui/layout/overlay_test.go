@@ -3,6 +3,9 @@ package layout
 import (
 	"strings"
 	"testing"
+
+	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 func TestOverlayCentersLayerOverBase(t *testing.T) {
@@ -29,5 +32,16 @@ func TestOverlayOriginMatchesOverlay(t *testing.T) {
 	x, y := OverlayOrigin(base, layer)
 	if x != 4 || y != 0 {
 		t.Fatalf("origin = (%d,%d), want (4,0)", x, y)
+	}
+}
+
+func TestOverlayEmptyBaseReturnsStyledLayer(t *testing.T) {
+	layer := lipgloss.NewStyle().Width(4).Height(2).Foreground(lipgloss.Color("196")).Render("X")
+	got := Overlay("", layer)
+	if got != layer {
+		t.Fatalf("Overlay empty base changed layer styling/content:\ngot:  %q\nwant: %q", got, layer)
+	}
+	if bounds := uv.NewStyledString(got).Bounds(); bounds.Dx() != 4 || bounds.Dy() != 2 {
+		t.Fatalf("layer bounds = %dx%d, want 4x2", bounds.Dx(), bounds.Dy())
 	}
 }

@@ -27,8 +27,12 @@ func (p *Progress) SetWidth(width int) {
 	p.width = max(width, 0)
 }
 
-// SetPercent sets the fill percentage. Values outside 0..100 clamp.
+// SetPercent sets the fill percentage. Finite values outside 0..100 clamp;
+// NaN normalizes to zero and infinities clamp to the corresponding endpoint.
 func (p *Progress) SetPercent(percent float64) {
+	if math.IsNaN(percent) {
+		percent = 0
+	}
 	p.percent = min(max(percent, 0), 100)
 }
 

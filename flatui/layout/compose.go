@@ -17,12 +17,35 @@ import (
 // frame, and a leaf that under-fills simply reveals whatever a parent painted
 // underneath — there is no "every leaf must fill its rect exactly" invariant.
 func SolveAndCompose(root Node, width, height int) (string, map[string]Rect) {
+	frame, rects, _ := SolveAndComposeWithDiagnostics(root, width, height)
+	return frame, rects
+}
+
+// DuplicateIDDiagnostic reports a repeated non-empty node ID in traversal
+// order. The later node still wins in the returned rect map, preserving the
+// historical behavior; diagnostics make accidental collisions observable
+// without changing that behavior.
+type DuplicateIDDiagnostic struct {
+	ID        string
+	FirstRect Rect
+	Duplicate Rect
+}
+
+// SolveAndComposeWithDiagnostics is SolveAndCompose with non-breaking
+// duplicate-ID diagnostics. Empty IDs remain valid and are not reported.
+func SolveAndComposeWithDiagnostics(root Node, width, height int) (string, map[string]Rect, []DuplicateIDDiagnostic) {
 	if width <= 0 || height <= 0 {
-		return "", map[string]Rect{}
+		return "", map[string]Rect{}, nil
 	}
 	buf := uv.NewScreenBuffer(width, height)
 	rects := make(map[string]Rect)
-	walk(root, Rect{0, 0, width, height}, &buf, rects)
+	state := walkState{rects: rects, first: make(map[string]Rect)}
+	// Overlay roots do not participate in the base pass. They are painted by
+	// the centered overlay pass below; walking one here first would paint it at
+	// the viewport origin and then paint it a second time at its centered rect.
+	if !isOverlay(root) {
+		walk(root, Rect{0, 0, width, height}, &buf, &state)
+	}
 
 	// Overlay pass: centered layers composed on top of the resolved base.
 	// Clear the layer's rect first (matching the string compositor's FillArea)
@@ -33,9 +56,15 @@ func SolveAndCompose(root Node, width, height int) (string, map[string]Rect) {
 	for _, o := range findOverlays(root) {
 		mr := centerRect(o, width, height)
 		buf.FillArea(&uv.EmptyCell, uv.Rect(mr.X, mr.Y, mr.W, mr.H))
-		walk(o, mr, &buf, rects)
+		walk(o, mr, &buf, &state)
 	}
-	return buf.Render(), rects
+	return buf.Render(), rects, state.diagnostics
+}
+
+type walkState struct {
+	rects       map[string]Rect
+	first       map[string]Rect
+	diagnostics []DuplicateIDDiagnostic
 }
 
 // walk is the single solve+paint traversal shared by Solve and SolveAndCompose.
@@ -49,9 +78,14 @@ func SolveAndCompose(root Node, width, height int) (string, map[string]Rect) {
 // Render called here. Containers are distributed structurally and never
 // Render'd by the walk, so Row/Col may delegate their own Render back to
 // SolveAndCompose without risking infinite recursion.
-func walk(n Node, r Rect, buf *uv.ScreenBuffer, out map[string]Rect) {
+func walk(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
 	if id := getID(n); id != "" {
-		out[id] = r
+		if first, ok := state.first[id]; ok {
+			state.diagnostics = append(state.diagnostics, DuplicateIDDiagnostic{ID: id, FirstRect: first, Duplicate: r})
+		} else {
+			state.first[id] = r
+		}
+		state.rects[id] = r
 	}
 
 	container, isContainer := n.(childContainer)
@@ -87,9 +121,12 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, out map[string]Rect) {
 	mainSizes := distributeMain(children, horizontal, gap, mainAvail(inner, horizontal))
 
 	pos := inner.X
+	mainOrigin := inner.X
 	if !horizontal {
 		pos = inner.Y
+		mainOrigin = inner.Y
 	}
+	innerEnd := rectEnd(mainOrigin, mainAvail(inner, horizontal))
 	for i, c := range children {
 		cw, ch := c.Size()
 		var cr Rect
@@ -104,8 +141,9 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, out map[string]Rect) {
 		// by distribution, so an overflowing row/col would otherwise place a
 		// child rect past the frame edge.
 		cr = cr.Intersect(inner)
-		walk(c, cr, buf, out)
-		pos += mainSizes[i] + gap
+		walk(c, cr, buf, state)
+		step := satAdd(mainSizes[i], gap)
+		pos = min(innerEnd, satAdd(pos, step))
 	}
 }
 

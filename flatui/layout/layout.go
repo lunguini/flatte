@@ -1,4 +1,4 @@
-// Package layout is a flexbox-style layout engine for Flatte.
+// Package layout is a flexbox-style layout and composition engine for Flatte.
 //
 // Every visual thing is a Node — an interface with two methods:
 //
@@ -7,18 +7,20 @@
 //	    Render(r Rect) string   // output at the solved rect
 //	}
 //
-// Concrete types embed NodeBase for shared geometry (W, H, Pad, Gap, Border)
+// Concrete types embed NodeBase for shared geometry (W, H, Pad, Gap, Bordered)
 // and add their own fields. Row distributes horizontally, Col vertically.
-// Text carries a string. Widgets embed NodeBase and implement both methods.
+// Text carries a string. Widgets may expose Layout nodes; the primitive nodes
+// implement both methods.
 //
-// There is no separate solver pass — containers distribute in their own
-// Render via a shared distributeMain helper. Measurement happens naturally
-// through Size() calls (each type computes its intrinsic size, querying
-// children as needed).
+// Solve returns geometry without painting. SolveAndCompose performs one shared
+// top-down walk that distributes rectangles, records IDs, and paints leaves
+// into a clipped cell buffer. Row and Col use that same compositor when they
+// are rendered as nested nodes, so layout geometry and pixels cannot drift.
 package layout
 
 import (
 	"image/color"
+	"math"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -29,17 +31,58 @@ import (
 
 type Rect struct{ X, Y, W, H int }
 
+const maxInt = int(^uint(0) >> 1)
+
+// saturating arithmetic keeps malformed, caller-authored geometry inside the
+// representable int domain. Layout dimensions are counts, so negative widths
+// and heights are treated as zero at the boundary.
+func satAdd(a, b int) int {
+	if b > 0 && a > maxInt-b {
+		return maxInt
+	}
+	if b < 0 && a < -maxInt-1-b {
+		return -maxInt - 1
+	}
+	return a + b
+}
+
+func satSub(a, b int) int {
+	if b > 0 && a < -maxInt-1+b {
+		return -maxInt - 1
+	}
+	if b < 0 && a > maxInt+b {
+		return maxInt
+	}
+	return a - b
+}
+
+func nonNegative(n int) int {
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
+func rectEnd(origin, size int) int {
+	return satAdd(origin, nonNegative(size))
+}
+
 func (r Rect) Inset(n int) Rect {
-	return Rect{r.X + n, r.Y + n, r.W - 2*n, r.H - 2*n}
+	return r.insetBy(sides{top: n, right: n, bottom: n, left: n})
 }
 
 // insetBy shrinks r by a per-side inset.
 func (r Rect) insetBy(s sides) Rect {
-	return Rect{r.X + s.left, r.Y + s.top, r.W - s.horiz(), r.H - s.vert()}
+	w, h := max(r.W, 0), max(r.H, 0)
+	left := min(nonNegative(s.left), w)
+	right := min(nonNegative(s.right), w-left)
+	top := min(nonNegative(s.top), h)
+	bottom := min(nonNegative(s.bottom), h-top)
+	return Rect{satAdd(r.X, left), satAdd(r.Y, top), w - left - right, h - top - bottom}
 }
 
 func (r Rect) Contains(x, y int) bool {
-	return x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
+	return x >= r.X && x < rectEnd(r.X, r.W) && y >= r.Y && y < rectEnd(r.Y, r.H)
 }
 
 // Intersect returns the overlapping region of r and s. If they do not overlap,
@@ -50,17 +93,19 @@ func (r Rect) Contains(x, y int) bool {
 func (r Rect) Intersect(s Rect) Rect {
 	x0 := max(r.X, s.X)
 	y0 := max(r.Y, s.Y)
-	x1 := min(r.X+r.W, s.X+s.W)
-	y1 := min(r.Y+r.H, s.Y+s.H)
+	x1 := min(rectEnd(r.X, r.W), rectEnd(s.X, s.W))
+	y1 := min(rectEnd(r.Y, r.H), rectEnd(s.Y, s.H))
 	// On no overlap, collapse the origin onto the clamped far edge so the empty
 	// rect still sits inside s rather than reporting an out-of-bounds corner.
 	if x0 > x1 {
-		x0 = x1
+		x0 = min(max(x1, s.X), rectEnd(s.X, s.W))
+		x1 = x0
 	}
 	if y0 > y1 {
-		y0 = y1
+		y0 = min(max(y1, s.Y), rectEnd(s.Y, s.H))
+		y1 = y0
 	}
-	return Rect{x0, y0, x1 - x0, y1 - y0}
+	return Rect{x0, y0, nonNegative(satSub(x1, x0)), nonNegative(satSub(y1, y0))}
 }
 
 type SizeKind int
@@ -103,9 +148,32 @@ type Size struct {
 	Weight float64
 }
 
-func Fixed(n int) Size    { return Size{Kind: SizeFixed, Value: n} }
-func Grow(w float64) Size { return Size{Kind: SizeGrow, Weight: w} }
+func Fixed(n int) Size    { return Size{Kind: SizeFixed, Value: max(n, 0)} }
+func Grow(w float64) Size { return normalizeSize(Size{Kind: SizeGrow, Weight: w}) }
 func Auto() Size          { return Size{Kind: SizeAuto} }
+
+// normalizeSize gives malformed public Size values a deterministic production
+// fallback. Fixed/Content counts cannot be negative. Grow weights must be
+// finite and non-negative; invalid weights become zero and participate in the
+// existing equal-share fallback when every grow weight is zero. Unknown kinds
+// behave as Auto. Consumers normalize as well as constructors because callers
+// can author Size values directly.
+func normalizeSize(s Size) Size {
+	switch s.Kind {
+	case SizeAuto:
+		return s
+	case SizeFixed, SizeContent:
+		s.Value = max(s.Value, 0)
+		return s
+	case SizeGrow:
+		if s.Weight < 0 || math.IsNaN(s.Weight) || math.IsInf(s.Weight, 0) {
+			s.Weight = 0
+		}
+		return s
+	default:
+		return Size{Kind: SizeAuto}
+	}
+}
 
 // Node is the primitive layout contract. Implementations should keep the two
 // methods separate:
@@ -166,17 +234,18 @@ func (n NodeBase) IsOverlay() bool    { return n.Overlay }
 type sides struct{ top, right, bottom, left int }
 
 func (s sides) any() bool  { return s.top > 0 || s.right > 0 || s.bottom > 0 || s.left > 0 }
-func (s sides) horiz() int { return s.left + s.right }
-func (s sides) vert() int  { return s.top + s.bottom }
+func (s sides) horiz() int { return satAdd(nonNegative(s.left), nonNegative(s.right)) }
+func (s sides) vert() int  { return satAdd(nonNegative(s.top), nonNegative(s.bottom)) }
 
 // padSides is the node's padding per side: symmetric Pad plus the per-side
 // extras (border excluded).
 func (n NodeBase) padSides() sides {
+	pad := max(n.Pad, 0)
 	return sides{
-		top:    n.Pad + n.PadTop,
-		right:  n.Pad + n.PadRight,
-		bottom: n.Pad + n.PadBottom,
-		left:   n.Pad + n.PadLeft,
+		top:    satAdd(pad, nonNegative(n.PadTop)),
+		right:  satAdd(pad, nonNegative(n.PadRight)),
+		bottom: satAdd(pad, nonNegative(n.PadBottom)),
+		left:   satAdd(pad, nonNegative(n.PadLeft)),
 	}
 }
 
@@ -184,10 +253,10 @@ func (n NodeBase) padSides() sides {
 func (n NodeBase) insetSides() sides {
 	s := n.padSides()
 	if n.Bordered {
-		s.top++
-		s.right++
-		s.bottom++
-		s.left++
+		s.top = satAdd(s.top, 1)
+		s.right = satAdd(s.right, 1)
+		s.bottom = satAdd(s.bottom, 1)
+		s.left = satAdd(s.left, 1)
 	}
 	return s
 }
@@ -204,28 +273,38 @@ func distributeMain(children []Node, horizontal bool, gap, avail int) []int {
 	if n == 0 {
 		return nil
 	}
-	avail -= gap * (n - 1)
-	if avail < 0 {
-		avail = 0
+	gap = max(gap, 0)
+	avail = nonNegative(avail)
+	if n > 1 {
+		gaps := n - 1
+		if gap > avail/gaps {
+			avail = 0
+		} else {
+			avail -= gap * gaps
+		}
 	}
 
 	// Collect sizes, sum fixed, sum grow weights.
 	sizes := make([]Size, n)
 	fixedSum := 0
 	growSum := 0.0
+	maxGrow := 0.0
 	growCount := 0
 	for i, c := range children {
 		cw, ch := c.Size()
 		if horizontal {
-			sizes[i] = cw
+			sizes[i] = normalizeSize(cw)
 		} else {
-			sizes[i] = ch
+			sizes[i] = normalizeSize(ch)
 		}
 		switch sizes[i].Kind {
 		case SizeFixed, SizeContent:
-			fixedSum += sizes[i].Value
+			fixedSum = satAdd(fixedSum, sizes[i].Value)
 		case SizeGrow:
 			growSum += sizes[i].Weight
+			if sizes[i].Weight > maxGrow {
+				maxGrow = sizes[i].Weight
+			}
 			growCount++
 		}
 	}
@@ -238,55 +317,93 @@ func distributeMain(children []Node, horizontal bool, gap, avail int) []int {
 		growSum = float64(growCount)
 	}
 
-	remaining := avail - fixedSum
-	if remaining < 0 {
-		remaining = 0
+	fixedBudget := min(fixedSum, avail)
+	remaining := avail - fixedBudget
+	// A finite but huge collection of finite weights can overflow growSum.
+	// Normalize by the largest weight in that case; the resulting denominator
+	// is bounded by the number of children and preserves proportions.
+	useScaledGrow := math.IsInf(growSum, 0)
+	if useScaledGrow {
+		growSum = 0
+		for _, s := range sizes {
+			if s.Kind == SizeGrow && maxGrow > 0 {
+				growSum += s.Weight / maxGrow
+			}
+		}
 	}
 
 	result := make([]int, n)
 	growUsed := 0
+	fixedUsed := 0
 	for i, s := range sizes {
 		switch s.Kind {
 		case SizeFixed, SizeContent:
-			result[i] = s.Value
+			claim := s.Value
+			if fixedUsed >= fixedBudget {
+				claim = 0
+			} else {
+				claim = min(claim, fixedBudget-fixedUsed)
+			}
+			result[i] = claim
+			fixedUsed += claim
 		case SizeGrow:
 			w := s.Weight
 			if equalGrow {
 				w = 1
 			}
-			if growSum > 0 {
-				result[i] = int(float64(remaining) * w / growSum)
+			if useScaledGrow && maxGrow > 0 {
+				w /= maxGrow
 			}
-			growUsed += result[i]
+			if growSum > 0 && remaining > 0 {
+				result[i] = fractionOf(remaining, w/growSum)
+			}
+			growUsed = min(remaining, satAdd(growUsed, result[i]))
 		}
 	}
 
-	// Distribute the rounding remainder to Grow children, round-robin
-	// left-to-right until it is exhausted (deterministic: earlier children win
-	// the extra cell).
+	// Distribute the rounding remainder to Grow children in O(n), rather than
+	// decrementing one cell at a time. The latter can take effectively forever
+	// when a tiny relative weight rounds every initial share to zero while the
+	// available width is MaxInt.
 	rem := remaining - growUsed
-	for rem > 0 {
-		progressed := false
+	if rem > 0 && growCount > 0 {
+		per, extra := rem/growCount, rem%growCount
 		for i, s := range sizes {
-			if rem <= 0 {
-				break
+			if s.Kind != SizeGrow {
+				continue
 			}
-			if s.Kind == SizeGrow {
-				result[i]++
-				rem--
-				progressed = true
+			result[i] = satAdd(result[i], per)
+			if extra > 0 {
+				result[i] = satAdd(result[i], 1)
+				extra--
 			}
-		}
-		if !progressed {
-			break
 		}
 	}
 	return result
 }
 
+// fractionOf returns floor(total*ratio), clamped to total. Keeping the
+// conversion behind an explicit cap avoids converting 2^wordsize to a
+// negative int when float64 rounds MaxInt up to the next power of two.
+func fractionOf(total int, ratio float64) int {
+	if total <= 0 || ratio <= 0 || math.IsNaN(ratio) {
+		return 0
+	}
+	if ratio >= 1 || math.IsInf(ratio, 1) {
+		return total
+	}
+	v := float64(total) * ratio
+	if v >= float64(total) {
+		return total
+	}
+	return int(v)
+}
+
 // crossAxis returns the cross-axis dimension for a child.
 // Fixed pins; everything else stretches to fill.
 func crossAxis(s Size, avail int) int {
+	s = normalizeSize(s)
+	avail = max(avail, 0)
 	if s.Kind == SizeFixed && s.Value < avail {
 		return s.Value
 	}
@@ -298,8 +415,10 @@ func crossAxis(s Size, avail int) int {
 // main or cross axis, so a container whose only claim on an axis is "grow" can
 // itself report Grow(1) instead of collapsing to zero.
 func measureChildren(children []Node, horizontal bool, gap int) (main, cross int, mainGrow, crossGrow bool) {
+	gap = max(gap, 0)
 	for i, c := range children {
 		cw, ch := c.Size()
+		cw, ch = normalizeSize(cw), normalizeSize(ch)
 		var m, cr Size
 		if horizontal {
 			m, cr = cw, ch
@@ -307,13 +426,13 @@ func measureChildren(children []Node, horizontal bool, gap int) (main, cross int
 			m, cr = ch, cw
 		}
 		if m.Kind == SizeFixed || m.Kind == SizeContent {
-			main += m.Value
+			main = satAdd(main, m.Value)
 		}
 		if m.Kind == SizeGrow {
 			mainGrow = true
 		}
 		if i > 0 {
-			main += gap
+			main = satAdd(main, gap)
 		}
 		if cr.Kind == SizeGrow {
 			crossGrow = true
@@ -401,15 +520,28 @@ func getChildren(n Node) []Node {
 // geometry-only mode of the shared walk (buf nil), so its rects are identical
 // to the ones SolveAndCompose records while composing.
 func Solve(root Node, width, height int) map[string]Rect {
+	rects, _ := SolveWithDiagnostics(root, width, height)
+	return rects
+}
+
+// SolveWithDiagnostics returns geometry and reports repeated non-empty IDs in
+// deterministic traversal order. Duplicate IDs retain the existing last-node-
+// wins map behavior; empty IDs are intentionally ignored.
+func SolveWithDiagnostics(root Node, width, height int) (map[string]Rect, []DuplicateIDDiagnostic) {
 	rects := make(map[string]Rect)
-	walk(root, Rect{0, 0, width, height}, nil, rects)
+	state := walkState{rects: rects, first: make(map[string]Rect)}
+	// Match SolveAndCompose: an overlay root is resolved only at its centered
+	// layer rect, never once as a viewport-sized base node.
+	if !isOverlay(root) {
+		walk(root, Rect{0, 0, width, height}, nil, &state)
+	}
 	// Overlay pass: recurse so overlay descendants get rects too, matching
 	// SolveAndCompose's overlay walk for hit-test parity.
 	for _, o := range findOverlays(root) {
 		mr := centerRect(o, width, height)
-		walk(o, mr, nil, rects)
+		walk(o, mr, nil, &state)
 	}
-	return rects
+	return rects, state.diagnostics
 }
 
 func mainAvail(inner Rect, horizontal bool) int {
@@ -432,6 +564,11 @@ func findOverlays(n Node) []Node {
 	return result
 }
 
+func isOverlay(n Node) bool {
+	o, ok := n.(interface{ IsOverlay() bool })
+	return ok && o.IsOverlay()
+}
+
 func centerRect(n Node, vpW, vpH int) Rect {
 	w, h := n.Size()
 	lw := resolveLayerSize(w, vpW)
@@ -448,6 +585,8 @@ func centerRect(n Node, vpW, vpH int) Rect {
 // Weight>=1 means the full viewport and Weight<1 means that fraction of the
 // viewport (see the Size doc for why this dual meaning is intentional).
 func resolveLayerSize(s Size, viewport int) int {
+	s = normalizeSize(s)
+	viewport = max(viewport, 0)
 	switch s.Kind {
 	case SizeFixed, SizeContent:
 		if s.Value > viewport {
@@ -476,7 +615,7 @@ func getID(n Node) string {
 func getGap(n Node) int {
 	type gapper interface{ GetGap() int }
 	if g, ok := n.(gapper); ok {
-		return g.GetGap()
+		return max(g.GetGap(), 0)
 	}
 	return 0
 }
