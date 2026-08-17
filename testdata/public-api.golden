@@ -1,530 +1,556 @@
 flatte
-  const CursorShapeBar
-  const CursorShapeBlock
-  const CursorShapeDefault
-  const CursorShapeUnderline
-  const KeyBackspace
-  const KeyCharacter
-  const KeyCtrlC
-  const KeyDelete
-  const KeyDown
-  const KeyEnd
-  const KeyEnter
-  const KeyEscape
-  const KeyF1
-  const KeyF10
-  const KeyF11
-  const KeyF12
-  const KeyF2
-  const KeyF3
-  const KeyF4
-  const KeyF5
-  const KeyF6
-  const KeyF7
-  const KeyF8
-  const KeyF9
-  const KeyHome
-  const KeyLeft
-  const KeyPageDown
-  const KeyPageUp
-  const KeyRight
-  const KeyTab
-  const KeyUnknown
-  const KeyUp
-  const ModAlt
-  const ModCtrl
-  const ModShift
-  const MouseLeft
-  const MouseMiddle
-  const MouseModeAllMotion
-  const MouseModeCellMotion
-  const MouseModeNone
-  const MouseMotion
-  const MouseNone
-  const MousePress
-  const MouseRelease
-  const MouseRight
-  const MouseWheelDown
-  const MouseWheelUp
-  field App.Handle
-  field App.Init
-  field App.OnExit
-  field App.State
-  field App.Tracer
-  field App.View
-  field ClipboardEvent.Text
-  field Cursor.Style
-  field Cursor.X
-  field Cursor.Y
-  field CursorStyle.Blink
-  field CursorStyle.Color
-  field CursorStyle.Shape
-  field FileSelection.Err
-  field FileSelection.Path
-  field FocusEvent.Focused
-  field Frame.Content
-  field Frame.Cursor
-  field Frame.Title
-  field KeyEvent.Key
-  field KeyEvent.Mod
-  field KeyEvent.Rune
-  field MouseEvent.Action
-  field MouseEvent.Button
-  field MouseEvent.Mod
-  field MouseEvent.X
-  field MouseEvent.Y
-  field PasteEvent.Text
-  field RenderContext.ColorProfile
-  field RenderContext.Width
-  field ResizeEvent.Height
-  field ResizeEvent.Width
-  func ApplyUpdate
-  func Async
-  func Cancel
-  func Every
-  func Exec
-  func Go
-  func Latest
-  func LoadState
-  func LoadStateWithError
-  func Named
-  func NewHarnessEffects
-  func NewHarnessEffectsQueue
-  func NewScope
-  func RenderContextFor
-  func Run
-  func SaveState
-  func ScopeEvery
-  func ScopeGo
-  func ScopeStream
-  func SelectFile
-  func Stream
-  func WithInline
-  func WithInput
-  func WithMouse
-  func WithOutput
-  func WithReportFocus
-  func WithoutBracketedPaste
-  func WithoutDefaultQuit
-  method Effects.Ctx
-  method Effects.Print
-  method Effects.Printf
-  method Effects.Quit
-  method Effects.ReadClipboard
-  method Effects.Send
-  method Effects.SetClipboard
-  method Effects.Suspend
-  method Mod.Contains
-  method NoopTracer.Event
-  method NoopTracer.Update
-  method Scope.Cancel
-  method Scope.Ctx
-  method UpdateTracer.Event
-  method UpdateTracer.Update
-  type App
-  type ClipboardEvent
-  type Clock
-  type Cursor
-  type CursorShape
-  type CursorStyle
-  type Effects
-  type Event
-  type FileSelection
-  type FocusEvent
-  type Frame
-  type Key
-  type KeyEvent
-  type Mod
-  type MouseAction
-  type MouseButton
-  type MouseEvent
-  type MouseMode
-  type NoopTracer
-  type Option
-  type PasteEvent
-  type RenderContext
-  type ResizeEvent
-  type Scope
-  type StateUpdate
-  type Tracer
-  type UpdateTracer
-  var ErrInlineMouseUnsupported
-  var ErrInvalidInterval
-  var ErrNoSelection
-flatui
-  const KeyMapFull
-  const KeyMapShort
-  field CardStyle.BorderForeground
-  field CardStyle.Container
-  field Column.Title
-  field Column.Width
-  field KeyBinding.Disabled
-  field KeyBinding.Help
-  field KeyBinding.Keys
-  field KeyGroup.Bindings
-  field KeyGroup.Title
-  field KeyMapOptions.Mode
-  field KeyMapOptions.Width
-  field List.RenderRow
-  field ProgressStyle.Empty
-  field ProgressStyle.Filled
-  field ProgressStyle.Label
-  field TabBar.Items
-  field TabBarBorder.Bottom
-  field TabBarBorder.Color
-  field TabBarBorder.Left
-  field TabBarBorder.Right
-  field TabBarBorder.Style
-  field TabBarBorder.Top
-  field TabGlyphs.Left
-  field TabGlyphs.Right
-  field TabItem.ID
-  field TabItem.Label
-  field TableStyle.Active
-  field TableStyle.Header
-  field TableStyle.Row
-  field TextField.Cursor
-  field TextField.Value
-  field TextPosition.Col
-  field TextPosition.Row
-  field TextRange.End
-  field TextRange.Start
-  field TreeNode.Children
-  field TreeNode.ID
-  field TreeNode.Label
-  field TreeRow.Depth
-  field TreeRow.Expandable
-  field TreeRow.Expanded
-  field TreeRow.ID
-  field TreeRow.Label
-  func Card
-  func CardBodyHeight
-  func CardBodyWidth
-  func CardOrigin
-  func CardWithStyle
-  func ContentWidth
-  func FrameWidth
-  func NewProgress
-  func NewSpinner
-  func NewStopwatch
-  func NewTabBar
-  func NewTimer
-  func NewTree
-  func NewZoneScanner
-  func Overlay
-  func OverlayOrigin
-  func Subtle
-  func SubtleWithStyle
-  func Title
-  func TitleWithStyle
-  method FocusRing.Count
-  method FocusRing.Focused
-  method FocusRing.Index
-  method FocusRing.Next
-  method FocusRing.Prev
-  method FocusRing.Select
-  method FocusRing.SetCount
-  method KeyGroups.ViewWithOptions
-  method KeyMap.View
-  method List.Count
-  method List.Cursor
-  method List.Height
-  method List.Layout
-  method List.MoveDown
-  method List.MoveUp
-  method List.Offset
-  method List.Select
-  method List.SetCount
-  method List.SetHeight
-  method List.View
-  method Paginator.NextPage
-  method Paginator.Page
-  method Paginator.PageSize
-  method Paginator.Pages
-  method Paginator.PrevPage
-  method Paginator.Range
-  method Paginator.SelectPage
-  method Paginator.SetPageSize
-  method Paginator.SetTotal
-  method Paginator.Total
-  method Paginator.View
-  method Progress.Layout
-  method Progress.Percent
-  method Progress.SetPercent
-  method Progress.SetWidth
-  method Progress.View
-  method Progress.ViewWithStyle
-  method Progress.Width
-  method Spinner.Frame
-  method Spinner.Tick
-  method Spinner.View
-  method Stopwatch.Elapsed
-  method Stopwatch.Reset
-  method Stopwatch.Running
-  method Stopwatch.Start
-  method Stopwatch.Stop
-  method Stopwatch.Tick
-  method Stopwatch.Toggle
-  method TabBar.Active
-  method TabBar.ActiveID
-  method TabBar.HitTest
-  method TabBar.Layout
-  method TabBar.Next
-  method TabBar.Prev
-  method TabBar.SetActive
-  method TabBar.WithBorder
-  method TabBar.WithColors
-  method TabBar.WithGlyphs
-  method TabBar.WithID
-  method Table.Cursor
-  method Table.Header
-  method Table.HeaderWithStyle
-  method Table.MoveDown
-  method Table.MoveUp
-  method Table.Select
-  method Table.SelectedRow
-  method Table.SetColumns
-  method Table.SetHeight
-  method Table.SetRows
-  method Table.View
-  method Table.ViewWithStyle
-  method TextField.Backspace
-  method TextField.ClearSelection
-  method TextField.CursorColumn
-  method TextField.Delete
-  method TextField.DeleteWordLeft
-  method TextField.DeleteWordRight
-  method TextField.Insert
-  method TextField.MoveLeft
-  method TextField.MoveLeftSelecting
-  method TextField.MoveRight
-  method TextField.MoveRightSelecting
-  method TextField.MoveWordLeft
-  method TextField.MoveWordLeftSelecting
-  method TextField.MoveWordRight
-  method TextField.MoveWordRightSelecting
-  method TextField.SelectedText
-  method TextField.Selection
-  method TextField.SetCursor
-  method Textarea.Backspace
-  method Textarea.ClearSelection
-  method Textarea.Col
-  method Textarea.CursorCell
-  method Textarea.Delete
-  method Textarea.DeleteWordLeft
-  method Textarea.DeleteWordRight
-  method Textarea.Insert
-  method Textarea.InsertNewline
-  method Textarea.MoveDown
-  method Textarea.MoveDownSelecting
-  method Textarea.MoveLeft
-  method Textarea.MoveLeftSelecting
-  method Textarea.MoveLineEnd
-  method Textarea.MoveLineEndSelecting
-  method Textarea.MoveLineStart
-  method Textarea.MoveLineStartSelecting
-  method Textarea.MoveRight
-  method Textarea.MoveRightSelecting
-  method Textarea.MoveUp
-  method Textarea.MoveUpSelecting
-  method Textarea.MoveWordLeft
-  method Textarea.MoveWordLeftSelecting
-  method Textarea.MoveWordRight
-  method Textarea.MoveWordRightSelecting
-  method Textarea.Offset
-  method Textarea.Row
-  method Textarea.SelectedText
-  method Textarea.Selection
-  method Textarea.SetSize
-  method Textarea.SetSoftWrap
-  method Textarea.SetValue
-  method Textarea.SoftWrap
-  method Textarea.Value
-  method Textarea.View
-  method Textarea.ViewWithSelection
-  method Timer.Done
-  method Timer.Duration
-  method Timer.Elapsed
-  method Timer.Percent
-  method Timer.Remaining
-  method Timer.Reset
-  method Timer.Tick
-  method Tree.CursorID
-  method Tree.MoveDown
-  method Tree.MoveUp
-  method Tree.Offset
-  method Tree.SelectVisible
-  method Tree.SetHeight
-  method Tree.SetNodes
-  method Tree.Toggle
-  method Tree.View
-  method Tree.VisibleRows
-  method Viewport.AtBottom
-  method Viewport.AtTop
-  method Viewport.GotoBottom
-  method Viewport.GotoTop
-  method Viewport.HalfPageDown
-  method Viewport.HalfPageUp
-  method Viewport.Layout
-  method Viewport.LineDown
-  method Viewport.LineUp
-  method Viewport.Offset
-  method Viewport.PageDown
-  method Viewport.PageUp
-  method Viewport.ScrollPercent
-  method Viewport.ScrollToLine
-  method Viewport.SetContent
-  method Viewport.SetLines
-  method Viewport.SetSize
-  method Viewport.SetWrappedContent
-  method Viewport.TotalLines
-  method Viewport.View
-  method Viewport.VisibleLines
-  method ZoneMap.At
-  method ZoneMap.Clear
-  method ZoneMap.In
-  method ZoneMap.Local
-  method ZoneMap.Rect
-  method ZoneMap.Set
-  method ZoneScanner.At
-  method ZoneScanner.In
-  method ZoneScanner.Rect
-  method ZoneScanner.Reset
-  method ZoneScanner.Set
-  type CardStyle
-  type Column
-  type FocusRing
-  type KeyBinding
-  type KeyGroup
-  type KeyGroups
-  type KeyMap
-  type KeyMapMode
-  type KeyMapOptions
-  type List
-  type Paginator
-  type Progress
-  type ProgressStyle
-  type Rect
-  type Spinner
-  type Stopwatch
-  type TabBar
-  type TabBarBorder
-  type TabGlyphs
-  type TabItem
-  type Table
-  type TableStyle
-  type TextField
-  type TextPosition
-  type TextRange
-  type Textarea
-  type Timer
-  type Tree
-  type TreeNode
-  type TreeRow
-  type Viewport
-  type ZoneMap
-  type ZoneScanner
-  var SpinnerDots
-  var SpinnerLine
-  var TabGlyphsPowerline
-  var TabGlyphsSafe
-flatui/layout
-  const SizeAuto
-  const SizeContent
-  const SizeFixed
-  const SizeGrow
-  field Col.Children
-  field Col.NodeBase
-  field DuplicateIDDiagnostic.Duplicate
-  field DuplicateIDDiagnostic.FirstRect
-  field DuplicateIDDiagnostic.ID
-  field NodeBase.Bordered
-  field NodeBase.Chrome
-  field NodeBase.Gap
-  field NodeBase.H
-  field NodeBase.ID
-  field NodeBase.Overlay
-  field NodeBase.Pad
-  field NodeBase.PadBottom
-  field NodeBase.PadLeft
-  field NodeBase.PadRight
-  field NodeBase.PadTop
-  field NodeBase.W
-  field Rect.H
-  field Rect.W
-  field Rect.X
-  field Rect.Y
-  field Row.Children
-  field Row.NodeBase
-  field Size.Kind
-  field Size.Value
-  field Size.Weight
-  field Spacer.NodeBase
-  field Text.NodeBase
-  field Text.String
-  func Auto
-  func Fixed
-  func Grow
-  func NewSpacer
-  func Overlay
-  func OverlayOrigin
-  func Solve
-  func SolveAndCompose
-  func SolveAndComposeWithDiagnostics
-  func SolveWithDiagnostics
-  method Col.GetChildren
-  method Col.GetGap
-  method Col.IsHorizontal
-  method Col.Render
-  method Col.Size
-  method NodeBase.GetID
-  method NodeBase.IsOverlay
-  method NodeBase.Size
-  method Rect.Contains
-  method Rect.Inset
-  method Rect.Intersect
-  method Row.GetChildren
-  method Row.GetGap
-  method Row.IsHorizontal
-  method Row.Render
-  method Row.Size
-  method Spacer.Render
-  method Spacer.WithBackground
-  method Text.Render
-  method Text.Size
-  type Col
-  type DuplicateIDDiagnostic
-  type Node
-  type NodeBase
-  type Rect
-  type Row
-  type Size
-  type SizeKind
-  type Spacer
-  type Text
+  const CursorShapeBar CursorShape = 3
+  const CursorShapeBlock CursorShape = 1
+  const CursorShapeDefault CursorShape = 0
+  const CursorShapeUnderline CursorShape = 2
+  const KeyBackspace Key = 5
+  const KeyCharacter Key = 6
+  const KeyCtrlC Key = 4
+  const KeyDelete Key = 11
+  const KeyDown Key = 2
+  const KeyEnd Key = 13
+  const KeyEnter Key = 3
+  const KeyEscape Key = 8
+  const KeyF1 Key = 16
+  const KeyF10 Key = 25
+  const KeyF11 Key = 26
+  const KeyF12 Key = 27
+  const KeyF2 Key = 17
+  const KeyF3 Key = 18
+  const KeyF4 Key = 19
+  const KeyF5 Key = 20
+  const KeyF6 Key = 21
+  const KeyF7 Key = 22
+  const KeyF8 Key = 23
+  const KeyF9 Key = 24
+  const KeyHome Key = 12
+  const KeyLeft Key = 9
+  const KeyPageDown Key = 15
+  const KeyPageUp Key = 14
+  const KeyRight Key = 10
+  const KeyTab Key = 7
+  const KeyUnknown Key = 0
+  const KeyUp Key = 1
+  const ModAlt Mod = 2
+  const ModCtrl Mod = 4
+  const ModShift Mod = 1
+  const MouseLeft MouseButton = 1
+  const MouseMiddle MouseButton = 2
+  const MouseModeAllMotion MouseMode = 2
+  const MouseModeCellMotion MouseMode = 1
+  const MouseModeNone MouseMode = 0
+  const MouseMotion MouseAction = 2
+  const MouseNone MouseButton = 0
+  const MousePress MouseAction = 0
+  const MouseRelease MouseAction = 1
+  const MouseRight MouseButton = 3
+  const MouseWheelDown MouseButton = 5
+  const MouseWheelUp MouseButton = 4
+  func ApplyUpdate[S any](s*S, tracer Tracer, update StateUpdate[S])
+  func Async[S any, T any](ctx context.Context, updates chan<-StateUpdate[S], spawn func(func()), name string, work func(context.Context)(T, error), fold func(*S, T, error))
+  func Cancel[S any](fx Effects[S], name string)
+  func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) error
+  func Exec[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, error))
+  func Go[S any, T any](fx Effects[S], name string, work func(context.Context)(T, error), fold func(*S, T, error))
+  func Latest[S any, T any](fx Effects[S], name string, work func(context.Context)(T, error), fold func(*S, T, error))
+  func LoadState[S any](path string, defaultState S) S
+  func LoadStateWithError[S any](path string, defaultState S)(S, error)
+  func Named[S any](name string, apply func(*S)) StateUpdate[S]
+  func NewHarnessEffects[S any](ctx context.Context, updates chan<-StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S]
+  func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(StateUpdate[S]) bool, quit func(), dispatch func(func()), clock Clock) Effects[S]
+  func NewScope[S any](fx Effects[S], name string) *Scope
+  func RenderContextFor(out io.Writer) RenderContext
+  func Run[S any](ctx context.Context, app App[S], opts ... Option)(runErr error)
+  func SaveState[S any](path string, state S) error
+  func ScopeEvery[S any](scope*Scope, fx Effects[S], interval time.Duration, fold func(*S, time.Time)) error
+  func ScopeGo[S any, T any](scope*Scope, fx Effects[S], work func(context.Context)(T, error), fold func(*S, T, error))
+  func ScopeStream[S any, T any](scope*Scope, fx Effects[S], source func(context.Context, func(T)), fold func(*S, T))
+  func SelectFile[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, FileSelection))
+  func Stream[S any, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T))
+  func WithInline() Option
+  func WithInput(in io.Reader) Option
+  func WithMouse(mode MouseMode) Option
+  func WithOutput(out io.Writer) Option
+  func WithReportFocus() Option
+  func WithoutBracketedPaste() Option
+  func WithoutDefaultQuit() Option
+  method *Scope.Cancel()
+  method *Scope.Ctx() context.Context
+  method Effects[S].Ctx() context.Context
+  method Effects[S].Print(s string)
+  method Effects[S].Printf(format string, args ... any)
+  method Effects[S].Quit()
+  method Effects[S].ReadClipboard()
+  method Effects[S].Send(update StateUpdate[S]) bool
+  method Effects[S].SetClipboard(text string)
+  method Effects[S].Suspend()
+  method Mod.Contains(mods Mod) bool
+  method NoopTracer.Event(Event)
+  method NoopTracer.Update(string)
+  method UpdateTracer.Event(Event)
+  method UpdateTracer.Update(name string)
+  type App[S any] struct
+  field App.State *S [order=0]
+  field App.Init func(*S, Effects[S]) [order=1]
+  field App.Handle func(*S, Event, Effects[S]) [order=2]
+  field App.View func(*S, RenderContext) Frame [order=3]
+  field App.Tracer Tracer [order=4]
+  field App.OnExit func(*S) [order=5]
+  type ClipboardEvent struct
+  field ClipboardEvent.Text string [order=0]
+  type Clock interface
+  interface Clock method Tick(ctx context.Context, interval time.Duration, cb func(time.Time))
+  type Cursor struct
+  field Cursor.X int [order=0]
+  field Cursor.Y int [order=1]
+  field Cursor.Style *CursorStyle [order=2]
+  type CursorShape int
+  type CursorStyle struct
+  field CursorStyle.Shape CursorShape [order=0]
+  field CursorStyle.Blink bool [order=1]
+  field CursorStyle.Color color.Color [order=2]
+  type Effects[S any] struct
+  type Event interface
+  interface Event method isEvent()
+  type FileSelection struct
+  field FileSelection.Path string [order=0]
+  field FileSelection.Err error [order=1]
+  type FocusEvent struct
+  field FocusEvent.Focused bool [order=0]
+  type Frame struct
+  field Frame.Content string [order=0]
+  field Frame.Cursor *Cursor [order=1]
+  field Frame.Title string [order=2]
+  type Key int
+  type KeyEvent struct
+  field KeyEvent.Key Key [order=0]
+  field KeyEvent.Rune rune [order=1]
+  field KeyEvent.Mod Mod [order=2]
+  type Mod int
+  type MouseAction int
+  type MouseButton int
+  type MouseEvent struct
+  field MouseEvent.X int [order=0]
+  field MouseEvent.Y int [order=1]
+  field MouseEvent.Button MouseButton [order=2]
+  field MouseEvent.Action MouseAction [order=3]
+  field MouseEvent.Mod Mod [order=4]
+  type MouseMode int
+  type NoopTracer struct
+  type Option func(*runConfig)
+  type PasteEvent struct
+  field PasteEvent.Text string [order=0]
+  type RenderContext struct
+  field RenderContext.Width int [order=0]
+  field RenderContext.ColorProfile colorprofile.Profile [order=1]
+  type ResizeEvent struct
+  field ResizeEvent.Width int [order=0]
+  field ResizeEvent.Height int [order=1]
+  type Scope struct
+  type StateUpdate[S any] interface
+  interface StateUpdate method Apply(*S)
+  interface StateUpdate method Name() string
+  type Tracer interface
+  interface Tracer method Event(Event)
+  interface Tracer method Update(string)
+  type UpdateTracer func(string)
+  var ErrInlineMouseUnsupported error
+  var ErrInvalidInterval error
+  var ErrNoSelection error
 flatest
-  field Recorder.Steps
-  field Step.Event
-  field Step.Update
-  func AssertFrames
-  func AssertGolden
-  func AssertGoldenFrame
-  func CleanFrame
-  func Frames
-  func RenderFrame
-  func Replay
-  func Start
-  method Driver.Advance
-  method Driver.Close
-  method Driver.Frame
-  method Driver.Quit
-  method Driver.Send
-  method Driver.Settle
-  method Driver.State
-  method Recorder.Event
-  method Recorder.Events
-  method Recorder.Update
-  method Recorder.Updates
-  type Driver
-  type Recorder
-  type Step
+  func AssertFrames(t*testing.T, path string, frames[]flatte.Frame)
+  func AssertGolden(t*testing.T, path string, frame string)
+  func AssertGoldenFrame(t*testing.T, path string, frame flatte.Frame)
+  func CleanFrame(frame string) string
+  func Frames[S any](d*Driver[S], steps ... func(*Driver[S]))[]flatte.Frame
+  func RenderFrame(frame flatte.Frame) string
+  func Replay[S any](app flatte.App[S], width int, rec*Recorder) *Recorder
+  func Start[S any](app flatte.App[S], width int) *Driver[S]
+  method *Driver[S].Advance(by time.Duration) flatte.Frame
+  method *Driver[S].Close()
+  method *Driver[S].Frame() flatte.Frame
+  method *Driver[S].Quit() bool
+  method *Driver[S].Send(ev flatte.Event) flatte.Frame
+  method *Driver[S].Settle() flatte.Frame
+  method *Driver[S].State() *S
+  method *Recorder.Event(ev flatte.Event)
+  method *Recorder.Events()[]flatte.Event
+  method *Recorder.Update(name string)
+  method *Recorder.Updates()[]string
+  type Driver[S any] struct
+  type Recorder struct
+  field Recorder.Steps []Step [order=0]
+  type Step struct
+  field Step.Event flatte.Event [order=0]
+  field Step.Update string [order=1]
+flatui
+  const KeyMapFull KeyMapMode = 1
+  const KeyMapShort KeyMapMode = 0
+  func Card(lines[]string, maxWidth int) string
+  func CardBodyHeight(totalHeight int, pinnedRows int) int
+  func CardBodyWidth(totalWidth int) int
+  func CardOrigin()(x int, y int)
+  func CardWithStyle(lines[]string, maxWidth int, style CardStyle) string
+  func ContentWidth(totalWidth int) int
+  func FrameWidth(maxWidth int, lines[]string) int
+  func NewProgress(width int) Progress
+  func NewSpinner(frames[]string) Spinner
+  func NewStopwatch() Stopwatch
+  func NewTabBar(items ... TabItem) *TabBar
+  func NewTimer(duration time.Duration) Timer
+  func NewTree(nodes[]TreeNode) Tree
+  func NewZoneScanner() *ZoneScanner
+  func Overlay(base string, layer string) string
+  func OverlayOrigin(base string, layer string)(x int, y int)
+  func Subtle(text string) string
+  func SubtleWithStyle(text string, style lipgloss.Style) string
+  func Title(text string) string
+  func TitleWithStyle(text string, style lipgloss.Style) string
+  method *FocusRing.Next()
+  method *FocusRing.Prev()
+  method *FocusRing.Select(i int)
+  method *FocusRing.SetCount(n int)
+  method *List.MoveDown()
+  method *List.MoveUp()
+  method *List.Select(i int)
+  method *List.SetCount(n int)
+  method *List.SetHeight(h int)
+  method *Paginator.NextPage()
+  method *Paginator.PrevPage()
+  method *Paginator.SelectPage(page int)
+  method *Paginator.SetPageSize(n int)
+  method *Paginator.SetTotal(n int)
+  method *Progress.SetPercent(percent float64)
+  method *Progress.SetWidth(width int)
+  method *Spinner.Tick()
+  method *Stopwatch.Reset()
+  method *Stopwatch.Start()
+  method *Stopwatch.Stop()
+  method *Stopwatch.Tick(delta time.Duration)
+  method *Stopwatch.Toggle()
+  method *TabBar.Active() int
+  method *TabBar.ActiveID() string
+  method *TabBar.HitTest(rects map[string] layout.Rect, x int, y int)(int, bool)
+  method *TabBar.Layout() layout.Node
+  method *TabBar.Next()
+  method *TabBar.Prev()
+  method *TabBar.SetActive(i int)
+  method *TabBar.WithBorder(b TabBarBorder) *TabBar
+  method *TabBar.WithColors(f color.Color, i color.Color, bg color.Color) *TabBar
+  method *TabBar.WithGlyphs(g TabGlyphs) *TabBar
+  method *TabBar.WithID(id string) *TabBar
+  method *Table.MoveDown()
+  method *Table.MoveUp()
+  method *Table.Select(i int)
+  method *Table.SetColumns(cols[]Column)
+  method *Table.SetHeight(h int)
+  method *Table.SetRows(rows[][]string)
+  method *TextField.Backspace()
+  method *TextField.ClearSelection()
+  method *TextField.Delete()
+  method *TextField.DeleteWordLeft()
+  method *TextField.DeleteWordRight()
+  method *TextField.Insert(r rune)
+  method *TextField.MoveLeft()
+  method *TextField.MoveLeftSelecting()
+  method *TextField.MoveRight()
+  method *TextField.MoveRightSelecting()
+  method *TextField.MoveWordLeft()
+  method *TextField.MoveWordLeftSelecting()
+  method *TextField.MoveWordRight()
+  method *TextField.MoveWordRightSelecting()
+  method *TextField.SetCursor(cursor int)
+  method *Textarea.Backspace()
+  method *Textarea.ClearSelection()
+  method *Textarea.Delete()
+  method *Textarea.DeleteWordLeft()
+  method *Textarea.DeleteWordRight()
+  method *Textarea.Insert(r rune)
+  method *Textarea.InsertNewline()
+  method *Textarea.MoveDown()
+  method *Textarea.MoveDownSelecting()
+  method *Textarea.MoveLeft()
+  method *Textarea.MoveLeftSelecting()
+  method *Textarea.MoveLineEnd()
+  method *Textarea.MoveLineEndSelecting()
+  method *Textarea.MoveLineStart()
+  method *Textarea.MoveLineStartSelecting()
+  method *Textarea.MoveRight()
+  method *Textarea.MoveRightSelecting()
+  method *Textarea.MoveUp()
+  method *Textarea.MoveUpSelecting()
+  method *Textarea.MoveWordLeft()
+  method *Textarea.MoveWordLeftSelecting()
+  method *Textarea.MoveWordRight()
+  method *Textarea.MoveWordRightSelecting()
+  method *Textarea.SetSize(width int, height int)
+  method *Textarea.SetSoftWrap(enabled bool)
+  method *Textarea.SetValue(s string)
+  method *Timer.Reset()
+  method *Timer.Tick(delta time.Duration)
+  method *Tree.MoveDown()
+  method *Tree.MoveUp()
+  method *Tree.SelectVisible(i int)
+  method *Tree.SetHeight(h int)
+  method *Tree.SetNodes(nodes[]TreeNode)
+  method *Tree.Toggle(id string)
+  method *Viewport.GotoBottom()
+  method *Viewport.GotoTop()
+  method *Viewport.HalfPageDown()
+  method *Viewport.HalfPageUp()
+  method *Viewport.LineDown(n int)
+  method *Viewport.LineUp(n int)
+  method *Viewport.PageDown()
+  method *Viewport.PageUp()
+  method *Viewport.ScrollToLine(i int)
+  method *Viewport.SetContent(content string)
+  method *Viewport.SetLines(lines[]string)
+  method *Viewport.SetSize(width int, height int)
+  method *Viewport.SetWrappedContent(content string)
+  method *ZoneMap.Clear()
+  method *ZoneMap.Set(id string, rect Rect)
+  method *ZoneScanner.Reset()
+  method *ZoneScanner.Set(id string, r Rect)
+  method FocusRing.Count() int
+  method FocusRing.Focused(i int) bool
+  method FocusRing.Index() int
+  method KeyGroups.ViewWithOptions(opts KeyMapOptions) string
+  method KeyMap.View() string
+  method List.Count() int
+  method List.Cursor() int
+  method List.Height() int
+  method List.Layout() layout.Node
+  method List.Offset() int
+  method List.View(render func(index int, selected bool) string) string
+  method Paginator.Page() int
+  method Paginator.PageSize() int
+  method Paginator.Pages() int
+  method Paginator.Range()(first int, last int)
+  method Paginator.Total() int
+  method Paginator.View() string
+  method Progress.Layout() layout.Node
+  method Progress.Percent() float64
+  method Progress.View() string
+  method Progress.ViewWithStyle(style ProgressStyle) string
+  method Progress.Width() int
+  method Spinner.Frame() int
+  method Spinner.View() string
+  method Stopwatch.Elapsed() time.Duration
+  method Stopwatch.Running() bool
+  method Table.Cursor() int
+  method Table.Header() string
+  method Table.HeaderWithStyle(style TableStyle) string
+  method Table.SelectedRow()[]string
+  method Table.View(renderRow func(text string, selected bool) string) string
+  method Table.ViewWithStyle(style TableStyle) string
+  method TextField.CursorColumn() int
+  method TextField.SelectedText() string
+  method TextField.Selection()(start int, end int, ok bool)
+  method Textarea.Col() int
+  method Textarea.CursorCell()(x int, y int)
+  method Textarea.Offset() int
+  method Textarea.Row() int
+  method Textarea.SelectedText() string
+  method Textarea.Selection()(TextRange, bool)
+  method Textarea.SoftWrap() bool
+  method Textarea.Value() string
+  method Textarea.View() string
+  method Textarea.ViewWithSelection(render func(text string, selected bool) string) string
+  method Timer.Done() bool
+  method Timer.Duration() time.Duration
+  method Timer.Elapsed() time.Duration
+  method Timer.Percent() float64
+  method Timer.Remaining() time.Duration
+  method Tree.CursorID() string
+  method Tree.Offset() int
+  method Tree.View(render func(row TreeRow, selected bool) string) string
+  method Tree.VisibleRows()[]TreeRow
+  method Viewport.AtBottom() bool
+  method Viewport.AtTop() bool
+  method Viewport.Layout() layout.Node
+  method Viewport.Offset() int
+  method Viewport.ScrollPercent() float64
+  method Viewport.TotalLines() int
+  method Viewport.View() string
+  method Viewport.VisibleLines() int
+  method ZoneMap.At(x int, y int)(string, bool)
+  method ZoneMap.In(id string, x int, y int) bool
+  method ZoneMap.Local(id string, x int, y int)(localX int, localY int, ok bool)
+  method ZoneMap.Rect(id string)(Rect, bool)
+  method ZoneScanner.At(x int, y int)(string, bool)
+  method ZoneScanner.In(id string, x int, y int) bool
+  method ZoneScanner.Rect(id string)(Rect, bool)
+  type CardStyle struct
+  field CardStyle.Container lipgloss.Style [order=0]
+  field CardStyle.BorderForeground color.Color [order=1]
+  type Column struct
+  field Column.Title string [order=0]
+  field Column.Width int [order=1]
+  type FocusRing struct
+  type KeyBinding struct
+  field KeyBinding.Keys []string [order=0]
+  field KeyBinding.Help string [order=1]
+  field KeyBinding.Disabled bool [order=2]
+  type KeyGroup struct
+  field KeyGroup.Title string [order=0]
+  field KeyGroup.Bindings KeyMap [order=1]
+  type KeyGroups []KeyGroup
+  type KeyMap []KeyBinding
+  type KeyMapMode int
+  type KeyMapOptions struct
+  field KeyMapOptions.Width int [order=0]
+  field KeyMapOptions.Mode KeyMapMode [order=1]
+  type List struct
+  field List.RenderRow func(index int, selected bool) string [order=4]
+  type Paginator struct
+  type Progress struct
+  type ProgressStyle struct
+  field ProgressStyle.Filled lipgloss.Style [order=0]
+  field ProgressStyle.Empty lipgloss.Style [order=1]
+  field ProgressStyle.Label lipgloss.Style [order=2]
+  type Rect = layout.Rect
+  type Spinner struct
+  type Stopwatch struct
+  type TabBar struct
+  field TabBar.Items []TabItem [order=0]
+  type TabBarBorder struct
+  field TabBarBorder.Style lipgloss.Border [order=0]
+  field TabBarBorder.Color color.Color [order=1]
+  field TabBarBorder.Top bool [order=2]
+  field TabBarBorder.Right bool [order=3]
+  field TabBarBorder.Bottom bool [order=4]
+  field TabBarBorder.Left bool [order=5]
+  type TabGlyphs struct
+  field TabGlyphs.Left string [order=0]
+  field TabGlyphs.Right string [order=1]
+  type TabItem struct
+  field TabItem.ID string [order=0]
+  field TabItem.Label string [order=1]
+  type Table struct
+  type TableStyle struct
+  field TableStyle.Header lipgloss.Style [order=0]
+  field TableStyle.Row lipgloss.Style [order=1]
+  field TableStyle.Active lipgloss.Style [order=2]
+  type TextField struct
+  field TextField.Value string [order=0]
+  field TextField.Cursor int [order=1]
+  type TextPosition struct
+  field TextPosition.Row int [order=0]
+  field TextPosition.Col int [order=1]
+  type TextRange struct
+  field TextRange.Start TextPosition [order=0]
+  field TextRange.End TextPosition [order=1]
+  type Textarea struct
+  type Timer struct
+  type Tree struct
+  type TreeNode struct
+  field TreeNode.ID string [order=0]
+  field TreeNode.Label string [order=1]
+  field TreeNode.Children []TreeNode [order=2]
+  type TreeRow struct
+  field TreeRow.ID string [order=0]
+  field TreeRow.Label string [order=1]
+  field TreeRow.Depth int [order=2]
+  field TreeRow.Expandable bool [order=3]
+  field TreeRow.Expanded bool [order=4]
+  type Viewport struct
+  type ZoneMap struct
+  type ZoneScanner struct
+  var SpinnerDots []string
+  var SpinnerLine []string
+  var TabGlyphsPowerline TabGlyphs
+  var TabGlyphsSafe TabGlyphs
+flatui/layout
+  const SizeAuto SizeKind = 0
+  const SizeContent SizeKind = 3
+  const SizeFixed SizeKind = 1
+  const SizeGrow SizeKind = 2
+  func Auto() Size
+  func Fixed(n int) Size
+  func Grow(w float64) Size
+  func NewSpacer() *Spacer
+  func Overlay(base string, layer string) string
+  func OverlayOrigin(base string, layer string)(x int, y int)
+  func Solve(root Node, width int, height int) map[string] Rect
+  func SolveAndCompose(root Node, width int, height int)(string, map[string] Rect)
+  func SolveAndComposeWithDiagnostics(root Node, width int, height int)(string, map[string] Rect, []DuplicateIDDiagnostic)
+  func SolveWithDiagnostics(root Node, width int, height int)(map[string] Rect, []DuplicateIDDiagnostic)
+  method *Spacer.Render(r Rect) string
+  method *Spacer.WithBackground(c color.Color) *Spacer
+  method Col.GetChildren()[]Node
+  method Col.GetGap() int
+  method Col.IsHorizontal() bool
+  method Col.Render(rect Rect) string
+  method Col.Size()(Size, Size)
+  method NodeBase.GetID() string
+  method NodeBase.IsOverlay() bool
+  method NodeBase.Size()(Size, Size)
+  method Rect.Contains(x int, y int) bool
+  method Rect.Inset(n int) Rect
+  method Rect.Intersect(s Rect) Rect
+  method Row.GetChildren()[]Node
+  method Row.GetGap() int
+  method Row.IsHorizontal() bool
+  method Row.Render(rect Rect) string
+  method Row.Size()(Size, Size)
+  method Text.Render(r Rect) string
+  method Text.Size()(Size, Size)
+  methodset *Col.GetID() string
+  methodset *Col.IsOverlay() bool
+  methodset *Row.GetID() string
+  methodset *Row.IsOverlay() bool
+  methodset *Spacer.GetID() string
+  methodset *Spacer.IsOverlay() bool
+  methodset *Spacer.Size()(Size, Size)
+  methodset *Text.GetID() string
+  methodset *Text.IsOverlay() bool
+  methodset Col.GetID() string
+  methodset Col.IsOverlay() bool
+  methodset Row.GetID() string
+  methodset Row.IsOverlay() bool
+  methodset Spacer.GetID() string
+  methodset Spacer.IsOverlay() bool
+  methodset Spacer.Size()(Size, Size)
+  methodset Text.GetID() string
+  methodset Text.IsOverlay() bool
+  type Col struct
+  field Col.NodeBase NodeBase [order=0]
+  field Col.Children []Node [order=1]
+  type DuplicateIDDiagnostic struct
+  field DuplicateIDDiagnostic.ID string [order=0]
+  field DuplicateIDDiagnostic.FirstRect Rect [order=1]
+  field DuplicateIDDiagnostic.Duplicate Rect [order=2]
+  type Node interface
+  interface Node method Render(r Rect) string
+  interface Node method Size()(w Size, h Size)
+  type NodeBase struct
+  field NodeBase.W Size [order=0]
+  field NodeBase.H Size [order=1]
+  field NodeBase.Pad int [order=2]
+  field NodeBase.Gap int [order=3]
+  field NodeBase.Bordered bool [order=4]
+  field NodeBase.Overlay bool [order=5]
+  field NodeBase.ID string [order=6]
+  field NodeBase.PadTop int [order=7]
+  field NodeBase.PadRight int [order=8]
+  field NodeBase.PadBottom int [order=9]
+  field NodeBase.PadLeft int [order=10]
+  field NodeBase.Chrome func(r Rect) string [order=11]
+  type Rect struct
+  field Rect.X int [order=0]
+  field Rect.Y int [order=1]
+  field Rect.W int [order=2]
+  field Rect.H int [order=3]
+  type Row struct
+  field Row.NodeBase NodeBase [order=0]
+  field Row.Children []Node [order=1]
+  type Size struct
+  field Size.Kind SizeKind [order=0]
+  field Size.Value int [order=1]
+  field Size.Weight float64 [order=2]
+  type SizeKind int
+  type Spacer struct
+  field Spacer.NodeBase NodeBase [order=0]
+  type Text struct
+  field Text.NodeBase NodeBase [order=0]
+  field Text.String string [order=1]
