@@ -68,8 +68,7 @@ func TestResizeDistributesPanelZones(t *testing.T) {
 func TestQuitKeys(t *testing.T) {
 	s := ready()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {

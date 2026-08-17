@@ -26,17 +26,25 @@ func main() {
 	session := flatte.LoadState(dockerapp.SessionFile, dockerapp.SessionState{})
 	state := dockerapp.NewStateFromSession(session)
 
-	err := flatte.Run(ctx, flatte.App[dockerapp.State]{
+	var saveErr error
+	runErr := flatte.Run(ctx, flatte.App[dockerapp.State]{
 		State:  state,
 		Init:   dockerapp.Init,
 		Handle: dockerapp.Handle,
 		View:   dockerapp.View,
 		OnExit: func(s *dockerapp.State) {
-			_ = flatte.SaveState(dockerapp.SessionFile, s.Session())
+			saveErr = flatte.SaveState(dockerapp.SessionFile, s.Session())
 		},
 	}, flatte.WithMouse(flatte.MouseModeCellMotion))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	// Run has restored the terminal before returning; report persistence
+	// failures only after that cleanup and fail the process visibly.
+	if runErr != nil {
+		fmt.Fprintln(os.Stderr, runErr)
+	}
+	if saveErr != nil {
+		fmt.Fprintf(os.Stderr, "save state: %v\n", saveErr)
+	}
+	if runErr != nil || saveErr != nil {
 		os.Exit(1)
 	}
 }

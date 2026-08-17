@@ -70,7 +70,7 @@ func TestHandleClearsAndQuits(t *testing.T) {
 	}
 
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")

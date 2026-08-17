@@ -11,6 +11,18 @@ flatte
   const KeyEnd
   const KeyEnter
   const KeyEscape
+  const KeyF1
+  const KeyF10
+  const KeyF11
+  const KeyF12
+  const KeyF2
+  const KeyF3
+  const KeyF4
+  const KeyF5
+  const KeyF6
+  const KeyF7
+  const KeyF8
+  const KeyF9
   const KeyHome
   const KeyLeft
   const KeyPageDown
@@ -47,8 +59,6 @@ flatte
   field CursorStyle.Blink
   field CursorStyle.Color
   field CursorStyle.Shape
-  field Effects.Context
-  field Effects.Updates
   field FileSelection.Err
   field FileSelection.Path
   field FocusEvent.Focused
@@ -76,9 +86,10 @@ flatte
   func Go
   func Latest
   func LoadState
+  func LoadStateWithError
   func Named
-  func NewEffects
   func NewHarnessEffects
+  func NewHarnessEffectsQueue
   func NewScope
   func RenderContextFor
   func Run
@@ -100,6 +111,7 @@ flatte
   method Effects.Printf
   method Effects.Quit
   method Effects.ReadClipboard
+  method Effects.Send
   method Effects.SetClipboard
   method Effects.Suspend
   method Mod.Contains
@@ -136,6 +148,8 @@ flatte
   type StateUpdate
   type Tracer
   type UpdateTracer
+  var ErrInlineMouseUnsupported
+  var ErrInvalidInterval
   var ErrNoSelection
 flatui
   const KeyMapFull

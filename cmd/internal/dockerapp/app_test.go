@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -42,6 +43,125 @@ func TestResizePropagatesBodyDimensionsToEveryScreen(t *testing.T) {
 	}
 }
 
+func TestNewStateOwnsMutableSampleData(t *testing.T) {
+	first := NewState()
+	first.containers.containers[0].Status = "mutated"
+	first.images.images[0].RepoTag = "mutated"
+	first.volumes.volumes[0].Name = "mutated"
+
+	second := NewState()
+	if second.containers.containers[0].Status != sampleContainers[0].Status {
+		t.Fatalf("container sample leaked between states: got %q, want %q", second.containers.containers[0].Status, sampleContainers[0].Status)
+	}
+	if second.images.images[0].RepoTag != sampleImages[0].RepoTag {
+		t.Fatalf("image sample leaked between states: got %q, want %q", second.images.images[0].RepoTag, sampleImages[0].RepoTag)
+	}
+	if second.volumes.volumes[0].Name != sampleVolumes[0].Name {
+		t.Fatalf("volume sample leaked between states: got %q, want %q", second.volumes.volumes[0].Name, sampleVolumes[0].Name)
+	}
+}
+
+func TestIgnoredMouseMotionDoesNotReflow(t *testing.T) {
+	s := resizedState(80, 24)
+	before := s.reflowCount
+	Handle(s, flatte.MouseEvent{Action: flatte.MouseMotion, Button: flatte.MouseNone, X: 3, Y: 3}, flatte.Effects[State]{})
+	if s.reflowCount != before {
+		t.Fatalf("ignored mouse motion reflowed geometry: count %d -> %d", before, s.reflowCount)
+	}
+}
+
+func TestViewDoesNotMutatePreparedGeometryOrWidgets(t *testing.T) {
+	s := resizedState(80, 24)
+	cloneRects := func(in map[string]layout.Rect) map[string]layout.Rect {
+		out := make(map[string]layout.Rect, len(in))
+		for id, r := range in {
+			out[id] = r
+		}
+		return out
+	}
+	rects := cloneRects(s.rects)
+	containerRects := cloneRects(s.containers.rects)
+	imagesRects := cloneRects(s.images.rects)
+	volumesRects := cloneRects(s.volumes.rects)
+	listHeights := [3]int{s.containers.list.Height(), s.images.list.Height(), s.volumes.list.Height()}
+	status := s.containers.statusLine
+	width, height, bodyY := s.width, s.height, s.bodyYOffset
+
+	_ = View(s, flatte.RenderContext{Width: 80})
+
+	if !reflect.DeepEqual(s.rects, rects) ||
+		!reflect.DeepEqual(s.containers.rects, containerRects) ||
+		!reflect.DeepEqual(s.images.rects, imagesRects) ||
+		!reflect.DeepEqual(s.volumes.rects, volumesRects) {
+		t.Fatal("View mutated retained geometry")
+	}
+	gotHeights := [3]int{s.containers.list.Height(), s.images.list.Height(), s.volumes.list.Height()}
+	if gotHeights != listHeights {
+		t.Fatalf("View resized list widgets: got %v, want %v", gotHeights, listHeights)
+	}
+	if s.containers.statusLine != status || s.width != width || s.height != height || s.bodyYOffset != bodyY {
+		t.Fatal("View mutated event-time state")
+	}
+}
+
+func TestResizePreparesFullFrameAndInteractiveGeometry(t *testing.T) {
+	s := resizedState(80, 24)
+	for _, id := range []string{"header", "list", "detail", "status"} {
+		r, ok := s.rects[id]
+		if !ok || r.W <= 0 || r.H <= 0 {
+			t.Fatalf("rect %q missing or empty: %+v", id, r)
+		}
+	}
+	if r, ok := s.containers.zones.Rect("list:1"); !ok || r.W <= 0 || r.H != 1 {
+		t.Fatalf("resize did not prepare list row geometry: %+v, %v", r, ok)
+	}
+	for name, rects := range map[string]map[string]layout.Rect{
+		"images":  s.images.rects,
+		"volumes": s.volumes.rects,
+	} {
+		if r, ok := rects["list"]; !ok || r.W <= 0 || r.H <= 0 {
+			t.Fatalf("resize did not prepare %s list geometry: %+v, %v", name, r, ok)
+		}
+	}
+}
+
+func TestEventReflowCoversModalScreenAndListEarlyReturns(t *testing.T) {
+	s := resizedState(80, 24)
+	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	if _, ok := s.rects["status"]; !ok {
+		t.Fatal("opening command modal lost full-frame status geometry")
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
+	if s.commandModal != nil {
+		t.Fatal("command modal did not close")
+	}
+	Handle(s, keyChar('2'), flatte.Effects[State]{})
+	if s.screen != screenImages {
+		t.Fatal("screen switch did not apply")
+	}
+	if _, ok := s.rects["list"]; !ok || s.images.rects["detail"].W <= 0 {
+		t.Fatalf("screen early return did not reflow active geometry: rects=%v", s.rects)
+	}
+	start := s.images.list.Cursor()
+	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	if s.images.list.Cursor() != start+1 {
+		t.Fatalf("list event did not apply after screen reflow: got %d, want %d", s.images.list.Cursor(), start+1)
+	}
+}
+
+func TestSolveAndComposeMatchesPreparedGeometry(t *testing.T) {
+	s := resizedState(80, 24)
+	want := layout.Solve(s.frameTree(), 80, 24)
+	_ = View(s, flatte.RenderContext{Width: 80})
+	if !reflect.DeepEqual(s.rects, want) {
+		t.Fatalf("prepared geometry differs from the shared frame solve:\nprepared=%v\nwant=%v", s.rects, want)
+	}
+	_, composed := layout.SolveAndCompose(s.frameTree(), 80, 24)
+	if !reflect.DeepEqual(composed, want) {
+		t.Fatalf("SolveAndCompose geometry differs from Solve:\ncomposed=%v\nwant=%v", composed, want)
+	}
+}
+
 func TestNumberKeysSwitchScreens(t *testing.T) {
 	s := resizedState(80, 24)
 
@@ -64,8 +184,7 @@ func TestNumberKeysSwitchScreens(t *testing.T) {
 func TestQQuits(t *testing.T) {
 	s := resizedState(80, 24)
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, keyChar('q'), fx)
 	if !quit {
 		t.Fatal("q did not quit")
@@ -1418,8 +1537,7 @@ func TestStatsTickSidestepUpdatesCurrentContainerOnly(t *testing.T) {
 func TestScopedLogsRestartOnSelectionChange(t *testing.T) {
 	s := resizedState(80, 24)
 	ctx := context.Background()
-	fx := flatte.NewEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {})
-
+	fx := flatte.NewHarnessEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {}, nil, nil)
 	// Initial streamer for first container
 	s.containers.startScopedLogs(s, fx)
 	if s.containers.logScope == nil {
@@ -1439,12 +1557,81 @@ func TestScopedLogsRestartOnSelectionChange(t *testing.T) {
 	}
 }
 
+func TestScopedLogStreamUsesCapturedSequence(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ticks := make(chan time.Time, 2)
+	lines := make(chan string, 2)
+	done := make(chan struct{})
+	liveLogs := map[string][]string{"a1b2c3d4e5": {"existing-1", "existing-2", "existing-3"}}
+	startSeq := len(liveLogs["a1b2c3d4e5"])
+	go func() {
+		streamScopedLogs(ctx, "a1b2c3d4e5", startSeq, ticks, func(line string) {
+			lines <- line
+		})
+		close(done)
+	}()
+
+	// Simulate the loop-side fold appending a line after the worker has been
+	// started. The worker must retain its captured sequence rather than derive
+	// it from this mutable map on every tick.
+	liveLogs["a1b2c3d4e5"] = append(liveLogs["a1b2c3d4e5"], "existing-4")
+	ticks <- time.Time{}
+	line := <-lines
+	if !strings.Contains(line, "req=3") {
+		t.Fatalf("first scoped log = %q, want captured sequence 3", line)
+	}
+
+	// A worker's sequence is independent of liveLogs mutations made by its
+	// loop-side fold. The second emission must follow the captured sequence.
+	ticks <- time.Time{}
+	line = <-lines
+	if !strings.Contains(line, "req=4") {
+		t.Fatalf("second scoped log = %q, want sequence 4", line)
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("scoped log stream did not stop after cancellation")
+	}
+}
+
+func TestLiveLogSequenceSurvivesRetentionCap(t *testing.T) {
+	c := newContainersScreen()
+	c.filtered = []int{0}
+	c.list.SetCount(1)
+	id := sampleContainers[0].ID
+	for seq := 0; seq < 100; seq++ {
+		c.appendLiveLog(id, scopedLogLine(id, seq))
+	}
+	if got := len(c.liveLogs[id]); got != 50 {
+		t.Fatalf("retained live logs = %d, want 50", got)
+	}
+	if got := c.nextLogSeq[id]; got != 100 {
+		t.Fatalf("next sequence = %d, want 100 after retention", got)
+	}
+	if !strings.Contains(c.liveLogs[id][0], "req=50") {
+		t.Fatalf("retained window starts at wrong sequence: %q", c.liveLogs[id][0])
+	}
+
+	// A host-driven emission after the cap must continue at 100, not restart
+	// from the retained slice length (50).
+	c.hostAdvanceLogs()
+	if got := c.nextLogSeq[id]; got != 101 {
+		t.Fatalf("next sequence after host emission = %d, want 101", got)
+	}
+	if !strings.Contains(c.liveLogs[id][49], "req=100") {
+		t.Fatalf("post-cap host emission repeated a sequence: %q", c.liveLogs[id][49])
+	}
+}
+
 func TestScopedLogsCancelReleasesGoroutine(t *testing.T) {
 	s := resizedState(80, 24)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	fx := flatte.NewEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {})
-
+	fx := flatte.NewHarnessEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {}, nil, nil)
 	s.containers.startScopedLogs(s, fx)
 	done := make(chan struct{})
 	go func() {

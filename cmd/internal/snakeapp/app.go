@@ -67,9 +67,11 @@ func (s *State) startTicker(fx flatte.Effects[State]) {
 		s.tick.Cancel()
 	}
 	s.tick = flatte.NewScope(fx, "tick")
-	flatte.ScopeEvery(s.tick, fx, baseInterval, func(st *State, _ time.Time) {
+	if err := flatte.ScopeEvery(s.tick, fx, baseInterval, func(st *State, _ time.Time) {
 		st.onTick()
-	})
+	}); err != nil {
+		panic(err) // baseInterval is a game invariant
+	}
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {

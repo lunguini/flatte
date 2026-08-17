@@ -8,7 +8,7 @@ import (
 )
 
 // translateEvent maps a substrate event onto the closed event set. Events
-// Flatte does not model yet (key releases, function keys, capability
+// Flatte does not model yet (key releases, capability
 // reports) are dropped — the closed set grows deliberately, not by leaking
 // substrate types.
 func translateEvent(event uv.Event) (Event, bool) {
@@ -69,6 +69,30 @@ func translateKey(key uv.Key) (Event, bool) {
 		return KeyEvent{Key: KeyPageUp, Mod: mod}, true
 	case uv.KeyPgDown, uv.KeyKpPgDown:
 		return KeyEvent{Key: KeyPageDown, Mod: mod}, true
+	case uv.KeyF1:
+		return KeyEvent{Key: KeyF1, Mod: mod}, true
+	case uv.KeyF2:
+		return KeyEvent{Key: KeyF2, Mod: mod}, true
+	case uv.KeyF3:
+		return KeyEvent{Key: KeyF3, Mod: mod}, true
+	case uv.KeyF4:
+		return KeyEvent{Key: KeyF4, Mod: mod}, true
+	case uv.KeyF5:
+		return KeyEvent{Key: KeyF5, Mod: mod}, true
+	case uv.KeyF6:
+		return KeyEvent{Key: KeyF6, Mod: mod}, true
+	case uv.KeyF7:
+		return KeyEvent{Key: KeyF7, Mod: mod}, true
+	case uv.KeyF8:
+		return KeyEvent{Key: KeyF8, Mod: mod}, true
+	case uv.KeyF9:
+		return KeyEvent{Key: KeyF9, Mod: mod}, true
+	case uv.KeyF10:
+		return KeyEvent{Key: KeyF10, Mod: mod}, true
+	case uv.KeyF11:
+		return KeyEvent{Key: KeyF11, Mod: mod}, true
+	case uv.KeyF12:
+		return KeyEvent{Key: KeyF12, Mod: mod}, true
 	}
 	if key.Text != "" {
 		// Multi-rune Text (IME composites) is truncated to its first rune

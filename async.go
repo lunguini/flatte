@@ -19,6 +19,9 @@ func Named[S any](name string, apply func(*S)) StateUpdate[S] {
 func (n named[S]) Name() string { return n.name }
 func (n named[S]) Apply(s *S)   { n.apply(s) }
 
+// Async runs work off-loop and sends one named update. Deprecated: use Go,
+// which obtains the context and update channel from Effects, or use
+// Effects.Send for a custom StateUpdate.
 func Async[S, T any](
 	ctx context.Context,
 	updates chan<- StateUpdate[S],

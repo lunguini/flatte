@@ -95,8 +95,7 @@ func TestAltBFMoveFocusedFieldByWord(t *testing.T) {
 func TestEscapeBlursAndQQuitsOnlyWhenBlurred(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if quit {
 		t.Fatal("q should edit focused field, not quit")

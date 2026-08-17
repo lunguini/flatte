@@ -30,7 +30,9 @@ func NewState() *State {
 }
 
 func Init(s *State, fx flatte.Effects[State]) {
-	flatte.Every(fx, "modal.background.tick", tickInterval(), applyTick)
+	if err := flatte.Every(fx, "modal.background.tick", tickInterval(), applyTick); err != nil {
+		panic(err) // tickInterval is a sample invariant
+	}
 }
 
 func applyTick(s *State, _ time.Time) {

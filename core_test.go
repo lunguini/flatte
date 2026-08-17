@@ -150,7 +150,7 @@ func TestRunProcessesInputAndAsyncUpdates(t *testing.T) {
 		done <- Run(ctx, App[testState]{
 			State: &state,
 			Init: func(s *testState, fx Effects[testState]) {
-				Async(fx.Context, fx.Updates, nil, "counter.load",
+				Go(fx, "counter.load",
 					func(context.Context) (int, error) {
 						return 3, nil
 					},
@@ -295,7 +295,7 @@ func TestRunExitsWhenInitRequestsQuit(t *testing.T) {
 
 func TestEffectsQuitRequestsExit(t *testing.T) {
 	var called bool
-	fx := NewEffects[testState](context.Background(), nil, func() { called = true })
+	fx := newEffects[testState](context.Background(), nil, func() { called = true })
 
 	fx.Quit()
 
@@ -376,7 +376,7 @@ func TestRunCoalescesQueuedUpdatesIntoOneDraw(t *testing.T) {
 				// Three updates queued before the loop starts; they must
 				// be applied in one batch and drawn once.
 				for range 3 {
-					fx.Updates <- Named("inc", func(s *testState) { s.count++ })
+					fx.Send(Named("inc", func(s *testState) { s.count++ }))
 				}
 			},
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {

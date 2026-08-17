@@ -80,7 +80,7 @@ func TestTimerQuit(t *testing.T) {
 		{Key: flatte.KeyEscape},
 	} {
 		var quit bool
-		fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+		fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 		Handle(NewState(), key, fx)
 		if !quit {
 			t.Fatalf("%+v did not request quit", key)

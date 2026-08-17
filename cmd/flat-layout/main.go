@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/lunguini/flatte"
@@ -63,8 +62,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	}
 
 	tree := buildTree(s)
-	rects := layout.Solve(tree, w, h)
-	content := renderBlocks(rects, w, h, s.Cursor)
+	content, _ := layout.SolveAndCompose(tree, w, h)
 
 	hint := "m toggle modal  ·  j/k cursor  ·  q quit"
 	if s.ShowModal {
@@ -79,79 +77,22 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 
 func buildTree(s *State) layout.Node {
 	children := []layout.Node{
-		layout.Text{NodeBase: layout.NodeBase{ID: "header", H: layout.Fixed(3), Bordered: true}},
+		layout.Text{NodeBase: layout.NodeBase{ID: "header", H: layout.Fixed(3), Bordered: true}, String: " header"},
 		layout.Row{
 			NodeBase: layout.NodeBase{H: layout.Grow(1)},
 			Children: []layout.Node{
-				layout.Text{NodeBase: layout.NodeBase{ID: "sidebar", W: layout.Fixed(20)}},
-				layout.Text{NodeBase: layout.NodeBase{ID: "content", W: layout.Grow(1)}},
+				layout.Text{NodeBase: layout.NodeBase{ID: "sidebar", W: layout.Fixed(20)}, String: " sidebar"},
+				layout.Text{NodeBase: layout.NodeBase{ID: "content", W: layout.Grow(1)}, String: fmt.Sprintf(" content  cursor=%d", s.Cursor)},
 			},
 		},
-		layout.Text{NodeBase: layout.NodeBase{ID: "footer", H: layout.Fixed(1)}},
+		layout.Text{NodeBase: layout.NodeBase{ID: "footer", H: layout.Fixed(1)}, String: " footer"},
 	}
 	if s.ShowModal {
 		children = append(children, layout.Text{NodeBase: layout.NodeBase{
 			ID: "modal", W: layout.Fixed(40), H: layout.Fixed(10), Overlay: true, Bordered: true,
-		}})
+		}, String: " modal"})
 	}
 	return layout.Col{Children: children}
-}
-
-func renderBlocks(rects map[string]layout.Rect, w, h, cursor int) string {
-	type cell struct {
-		ch rune
-		bg string
-		fg string
-	}
-
-	grid := make([][]cell, h)
-	for y := range grid {
-		grid[y] = make([]cell, w)
-		for x := range grid[y] {
-			grid[y][x] = cell{ch: ' ', bg: "234", fg: "240"}
-		}
-	}
-
-	paint := func(id, bg, fg, label string) {
-		r, ok := rects[id]
-		if !ok {
-			return
-		}
-		for y := r.Y; y < r.Y+r.H && y >= 0 && y < h; y++ {
-			for x := r.X; x < r.X+r.W && x >= 0 && x < w; x++ {
-				grid[y][x] = cell{ch: ' ', bg: bg, fg: fg}
-			}
-		}
-		for i, ch := range label {
-			x := r.X + i
-			if x >= 0 && x < r.X+r.W && x < w && r.Y >= 0 && r.Y < h {
-				grid[r.Y][x] = cell{ch: ch, bg: bg, fg: fg}
-			}
-		}
-	}
-
-	paint("header", "25", "255", " header")
-	paint("sidebar", "22", "255", " sidebar")
-	paint("content", "236", "245", fmt.Sprintf(" content  cursor=%d", cursor))
-	paint("footer", "88", "255", " footer")
-	paint("modal", "90", "255", " modal")
-
-	var lines []string
-	for y := 0; y < h; y++ {
-		var sb strings.Builder
-		prevBg := ""
-		for x := 0; x < w; x++ {
-			c := grid[y][x]
-			if c.bg != prevBg {
-				fmt.Fprintf(&sb, "\x1b[48;5;%sm\x1b[38;5;%sm", c.bg, c.fg)
-				prevBg = c.bg
-			}
-			sb.WriteRune(c.ch)
-		}
-		sb.WriteString("\x1b[0m")
-		lines = append(lines, sb.String())
-	}
-	return strings.Join(lines, "\n")
 }
 
 // main runs the layout validation harness with a save-state/reload loop.
@@ -178,16 +119,24 @@ func main() {
 
 	state := flatte.LoadState(stateFile, State{})
 
-	err := flatte.Run(ctx, flatte.App[State]{
+	var saveErr error
+	runErr := flatte.Run(ctx, flatte.App[State]{
 		State:  &state,
 		Handle: Handle,
 		View:   View,
 		OnExit: func(s *State) {
-			_ = flatte.SaveState(stateFile, *s)
+			saveErr = flatte.SaveState(stateFile, *s)
 		},
 	}, flatte.WithMouse(flatte.MouseModeNone))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	// Run restores the terminal before returning, keeping the diagnostic
+	// visible when this watcher restarts the sample.
+	if runErr != nil {
+		fmt.Fprintln(os.Stderr, runErr)
+	}
+	if saveErr != nil {
+		fmt.Fprintf(os.Stderr, "save state: %v\n", saveErr)
+	}
+	if runErr != nil || saveErr != nil {
 		os.Exit(1)
 	}
 }

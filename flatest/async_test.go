@@ -98,3 +98,49 @@ func TestAdvanceFiresEveryTicks(t *testing.T) {
 		t.Fatalf("n = %d, want 3 ticks in 35ms@10ms", d.State().n)
 	}
 }
+
+type burst struct{ n int }
+
+func TestAdvanceDrainsMoreThanChannelCapacity(t *testing.T) {
+	app := flatte.App[burst]{
+		State: &burst{},
+		Init: func(s *burst, fx flatte.Effects[burst]) {
+			if err := flatte.Every(fx, "burst", time.Nanosecond, func(s *burst, _ time.Time) { s.n++ }); err != nil {
+				t.Fatal(err)
+			}
+		},
+		View: func(s *burst, _ flatte.RenderContext) flatte.Frame { return flatte.Frame{} },
+	}
+	d := Start(app, 40)
+	d.Advance(2048 * time.Nanosecond)
+	if d.State().n != 2048 {
+		t.Fatalf("ticks applied=%d want 2048", d.State().n)
+	}
+}
+
+func TestStreamBurstIsUnboundedAndScopeCancellationStopsQueuedUpdates(t *testing.T) {
+	var scope *flatte.Scope
+	app := flatte.App[burst]{
+		State: &burst{},
+		Init: func(s *burst, fx flatte.Effects[burst]) {
+			scope = flatte.NewScope(fx, "burst")
+			flatte.ScopeStream(scope, fx,
+				func(_ context.Context, send func(int)) {
+					for i := 0; i < 4096; i++ {
+						if i == 100 {
+							scope.Cancel()
+						}
+						send(i)
+					}
+				},
+				func(s *burst, _ int) { s.n++ },
+			)
+		},
+		View: func(s *burst, _ flatte.RenderContext) flatte.Frame { return flatte.Frame{} },
+	}
+	d := Start(app, 40)
+	d.Settle()
+	if d.State().n != 0 {
+		t.Fatalf("cancelled burst applied=%d want 0", d.State().n)
+	}
+}

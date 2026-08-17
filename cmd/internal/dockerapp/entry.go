@@ -28,9 +28,14 @@ func Tick(s *State, now time.Time, frame int) {
 // Init arms the background pollers: a stats tick, scoped per-container log
 // streams, and a one-time glyph hint pushed into the activity feed.
 func Init(s *State, fx flatte.Effects[State]) {
-	flatte.Every(fx, "stats-poll", 1*time.Second, func(s *State, now time.Time) {
+	if err := flatte.Every(fx, "stats-poll", 1*time.Second, func(s *State, now time.Time) {
 		s.containers.tickStats(now)
-	})
+	}); err != nil {
+		// The interval is a compile-time constant. Reaching this branch means
+		// the sample violated its own invariant and cannot provide correct
+		// stats polling, so fail loudly during initialization.
+		panic(err)
+	}
 	s.containers.startScopedLogs(s, fx)
 	s.containers.pushActivity(tipForGlyphs(pickGlyphs()))
 }

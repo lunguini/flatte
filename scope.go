@@ -38,7 +38,8 @@ func (s *Scope) Ctx() context.Context { return s.ctx }
 
 // Cancel cancels all in-flight work started through this scope. The
 // scope's context is cancelled, which causes every goroutine spawned by
-// ScopeGo/ScopeStream/ScopeEvery to see ctx.Done() and exit.
+// ScopeGo/ScopeStream/ScopeEvery to see ctx.Done() and exit. Updates that
+// were already queued but have not been applied are discarded as well.
 func (s *Scope) Cancel() {
 	if s.cancel != nil {
 		s.cancel()
@@ -47,49 +48,63 @@ func (s *Scope) Cancel() {
 
 // ScopeGo runs work off-loop using the scope's context. When the scope is
 // cancelled, the context passed to work is cancelled. The fold runs on
-// the loop goroutine as a named update.
+// the loop goroutine as a named update. The update checks the scope again at
+// apply time, so cancelling after enqueueing cannot run a stale fold.
 func ScopeGo[S, T any](scope *Scope, fx Effects[S], work func(context.Context) (T, error), fold func(*S, T, error)) {
 	fx.spawn(func() {
 		value, err := work(scope.ctx)
 		if scope.ctx.Err() != nil {
 			return
 		}
-		update := Named(scope.name+":go", func(state *S) { fold(state, value, err) })
-		select {
-		case fx.Updates <- update:
-		case <-scope.ctx.Done():
-		}
+		update := Named(scope.name+":go", func(state *S) {
+			if scope.ctx.Err() != nil {
+				return // cancelled after queueing, before the loop applied it
+			}
+			fold(state, value, err)
+		})
+		fx.send(scope.ctx, update)
 	})
 }
 
 // ScopeStream runs a long-lived source that emits many values over time.
 // Each emitted value becomes one named update. When the scope is cancelled,
-// both the source's context and the send-channel select see the cancellation.
+// both the source's context and the send-channel select see the cancellation;
+// an update already queued at cancellation time is discarded on apply.
 func ScopeStream[S, T any](scope *Scope, fx Effects[S], source func(context.Context, func(T)), fold func(*S, T)) {
 	fx.spawn(func() {
 		source(scope.ctx, func(value T) {
-			update := Named(scope.name+":stream", func(state *S) { fold(state, value) })
-			select {
-			case fx.Updates <- update:
-			case <-scope.ctx.Done():
-			}
+			update := Named(scope.name+":stream", func(state *S) {
+				if scope.ctx.Err() != nil {
+					return // cancelled after queueing, before the loop applied it
+				}
+				fold(state, value)
+			})
+			fx.send(scope.ctx, update)
 		})
 	})
 }
 
 // ScopeEvery sends a named update on a fixed interval until the scope is
 // cancelled. Timing comes from the Clock (real ticker by default; fake
-// clock under test).
-func ScopeEvery[S any](scope *Scope, fx Effects[S], interval time.Duration, fold func(*S, time.Time)) {
+// clock under test). A queued tick is discarded if the scope is cancelled
+// before the loop applies it. It returns ErrInvalidInterval when interval is
+// zero or negative and does not register a ticker.
+func ScopeEvery[S any](scope *Scope, fx Effects[S], interval time.Duration, fold func(*S, time.Time)) error {
+	if interval <= 0 {
+		return ErrInvalidInterval
+	}
 	clk := fx.clock
 	if clk == nil {
 		clk = realClock{}
 	}
 	clk.Tick(scope.ctx, interval, func(now time.Time) {
-		update := Named(scope.name+":every", func(state *S) { fold(state, now) })
-		select {
-		case fx.Updates <- update:
-		case <-scope.ctx.Done():
-		}
+		update := Named(scope.name+":every", func(state *S) {
+			if scope.ctx.Err() != nil {
+				return // cancelled after queueing, before the loop applied it
+			}
+			fold(state, now)
+		})
+		fx.send(scope.ctx, update)
 	})
+	return nil
 }

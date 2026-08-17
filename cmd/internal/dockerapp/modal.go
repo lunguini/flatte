@@ -112,6 +112,7 @@ func (m *commandModel) execute(s *State, _ flatte.Effects[State], line string) {
 		}
 		ct.Status = "exited"
 		s.containers.recomputeDetailWidgets()
+		s.containers.recomputeStatusLine()
 		s.containers.pushActivity("→   stopped " + ct.Name)
 	case "remove":
 		ct := s.containers.selected()
@@ -121,6 +122,7 @@ func (m *commandModel) execute(s *State, _ flatte.Effects[State], line string) {
 		}
 		ct.Status = "removed"
 		s.containers.recomputeDetailWidgets()
+		s.containers.recomputeStatusLine()
 		s.containers.pushActivity("→   removed " + ct.Name)
 	case "goto":
 		if len(args) == 0 {
@@ -218,6 +220,7 @@ func (s *State) applyModalAction() {
 		}
 	}
 	s.containers.recomputeDetailWidgets()
+	s.containers.recomputeStatusLine()
 }
 
 func (s *State) openConfirm(action string, ct *Container) {

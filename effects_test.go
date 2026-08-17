@@ -10,7 +10,47 @@ func newTestEffects(t *testing.T) (Effects[testState], chan StateUpdate[testStat
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	updates := make(chan StateUpdate[testState], 16)
-	return NewEffects(ctx, updates, nil), updates, cancel
+	return newEffects(ctx, updates, nil), updates, cancel
+}
+
+func TestEffectsSendQueuesUpdate(t *testing.T) {
+	fx, updates, cancel := newTestEffects(t)
+	defer cancel()
+
+	if !fx.Send(Named("inc", func(s *testState) { s.count++ })) {
+		t.Fatal("Send returned false for a live Effects value")
+	}
+	state := testState{}
+	(<-updates).Apply(&state)
+	if state.count != 1 {
+		t.Fatalf("count = %d, want 1", state.count)
+	}
+}
+
+func TestEffectsSendIsSafeOnZeroAndNilUpdate(t *testing.T) {
+	var fx Effects[testState]
+	if fx.Send(nil) {
+		t.Fatal("Send(nil) on zero Effects returned true")
+	}
+	if fx.Send(Named("noop", func(*testState) {})) {
+		t.Fatal("Send on zero Effects returned true")
+	}
+}
+
+func TestEffectsSendRejectsCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	updates := make(chan StateUpdate[testState], 1)
+	fx := newEffects(ctx, updates, nil)
+	cancel()
+
+	if fx.Send(Named("noop", func(*testState) {})) {
+		t.Fatal("Send returned true after context cancellation")
+	}
+	select {
+	case <-updates:
+		t.Fatal("Send queued an update after context cancellation")
+	default:
+	}
 }
 
 func TestGoSendsNamedFoldedUpdate(t *testing.T) {

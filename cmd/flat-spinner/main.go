@@ -24,9 +24,11 @@ func NewState() *State {
 // Init starts the animation: Every drives the spinner from the loop goroutine;
 // the widget itself owns no timer.
 func Init(s *State, fx flatte.Effects[State]) {
-	flatte.Every(fx, "spin", interval, func(s *State, _ time.Time) {
+	if err := flatte.Every(fx, "spin", interval, func(s *State, _ time.Time) {
 		s.spinner.Tick()
-	})
+	}); err != nil {
+		panic(err) // interval is a sample invariant
+	}
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {

@@ -86,10 +86,12 @@ type State struct {
 	// being forwarded to a hosted app, whose own rects are frame-local.
 	coX int
 	coY int
-	// uiList is the absolute rect of the UI-tab component list rows. It lives in
-	// a field, not s.rects, because View replaces s.rects with the compose
-	// result after contentView runs (which would drop a map entry set here).
+	// uiList is the absolute rect of the UI-tab component list rows.
 	uiList layout.Rect
+	gameW  int
+	gameH  int
+	appW   int
+	appH   int
 	// lastTick is the wall time of the previous host Tick, used to feed hosted
 	// apps the real elapsed duration (the browser's setInterval can fire slower
 	// than requested, which would otherwise slow the snake down).
@@ -123,7 +125,7 @@ func NewState() *State {
 		timer:    flatui.NewTimer(90 * time.Second),
 	}
 	s.catalog.SetCount(len(showcase))
-	s.catalog.SetHeight(10)
+	s.reflow()
 	return s
 }
 
@@ -144,6 +146,46 @@ func sandboxFx[T any]() flatte.Effects[T] {
 func (s *State) layout(width, height int) {
 	s.width = max(width, 64)
 	s.height = max(height, 20)
+	s.reflow()
+}
+
+// reflow is the sole geometry-adoption path. Handle calls it after events that
+// can change outer layout or interactive regions; View only paints the already
+// prepared state. The runtime delivers an initial ResizeEvent before the first
+// View, while NewState performs one default-size reflow for direct callers.
+func (s *State) reflow() {
+	st := newStyles()
+	width := max(s.width, 64)
+	height := max(s.height, minRowsFor(s.active))
+	s.rects = layout.Solve(shellTree(s, st), width, height)
+
+	r, ok := s.rects["content"]
+	if !ok {
+		return
+	}
+	contentWidth := max(innerWidth(contentNodeBase(), r.W), 1)
+	contentHeight := max(r.H-2, 1)
+	s.coX, s.coY = r.X+2, r.Y+1
+
+	switch s.active {
+	case tabGame:
+		if s.gameW != contentWidth || s.gameH != contentHeight {
+			s.gameW, s.gameH = contentWidth, contentHeight
+			snakeapp.Handle(s.game, flatte.ResizeEvent{Width: contentWidth, Height: contentHeight}, s.gameFx)
+		}
+	case tabApp:
+		if s.appW != contentWidth || s.appH != contentHeight {
+			s.appW, s.appH = contentWidth, contentHeight
+			dockerapp.Handle(s.docker, flatte.ResizeEvent{Width: contentWidth, Height: contentHeight}, s.dockerFx)
+		}
+	case tabUI:
+		listW := max(min(contentWidth/3, 20), 12)
+		listHeight := max(contentHeight-1, 1)
+		s.catalog.SetHeight(listHeight)
+		s.uiList = layout.Rect{X: s.coX, Y: s.coY + 1, W: listW, H: listHeight}
+		previewW := max(contentWidth-listW-3, 8)
+		s.prog.SetWidth(clampInt(previewW-6, 8, 32))
+	}
 }
 
 // Tick advances the intro animation or the active hosted app. It is driven by
@@ -190,6 +232,9 @@ func Tick(s *State, now time.Time) {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	if _, ok := ev.(flatte.ResizeEvent); !ok {
+		defer s.reflow()
+	}
 	switch ev := ev.(type) {
 	case flatte.ResizeEvent:
 		s.layout(ev.Width, ev.Height)
@@ -342,9 +387,12 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	if s.phase == phaseIntro {
 		return flatte.Frame{Content: trimRightLines(introView(s, st, width, height)), Title: "Flatte"}
 	}
-	content, rects := layout.SolveAndCompose(shellTree(s, st), width, height)
-	s.rects = rects
+	content, _ := layout.SolveAndCompose(shellTree(s, st), width, height)
 	return flatte.Frame{Content: trimRightLines(content), Title: "Flatte"}
+}
+
+func contentNodeBase() layout.NodeBase {
+	return layout.NodeBase{ID: "content", H: layout.Grow(1), Bordered: true, PadLeft: 1, PadRight: 1}
 }
 
 func shellTree(s *State, st styles) layout.Node {
@@ -353,7 +401,7 @@ func shellTree(s *State, st styles) layout.Node {
 		Children: []layout.Node{
 			tabBarRow(s, st),
 			landingBlock{
-				NodeBase:      layout.NodeBase{ID: "content", H: layout.Grow(1), Bordered: true, PadLeft: 1, PadRight: 1},
+				NodeBase:      contentNodeBase(),
 				RenderContent: func(r layout.Rect, width int) string { return contentView(s, st, r, width) },
 			},
 			landingBlock{
@@ -405,15 +453,10 @@ func tabHit(rects map[string]layout.Rect, x, y int) (landingTab, bool) {
 
 func contentView(s *State, st styles, r layout.Rect, width int) string {
 	height := max(r.H-2, 1)
-	// Inner top-left of the content pane: border (1) + PadLeft (1) on x, border
-	// (1) on y. Hosted apps render from here, so this is the mouse offset.
-	s.coX, s.coY = r.X+2, r.Y+1
 	switch s.active {
 	case tabGame:
-		snakeapp.Handle(s.game, flatte.ResizeEvent{Width: width, Height: height}, s.gameFx)
 		return snakeapp.View(s.game, flatte.RenderContext{Width: width}).Content
 	case tabApp:
-		dockerapp.Handle(s.docker, flatte.ResizeEvent{Width: width, Height: height}, s.dockerFx)
 		return dockerapp.View(s.docker, flatte.RenderContext{Width: width}).Content
 	case tabLayout:
 		return layoutTabView(st, width, height)
@@ -470,7 +513,6 @@ func layoutTabView(st styles, width, height int) string {
 func uiTabView(s *State, st styles, r layout.Rect, width, height int) string {
 	listW := max(min(width/3, 20), 12)
 	item := s.selectedItem()
-	s.catalog.SetHeight(max(height-1, 1))
 	list := s.catalog.View(func(i int, selected bool) string {
 		prefix, style := "  ", st.body
 		if selected {
@@ -478,10 +520,6 @@ func uiTabView(s *State, st styles, r layout.Rect, width, height int) string {
 		}
 		return style.Render(truncate(prefix+showcase[i].Name, listW))
 	})
-	// Record the list-rows rect for mouse selection. The nested Row sits at the
-	// content inner origin (coX, coY); the "Components" header takes one row, so
-	// the first list row is at coY+1.
-	s.uiList = layout.Rect{X: s.coX, Y: s.coY + 1, W: listW, H: max(height-1, 1)}
 	_ = r
 
 	previewW := max(width-listW-3, 8)
@@ -510,7 +548,6 @@ func previewBody(s *State, st styles, name string, width, height int) string {
 		return st.accent.Render(s.spin.View()) + " " + st.body.Render("working…") + "\n" +
 			st.subtle.Render(wrapText("flatte.Every advances one frame per tick.", width))
 	case "Progress":
-		s.prog.SetWidth(clampInt(width-6, 8, 32))
 		return st.accent.Render(s.prog.View()) + "\n" + st.subtle.Render(wrapText("Resize-aware, deterministic.", width))
 	case "Timer":
 		rem := s.timer.Remaining()
@@ -960,8 +997,12 @@ func hex2(n int) string {
 
 func runTerminal() error {
 	app := flatte.App[State]{
-		State:  NewState(),
-		Init:   func(_ *State, fx flatte.Effects[State]) { flatte.Every(fx, "host-tick", tickInterval, tickFold) },
+		State: NewState(),
+		Init: func(_ *State, fx flatte.Effects[State]) {
+			if err := flatte.Every(fx, "host-tick", tickInterval, tickFold); err != nil {
+				panic(err) // tickInterval is a sample invariant
+			}
+		},
 		Handle: Handle,
 		View:   View,
 	}

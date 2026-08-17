@@ -31,6 +31,9 @@ type State struct {
 	screen        screen
 	rects         map[string]layout.Rect // full-frame solved geometry
 	bodyYOffset   int                    // Y where body starts (header + separator)
+	geometryDirty bool
+	warmInactive  bool
+	reflowCount   uint64 // test/benchmark instrumentation; not app state
 
 	containers containersScreen
 	images     *imagesScreen
@@ -64,6 +67,25 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	// A prior event normally leaves geometry prepared. This check also makes
+	// direct callers safe when they mutate state between events.
+	s.reflow()
+	initialScreen := s.screen
+	initialConfirm, initialCommand := s.confirmModal, s.commandModal
+	defer func() {
+		// Modal presence changes the frame tree. Screen changes require warming
+		// the newly active screen (and all peers, which may have stale widths).
+		if initialConfirm != s.confirmModal || initialCommand != s.commandModal {
+			s.markGeometryDirty(false)
+		}
+		if initialScreen != s.screen {
+			s.markGeometryDirty(true)
+		}
+		// Geometry is event-time state. View remains a read-only projection of
+		// the prepared state, while ignored events avoid a layout solve.
+		s.reflow()
+	}()
+
 	if s.confirmModal != nil {
 		s.confirmModal.Handle(s, ev, fx)
 		return
@@ -138,6 +160,7 @@ func (s *State) bodyRect() layout.Rect {
 
 func (s *State) resize(width, height int) {
 	s.width, s.height = width, height
+	s.markGeometryDirty(true)
 	s.headerTabs.SetActive(int(s.screen))
 
 	// Header height = content row + enabled border rules.
@@ -148,47 +171,116 @@ func (s *State) resize(width, height int) {
 	s.images.initLayout(body.W, body.H, s.bodyYOffset)
 	s.volumes.initLayout(body.W, body.H, s.bodyYOffset)
 
-	// Warm every screen's geometry from one absolute solve apiece so hit-testing
-	// works before the first View and for screens that are not yet active.
-	s.warmRects(body)
+	// Rehydrate data-derived widgets before the first solve. The subsequent
+	// reflow sizes them from the full frame geometry and records hit zones.
 	s.containers.afterResize()
 }
 
-// warmRects solves each screen's body subtree at the absolute body rect and
-// hands the resulting geometry to that screen. Cold path (resize only) — the
-// per-frame path resolves the active screen as part of the single frame solve
-// in View.
-func (s *State) warmRects(body layout.Rect) {
-	s.containers.adopt(solveScreenRects(s.containers.bodyNode(nil), body))
-	s.images.adopt(solveScreenRects(s.images.bodyNode(), body))
-	s.volumes.adopt(solveScreenRects(s.volumes.bodyNode(), body))
+// refreshActiveRects is kept as the divider-drag hook, but the refreshed map
+// is always the full frame map. A body-only solve would leave header, footer,
+// modal, and active widget geometry out of sync until the next render.
+func (s *State) refreshActiveRects() {
+	s.markGeometryDirty(false)
 }
 
-// refreshActiveRects re-solves only the active screen's geometry. Used by
-// divider drags, which change pane widths between frames and need the updated
-// rects immediately (before the next View).
-func (s *State) refreshActiveRects() {
-	body := s.bodyRect()
-	switch s.screen {
-	case screenContainers:
-		s.containers.adopt(solveScreenRects(s.containers.bodyNode(nil), body))
-	case screenImages:
-		s.images.adopt(solveScreenRects(s.images.bodyNode(), body))
-	case screenVolumes:
-		s.volumes.adopt(solveScreenRects(s.volumes.bodyNode(), body))
+func (s *State) markGeometryDirty(warmInactive bool) {
+	s.geometryDirty = true
+	s.warmInactive = s.warmInactive || warmInactive
+}
+
+// frameTree is the one source of truth for the active frame in both
+// event-time geometry and rendering. Keeping this builder shared prevents a
+// resize/drag solve from silently diverging from what View composes.
+func (s *State) frameTree() layout.Node {
+	return s.frameTreeFor(s.screen)
+}
+
+// frameTreeFor lets the resize path prepare each screen's widgets before a
+// user switches to it. The active frame and View still use exactly the same
+// tree builder; inactive trees are solved only to warm their event geometry.
+func (s *State) frameTreeFor(sc screen) layout.Node {
+	status := func(r layout.Rect) string {
+		if s.commandModal != nil {
+			return s.commandModal.View(r.W)
+		}
+		return s.containers.renderStatusLine(r.W)
 	}
+
+	children := []layout.Node{
+		headerNode(s),
+		s.bodyFor(sc, status),
+		Separator{},
+		Footer{State: s},
+	}
+	if s.confirmModal != nil {
+		children = append(children, modalNode(s.confirmModal))
+	}
+	return layout.Col{Children: children}
 }
 
 // activeBody returns the active screen's body subtree, ready to slot into the
 // frame tree as real children (so the single frame Solve owns its geometry).
 func (s *State) activeBody(status func(layout.Rect) string) layout.Node {
-	switch s.screen {
+	return s.bodyFor(s.screen, status)
+}
+
+func (s *State) bodyFor(sc screen, status func(layout.Rect) string) layout.Node {
+	switch sc {
 	case screenImages:
 		return s.images.bodyNode()
 	case screenVolumes:
 		return s.volumes.bodyNode()
 	default:
 		return s.containers.bodyNode(status)
+	}
+}
+
+// reflow prepares all geometry needed by the next event and frame. It runs on
+// the loop goroutine, after mutations, and never paints. A list's visible row
+// count is itself derived from its solved pane height, so solve/adopt once
+// more when that count changes to make row rects available immediately after
+// resize or a screen switch.
+func (s *State) reflow() {
+	if (!s.geometryDirty && !s.containers.geometryDirty) || s.width <= 0 || s.height <= 0 {
+		return
+	}
+	s.reflowCount++
+	warmInactive := s.warmInactive
+	for pass := 0; pass < 2; pass++ {
+		oldContainersHeight := s.containers.listHeight
+		oldImagesHeight := s.images.list.Height()
+		oldVolumesHeight := s.volumes.list.Height()
+		screens := []screen{s.screen}
+		if warmInactive {
+			screens = []screen{screenContainers, screenImages, screenVolumes}
+		}
+		for _, sc := range screens {
+			rects := layout.Solve(s.frameTreeFor(sc), s.width, s.height)
+			if sc == s.screen {
+				s.rects = rects
+			}
+			s.adoptScreenRects(sc, rects)
+		}
+		if oldContainersHeight == s.containers.listHeight &&
+			oldImagesHeight == s.images.list.Height() &&
+			oldVolumesHeight == s.volumes.list.Height() {
+			s.geometryDirty = false
+			s.warmInactive = false
+			return
+		}
+	}
+	s.geometryDirty = false
+	s.warmInactive = false
+}
+
+func (s *State) adoptScreenRects(sc screen, rects map[string]layout.Rect) {
+	switch sc {
+	case screenContainers:
+		s.containers.adopt(rects)
+	case screenImages:
+		s.images.adopt(rects)
+	case screenVolumes:
+		s.volumes.adopt(rects)
 	}
 }
 
@@ -201,45 +293,14 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	if height <= 0 {
 		height = 24
 	}
-	if s.width != width || s.height != height {
-		s.resize(width, height)
+	if width <= 0 || height <= 0 {
+		return flatte.Frame{Title: "flat-docker — " + s.screen.Name()}
 	}
-
-	status := func(r layout.Rect) string {
-		if s.commandModal != nil {
-			return s.commandModal.View(r.W)
-		}
-		return s.containers.renderStatusLine(r.W)
-	}
-
-	children := []layout.Node{
-		headerNode(s),
-		s.activeBody(status),
-		Separator{},
-		Footer{State: s},
-	}
-	// The confirm dialog is a centered overlay node appended to the frame tree:
-	// the single SolveAndCompose walk clears its rect and composes it over the
-	// base, and records its rects — no separate string-overlay pass.
-	if s.confirmModal != nil {
-		children = append(children, modalNode(s.confirmModal))
-	}
-	tree := layout.Col{Children: children}
 
 	// One top-to-bottom pass resolves the whole frame — header, panes,
-	// dividers, status, footer — in absolute coordinates AND paints it into a
-	// cell buffer. The active screen adopts that geometry for hit-testing and
-	// widget sizing; solve and render can't drift because there is one walk.
-	content, rects := layout.SolveAndCompose(tree, width, height)
-	s.rects = rects
-	switch s.screen {
-	case screenContainers:
-		s.containers.adopt(s.rects)
-	case screenImages:
-		s.images.adopt(s.rects)
-	case screenVolumes:
-		s.volumes.adopt(s.rects)
-	}
+	// dividers, status, footer — and paints it into a cell buffer. Geometry is
+	// prepared by Handle; this compose pass deliberately does not adopt it.
+	content, _ := layout.SolveAndCompose(s.frameTree(), width, height)
 
 	frame := flatte.Frame{
 		Content: content,

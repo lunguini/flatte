@@ -36,7 +36,7 @@ func TestHandleGotoBottomAndQuit(t *testing.T) {
 		t.Fatal("G did not reach bottom")
 	}
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")

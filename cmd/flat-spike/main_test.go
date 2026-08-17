@@ -57,8 +57,7 @@ func TestHandleEnterSelectsCursorModel(t *testing.T) {
 func TestQQuits(t *testing.T) {
 	state := State{models: []string{"haiku"}}
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {

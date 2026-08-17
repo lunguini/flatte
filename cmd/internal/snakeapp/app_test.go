@@ -295,7 +295,7 @@ func TestRestartResetsButKeepsHighScore(t *testing.T) {
 func TestQuitKeys(t *testing.T) {
 	for _, key := range []flatte.KeyEvent{keyChar('q'), {Key: flatte.KeyEscape}} {
 		var quit bool
-		fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+		fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 		Handle(newGame(1), key, fx)
 		if !quit {
 			t.Fatalf("%+v did not request quit", key)
@@ -306,7 +306,7 @@ func TestQuitKeys(t *testing.T) {
 func TestGameOverIgnoresSteeringButAcceptsRestart(t *testing.T) {
 	s := newGame(1)
 	s.game.Over = true
-	fx := flatte.NewEffects[State](context.Background(), nil, func() {})
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() {}, nil, nil)
 	Handle(s, keyChar('w'), fx) // steering ignored while over
 	if len(s.game.DirQueue) != 0 {
 		t.Fatal("steering should be ignored on the game-over screen")

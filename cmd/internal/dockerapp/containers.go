@@ -82,11 +82,16 @@ type containersScreen struct {
 	cpuHistory map[string][]float64
 	memHistory map[string][]float64
 	liveLogs   map[string][]string
-	logTarget  string
-	logScope   *flatte.Scope
-	zones      *flatui.ZoneScanner // auto-zones for list rows
-	detailTabs *flatui.TabBar      // stats/logs/inspect tab strip with mouse support
-	listHeight int
+	// nextLogSeq is the producer sequence, independent of the retained live
+	// log window. The display keeps only the newest 50 lines, but a stream
+	// restarted after that cap must continue from its last sequence.
+	nextLogSeq    map[string]int
+	logTarget     string
+	logScope      *flatte.Scope
+	zones         flatui.ZoneMap // measured list-row hit regions
+	detailTabs    *flatui.TabBar // stats/logs/inspect tab strip with mouse support
+	listHeight    int
+	geometryDirty bool
 
 	activity      []string
 	statusLine    string
@@ -152,10 +157,9 @@ type containerStats struct {
 
 func newContainersScreen() containersScreen {
 	c := containersScreen{
-		containers: sampleContainers,
+		containers: append([]Container(nil), sampleContainers...),
 		cpu:        flatui.NewProgress(18),
 		mem:        flatui.NewProgress(18),
-		zones:      flatui.NewZoneScanner(),
 		followTail: true,
 		detailTabs: flatui.NewTabBar(
 			flatui.TabItem{ID: "stats", Label: "stats"},
@@ -165,6 +169,9 @@ func newContainersScreen() containersScreen {
 	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
+	// Keep the status line valid before the first resize/render. Rendering is a
+	// pure projection; all recomputation happens on state mutation paths.
+	c.recomputeStatusLine()
 	return c
 }
 
@@ -377,6 +384,7 @@ func (c *containersScreen) bodyNode(status func(layout.Rect) string) layout.Node
 // frame solve (View) or the warm solve (resize/drag).
 func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	c.rects = rects
+	c.geometryDirty = false
 	list := rects["list"]
 	c.bodyYOffset = list.Y
 	c.bodyContentHeight = list.H
@@ -400,12 +408,12 @@ func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	c.registerListZones()
 }
 
-// registerListZones feeds list-row hit rects to the zone scanner straight from
+// registerListZones feeds list-row hit rects to the zone map straight from
 // the frame-solved geometry. Each visible row is an ID'd node ("list:i"), so its
 // rect is recorded by the single frame walk — paint and hit-testing read the
 // same rects and can't drift.
 func (c *containersScreen) registerListZones() {
-	c.zones.Reset()
+	c.zones.Clear()
 	for id, rect := range c.rects {
 		if strings.HasPrefix(id, "list:") {
 			c.zones.Set(id, rect)
@@ -621,6 +629,8 @@ func (c *containersScreen) refreshFilter() {
 	}
 	c.list.SetCount(len(c.filtered))
 	c.syncDetail()
+	c.recomputeStatusLine()
+	c.geometryDirty = true
 }
 
 func (c *containersScreen) syncDetail() {
@@ -753,23 +763,39 @@ func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
+	if c.nextLogSeq == nil {
+		c.nextLogSeq = make(map[string]int)
+	}
 
 	c.logScope = flatte.NewScope(fx, "logs:"+ct.ID)
 	targetID := ct.ID
+	// Capture the sequence on the loop goroutine before starting the worker.
+	// The worker must not read liveLogs: folds append to that map on the loop
+	// goroutine, and reading it here would race with those appends.
+	startSeq := c.nextLogSeq[targetID]
 	flatte.ScopeStream(c.logScope, fx, func(ctx context.Context, send func(string)) {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				send(scopedLogLine(targetID, len(c.liveLogs[targetID])))
-			}
-		}
+		streamScopedLogs(ctx, targetID, startSeq, ticker.C, send)
 	}, func(s *State, line string) {
 		s.containers.appendLiveLog(targetID, line)
 	})
+}
+
+// streamScopedLogs emits a sequence of log lines without consulting app
+// state. ticks is injected so the sequencing behavior can be tested without
+// waiting on wall-clock time; production passes a ticker channel.
+func streamScopedLogs(ctx context.Context, targetID string, startSeq int, ticks <-chan time.Time, send func(string)) {
+	seq := startSeq
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticks:
+			send(scopedLogLine(targetID, seq))
+			seq++
+		}
+	}
 }
 
 func scopedLogLine(id string, seq int) string {
@@ -801,14 +827,22 @@ func (c *containersScreen) hostAdvanceLogs() {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
+	if c.nextLogSeq == nil {
+		c.nextLogSeq = make(map[string]int)
+	}
 	c.logTarget = ct.ID
-	c.appendLiveLog(ct.ID, scopedLogLine(ct.ID, len(c.liveLogs[ct.ID])))
+	seq := c.nextLogSeq[ct.ID]
+	c.appendLiveLog(ct.ID, scopedLogLine(ct.ID, seq))
 }
 
 func (c *containersScreen) appendLiveLog(id, line string) {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
+	if c.nextLogSeq == nil {
+		c.nextLogSeq = make(map[string]int)
+	}
+	c.nextLogSeq[id]++
 	c.liveLogs[id] = append(c.liveLogs[id], line)
 	if len(c.liveLogs[id]) > 50 {
 		c.liveLogs[id] = c.liveLogs[id][len(c.liveLogs[id])-50:]
@@ -1050,9 +1084,6 @@ func (c *containersScreen) resumeFollow() {
 }
 
 func (c *containersScreen) renderStatusLine(width int) string {
-	if c.statusLine == "" {
-		c.recomputeStatusLine()
-	}
 	return lipgloss.NewStyle().
 		Width(width).
 		Background(lipgloss.Color("236")).

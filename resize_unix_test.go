@@ -160,3 +160,60 @@ func TestRunRepaintsFullFrameAfterResize(t *testing.T) {
 		t.Fatalf("full frame painted %d time(s), want initial + post-resize repaint:\n%q", got, out.String())
 	}
 }
+
+func TestRunRepaintsFullFrameAfterInputResize(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+
+	state := testState{}
+	done := make(chan error, 1)
+	inputResize := make(chan struct{}, 1)
+	var out bytes.Buffer
+	go func() {
+		done <- Run(context.Background(), App[testState]{
+			State: &state,
+			Handle: func(s *testState, ev Event, fx Effects[testState]) {
+				if resize, ok := ev.(ResizeEvent); ok && resize.Width == 81 && resize.Height == 25 {
+					select {
+					case inputResize <- struct{}{}:
+					default:
+					}
+				}
+				if key, ok := ev.(KeyEvent); ok && key.Key == KeyCharacter && key.Rune == 'q' {
+					fx.Quit()
+				}
+			},
+			View: func(s *testState, ctx RenderContext) Frame { return Frame{Content: "input-resize-content"} },
+		}, WithInput(reader), WithOutput(&out))
+	}()
+
+	// Ultraviolet's terminal decoder represents a cell-size report as CSI
+	// 8;height;width t. This exercises the input-delivered (rather than
+	// SIGWINCH) ResizeEvent path used by the Windows console reader.
+	if _, err := writer.Write([]byte("\x1b[8;25;81t")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-inputResize:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for input-delivered resize")
+	}
+	if _, err := writer.Write([]byte("q")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Run")
+	}
+	if got := strings.Count(out.String(), "input-resize-content"); got < 2 {
+		t.Fatalf("frame painted %d time(s), want initial + input-resize repaint:\n%q", got, out.String())
+	}
+}

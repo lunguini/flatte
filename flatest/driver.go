@@ -18,7 +18,7 @@ import (
 type Driver[S any] struct {
 	app     flatte.App[S]
 	width   int
-	updates chan flatte.StateUpdate[S]
+	updates []flatte.StateUpdate[S]
 	clock   *fakeClock
 	pending []func()
 	quit    bool
@@ -31,14 +31,17 @@ func Start[S any](app flatte.App[S], width int) *Driver[S] {
 	d := &Driver[S]{
 		app:     app,
 		width:   width,
-		updates: make(chan flatte.StateUpdate[S], 1024),
+		updates: make([]flatte.StateUpdate[S], 0, 64),
 		clock:   newFakeClock(),
 	}
 	// One Effects for the whole session: the latest registry (and thus
 	// Latest's cross-event supersede) must persist across events, exactly
 	// like Run's single long-lived Effects.
-	d.fx = flatte.NewHarnessEffects(
-		context.Background(), d.updates,
+	d.fx = flatte.NewHarnessEffectsQueue(
+		context.Background(), func(update flatte.StateUpdate[S]) bool {
+			d.updates = append(d.updates, update)
+			return true
+		},
 		func() { d.quit = true },
 		func(f func()) { d.pending = append(d.pending, f) },
 		d.clock,
@@ -71,13 +74,11 @@ func (d *Driver[S]) deliver(ev flatte.Event) {
 // drain applies every queued update to completion — the harness is
 // synchronous, so there is no per-frame cap like Run's drainUpdates.
 func (d *Driver[S]) drain() {
-	for {
-		select {
-		case u := <-d.updates:
-			flatte.ApplyUpdate(d.app.State, d.app.Tracer, u)
-		default:
-			return
-		}
+	for len(d.updates) > 0 {
+		u := d.updates[0]
+		d.updates[0] = nil
+		d.updates = d.updates[1:]
+		flatte.ApplyUpdate(d.app.State, d.app.Tracer, u)
 	}
 }
 

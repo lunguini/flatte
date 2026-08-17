@@ -18,7 +18,9 @@ type State struct {
 }
 
 func Init(s *State, fx flatte.Effects[State]) {
-	flatte.Every(fx, "ticker.tick", tickInterval(), applyTick)
+	if err := flatte.Every(fx, "ticker.tick", tickInterval(), applyTick); err != nil {
+		panic(err) // tickInterval is a sample invariant
+	}
 }
 
 func applyTick(s *State, _ time.Time) {

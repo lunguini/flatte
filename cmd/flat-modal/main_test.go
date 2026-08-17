@@ -51,7 +51,7 @@ func TestModalCapturesInputAndConfirmCompletesWaiting(t *testing.T) {
 func TestModalCapturesQInsteadOfQuitting(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnter}, fx)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
@@ -120,8 +120,7 @@ func TestBackgroundTickContinuesWhileModalIsOpen(t *testing.T) {
 func TestQQuitsOnlyWhenModalIsClosed(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {

@@ -4,8 +4,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-
-	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const (
@@ -19,23 +17,6 @@ const (
 type splitDrag struct {
 	startX     int
 	startWidth int
-}
-
-// solveScreenRects solves a screen's body subtree and returns its geometry in
-// absolute frame coordinates by offsetting the origin-based solve to the body
-// rect. Used by the resize and drag paths, which derive geometry without going
-// through the full frame render in View.
-func solveScreenRects(body layout.Node, bodyRect layout.Rect) map[string]layout.Rect {
-	rects := layout.Solve(body, bodyRect.W, bodyRect.H)
-	if bodyRect.X == 0 && bodyRect.Y == 0 {
-		return rects
-	}
-	for id, r := range rects {
-		r.X += bodyRect.X
-		r.Y += bodyRect.Y
-		rects[id] = r
-	}
-	return rects
 }
 
 func scrollbarLines(offset, visible, total, height int) string {

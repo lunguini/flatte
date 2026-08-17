@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // shellState returns a laid-out state past the intro, on the given tab.
@@ -101,7 +103,6 @@ func TestGameTabDoesNotHijackTabNavForSteering(t *testing.T) {
 
 func TestMouseSwitchesTab(t *testing.T) {
 	s := shellState(tabGame)
-	View(s, flatte.RenderContext{Width: 92})
 
 	r := s.rects["tab-4"] // the UI tab
 	if r.W == 0 {
@@ -115,7 +116,6 @@ func TestMouseSwitchesTab(t *testing.T) {
 
 func TestUITabMouseSelectsRow(t *testing.T) {
 	s := shellState(tabUI)
-	View(s, flatte.RenderContext{Width: 92})
 
 	r := s.uiList
 	if r.H < 3 {
@@ -134,14 +134,37 @@ func TestUITabMouseSelectsRow(t *testing.T) {
 	}
 }
 
-func TestViewRecordsTabRects(t *testing.T) {
+func TestResizePreparesInteractiveGeometryBeforeView(t *testing.T) {
 	s := shellState(tabWhat)
-	View(s, flatte.RenderContext{Width: 92})
 	for _, id := range []string{"tab-0", "tab-4", "content", "footer"} {
 		r, ok := s.rects[id]
 		if !ok || r.W <= 0 || r.H <= 0 {
 			t.Fatalf("rect %q missing or empty: %+v", id, r)
 		}
+	}
+}
+
+func TestViewDoesNotMutateLayoutState(t *testing.T) {
+	s := shellState(tabUI)
+	rects := make(map[string]layout.Rect, len(s.rects))
+	for id, r := range s.rects {
+		rects[id] = r
+	}
+	coX, coY, uiList := s.coX, s.coY, s.uiList
+	listHeight, progressWidth := s.catalog.Height(), s.prog.Width()
+	gameW, gameH, appW, appH := s.gameW, s.gameH, s.appW, s.appH
+
+	_ = View(s, flatte.RenderContext{Width: 92})
+
+	if !reflect.DeepEqual(s.rects, rects) || s.coX != coX || s.coY != coY || s.uiList != uiList {
+		t.Fatalf("View mutated retained geometry")
+	}
+	if s.catalog.Height() != listHeight || s.prog.Width() != progressWidth {
+		t.Fatalf("View resized UI widgets: list=%d/%d progress=%d/%d",
+			s.catalog.Height(), listHeight, s.prog.Width(), progressWidth)
+	}
+	if s.gameW != gameW || s.gameH != gameH || s.appW != appW || s.appH != appH {
+		t.Fatalf("View resized hosted apps")
 	}
 }
 

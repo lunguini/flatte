@@ -44,15 +44,15 @@ func main() {}
 
 // stepCap bounds a replay so a malformed or adversarial log cannot spin. The
 // board is 26x22, so even a perfect game is far shorter than this.
-const stepCap = 1 << 20
+const stepCap = 8192
 
 // eventSize is the on-wire size of one accepted turn: int32 move + uint8 dir.
 const eventSize = 5
 
 // input is the shared buffer the host writes the payload into. It is a package
-// global so its address is stable for the whole module lifetime; 256 KiB holds
-// ~52k turns, far more than any real game.
-var input [1 << 18]byte
+// global so its address is stable for the whole module lifetime; its size is
+// deliberately close to the Worker's request and turn limits.
+var input [16 << 10]byte
 
 //go:wasmexport input_ptr
 func inputPtr() int32 { return int32(uintptr(unsafe.Pointer(&input[0]))) }

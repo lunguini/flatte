@@ -53,7 +53,7 @@ func TestGotoEndAndQuit(t *testing.T) {
 		t.Fatalf("G: Cursor() = %d, want 19", s.tb.Cursor())
 	}
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, key('q'), fx)
 	if !quit {
 		t.Fatal("q did not quit")

@@ -40,10 +40,10 @@ const (
 )
 
 func newVolumesScreen() *volumesScreen {
-	s := &volumesScreen{volumes: sampleVolumes}
+	s := &volumesScreen{volumes: append([]Volume(nil), sampleVolumes...)}
 	s.focus.SetCount(2)
 	s.focus.Select(volFocusList)
-	s.list.SetCount(len(sampleVolumes))
+	s.list.SetCount(len(s.volumes))
 	return s
 }
 

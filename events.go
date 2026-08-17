@@ -25,6 +25,18 @@ const (
 	KeyEnd
 	KeyPageUp
 	KeyPageDown
+	KeyF1
+	KeyF2
+	KeyF3
+	KeyF4
+	KeyF5
+	KeyF6
+	KeyF7
+	KeyF8
+	KeyF9
+	KeyF10
+	KeyF11
+	KeyF12
 )
 
 // Mod is a bitmask of key modifiers.
@@ -46,8 +58,9 @@ type KeyEvent struct {
 }
 
 // ResizeEvent reports the terminal size in cells. The loop delivers one at
-// startup and one per SIGWINCH; sizes fall back to 72×24 when the output is
-// not a terminal.
+// startup and, on Unix, one per SIGWINCH. On Windows, ultraviolet can deliver
+// console window-size events when connected to a real console. Sizes fall back
+// to 72×24 when the output is not a terminal.
 type ResizeEvent struct {
 	Width  int
 	Height int

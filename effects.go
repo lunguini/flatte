@@ -8,9 +8,76 @@ import (
 )
 
 // Go runs work off-loop and folds its result back into state as one named
-// update. It is Async spelled through Effects.
+// update. It is the preferred replacement for the deprecated Async helper.
 func Go[S, T any](fx Effects[S], name string, work func(context.Context) (T, error), fold func(*S, T, error)) {
-	Async(fx.context(), fx.Updates, fx.dispatch, name, work, fold)
+	fx.spawn(func() {
+		ctx := fx.Ctx()
+		value, err := work(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		fx.Send(Named(name, func(s *S) { fold(s, value, err) }))
+	})
+}
+
+// Send queues a state update for application on the loop goroutine. It
+// returns false when update is nil, the Effects value has no update channel,
+// or its context has been cancelled before the update could be queued.
+// Send may block while waiting for a receiver; cancellation unblocks it.
+// It is safe to call on a zero Effects value. Call Send from off-loop work;
+// Handle, View, and fold callbacks already run on the loop and must mutate
+// state directly rather than queueing work back to themselves.
+func (fx Effects[S]) Send(update StateUpdate[S]) bool {
+	return fx.send(fx.Ctx(), update)
+}
+
+// send is the internal variant used by scoped helpers so cancellation of a
+// child scope can unblock a send even while the parent loop remains alive.
+func (fx Effects[S]) send(ctx context.Context, update StateUpdate[S]) bool {
+	if update == nil || (fx.updates == nil && fx.sendUpdate == nil) {
+		return false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	default:
+	}
+	if fx.sendUpdate != nil {
+		return fx.sendUpdate(ctx, update)
+	}
+	select {
+	case fx.updates <- update:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// trySend is the non-blocking form used by actions completed on the loop
+// goroutine itself, where waiting for a full update queue would deadlock the
+// loop.
+func (fx Effects[S]) trySend(update StateUpdate[S]) bool {
+	if update == nil || (fx.updates == nil && fx.sendUpdate == nil) {
+		return false
+	}
+	ctx := fx.Ctx()
+	select {
+	case <-ctx.Done():
+		return false
+	default:
+	}
+	if fx.sendUpdate != nil {
+		return fx.sendUpdate(ctx, update)
+	}
+	select {
+	case fx.updates <- update:
+		return true
+	default:
+		return false
+	}
 }
 
 // Exec releases the terminal (cooked mode, main screen), runs cmd
@@ -28,18 +95,13 @@ func Exec[S any](fx Effects[S], name string, cmd *exec.Cmd, fold func(*S, error)
 		cmd: cmd,
 		done: func(err error) {
 			update := Named(name, func(s *S) { fold(s, err) })
-			select {
-			case fx.Updates <- update:
-			default:
+			if !fx.trySend(update) {
 				// The updates channel is full (a burst of async results
 				// landed during the exec). Spill to a goroutine instead of
 				// deadlocking the loop against its own channel.
-				ctx := fx.context()
+				ctx := fx.Ctx()
 				go func() {
-					select {
-					case fx.Updates <- update:
-					case <-ctx.Done():
-					}
+					fx.send(ctx, update)
 				}()
 			}
 		},
@@ -48,25 +110,28 @@ func Exec[S any](fx Effects[S], name string, cmd *exec.Cmd, fold func(*S, error)
 
 // Every sends a named update on a fixed interval until the loop context is
 // cancelled. Timing comes from the Clock (real ticker by default; a fake
-// clock drives it deterministically under test).
+// clock drives it deterministically under test). It returns
+// ErrInvalidInterval when interval is zero or negative and does not register
+// a ticker.
 //
 // Every has no name-based cancellation of its own — Cancel only stops
 // Latest work. To stop or re-arm a ticker (pause/resume, changing the
 // interval), start it through a Scope (ScopeEvery) and cancel the scope;
 // flat-game dogfoods exactly this for pause/resume/restart.
-func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) {
+func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) error {
+	if interval <= 0 {
+		return ErrInvalidInterval
+	}
 	clk := fx.clock
 	if clk == nil {
 		clk = realClock{}
 	}
-	ctx := fx.context()
+	ctx := fx.Ctx()
 	clk.Tick(ctx, interval, func(now time.Time) {
 		update := Named(name, func(s *S) { fold(s, now) })
-		select {
-		case fx.Updates <- update:
-		case <-ctx.Done():
-		}
+		fx.Send(update)
 	})
+	return nil
 }
 
 // Stream runs a long-lived source that emits many values over time; each
@@ -77,10 +142,7 @@ func Stream[S, T any](fx Effects[S], name string, source func(context.Context, f
 	fx.spawn(func() {
 		source(ctx, func(value T) {
 			update := Named(name, func(s *S) { fold(s, value) })
-			select {
-			case fx.Updates <- update:
-			case <-ctx.Done():
-			}
+			fx.Send(update)
 		})
 	})
 }
@@ -117,9 +179,7 @@ func Latest[S, T any](fx Effects[S], name string, work func(context.Context) (T,
 			}
 			fold(s, value, err)
 		})
-		select {
-		case fx.Updates <- update:
-		case <-ctx.Done():
+		if !fx.send(ctx, update) {
 			fx.latest.release(name, entry)
 		}
 	})
@@ -136,10 +196,10 @@ func Cancel[S any](fx Effects[S], name string) {
 }
 
 func (fx Effects[S]) context() context.Context {
-	if fx.Context == nil {
+	if fx.ctx == nil {
 		return context.Background()
 	}
-	return fx.Context
+	return fx.ctx
 }
 
 // Ctx returns the loop's context, defaulting to context.Background() if

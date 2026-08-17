@@ -22,7 +22,9 @@ func NewState() *State {
 }
 
 func Init(s *State, fx flatte.Effects[State]) {
-	flatte.Every(fx, "progress.tick", progressInterval(), applyTick)
+	if err := flatte.Every(fx, "progress.tick", progressInterval(), applyTick); err != nil {
+		panic(err) // progressInterval is a sample invariant
+	}
 }
 
 func applyTick(s *State, _ time.Time) {

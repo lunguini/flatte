@@ -44,27 +44,91 @@ type execAction struct {
 }
 
 type Effects[S any] struct {
-	Context  context.Context
-	Updates  chan<- StateUpdate[S]
-	quit     func()
-	enqueue  func(action)
-	latest   *latestRegistry
-	dispatch func(func())
-	clock    Clock
+	ctx     context.Context
+	updates chan<- StateUpdate[S]
+	// sendUpdate is used by deterministic harnesses that need an unbounded
+	// in-memory queue. Production effects always use updates; keeping this
+	// seam private prevents applications from replacing the loop transport.
+	sendUpdate func(context.Context, StateUpdate[S]) bool
+	quit       func()
+	enqueue    func(action)
+	latest     *latestRegistry
+	dispatch   func(func())
+	clock      Clock
 }
 
-// NewEffects builds an Effects value with an observable quit callback.
-// Run uses it internally; tests use it to assert quit requests.
-func NewEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func()) Effects[S] {
-	return Effects[S]{Context: ctx, Updates: updates, quit: quit, latest: newLatestRegistry()}
+// cancelReaderFactory is a seam for the input lifecycle tests. Keeping the
+// substrate constructor behind this small interface also makes ownership
+// explicit: every cancel reader created here is closed after its read loop
+// has joined.
+type cancelReader interface {
+	io.ReadCloser
+	Cancel() bool
+}
+
+var cancelReaderFactory = func(in io.Reader) (cancelReader, error) {
+	return uv.NewCancelReader(in)
+}
+
+// outputSink is the one place where Run writes bytes to the real terminal
+// sink. It latches the first failure so later best-effort cleanup writes do
+// not hide the error that stopped normal work.
+type outputSink struct {
+	w   io.Writer
+	err error
+}
+
+func (s *outputSink) write(p []byte) error {
+	n, err := s.w.Write(p)
+	if err == nil && n != len(p) {
+		err = io.ErrShortWrite
+	}
+	s.record(err)
+	return err
+}
+
+func (s *outputSink) record(err error) {
+	if err != nil && s.err == nil {
+		s.err = err
+	}
+}
+
+func newEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func()) Effects[S] {
+	return Effects[S]{ctx: ctx, updates: updates, quit: quit, latest: newLatestRegistry()}
 }
 
 // NewHarnessEffects builds an Effects wired for deterministic testing:
 // dispatch controls how async bodies are spawned (nil = real goroutine)
 // and clock controls time-based effects (nil = real clock). For flatest;
-// not app API.
+// it is a test seam, not general application API. It remains exported so
+// external test harnesses can construct an Effects without an import cycle.
 func NewHarnessEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S] {
-	fx := NewEffects(ctx, updates, quit)
+	fx := newEffects[S](ctx, updates, quit)
+	fx.dispatch = dispatch
+	fx.clock = clock
+	return fx
+}
+
+// NewHarnessEffectsQueue builds a deterministic test Effects value backed by
+// an enqueue callback instead of a channel. It is intended for synchronous
+// harnesses such as flatest, where a burst of updates must not block a fake
+// clock or a controlled Stream worker on an arbitrary channel capacity.
+func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(StateUpdate[S]) bool, quit func(), dispatch func(func()), clock Clock) Effects[S] {
+	fx := newEffects[S](ctx, nil, quit)
+	fx.sendUpdate = func(sendCtx context.Context, update StateUpdate[S]) bool {
+		if sendCtx == nil {
+			sendCtx = context.Background()
+		}
+		select {
+		case <-sendCtx.Done():
+			return false
+		default:
+		}
+		if enqueue == nil {
+			return false
+		}
+		return enqueue(update)
+	}
 	fx.dispatch = dispatch
 	fx.clock = clock
 	return fx
@@ -144,6 +208,12 @@ func (fx Effects[S]) Printf(format string, args ...any) {
 // Option configures Run behaviour.
 type Option func(*runConfig)
 
+// ErrInlineMouseUnsupported reports an invalid combination of options.
+// Inline frames do not have a stable terminal origin, so mouse coordinates
+// cannot be translated to frame-relative positions. Use alternate-screen
+// rendering for mouse-enabled apps.
+var ErrInlineMouseUnsupported = errors.New("flat: WithInline cannot be combined with mouse reporting")
+
 // MouseMode selects which mouse events the terminal reports.
 type MouseMode int
 
@@ -190,6 +260,7 @@ func WithoutDefaultQuit() Option { return func(c *runConfig) { c.defaultQuit = f
 func WithoutBracketedPaste() Option { return func(c *runConfig) { c.bracketedPaste = false } }
 
 // WithMouse enables terminal mouse reporting; events arrive as MouseEvent.
+// MouseModeNone remains compatible with WithInline; reporting modes do not.
 func WithMouse(mode MouseMode) Option { return func(c *runConfig) { c.mouse = mode } }
 
 // WithReportFocus enables focus reporting; terminal focus changes arrive
@@ -200,16 +271,31 @@ func WithReportFocus() Option { return func(c *runConfig) { c.reportFocus = true
 // WithInline renders below the shell prompt instead of in the alternate
 // screen: the frame occupies exactly its own lines, the terminal's
 // scrollback stays intact, and on exit the final frame remains visible
-// with the prompt landing below it.
+// with the prompt landing below it. Mouse reporting cannot be enabled because
+// an inline frame has no stable terminal origin; Run returns
+// ErrInlineMouseUnsupported for that combination.
 func WithInline() Option { return func(c *runConfig) { c.inline = true } }
 
-func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
+// Run owns the terminal loop until the app quits, input ends, or ctx is
+// cancelled. Those three shutdown paths are clean and return nil after OnExit
+// and terminal restoration; cancellation is intentionally not surfaced as
+// context.Canceled. Input, rendering, output, and cleanup failures are returned.
+func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) {
 	if app.State == nil {
 		panic("flat: App.State is nil")
 	}
 	if app.View == nil {
 		panic("flat: App.View is nil")
 	}
+	var inputCloseErr error
+	// Input cleanup happens before renderer cleanup, but a close failure is a
+	// cleanup error. Let an earlier run or output error win, and only expose it
+	// when the run otherwise completed successfully.
+	defer func() {
+		if runErr == nil && inputCloseErr != nil {
+			runErr = inputCloseErr
+		}
+	}()
 
 	cfg := runConfig{
 		input:          os.Stdin,
@@ -223,7 +309,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			opt(&cfg)
 		}
 	}
+	if cfg.inline && cfg.mouse != MouseModeNone {
+		return ErrInlineMouseUnsupported
+	}
 	in, out := cfg.input, cfg.output
+	sink := &outputSink{w: out}
 
 	// Raw mode enter/restore are reusable: suspend and exec hand the
 	// terminal back to the shell or a subprocess and re-enter afterwards.
@@ -262,6 +352,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		return newTerminalRenderer(renderOut, out, os.Environ(), cfg.inline)
 	}
 	renderer := newRenderer()
+	flushRenderer := func() error {
+		err := renderer.Flush()
+		sink.record(err)
+		return err
+	}
 	var lastFrame Frame
 	drew := false
 	cursorShown := false
@@ -345,9 +440,16 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		} else {
 			renderer.ExitAltScreen()
 		}
-		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
-			_, _ = out.Write(renderOut.Bytes())
+		if err := flushRenderer(); err != nil && runErr == nil {
+			runErr = err
+		}
+		if renderOut.Len() > 0 {
+			data := append([]byte(nil), renderOut.Bytes()...)
 			renderOut.Reset()
+			_ = sink.write(data)
+		}
+		if runErr == nil {
+			runErr = sink.err
 		}
 	}()
 
@@ -385,12 +487,35 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		inputCtx, cancelCtx := context.WithCancel(runCtx)
 		eventSource := io.Reader(in)
 		cancelRead := func() bool { return false }
-		if cancelable, err := uv.NewCancelReader(in); err == nil {
+		var cancelable cancelReader
+		if candidate, err := cancelReaderFactory(in); err == nil {
+			cancelable = candidate
 			eventSource = cancelable
 			cancelRead = cancelable.Cancel
 		}
 		events, done := readInput(inputCtx, eventSource)
+		stopped := false
+		closeCancelable := func() {
+			if cancelable != nil {
+				if err := cancelable.Close(); err != nil && inputCloseErr == nil {
+					inputCloseErr = err
+				}
+			}
+		}
 		return inputPipeline{events: events, stop: func() bool {
+			if stopped {
+				return true
+			}
+			// A reader that reached EOF on its own is already safe to close;
+			// Cancel may legitimately return false once no read is pending.
+			select {
+			case <-done:
+				cancelCtx()
+				closeCancelable()
+				stopped = true
+				return true
+			default:
+			}
 			// Cancel first: it is the only way to learn whether this
 			// pipeline can be stopped, and the answer decides whether the
 			// context may be cancelled at all. The interrupted read makes
@@ -401,6 +526,8 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			}
 			cancelCtx()
 			<-done
+			closeCancelable()
+			stopped = true
 			return true
 		}}
 	}
@@ -422,7 +549,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	}()
 	updates := make(chan StateUpdate[S], 64)
 	quitRequested := false
-	effects := NewEffects(runCtx, updates, func() { quitRequested = true })
+	effects := newEffects(runCtx, updates, func() { quitRequested = true })
 	effects.enqueue = func(a action) { pending = append(pending, a) }
 	if app.Init != nil {
 		app.Init(app.State, effects)
@@ -444,20 +571,34 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		return nil
 	}
 
-	writeFrameOutput := func() {
+	writePendingOutput := func(synchronized bool) error {
 		if renderOut.Len() == 0 {
-			return // nothing to write, not even markers
+			return nil // nothing to write, not even markers
 		}
-		fmt.Fprintf(out, "\x1b[?2026h%s\x1b[?2026l", renderOut.Bytes())
+		prefix, suffix := "", ""
+		if synchronized {
+			prefix, suffix = "\x1b[?2026h", "\x1b[?2026l"
+		}
+		data := make([]byte, 0, len(prefix)+renderOut.Len()+len(suffix))
+		data = append(data, prefix...)
+		data = append(data, renderOut.Bytes()...)
+		data = append(data, suffix...)
 		renderOut.Reset()
+		return sink.write(data)
+	}
+	writeFrameOutput := func() {
+		_ = writePendingOutput(true)
 	}
 
 	draw := func() {
+		if sink.err != nil {
+			return // terminal output failed; defer handles best-effort cleanup
+		}
 		renderCtx := RenderContextFor(out)
 		frame := app.View(app.State, renderCtx)
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
-			if err := renderer.Flush(); err == nil {
+			if err := flushRenderer(); err == nil {
 				writeFrameOutput()
 			}
 			return
@@ -506,7 +647,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 				cursorShown = true
 			}
 		}
-		if err := renderer.Flush(); err != nil {
+		if err := flushRenderer(); err != nil {
 			return
 		}
 		lastFrame, drew = frame, true
@@ -534,9 +675,8 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		} else {
 			renderer.ExitAltScreen()
 		}
-		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
-			_, _ = out.Write(renderOut.Bytes())
-			renderOut.Reset()
+		if err := flushRenderer(); err == nil {
+			_ = writePendingOutput(false)
 		}
 		restoreRaw()
 	}
@@ -593,9 +733,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		}
 		// Flush any buffered renderer output first so the inserted lines land in
 		// order relative to a pending frame.
-		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
-			_, _ = out.Write(renderOut.Bytes())
-			renderOut.Reset()
+		if err := flushRenderer(); err != nil {
+			return
+		}
+		if err := writePendingOutput(false); err != nil {
+			return
 		}
 		_, y := renderer.Position()
 		var sb strings.Builder
@@ -609,7 +751,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			sb.WriteString(ansi.EraseLineRight)
 			sb.WriteString("\r\n")
 		}
-		_, _ = io.WriteString(out, sb.String())
+		_ = sink.write([]byte(sb.String()))
 		// Rebuild the frame fresh starting at the current cursor row (below the
 		// inserted lines). A fresh inline renderer treats that row as its origin.
 		// Zero dimensions force the next draw through the full render path; do not
@@ -626,16 +768,28 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	// loop re-checks because the post-restore resize Handle may enqueue.
 	processActions := func() {
 		for len(pending) > 0 {
+			if sink.err != nil {
+				return
+			}
 			queued := pending
 			pending = nil
 			for _, a := range queued {
+				if sink.err != nil {
+					return
+				}
 				switch {
 				case a.suspend:
 					releaseTerminal()
+					if sink.err != nil {
+						return
+					}
 					cfg.suspendProcess()
 					restoreTerminal()
 				case a.exec != nil:
 					releaseTerminal()
+					if sink.err != nil {
+						return
+					}
 					cmd := a.exec.cmd
 					if cmd.Stdin == nil {
 						cmd.Stdin = in
@@ -662,15 +816,24 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 						insertAbove(a.print)
 					}
 				}
+				if sink.err != nil {
+					return
+				}
 			}
 		}
 	}
 
 	processActions() // Init and the initial resize Handle may have enqueued
+	if sink.err != nil {
+		return sink.err
+	}
 	if quitRequested {
 		return nil
 	}
 	draw()
+	if sink.err != nil {
+		return sink.err
+	}
 	for {
 		select {
 		case <-runCtx.Done():
@@ -681,6 +844,13 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			}
 			if result.err != nil {
 				return result.err
+			}
+			if _, ok := result.event.(ResizeEvent); ok {
+				// A resize can arrive through the input stream (notably the
+				// Windows console path), rather than SIGWINCH. Both paths
+				// invalidate the renderer's screen model and require a full
+				// repaint, even when the frame content is unchanged.
+				forceRepaint = true
 			}
 			// Trace before any exit decision so the recorder sees the
 			// exit-causing event too (incl. a default-quit Ctrl-C).
@@ -716,10 +886,16 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			return nil
 		}
 		processActions()
+		if sink.err != nil {
+			return sink.err
+		}
 		if quitRequested {
 			return nil
 		}
 		draw()
+		if sink.err != nil {
+			return sink.err
+		}
 	}
 }
 
@@ -838,8 +1014,11 @@ func readInput(ctx context.Context, in io.Reader) (<-chan inputResult, <-chan st
 		streamErr <- reader.StreamEvents(ctx, rawEvents)
 	}()
 	go func() {
-		defer close(done)
+		// Publish completion before closing results. A caller that observes
+		// input EOF can then close an already-finished CancelReader even when
+		// its Cancel method correctly reports that no read remains pending.
 		defer close(results)
+		defer close(done)
 		for {
 			select {
 			case raw := <-rawEvents:

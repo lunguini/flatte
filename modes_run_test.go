@@ -1,6 +1,9 @@
 package flatte
 
 import (
+	"context"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -77,6 +80,18 @@ func TestRunWithoutMouseEmitsNoMouseSequences(t *testing.T) {
 	for _, seq := range []string{"1002", "1003", "1006"} {
 		if strings.Contains(output, seq) {
 			t.Fatalf("unexpected mouse sequence %q:\n%q", seq, output)
+		}
+	}
+}
+
+func TestRunRejectsInlineMouse(t *testing.T) {
+	for _, mode := range []MouseMode{MouseModeCellMotion, MouseModeAllMotion} {
+		err := Run(context.Background(), App[testState]{
+			State: &testState{},
+			View:  plainView,
+		}, WithInput(strings.NewReader("q")), WithOutput(io.Discard), WithInline(), WithMouse(mode))
+		if !errors.Is(err, ErrInlineMouseUnsupported) {
+			t.Fatalf("Run error for mouse mode %v = %v, want %v", mode, err, ErrInlineMouseUnsupported)
 		}
 	}
 }

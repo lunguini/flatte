@@ -44,10 +44,10 @@ const (
 )
 
 func newImagesScreen() *imagesScreen {
-	s := &imagesScreen{images: sampleImages}
+	s := &imagesScreen{images: append([]Image(nil), sampleImages...)}
 	s.focus.SetCount(2)
 	s.focus.Select(imgFocusList)
-	s.list.SetCount(len(sampleImages))
+	s.list.SetCount(len(s.images))
 	return s
 }
 

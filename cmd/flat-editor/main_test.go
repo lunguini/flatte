@@ -271,7 +271,7 @@ func TestRawCtrlWDeletesWordThroughRun(t *testing.T) {
 func TestEscQuits(t *testing.T) {
 	s := emptyState()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, fx)
 	if !quit {
 		t.Fatal("esc did not quit")
