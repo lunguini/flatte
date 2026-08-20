@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/format"
 	"go/importer"
 	"go/parser"
@@ -52,8 +53,11 @@ func TestPublicAPISnapshot(t *testing.T) {
 func TestPublicAPISnapshotIncludesContracts(t *testing.T) {
 	items := strings.Join(collectPublicAPI(t), "\n")
 	for _, want := range []string{
+		"flatte package flatte",
 		"func Named[S any](name string, apply func(*S)) StateUpdate[S]",
 		"const KeyUp Key = 1",
+		"struct Effects fields=8 comparable=false",
+		"field Effects.<unexported> context.Context [order=0]",
 		"field KeyEvent.Rune rune [order=1]",
 		"method Mod.Contains(mods Mod) bool",
 		"interface Event method isEvent()",
@@ -61,6 +65,10 @@ func TestPublicAPISnapshotIncludesContracts(t *testing.T) {
 		if !strings.Contains(items, want) {
 			t.Errorf("API snapshot does not include %q", want)
 		}
+	}
+	value := constant.MakeFromLiteral("1.234567890123456789", token.FLOAT, 0)
+	if got, want := constantValueText(value), "1234567890123456789/1000000000000000000"; got != want {
+		t.Errorf("constantValueText = %q, want exact %q", got, want)
 	}
 }
 
@@ -108,7 +116,7 @@ func collectPublicAPI(t *testing.T) []string {
 		if label == "" {
 			label = "flatte"
 		}
-		out = append(out, label)
+		out = append(out, label+" package "+pkg.types.Name())
 		for _, item := range items {
 			out = append(out, "  "+item.text)
 		}
@@ -222,7 +230,7 @@ func exportedItems(pkg *apiPackage) []apiItem {
 		}
 		switch obj := scope.Lookup(name).(type) {
 		case *types.Const:
-			items = append(items, apiItem{"const:" + name, "const " + name + " " + formatType(obj.Type(), pkg) + " = " + obj.Val().String()})
+			items = append(items, apiItem{"const:" + name, "const " + name + " " + formatType(obj.Type(), pkg) + " = " + constantValueText(obj.Val())})
 		case *types.Var:
 			items = append(items, apiItem{"var:" + name, "var " + name + " " + formatType(obj.Type(), pkg)})
 		case *types.Func:
@@ -259,9 +267,17 @@ func typeItems(pkg *apiPackage, obj *types.TypeName, spec *ast.TypeSpec) []apiIt
 		return items
 	}
 	if st, ok := named.Underlying().(*types.Struct); ok {
+		items = append(items, apiItem{
+			"type:" + obj.Name() + ":struct",
+			fmt.Sprintf("struct %s fields=%d comparable=%t", obj.Name(), st.NumFields(), types.Comparable(named)),
+		})
 		for i := 0; i < st.NumFields(); i++ {
 			field := st.Field(i)
 			if !field.Exported() {
+				items = append(items, apiItem{
+					fmt.Sprintf("type:%s:field:%06d", obj.Name(), i),
+					fmt.Sprintf("field %s.<unexported> %s [order=%d]", obj.Name(), formatType(field.Type(), pkg), i),
+				})
 				continue
 			}
 			text := "field " + obj.Name() + "." + field.Name() + " " + formatType(field.Type(), pkg) + " [order=" + fmt.Sprint(i) + "]"
@@ -285,6 +301,10 @@ func typeItems(pkg *apiPackage, obj *types.TypeName, spec *ast.TypeSpec) []apiIt
 		items = append(items, methodItems(pkg, named)...)
 	}
 	return items
+}
+
+func constantValueText(value constant.Value) string {
+	return value.ExactString()
 }
 
 func methodItems(pkg *apiPackage, named *types.Named) []apiItem {

@@ -1,4 +1,4 @@
-flatte
+flatte package flatte
   const CursorShapeBar CursorShape = 3
   const CursorShapeBlock CursorShape = 1
   const CursorShapeDefault CursorShape = 0
@@ -96,36 +96,53 @@ flatte
   field App.View func(*S, RenderContext) Frame [order=3]
   field App.Tracer Tracer [order=4]
   field App.OnExit func(*S) [order=5]
+  struct App fields=6 comparable=false
   type ClipboardEvent struct
   field ClipboardEvent.Text string [order=0]
+  struct ClipboardEvent fields=1 comparable=true
   type Clock interface
   interface Clock method Tick(ctx context.Context, interval time.Duration, cb func(time.Time))
   type Cursor struct
   field Cursor.X int [order=0]
   field Cursor.Y int [order=1]
   field Cursor.Style *CursorStyle [order=2]
+  struct Cursor fields=3 comparable=true
   type CursorShape int
   type CursorStyle struct
   field CursorStyle.Shape CursorShape [order=0]
   field CursorStyle.Blink bool [order=1]
   field CursorStyle.Color color.Color [order=2]
+  struct CursorStyle fields=3 comparable=true
   type Effects[S any] struct
+  field Effects.<unexported> context.Context [order=0]
+  field Effects.<unexported> chan<-StateUpdate[S] [order=1]
+  field Effects.<unexported> func(context.Context, StateUpdate[S]) bool [order=2]
+  field Effects.<unexported> func() [order=3]
+  field Effects.<unexported> func(action) [order=4]
+  field Effects.<unexported> *latestRegistry [order=5]
+  field Effects.<unexported> func(func()) [order=6]
+  field Effects.<unexported> Clock [order=7]
+  struct Effects fields=8 comparable=false
   type Event interface
   interface Event method isEvent()
   type FileSelection struct
   field FileSelection.Path string [order=0]
   field FileSelection.Err error [order=1]
+  struct FileSelection fields=2 comparable=true
   type FocusEvent struct
   field FocusEvent.Focused bool [order=0]
+  struct FocusEvent fields=1 comparable=true
   type Frame struct
   field Frame.Content string [order=0]
   field Frame.Cursor *Cursor [order=1]
   field Frame.Title string [order=2]
+  struct Frame fields=3 comparable=true
   type Key int
   type KeyEvent struct
   field KeyEvent.Key Key [order=0]
   field KeyEvent.Rune rune [order=1]
   field KeyEvent.Mod Mod [order=2]
+  struct KeyEvent fields=3 comparable=true
   type Mod int
   type MouseAction int
   type MouseButton int
@@ -135,18 +152,27 @@ flatte
   field MouseEvent.Button MouseButton [order=2]
   field MouseEvent.Action MouseAction [order=3]
   field MouseEvent.Mod Mod [order=4]
+  struct MouseEvent fields=5 comparable=true
   type MouseMode int
   type NoopTracer struct
+  struct NoopTracer fields=0 comparable=true
   type Option func(*runConfig)
   type PasteEvent struct
   field PasteEvent.Text string [order=0]
+  struct PasteEvent fields=1 comparable=true
   type RenderContext struct
   field RenderContext.Width int [order=0]
   field RenderContext.ColorProfile colorprofile.Profile [order=1]
+  struct RenderContext fields=2 comparable=true
   type ResizeEvent struct
   field ResizeEvent.Width int [order=0]
   field ResizeEvent.Height int [order=1]
+  struct ResizeEvent fields=2 comparable=true
   type Scope struct
+  field Scope.<unexported> string [order=0]
+  field Scope.<unexported> context.Context [order=1]
+  field Scope.<unexported> context.CancelFunc [order=2]
+  struct Scope fields=3 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string
@@ -157,7 +183,7 @@ flatte
   var ErrInlineMouseUnsupported error
   var ErrInvalidInterval error
   var ErrNoSelection error
-flatest
+flatest package flatest
   func AssertFrames(t*testing.T, path string, frames[]flatte.Frame)
   func AssertGolden(t*testing.T, path string, frame string)
   func AssertGoldenFrame(t*testing.T, path string, frame flatte.Frame)
@@ -178,12 +204,22 @@ flatest
   method *Recorder.Update(name string)
   method *Recorder.Updates()[]string
   type Driver[S any] struct
+  field Driver.<unexported> flatte.App[S] [order=0]
+  field Driver.<unexported> int [order=1]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=2]
+  field Driver.<unexported> *fakeClock [order=3]
+  field Driver.<unexported> []func() [order=4]
+  field Driver.<unexported> bool [order=5]
+  field Driver.<unexported> flatte.Effects[S] [order=6]
+  struct Driver fields=7 comparable=false
   type Recorder struct
   field Recorder.Steps []Step [order=0]
+  struct Recorder fields=1 comparable=false
   type Step struct
   field Step.Event flatte.Event [order=0]
   field Step.Update string [order=1]
-flatui
+  struct Step fields=2 comparable=true
+flatui package flatui
   const KeyMapFull KeyMapMode = 1
   const KeyMapShort KeyMapMode = 0
   func Card(lines[]string, maxWidth int) string
@@ -383,36 +419,71 @@ flatui
   type CardStyle struct
   field CardStyle.Container lipgloss.Style [order=0]
   field CardStyle.BorderForeground color.Color [order=1]
+  struct CardStyle fields=2 comparable=false
   type Column struct
   field Column.Title string [order=0]
   field Column.Width int [order=1]
+  struct Column fields=2 comparable=true
   type FocusRing struct
+  field FocusRing.<unexported> int [order=0]
+  field FocusRing.<unexported> int [order=1]
+  struct FocusRing fields=2 comparable=true
   type KeyBinding struct
   field KeyBinding.Keys []string [order=0]
   field KeyBinding.Help string [order=1]
   field KeyBinding.Disabled bool [order=2]
+  struct KeyBinding fields=3 comparable=false
   type KeyGroup struct
   field KeyGroup.Title string [order=0]
   field KeyGroup.Bindings KeyMap [order=1]
+  struct KeyGroup fields=2 comparable=false
   type KeyGroups []KeyGroup
   type KeyMap []KeyBinding
   type KeyMapMode int
   type KeyMapOptions struct
   field KeyMapOptions.Width int [order=0]
   field KeyMapOptions.Mode KeyMapMode [order=1]
+  struct KeyMapOptions fields=2 comparable=true
   type List struct
+  field List.<unexported> int [order=0]
+  field List.<unexported> int [order=1]
+  field List.<unexported> int [order=2]
+  field List.<unexported> int [order=3]
   field List.RenderRow func(index int, selected bool) string [order=4]
+  struct List fields=5 comparable=false
   type Paginator struct
+  field Paginator.<unexported> int [order=0]
+  field Paginator.<unexported> int [order=1]
+  field Paginator.<unexported> int [order=2]
+  struct Paginator fields=3 comparable=true
   type Progress struct
+  field Progress.<unexported> int [order=0]
+  field Progress.<unexported> float64 [order=1]
+  struct Progress fields=2 comparable=true
   type ProgressStyle struct
   field ProgressStyle.Filled lipgloss.Style [order=0]
   field ProgressStyle.Empty lipgloss.Style [order=1]
   field ProgressStyle.Label lipgloss.Style [order=2]
+  struct ProgressStyle fields=3 comparable=false
   type Rect = layout.Rect
   type Spinner struct
+  field Spinner.<unexported> []string [order=0]
+  field Spinner.<unexported> int [order=1]
+  struct Spinner fields=2 comparable=false
   type Stopwatch struct
+  field Stopwatch.<unexported> time.Duration [order=0]
+  field Stopwatch.<unexported> bool [order=1]
+  struct Stopwatch fields=2 comparable=true
   type TabBar struct
   field TabBar.Items []TabItem [order=0]
+  field TabBar.<unexported> int [order=1]
+  field TabBar.<unexported> TabGlyphs [order=2]
+  field TabBar.<unexported> color.Color [order=3]
+  field TabBar.<unexported> color.Color [order=4]
+  field TabBar.<unexported> color.Color [order=5]
+  field TabBar.<unexported> TabBarBorder [order=6]
+  field TabBar.<unexported> string [order=7]
+  struct TabBar fields=8 comparable=false
   type TabBarBorder struct
   field TabBarBorder.Style lipgloss.Border [order=0]
   field TabBarBorder.Color color.Color [order=1]
@@ -420,47 +491,98 @@ flatui
   field TabBarBorder.Right bool [order=3]
   field TabBarBorder.Bottom bool [order=4]
   field TabBarBorder.Left bool [order=5]
+  struct TabBarBorder fields=6 comparable=true
   type TabGlyphs struct
   field TabGlyphs.Left string [order=0]
   field TabGlyphs.Right string [order=1]
+  struct TabGlyphs fields=2 comparable=true
   type TabItem struct
   field TabItem.ID string [order=0]
   field TabItem.Label string [order=1]
+  struct TabItem fields=2 comparable=true
   type Table struct
+  field Table.<unexported> []Column [order=0]
+  field Table.<unexported> [][]string [order=1]
+  field Table.<unexported> List [order=2]
+  struct Table fields=3 comparable=false
   type TableStyle struct
   field TableStyle.Header lipgloss.Style [order=0]
   field TableStyle.Row lipgloss.Style [order=1]
   field TableStyle.Active lipgloss.Style [order=2]
+  struct TableStyle fields=3 comparable=false
   type TextField struct
   field TextField.Value string [order=0]
   field TextField.Cursor int [order=1]
+  field TextField.<unexported> bool [order=2]
+  field TextField.<unexported> int [order=3]
+  struct TextField fields=4 comparable=true
   type TextPosition struct
   field TextPosition.Row int [order=0]
   field TextPosition.Col int [order=1]
+  struct TextPosition fields=2 comparable=true
   type TextRange struct
   field TextRange.Start TextPosition [order=0]
   field TextRange.End TextPosition [order=1]
+  struct TextRange fields=2 comparable=true
   type Textarea struct
+  field Textarea.<unexported> []string [order=0]
+  field Textarea.<unexported> int [order=1]
+  field Textarea.<unexported> int [order=2]
+  field Textarea.<unexported> int [order=3]
+  field Textarea.<unexported> int [order=4]
+  field Textarea.<unexported> int [order=5]
+  field Textarea.<unexported> int [order=6]
+  field Textarea.<unexported> int [order=7]
+  field Textarea.<unexported> bool [order=8]
+  field Textarea.<unexported> int [order=9]
+  field Textarea.<unexported> bool [order=10]
+  field Textarea.<unexported> int [order=11]
+  field Textarea.<unexported> int [order=12]
+  struct Textarea fields=13 comparable=false
   type Timer struct
+  field Timer.<unexported> time.Duration [order=0]
+  field Timer.<unexported> time.Duration [order=1]
+  struct Timer fields=2 comparable=true
   type Tree struct
+  field Tree.<unexported> []TreeNode [order=0]
+  field Tree.<unexported> map[string] bool [order=1]
+  field Tree.<unexported> int [order=2]
+  field Tree.<unexported> int [order=3]
+  field Tree.<unexported> int [order=4]
+  struct Tree fields=5 comparable=false
   type TreeNode struct
   field TreeNode.ID string [order=0]
   field TreeNode.Label string [order=1]
   field TreeNode.Children []TreeNode [order=2]
+  struct TreeNode fields=3 comparable=false
   type TreeRow struct
   field TreeRow.ID string [order=0]
   field TreeRow.Label string [order=1]
   field TreeRow.Depth int [order=2]
   field TreeRow.Expandable bool [order=3]
   field TreeRow.Expanded bool [order=4]
+  struct TreeRow fields=5 comparable=true
   type Viewport struct
+  field Viewport.<unexported> []string [order=0]
+  field Viewport.<unexported> string [order=1]
+  field Viewport.<unexported> bool [order=2]
+  field Viewport.<unexported> int [order=3]
+  field Viewport.<unexported> int [order=4]
+  field Viewport.<unexported> int [order=5]
+  struct Viewport fields=6 comparable=false
   type ZoneMap struct
+  field ZoneMap.<unexported> []string [order=0]
+  field ZoneMap.<unexported> map[string] Rect [order=1]
+  struct ZoneMap fields=2 comparable=false
   type ZoneScanner struct
+  field ZoneScanner.<unexported> []string [order=0]
+  field ZoneScanner.<unexported> map[string] Rect [order=1]
+  struct ZoneScanner fields=2 comparable=false
   var SpinnerDots []string
   var SpinnerLine []string
   var TabGlyphsPowerline TabGlyphs
   var TabGlyphsSafe TabGlyphs
-flatui/layout
+flatui/layout package layout
   const SizeAuto SizeKind = 0
   const SizeContent SizeKind = 3
   const SizeFixed SizeKind = 1
@@ -516,10 +638,12 @@ flatui/layout
   type Col struct
   field Col.NodeBase NodeBase [order=0]
   field Col.Children []Node [order=1]
+  struct Col fields=2 comparable=false
   type DuplicateIDDiagnostic struct
   field DuplicateIDDiagnostic.ID string [order=0]
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
   field DuplicateIDDiagnostic.Duplicate Rect [order=2]
+  struct DuplicateIDDiagnostic fields=3 comparable=true
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)
@@ -536,21 +660,28 @@ flatui/layout
   field NodeBase.PadBottom int [order=9]
   field NodeBase.PadLeft int [order=10]
   field NodeBase.Chrome func(r Rect) string [order=11]
+  struct NodeBase fields=12 comparable=false
   type Rect struct
   field Rect.X int [order=0]
   field Rect.Y int [order=1]
   field Rect.W int [order=2]
   field Rect.H int [order=3]
+  struct Rect fields=4 comparable=true
   type Row struct
   field Row.NodeBase NodeBase [order=0]
   field Row.Children []Node [order=1]
+  struct Row fields=2 comparable=false
   type Size struct
   field Size.Kind SizeKind [order=0]
   field Size.Value int [order=1]
   field Size.Weight float64 [order=2]
+  struct Size fields=3 comparable=true
   type SizeKind int
   type Spacer struct
   field Spacer.NodeBase NodeBase [order=0]
+  field Spacer.<unexported> color.Color [order=1]
+  struct Spacer fields=2 comparable=false
   type Text struct
   field Text.NodeBase NodeBase [order=0]
   field Text.String string [order=1]
+  struct Text fields=2 comparable=false
