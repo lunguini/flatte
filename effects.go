@@ -8,7 +8,7 @@ import (
 )
 
 // Go runs work off-loop and folds its result back into state as one named
-// update. It is the preferred replacement for the deprecated Async helper.
+// update through Effects-owned context and transport.
 func Go[S, T any](fx Effects[S], name string, work func(context.Context) (T, error), fold func(*S, T, error)) {
 	fx.spawn(func() {
 		ctx := fx.Ctx()

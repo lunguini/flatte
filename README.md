@@ -203,13 +203,12 @@ a regression guard, not a promise that every 0.x release is source-compatible.
 Ultraviolet and Lip Gloss are implementation dependencies: applications use
 Flatte's events, frames, and layout types rather than substrate types.
 
-`Async` is a deprecated raw-channel compatibility bridge and is planned for
-removal in the next pre-1.0 minor release that accepts breaking changes; use
-`Go` or off-loop `Effects.Send`. `NewHarnessEffects` and
-`NewHarnessEffectsQueue` are exported only so external deterministic harnesses
-can construct effects without a `flatte`/`flatest` import cycle. They are not
-application APIs and will be reviewed for relocation or consolidation before
-1.0.
+The deprecated raw-channel `Async` bridge was removed in the 2026-08 breaking
+stabilization increment; use `Go` or off-loop `Effects.Send`.
+`NewHarnessEffects` and `NewHarnessEffectsQueue` are exported only so external
+deterministic harnesses can construct effects without a `flatte`/`flatest`
+import cycle. They are not application APIs and will be reviewed for relocation
+or consolidation before 1.0.
 
 Public widget dimensions clamp to 0..65,536 cells. `SaveState` syncs the file
 before replacement and additionally syncs the containing directory on Unix;

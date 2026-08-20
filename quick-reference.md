@@ -211,11 +211,12 @@ then `At(x, y)`). `ZoneScanner` remains as deprecated compatibility API.
 
 ## Async And Effects
 
-Application code should use the helpers below. Deprecated `Async` is a raw
-channel compatibility bridge scheduled for removal in the next breaking
-pre-1.0 minor. `NewHarnessEffects` and `NewHarnessEffectsQueue` are test-only
-construction seams for external deterministic harnesses, not app APIs; they
-will be reviewed for consolidation or relocation before 1.0.
+Application code should use the helpers below. The deprecated raw-channel
+`Async` bridge was removed in the 2026-08 breaking stabilization increment;
+use `Go` or off-loop `Effects.Send`. `NewHarnessEffects` and
+`NewHarnessEffectsQueue` remain test-only construction seams for external
+deterministic harnesses, not app APIs; they will be reviewed for consolidation
+or relocation before 1.0.
 
 | If you need... | Use... | Notes |
 |---|---|---|

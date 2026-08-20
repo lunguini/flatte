@@ -99,7 +99,7 @@ deterministic (no wall-clock, no randomness in `View`).
 ## Architecture
 
 - root package `flatte` — the runtime: `App[S]`, `Run`, the closed event set
-  + substrate event translation, `StateUpdate[S]`/`Async`, `Tracer`,
+  + substrate event translation, `StateUpdate[S]`/`Named`, `Tracer`,
   cell-buffer rendering via ultraviolet. No app policy here, and no
   ultraviolet types in exported signatures.
 - `flatui` — opt-in widget state structs and layout helpers (`TextField`,

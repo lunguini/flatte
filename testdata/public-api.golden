@@ -47,7 +47,6 @@ flatte package flatte
   const MouseWheelDown MouseButton = 5
   const MouseWheelUp MouseButton = 4
   func ApplyUpdate[S any](s*S, tracer Tracer, update StateUpdate[S])
-  func Async[S any, T any](ctx context.Context, updates chan<-StateUpdate[S], spawn func(func()), name string, work func(context.Context)(T, error), fold func(*S, T, error))
   func Cancel[S any](fx Effects[S], name string)
   func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) error
   func Exec[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, error))
