@@ -9,6 +9,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/cmd/internal/dockerapp"
+	"github.com/lunguini/flatte/cmd/internal/persist"
 )
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 	}()
 	defer signal.Stop(sigCh)
 
-	session := flatte.LoadState(dockerapp.SessionFile, dockerapp.SessionState{})
+	session, loadErr := persist.Load(dockerapp.SessionFile, dockerapp.SessionState{})
 	state := dockerapp.NewStateFromSession(session)
 
 	var saveErr error
@@ -33,7 +34,7 @@ func main() {
 		Handle: dockerapp.Handle,
 		View:   dockerapp.View,
 		OnExit: func(s *dockerapp.State) {
-			saveErr = flatte.SaveState(dockerapp.SessionFile, s.Session())
+			saveErr = persist.Save(dockerapp.SessionFile, s.Session(), loadErr)
 		},
 	}, flatte.WithMouse(flatte.MouseModeCellMotion))
 	// Run has restored the terminal before returning; report persistence

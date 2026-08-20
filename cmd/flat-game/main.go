@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/cmd/internal/persist"
 	"github.com/lunguini/flatte/cmd/internal/snakeapp"
 )
 
 const stateFile = ".flat-game-state.gob"
 
 func main() {
-	loaded := flatte.LoadState(stateFile, snakeapp.State{})
+	loaded, loadErr := persist.Load(stateFile, snakeapp.State{})
 	s := snakeapp.NewGame(uint64(time.Now().UnixNano()))
 	s.HighScore = loaded.HighScore
 
@@ -24,7 +25,7 @@ func main() {
 		Handle: snakeapp.Handle,
 		View:   snakeapp.View,
 		OnExit: func(s *snakeapp.State) {
-			saveErr = flatte.SaveState(stateFile, *s)
+			saveErr = persist.Save(stateFile, *s, loadErr)
 		},
 	})
 	// Run has restored the terminal before returning, so persistence

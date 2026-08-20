@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/cmd/internal/persist"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -117,7 +118,7 @@ func main() {
 	}()
 	defer signal.Stop(sigCh)
 
-	state := flatte.LoadState(stateFile, State{})
+	state, loadErr := persist.Load(stateFile, State{})
 
 	var saveErr error
 	runErr := flatte.Run(ctx, flatte.App[State]{
@@ -125,7 +126,7 @@ func main() {
 		Handle: Handle,
 		View:   View,
 		OnExit: func(s *State) {
-			saveErr = flatte.SaveState(stateFile, *s)
+			saveErr = persist.Save(stateFile, *s, loadErr)
 		},
 	}, flatte.WithMouse(flatte.MouseModeNone))
 	// Run restores the terminal before returning, keeping the diagnostic
