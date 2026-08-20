@@ -82,16 +82,17 @@ type containersScreen struct {
 	cpuHistory map[string][]float64
 	memHistory map[string][]float64
 	liveLogs   map[string][]string
-	// nextLogSeq is the producer sequence, independent of the retained live
-	// log window. The display keeps only the newest 50 lines, but a stream
-	// restarted after that cap must continue from its last sequence.
-	nextLogSeq    map[string]int
-	logTarget     string
-	logScope      *flatte.Scope
-	zones         flatui.ZoneMap // measured list-row hit regions
-	detailTabs    *flatui.TabBar // stats/logs/inspect tab strip with mouse support
-	listHeight    int
-	geometryDirty bool
+	// nextDisplayedLogSeq numbers applied display entries independently of the
+	// retained 50-line window. A scoped value cancelled while queued was never
+	// displayed and does not reserve a number; a restarted stream may reuse it
+	// without creating duplicate visible entries.
+	nextDisplayedLogSeq map[string]int
+	logTarget           string
+	logScope            *flatte.Scope
+	zones               flatui.ZoneMap // measured list-row hit regions
+	detailTabs          *flatui.TabBar // stats/logs/inspect tab strip with mouse support
+	listHeight          int
+	geometryDirty       bool
 
 	activity      []string
 	statusLine    string
@@ -763,8 +764,8 @@ func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
-	if c.nextLogSeq == nil {
-		c.nextLogSeq = make(map[string]int)
+	if c.nextDisplayedLogSeq == nil {
+		c.nextDisplayedLogSeq = make(map[string]int)
 	}
 
 	c.logScope = flatte.NewScope(fx, "logs:"+ct.ID)
@@ -772,7 +773,7 @@ func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
 	// Capture the sequence on the loop goroutine before starting the worker.
 	// The worker must not read liveLogs: folds append to that map on the loop
 	// goroutine, and reading it here would race with those appends.
-	startSeq := c.nextLogSeq[targetID]
+	startSeq := c.nextDisplayedLogSeq[targetID]
 	flatte.ScopeStream(c.logScope, fx, func(ctx context.Context, send func(string)) {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
@@ -827,11 +828,11 @@ func (c *containersScreen) hostAdvanceLogs() {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
-	if c.nextLogSeq == nil {
-		c.nextLogSeq = make(map[string]int)
+	if c.nextDisplayedLogSeq == nil {
+		c.nextDisplayedLogSeq = make(map[string]int)
 	}
 	c.logTarget = ct.ID
-	seq := c.nextLogSeq[ct.ID]
+	seq := c.nextDisplayedLogSeq[ct.ID]
 	c.appendLiveLog(ct.ID, scopedLogLine(ct.ID, seq))
 }
 
@@ -839,10 +840,10 @@ func (c *containersScreen) appendLiveLog(id, line string) {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
-	if c.nextLogSeq == nil {
-		c.nextLogSeq = make(map[string]int)
+	if c.nextDisplayedLogSeq == nil {
+		c.nextDisplayedLogSeq = make(map[string]int)
 	}
-	c.nextLogSeq[id]++
+	c.nextDisplayedLogSeq[id]++
 	c.liveLogs[id] = append(c.liveLogs[id], line)
 	if len(c.liveLogs[id]) > 50 {
 		c.liveLogs[id] = c.liveLogs[id][len(c.liveLogs[id])-50:]

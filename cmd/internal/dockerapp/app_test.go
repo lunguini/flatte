@@ -44,20 +44,23 @@ func TestResizePropagatesBodyDimensionsToEveryScreen(t *testing.T) {
 }
 
 func TestNewStateOwnsMutableSampleData(t *testing.T) {
+	wantContainerStatus := sampleContainers[0].Status
+	wantImageTag := sampleImages[0].RepoTag
+	wantVolumeName := sampleVolumes[0].Name
 	first := NewState()
+	second := NewState()
 	first.containers.containers[0].Status = "mutated"
 	first.images.images[0].RepoTag = "mutated"
 	first.volumes.volumes[0].Name = "mutated"
 
-	second := NewState()
-	if second.containers.containers[0].Status != sampleContainers[0].Status {
-		t.Fatalf("container sample leaked between states: got %q, want %q", second.containers.containers[0].Status, sampleContainers[0].Status)
+	if sampleContainers[0].Status != wantContainerStatus || second.containers.containers[0].Status != wantContainerStatus {
+		t.Fatalf("container mutation leaked: global=%q second=%q want=%q", sampleContainers[0].Status, second.containers.containers[0].Status, wantContainerStatus)
 	}
-	if second.images.images[0].RepoTag != sampleImages[0].RepoTag {
-		t.Fatalf("image sample leaked between states: got %q, want %q", second.images.images[0].RepoTag, sampleImages[0].RepoTag)
+	if sampleImages[0].RepoTag != wantImageTag || second.images.images[0].RepoTag != wantImageTag {
+		t.Fatalf("image mutation leaked: global=%q second=%q want=%q", sampleImages[0].RepoTag, second.images.images[0].RepoTag, wantImageTag)
 	}
-	if second.volumes.volumes[0].Name != sampleVolumes[0].Name {
-		t.Fatalf("volume sample leaked between states: got %q, want %q", second.volumes.volumes[0].Name, sampleVolumes[0].Name)
+	if sampleVolumes[0].Name != wantVolumeName || second.volumes.volumes[0].Name != wantVolumeName {
+		t.Fatalf("volume mutation leaked: global=%q second=%q want=%q", sampleVolumes[0].Name, second.volumes.volumes[0].Name, wantVolumeName)
 	}
 }
 
@@ -1609,7 +1612,7 @@ func TestLiveLogSequenceSurvivesRetentionCap(t *testing.T) {
 	if got := len(c.liveLogs[id]); got != 50 {
 		t.Fatalf("retained live logs = %d, want 50", got)
 	}
-	if got := c.nextLogSeq[id]; got != 100 {
+	if got := c.nextDisplayedLogSeq[id]; got != 100 {
 		t.Fatalf("next sequence = %d, want 100 after retention", got)
 	}
 	if !strings.Contains(c.liveLogs[id][0], "req=50") {
@@ -1619,11 +1622,53 @@ func TestLiveLogSequenceSurvivesRetentionCap(t *testing.T) {
 	// A host-driven emission after the cap must continue at 100, not restart
 	// from the retained slice length (50).
 	c.hostAdvanceLogs()
-	if got := c.nextLogSeq[id]; got != 101 {
+	if got := c.nextDisplayedLogSeq[id]; got != 101 {
 		t.Fatalf("next sequence after host emission = %d, want 101", got)
 	}
 	if !strings.Contains(c.liveLogs[id][49], "req=100") {
 		t.Fatalf("post-cap host emission repeated a sequence: %q", c.liveLogs[id][49])
+	}
+}
+
+func TestCancelledQueuedLogDoesNotDuplicateDisplayedSequence(t *testing.T) {
+	c := newContainersScreen()
+	id := sampleContainers[0].ID
+	state := State{containers: c}
+	var updates []flatte.StateUpdate[State]
+	fx := flatte.NewHarnessEffectsQueue(context.Background(), func(update flatte.StateUpdate[State]) bool {
+		updates = append(updates, update)
+		return true
+	}, func() {}, func(run func()) { run() }, nil)
+
+	queueOne := func(scope *flatte.Scope) {
+		flatte.ScopeStream(scope, fx,
+			func(_ context.Context, send func(string)) {
+				send(scopedLogLine(id, state.containers.nextDisplayedLogSeq[id]))
+			},
+			func(s *State, line string) { s.containers.appendLiveLog(id, line) },
+		)
+	}
+
+	first := flatte.NewScope(fx, "first")
+	queueOne(first)
+	first.Cancel()
+	updates[0].Apply(&state)
+	if got := state.containers.nextDisplayedLogSeq[id]; got != 0 {
+		t.Fatalf("cancelled display sequence = %d, want 0", got)
+	}
+	if got := len(state.containers.liveLogs[id]); got != 0 {
+		t.Fatalf("cancelled displayed logs = %d, want 0", got)
+	}
+
+	updates = updates[:0]
+	second := flatte.NewScope(fx, "second")
+	queueOne(second)
+	updates[0].Apply(&state)
+	if got := state.containers.nextDisplayedLogSeq[id]; got != 1 {
+		t.Fatalf("applied display sequence = %d, want 1", got)
+	}
+	if got := len(state.containers.liveLogs[id]); got != 1 || !strings.Contains(state.containers.liveLogs[id][0], "req=0") {
+		t.Fatalf("displayed logs = %v, want one req=0 entry", state.containers.liveLogs[id])
 	}
 }
 
