@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -480,8 +481,10 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	// hanging, and not reachable on a real console, where the substrate has
 	// a cancelable reader and Cancel reports true.
 	type inputPipeline struct {
-		events <-chan inputResult
-		stop   func() bool
+		events   <-chan inputResult
+		stop     func() bool
+		finish   func()
+		finalize func()
 	}
 	startInput := func() inputPipeline {
 		inputCtx, cancelCtx := context.WithCancel(runCtx)
@@ -495,14 +498,32 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		}
 		events, done := readInput(inputCtx, eventSource)
 		stopped := false
-		closeCancelable := func() {
-			if cancelable != nil {
-				if err := cancelable.Close(); err != nil && inputCloseErr == nil {
-					inputCloseErr = err
+		var closeOnce sync.Once
+		var closeErr error
+		closeCancelable := func() error {
+			closeOnce.Do(func() {
+				if cancelable != nil {
+					closeErr = cancelable.Close()
 				}
+			})
+			return closeErr
+		}
+		recordClose := func() {
+			if err := closeCancelable(); err != nil && inputCloseErr == nil {
+				inputCloseErr = err
 			}
 		}
-		return inputPipeline{events: events, stop: func() bool {
+		finish := func() {
+			if stopped {
+				return
+			}
+			cancelCtx()
+			<-done
+			recordClose()
+			stopped = true
+		}
+		var stop func() bool
+		stop = func() bool {
 			if stopped {
 				return true
 			}
@@ -511,7 +532,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			select {
 			case <-done:
 				cancelCtx()
-				closeCancelable()
+				recordClose()
 				stopped = true
 				return true
 			default:
@@ -526,10 +547,25 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			}
 			cancelCtx()
 			<-done
-			closeCancelable()
+			recordClose()
 			stopped = true
 			return true
-		}}
+		}
+		finalize := func() {
+			if stop() {
+				return
+			}
+			// Final Run shutdown differs from suspend/exec: this pipeline will
+			// never be reused. Stop delivering events now, then release the
+			// CancelReader asynchronously once its uncancelable read eventually
+			// completes. A late close error cannot be returned after Run exits.
+			cancelCtx()
+			go func() {
+				<-done
+				_ = closeCancelable()
+			}()
+		}
+		return inputPipeline{events: events, stop: stop, finish: finish, finalize: finalize}
 	}
 	pipe := startInput()
 	// inputStopped tracks whether the last stop actually tore the pipeline
@@ -538,7 +574,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	inputStopped := false
 	defer func() {
 		cancel()
-		pipe.stop()
+		pipe.finalize()
 	}()
 	resize, stopResize := notifyResize()
 	defer stopResize()
@@ -843,6 +879,10 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				return nil
 			}
 			if result.err != nil {
+				// The terminal reader has already returned, but the dispatcher
+				// may still be unwinding after its unbuffered error send. Join it
+				// before closing the owned CancelReader.
+				pipe.finish()
 				return result.err
 			}
 			if _, ok := result.event.(ResizeEvent); ok {
