@@ -118,7 +118,29 @@ func TestAdvanceDrainsMoreThanChannelCapacity(t *testing.T) {
 	}
 }
 
-func TestStreamBurstIsUnboundedAndScopeCancellationStopsQueuedUpdates(t *testing.T) {
+func TestStreamBurstIsUnbounded(t *testing.T) {
+	app := flatte.App[burst]{
+		State: &burst{},
+		Init: func(_ *burst, fx flatte.Effects[burst]) {
+			flatte.Stream(fx, "burst",
+				func(_ context.Context, send func(int)) {
+					for i := 0; i < 4096; i++ {
+						send(i)
+					}
+				},
+				func(s *burst, _ int) { s.n++ },
+			)
+		},
+		View: func(*burst, flatte.RenderContext) flatte.Frame { return flatte.Frame{} },
+	}
+	d := Start(app, 40)
+	d.Settle()
+	if d.State().n != 4096 {
+		t.Fatalf("stream burst applied=%d want 4096", d.State().n)
+	}
+}
+
+func TestScopeStreamCancellationDropsQueuedBurst(t *testing.T) {
 	var scope *flatte.Scope
 	app := flatte.App[burst]{
 		State: &burst{},
