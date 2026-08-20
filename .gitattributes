@@ -7,3 +7,8 @@
 # Golden snapshots are byte-compared by tests; never let a CRLF checkout
 # (e.g. Windows CI runners) rewrite their line endings.
 *.golden -text
+
+# Keep security-sensitive leaderboard validation reviewable even when an older
+# blob contains literal control bytes. Current sources use explicit escapes.
+leaderboard/src/board.js text eol=lf diff
+leaderboard/test/logic.test.mjs text eol=lf diff
