@@ -20,10 +20,10 @@ func (t Text) Size() (Size, Size) {
 		mw, mh := measureString(t.String)
 		inset := t.insetSides()
 		if w.Kind == SizeAuto {
-			w = Size{Kind: SizeContent, Value: mw + inset.horiz()}
+			w = Size{Kind: SizeContent, Value: satAdd(mw, inset.horiz())}
 		}
 		if h.Kind == SizeAuto {
-			h = Size{Kind: SizeContent, Value: mh + inset.vert()}
+			h = Size{Kind: SizeContent, Value: satAdd(mh, inset.vert())}
 		}
 	}
 	return w, h

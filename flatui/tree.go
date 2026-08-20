@@ -33,9 +33,10 @@ func NewTree(nodes []TreeNode) Tree {
 	return Tree{nodes: cloneTreeNodes(nodes), expanded: map[string]bool{}}
 }
 
-// SetHeight sets the number of visible rows.
+// SetHeight sets the number of visible rows, clamped to the supported widget
+// dimension range.
 func (t *Tree) SetHeight(h int) {
-	t.height = h
+	t.height = clampWidgetDimension(h)
 	t.clamp()
 }
 

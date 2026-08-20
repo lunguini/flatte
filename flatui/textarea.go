@@ -64,7 +64,7 @@ func (t Textarea) Value() string {
 // horizontal scrolling; height caps the rows View emits and drives vertical
 // scrolling.
 func (t *Textarea) SetSize(width, height int) {
-	t.width, t.height = width, height
+	t.width, t.height = clampWidgetDimension(width), clampWidgetDimension(height)
 	t.ensure()
 	t.keepVisible()
 }

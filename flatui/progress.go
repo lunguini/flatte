@@ -22,9 +22,10 @@ func NewProgress(width int) Progress {
 	return p
 }
 
-// SetWidth sets the fill bar width in cells. Negative widths clamp to zero.
+// SetWidth sets the fill bar width in cells. Values outside the supported
+// 0..65,536 cell range clamp to the nearest endpoint.
 func (p *Progress) SetWidth(width int) {
-	p.width = max(width, 0)
+	p.width = clampWidgetDimension(width)
 }
 
 // SetPercent sets the fill percentage. Finite values outside 0..100 clamp;

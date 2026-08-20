@@ -38,9 +38,10 @@ func (l *List) SetCount(n int) {
 	l.clamp()
 }
 
-// SetHeight sets the number of visible rows.
+// SetHeight sets the number of visible rows, clamped to the supported widget
+// dimension range.
 func (l *List) SetHeight(h int) {
-	l.height = h
+	l.height = clampWidgetDimension(h)
 	l.clamp()
 }
 

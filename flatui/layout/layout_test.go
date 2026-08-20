@@ -436,6 +436,21 @@ func TestRectIntersectAndContainsDoNotOverflow(t *testing.T) {
 	}
 }
 
+func TestExtremeInsetsHaveBoundedIntrinsicSizes(t *testing.T) {
+	max := int(^uint(0) >> 1)
+	text := Text{NodeBase: NodeBase{Pad: max, Bordered: true}, String: "x"}
+	w, h := text.Size()
+	if w.Kind != SizeContent || w.Value != max || h.Kind != SizeContent || h.Value != max {
+		t.Fatalf("text size = (%+v, %+v), want saturated content sizes", w, h)
+	}
+
+	row := Row{NodeBase: NodeBase{PadLeft: max, Bordered: true}, Children: []Node{text}}
+	w, h = row.Size()
+	if w.Kind != SizeContent || w.Value != max || h.Kind != SizeContent || h.Value != max {
+		t.Fatalf("row size = (%+v, %+v), want saturated content sizes", w, h)
+	}
+}
+
 func TestMaxIntFixedClaimsStayWithinFrame(t *testing.T) {
 	max := int(^uint(0) >> 1)
 	tree := Row{Children: []Node{
@@ -445,7 +460,7 @@ func TestMaxIntFixedClaimsStayWithinFrame(t *testing.T) {
 	rects := Solve(tree, 10, 1)
 	for _, id := range []string{"a", "b"} {
 		r := rects[id]
-		if r.X < 0 || r.X+r.W > 10 || r.W < 0 {
+		if r.X < 0 || r.W < 0 || r.X > 10 || r.W > 10-r.X {
 			t.Fatalf("rect[%q]=%+v escapes frame", id, r)
 		}
 	}
@@ -464,7 +479,7 @@ func TestHugeGrowWeightsStayWithinFrame(t *testing.T) {
 	}
 	for _, id := range []string{"a", "b", "c"} {
 		r := rects[id]
-		if r.X < 0 || r.X+r.W > 10 || r.W < 0 {
+		if r.X < 0 || r.W < 0 || r.X > 10 || r.W > 10-r.X {
 			t.Fatalf("rect[%q]=%+v escapes frame", id, r)
 		}
 	}

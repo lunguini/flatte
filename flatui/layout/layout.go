@@ -237,6 +237,18 @@ func (s sides) any() bool  { return s.top > 0 || s.right > 0 || s.bottom > 0 || 
 func (s sides) horiz() int { return satAdd(nonNegative(s.left), nonNegative(s.right)) }
 func (s sides) vert() int  { return satAdd(nonNegative(s.top), nonNegative(s.bottom)) }
 
+// clampTo constrains per-side claims to a concrete box without allowing the
+// second side to push the first outside it. The order matches Rect.insetBy:
+// left/top win when malformed callers claim more than the entire box.
+func (s sides) clampTo(width, height int) sides {
+	width, height = nonNegative(width), nonNegative(height)
+	left := min(nonNegative(s.left), width)
+	right := min(nonNegative(s.right), width-left)
+	top := min(nonNegative(s.top), height)
+	bottom := min(nonNegative(s.bottom), height-top)
+	return sides{top: top, right: right, bottom: bottom, left: left}
+}
+
 // padSides is the node's padding per side: symmetric Pad plus the per-side
 // extras (border excluded).
 func (n NodeBase) padSides() sides {
@@ -460,12 +472,18 @@ func fillRectWithBg(content string, r Rect, pad sides, c color.Color, bordered b
 	// eating the bottom/right chrome. Clipping the content to the inner box
 	// first means the frame can never overflow, so borders and padding stay
 	// intact no matter what the caller hands in.
+	borderWidth, borderHeight := 0, 0
+	if bordered {
+		borderWidth = min(2, r.W)
+		borderHeight = min(2, r.H)
+	}
+	pad = pad.clampTo(r.W-borderWidth, r.H-borderHeight)
 	inset := pad
 	if bordered {
-		inset.top++
-		inset.right++
-		inset.bottom++
-		inset.left++
+		inset.top = satAdd(inset.top, 1)
+		inset.right = satAdd(inset.right, 1)
+		inset.bottom = satAdd(inset.bottom, 1)
+		inset.left = satAdd(inset.left, 1)
 	}
 	content = clipToBox(content, r.W-inset.horiz(), r.H-inset.vert())
 
@@ -528,6 +546,9 @@ func Solve(root Node, width, height int) map[string]Rect {
 // deterministic traversal order. Duplicate IDs retain the existing last-node-
 // wins map behavior; empty IDs are intentionally ignored.
 func SolveWithDiagnostics(root Node, width, height int) (map[string]Rect, []DuplicateIDDiagnostic) {
+	if width <= 0 || height <= 0 {
+		return map[string]Rect{}, nil
+	}
 	rects := make(map[string]Rect)
 	state := walkState{rects: rects, first: make(map[string]Rect)}
 	// Match SolveAndCompose: an overlay root is resolved only at its centered

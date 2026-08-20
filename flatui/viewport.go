@@ -55,7 +55,7 @@ func (v *Viewport) SetWrappedContent(content string) {
 // SetSize sets the visible window dimensions. Width drives wrapping and
 // clipping; height caps the number of rows View emits.
 func (v *Viewport) SetSize(width, height int) {
-	v.width, v.height = width, height
+	v.width, v.height = clampWidgetDimension(width), clampWidgetDimension(height)
 	v.relayout()
 }
 

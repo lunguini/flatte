@@ -112,6 +112,53 @@ func TestSolveAndComposeClipsOverflow(t *testing.T) {
 	}
 }
 
+func TestSolveAndComposeParityForNonPositiveViewports(t *testing.T) {
+	minInt := -int(^uint(0)>>1) - 1
+	viewports := []struct{ w, h int }{
+		{0, 10}, {10, 0}, {-1, 10}, {10, -1}, {minInt, minInt},
+	}
+	trees := []Node{
+		Col{NodeBase: NodeBase{ID: "root"}, Children: []Node{
+			Text{NodeBase: NodeBase{ID: "child"}, String: "x"},
+		}},
+		Col{NodeBase: NodeBase{ID: "overlay", Overlay: true}, Children: []Node{
+			Text{NodeBase: NodeBase{ID: "overlay-child"}, String: "x"},
+		}},
+	}
+	for _, vp := range viewports {
+		for _, tree := range trees {
+			frame, composed := SolveAndCompose(tree, vp.w, vp.h)
+			solved := Solve(tree, vp.w, vp.h)
+			if frame != "" || len(composed) != 0 || len(solved) != 0 {
+				t.Fatalf("viewport %dx%d: frame=%q composed=%v solved=%v, want empty parity", vp.w, vp.h, frame, composed, solved)
+			}
+		}
+	}
+}
+
+func TestSolveAndComposeBoundsExtremePublicPadding(t *testing.T) {
+	max := int(^uint(0) >> 1)
+	trees := []Node{
+		Text{NodeBase: NodeBase{Pad: max}, String: "x"},
+		Text{NodeBase: NodeBase{PadLeft: max, PadRight: max, PadTop: max, PadBottom: max}, String: "x"},
+		Text{NodeBase: NodeBase{Pad: max, Bordered: true}, String: "x"},
+		Row{NodeBase: NodeBase{Pad: max}},
+		Col{NodeBase: NodeBase{Pad: max}, Children: []Node{Text{String: "x"}}},
+	}
+	for i, tree := range trees {
+		frame, _ := SolveAndCompose(tree, 10, 3)
+		lines := strings.Split(ansi.Strip(frame), "\n")
+		if len(lines) > 3 {
+			t.Fatalf("tree %d rendered %d rows, want <= 3", i, len(lines))
+		}
+		for _, line := range lines {
+			if width := ansi.StringWidth(line); width > 10 {
+				t.Fatalf("tree %d rendered width %d, want <= 10", i, width)
+			}
+		}
+	}
+}
+
 // A bordered container paints its own chrome; a child that does not cover the
 // border cells leaves them visible (no fill invariant required).
 func TestSolveAndComposePaintsContainerChrome(t *testing.T) {
@@ -173,7 +220,8 @@ func TestNoRectEscapesFrame(t *testing.T) {
 	}
 	for ti, tr := range trees {
 		for id, r := range Solve(tr, W, H) {
-			if r.X < 0 || r.Y < 0 || r.X+r.W > W || r.Y+r.H > H {
+			if r.X < 0 || r.Y < 0 || r.W < 0 || r.H < 0 ||
+				r.X > W || r.Y > H || r.W > W-r.X || r.H > H-r.Y {
 				t.Fatalf("tree %d: rect %q = %+v escapes frame %dx%d", ti, id, r, W, H)
 			}
 		}

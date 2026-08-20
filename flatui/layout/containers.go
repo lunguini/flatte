@@ -18,14 +18,14 @@ func (r Row) Size() (Size, Size) {
 		// Grow(1) so the container does not collapse to zero.
 		if w.Kind == SizeAuto {
 			if mainSize > 0 {
-				w = Size{Kind: SizeContent, Value: mainSize + inset.horiz()}
+				w = Size{Kind: SizeContent, Value: satAdd(mainSize, inset.horiz())}
 			} else if mainGrow {
 				w = Grow(1)
 			}
 		}
 		if h.Kind == SizeAuto {
 			if crossSize > 0 {
-				h = Size{Kind: SizeContent, Value: crossSize + inset.vert()}
+				h = Size{Kind: SizeContent, Value: satAdd(crossSize, inset.vert())}
 			} else if crossGrow {
 				h = Grow(1)
 			}
@@ -72,14 +72,14 @@ func (c Col) Size() (Size, Size) {
 		// Grow(1) so the container does not collapse to zero.
 		if h.Kind == SizeAuto {
 			if mainSize > 0 {
-				h = Size{Kind: SizeContent, Value: mainSize + inset.vert()}
+				h = Size{Kind: SizeContent, Value: satAdd(mainSize, inset.vert())}
 			} else if mainGrow {
 				h = Grow(1)
 			}
 		}
 		if w.Kind == SizeAuto {
 			if crossSize > 0 {
-				w = Size{Kind: SizeContent, Value: crossSize + inset.horiz()}
+				w = Size{Kind: SizeContent, Value: satAdd(crossSize, inset.horiz())}
 			} else if crossGrow {
 				w = Grow(1)
 			}

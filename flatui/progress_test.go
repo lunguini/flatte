@@ -89,3 +89,19 @@ func TestProgressViewWithStyle(t *testing.T) {
 		t.Fatalf("stripped ViewWithStyle() = %q, want %q", clean, "██░░   50%")
 	}
 }
+
+func TestProgressExtremeWidthIsBounded(t *testing.T) {
+	p := NewProgress(int(^uint(0) >> 1))
+	p.SetPercent(50)
+	if p.Width() != maxWidgetDimension {
+		t.Fatalf("width = %d, want ceiling %d", p.Width(), maxWidgetDimension)
+	}
+	for name, view := range map[string]string{
+		"plain":  p.View(),
+		"styled": p.ViewWithStyle(ProgressStyle{}),
+	} {
+		if width := lipgloss.Width(view); width > maxWidgetDimension+6 {
+			t.Fatalf("%s view width = %d, want <= %d", name, width, maxWidgetDimension+6)
+		}
+	}
+}
