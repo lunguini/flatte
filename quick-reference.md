@@ -46,7 +46,8 @@ shutdown and returns `nil` for those paths. It still restores terminal state
 before returning; `OnExit` runs during cleanup, before that restoration, so
 applications that report persistence failures should capture them in `OnExit`
 and print them after `Run` returns. A context cancellation is not returned as
-`context.Canceled`.
+`context.Canceled`, is not an update-drain barrier, and `OnExit` observes only
+the updates the loop applied before selecting cancellation.
 
 Input limitations are explicit: F1–F12 key presses are supported, but key
 release events and terminal capability/keyboard-enhancement reports are not
@@ -152,6 +153,10 @@ whole viewport.
 `Rect` (`layout.Rect`, aliased as `flatui.Rect`) is `{X, Y, W, H}` in absolute
 frame cells, with `Contains`, `Inset`, and `Intersect`.
 
+Both solve paths return empty content/geometry for a non-positive viewport.
+Negative/extreme padding and intrinsic sizes saturate, and composition clamps
+padding to the resolved rectangle before calling Lip Gloss.
+
 ### Overlays
 
 Set `Overlay: true` on a node (or a container) to make it a centered layer. It
@@ -221,7 +226,7 @@ will be reviewed for consolidation or relocation before 1.0.
 | Latest request wins | `flatte.Latest(fx, name, work, fold)` | Cancels and drops stale results by name. |
 | Cancel latest request | `flatte.Cancel(fx, name)` | Only cancels work started with `Latest`. It does **not** stop `Every`/`Stream`/`Go` — for those, use a `Scope`. |
 | Cancellable group of work | `flatte.NewScope(fx, name)` + `flatte.ScopeGo`/`ScopeStream`/`ScopeEvery` | `ScopeEvery` returns `ErrInvalidInterval` for a non-positive interval. `scope.Cancel()` stops everything started through the scope (e.g. pause/restart a game tick — `cmd/flat-game`). Create a fresh scope to start again. |
-| Persist state across runs | `flatte.SaveState(path, s)` / `flatte.LoadState(path, defaultState)` | Gob-encoded snapshot (e.g. high scores — `cmd/flat-game`). Use `LoadStateWithError` when missing/corrupt state must be distinguished from a valid zero value. |
+| Persist state across runs | `flatte.SaveState(path, s)` / `flatte.LoadStateWithError(path, defaultState)` | Gob-encoded snapshot. Refuse or explicitly quarantine corrupt state before saving; the flagship samples preserve unreadable files. Unix syncs the containing directory after rename, while other platforms provide file sync + rename without portable directory fsync. |
 | Print above inline frame | `fx.Print(...)` / `fx.Printf(...)` | Requires `flatte.WithInline()`. |
 | Shell out to editor/tool | `flatte.Exec(fx, name, cmd, fold)` | Releases terminal, runs command, restores. |
 | File picker | `flatte.SelectFile(fx, name, cmd, fold)` | App chooses command; `cmd/flat-file-select` shows platform picker selection. |
@@ -301,7 +306,13 @@ cadence. `Driver.Frame` uses a fixed width and a zero-value color profile, and
 does not model the renderer, terminal input/signals, or capability actions such
 as suspend, exec, clipboard, and inline scrollback. `Recorder` stores event and
 update names, not update payloads or `Settle`/`Advance` cadence; use `Driver`
-directly for supersession and timing scenarios.
+directly for supersession and timing scenarios. Its update queue is intentionally
+unbounded for deterministic convergence, so a malicious or erroneous
+synchronous source can allocate memory proportional to its emissions.
+
+Widget width/height setters clamp to 0..65,536 cells. This ceiling is far above
+real terminal dimensions and prevents malformed public values from reaching
+unbounded allocation or repetition primitives.
 
 ## Rules Of Thumb
 

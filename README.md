@@ -211,6 +211,11 @@ can construct effects without a `flatte`/`flatest` import cycle. They are not
 application APIs and will be reviewed for relocation or consolidation before
 1.0.
 
+Public widget dimensions clamp to 0..65,536 cells. `SaveState` syncs the file
+before replacement and additionally syncs the containing directory on Unix;
+use `LoadStateWithError` when corrupt state must be preserved rather than
+silently replaced by defaults.
+
 See [Current terminal input scope](#current-terminal-input-scope) for the
 current input and resize limitations. Apps should size scrollable content with
 `flatui.Viewport` and use `layout.SolveAndCompose` when they need frame geometry

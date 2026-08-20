@@ -12,9 +12,10 @@ import (
 // connections. Anything live gets reopened on boot via a rehydrate step.
 //
 // The file is written and synced beside the destination, then atomically
-// renamed into place. This keeps a previously valid state file intact when
-// encoding or writing the new state fails (for example, when a state gains an
-// unsupported gob field).
+// renamed into place. Unix also syncs the containing directory; platforms
+// without portable directory fsync still receive the file sync and rename.
+// This keeps a previously valid state file intact when encoding or writing the
+// new state fails (for example, when a state gains an unsupported gob field).
 func SaveState[S any](path string, state S) error {
 	dir := filepath.Dir(path)
 	base := filepath.Base(path)
@@ -46,10 +47,10 @@ func SaveState[S any](path string, state S) error {
 	return syncStateDir(dir)
 }
 
-// LoadState gob-decodes state from path, returning defaultState if the file
-// is missing or fails to decode. Struct shape changes during iteration will
-// invalidate old state — the decode-error fallback handles this gracefully
-// instead of crashing.
+// LoadState gob-decodes state from path, returning defaultState if the file is
+// missing or fails to decode. Callers that later save unconditionally can
+// overwrite unreadable evidence; persistent applications should use
+// LoadStateWithError and refuse or explicitly quarantine corrupt state.
 func LoadState[S any](path string, defaultState S) S {
 	state, err := LoadStateWithError(path, defaultState)
 	if err != nil {
