@@ -219,5 +219,5 @@ silently replaced by defaults.
 See [Current terminal input scope](#current-terminal-input-scope) for the
 current input and resize limitations. Apps should size scrollable content with
 `flatui.Viewport`, return layout trees as `Frame.Root` so mouse events carry
-`Target`, and call `layout.Solve` themselves only when widget state depends on
-solved geometry.
+`Target`/`TargetRect`, and adopt solved geometry into widget state from
+`LayoutEvent`, which the runtime delivers before painting.

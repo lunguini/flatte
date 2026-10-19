@@ -56,17 +56,21 @@ type hit struct {
 	rect Rect
 }
 
-// HitTest returns the ID of the topmost ID'd node containing cell (x, y):
-// the last one painted, so children beat parents and overlays beat the base.
-// It returns "" outside the frame, over an overlay area with no ID'd node,
-// or where no ID'd node is painted.
-func (c Composition) HitTest(x, y int) string {
+// HitTest returns the ID and solved rect of the topmost ID'd node containing
+// cell (x, y): the last one painted, so children beat parents and overlays
+// beat the base. The rect is that node's own (not the last-wins entry in
+// Rects when IDs repeat). It returns "" and a zero Rect outside the frame,
+// over an overlay area with no ID'd node, or where no ID'd node is painted.
+func (c Composition) HitTest(x, y int) (string, Rect) {
 	for i := len(c.hits) - 1; i >= 0; i-- {
-		if c.hits[i].rect.Contains(x, y) {
-			return c.hits[i].id
+		if h := c.hits[i]; h.rect.Contains(x, y) {
+			if h.id == "" {
+				return "", Rect{}
+			}
+			return h.id, h.rect
 		}
 	}
-	return ""
+	return "", Rect{}
 }
 
 // Compose is SolveAndCompose returning a Composition, which adds hit-testing

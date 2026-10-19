@@ -110,7 +110,7 @@ func (i *imagesScreen) adopt(rects map[string]layout.Rect) {
 
 func (i *imagesScreen) Handle(s *State, ev flatte.Event, _ flatte.Effects[State]) {
 	if m, ok := ev.(flatte.MouseEvent); ok {
-		i.handleMouse(s, m)
+		i.handleMouse(m)
 		return
 	}
 	key, ok := ev.(flatte.KeyEvent)
@@ -144,7 +144,7 @@ func (i *imagesScreen) Handle(s *State, ev flatte.Event, _ flatte.Effects[State]
 	}
 }
 
-func (i *imagesScreen) handleMouse(root *State, m flatte.MouseEvent) {
+func (i *imagesScreen) handleMouse(m flatte.MouseEvent) {
 	if i.drag != nil {
 		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
 			i.drag = nil
@@ -155,19 +155,18 @@ func (i *imagesScreen) handleMouse(root *State, m flatte.MouseEvent) {
 			newList := i.drag.startWidth + delta
 			maxList := i.width - minDetailWidth - dividerWidth
 			i.listPaneWidth = max(minListWidth, min(newList, maxList))
-			root.refreshActiveRects()
 			return
 		}
 		return
 	}
 
-	if m.Action == flatte.MousePress && i.rects["div0"].Contains(m.X, m.Y) {
+	if m.Action == flatte.MousePress && m.Target == "div0" {
 		i.drag = &splitDrag{startX: m.X, startWidth: i.listPaneWidth}
 		return
 	}
 
-	if listR := i.rects["list"]; listR.Contains(m.X, m.Y) {
-		i.handleImageListMouse(m, m.X-listR.X, m.Y-listR.Y)
+	if m.Target == "list" {
+		i.handleImageListMouse(m, m.X-m.TargetRect.X, m.Y-m.TargetRect.Y)
 	}
 }
 

@@ -27,10 +27,10 @@ func TestComposeFrameResolvesRoot(t *testing.T) {
 	if frame.Title != "t" || frame.Cursor != cursor || frame.Root == nil {
 		t.Fatalf("metadata not preserved: %+v", frame)
 	}
-	if got := comp.HitTest(0, 0); got != "header" {
+	if got, _ := comp.HitTest(0, 0); got != "header" {
 		t.Fatalf("HitTest(0,0) = %q, want header", got)
 	}
-	if got := comp.HitTest(0, 3); got != "body" {
+	if got, _ := comp.HitTest(0, 3); got != "body" {
 		t.Fatalf("HitTest(0,3) = %q, want body", got)
 	}
 }
@@ -41,14 +41,14 @@ func TestComposeFrameWithoutRootIsUnchanged(t *testing.T) {
 	if !framesEqual(frame, in) || frame.Root != nil {
 		t.Fatalf("frame changed: %+v", frame)
 	}
-	if got := comp.HitTest(0, 0); got != "" {
+	if got, _ := comp.HitTest(0, 0); got != "" {
 		t.Fatalf("HitTest without Root = %q, want \"\"", got)
 	}
 }
 
 func TestComposeFrameDegenerateSize(t *testing.T) {
 	frame, comp := ComposeFrame(Frame{Root: rootTree(), Content: "stale"}, 0, 4)
-	if frame.Content != "" || comp.HitTest(0, 0) != "" {
+	if id, _ := comp.HitTest(0, 0); frame.Content != "" || id != "" {
 		t.Fatalf("zero-width compose = %q", frame.Content)
 	}
 }

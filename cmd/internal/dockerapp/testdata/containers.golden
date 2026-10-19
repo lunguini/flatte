@@ -1,16 +1,16 @@
 flat-docker                        1 containers    2 images    3 volumes  
 ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
- filter: (all)        nginx-proxy  stats    logs      activity              
-                        inspect                      
- ●> nginx-proxy                                          (no events yet)
- ●  api-server          status: running                 
- ●  postgres            image:  nginx:1.25              
- ●  redis-cache                                         
- ○  frontend            CPU █████████░░░░░░   63%       
- ●  worker              hist (no history)               
- ●  nginx-web                                           
- ○  migration       │   MEM █████░░░░░░░░░░   35%      │
-                        hist (no history)               
+ filter: (all)          stats    logs    inspect    activity              
+                                                        
+ ●> nginx-proxy         status: running                  (no events yet)
+ ●  api-server          image:  nginx:1.25              
+ ●  postgres                                            
+ ●  redis-cache         CPU █████████░░░░░░   63%       
+ ○  frontend            hist (no history)               
+ ●  worker                                              
+ ●  nginx-web           MEM █████░░░░░░░░░░   35%       
+ ○  migration       │   hist (no history)              │
+                                                        
                                                         
                                                         
                                                         

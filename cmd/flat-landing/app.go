@@ -103,6 +103,12 @@ type State struct {
 	gameFx   flatte.Effects[snakeapp.State]
 	docker   *dockerapp.State
 	dockerFx flatte.Effects[dockerapp.State]
+	// dockerLayout/dockerComp are this host's side of the docker app's
+	// layout, as Run keeps them for a top-level app: the rects last delivered
+	// as a LayoutEvent and the composition on screen, which forwarded mouse
+	// events are hit-tested against.
+	dockerLayout map[string]layout.Rect
+	dockerComp   layout.Composition
 
 	// UI-tab component picker + animated preview widgets.
 	catalog flatui.List
@@ -178,6 +184,7 @@ func (s *State) reflow() {
 			s.appW, s.appH = contentWidth, contentHeight
 			dockerapp.Handle(s.docker, flatte.ResizeEvent{Width: contentWidth, Height: contentHeight}, s.dockerFx)
 		}
+		s.settleDocker()
 	case tabUI:
 		listW := max(min(contentWidth/3, 20), 12)
 		listHeight := max(contentHeight-1, 1)
@@ -217,6 +224,7 @@ func Tick(s *State, now time.Time) {
 		snakeapp.TickElapsed(s.game, elapsed)
 	case tabApp:
 		dockerapp.Tick(s.docker, now, s.frame)
+		s.settleDocker()
 	case tabUI:
 		s.spin.Tick()
 		p := float64(s.frame%80) / 40.0
@@ -342,6 +350,7 @@ func (s *State) forwardMouse(m flatte.MouseEvent) {
 		// its own rect-based hit-testing lines up with what's on screen.
 		local := m
 		local.X, local.Y = m.X-s.coX, m.Y-s.coY
+		local.Target, local.TargetRect = s.dockerComp.HitTest(local.X, local.Y)
 		dockerapp.Handle(s.docker, local, s.dockerFx)
 	case tabUI:
 		r := s.uiList
@@ -457,7 +466,8 @@ func contentView(s *State, st styles, r layout.Rect, width int) string {
 	case tabGame:
 		return snakeapp.View(s.game, flatte.RenderContext{Width: width}).Content
 	case tabApp:
-		return dockerapp.View(s.docker, flatte.RenderContext{Width: width}).Content
+		frame, _ := flatte.ComposeFrame(dockerapp.View(s.docker, flatte.RenderContext{Width: s.appW}), s.appW, s.appH)
+		return frame.Content
 	case tabLayout:
 		return layoutTabView(st, width, height)
 	case tabUI:
@@ -1017,4 +1027,16 @@ func exitOnError(err error) {
 	}
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
+}
+
+// settleDocker settles the hosted docker app's layout exactly as Run would
+// for a top-level app: its frame tree is solved at the content-pane size and
+// any changed geometry is delivered to it as a LayoutEvent. It runs after
+// every event or tick that reaches docker, so View only composes.
+func (s *State) settleDocker() {
+	_, s.dockerComp, s.dockerLayout = flatte.SettleFrame(
+		func() flatte.Frame { return dockerapp.View(s.docker, flatte.RenderContext{Width: s.appW}) },
+		func(ev flatte.LayoutEvent) { dockerapp.Handle(s.docker, ev, s.dockerFx) },
+		s.dockerLayout, s.appW, s.appH,
+	)
 }

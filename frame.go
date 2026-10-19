@@ -2,6 +2,7 @@ package flatte
 
 import (
 	"image/color"
+	"maps"
 
 	"github.com/lunguini/flatte/flatui/layout"
 )
@@ -58,6 +59,40 @@ func ComposeFrame(frame Frame, width, height int) (Frame, layout.Composition) {
 	c := layout.Compose(frame.Root, width, height)
 	frame.Content = c.Frame
 	return frame, c
+}
+
+// maxLayoutPasses bounds how many LayoutEvents one render delivers. Two
+// covers the common chain (a pane's size sets a list's rows, which moves the
+// row rects). Geometry still changing after that is painted as-is and
+// re-delivered on the next render, so a non-converging app cannot stall.
+const maxLayoutPasses = 2
+
+// SettleFrame renders one frame the way Run does. It calls view and composes
+// a Root at width×height; while the solved rects differ from last, it
+// delivers a copy of them to handle as a LayoutEvent and renders again, at
+// most maxLayoutPasses times. It returns the frame to paint, its composition
+// (for hit-testing), and the rects last delivered, to pass back as last on
+// the next render. Frames without Root, or a nil handle, deliver nothing.
+// Hosts and test harnesses use it so every host settles layout identically.
+func SettleFrame(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width, height int) (Frame, layout.Composition, map[string]layout.Rect) {
+	return settleFrame(view, handle, last, width, func(layout.Node) int { return height })
+}
+
+// settleFrame is SettleFrame with a per-root height, which inline Run needs
+// because an inline frame's height comes from its root.
+func settleFrame(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width int, heightFor func(layout.Node) int) (Frame, layout.Composition, map[string]layout.Rect) {
+	for pass := 0; ; pass++ {
+		frame := view()
+		if frame.Root == nil {
+			return frame, layout.Composition{}, last
+		}
+		frame, comp := ComposeFrame(frame, width, heightFor(frame.Root))
+		if handle == nil || pass == maxLayoutPasses || maps.Equal(comp.Rects, last) {
+			return frame, comp, last
+		}
+		last = comp.Rects
+		handle(LayoutEvent{Rects: maps.Clone(last)})
+	}
 }
 
 // rootHeight is the height a Root frame is composed at. Alt-screen frames

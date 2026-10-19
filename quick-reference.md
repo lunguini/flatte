@@ -38,6 +38,7 @@ Use these names for every app:
 | Window size | handle `flatte.ResizeEvent` |
 | Keyboard | type switch to `flatte.KeyEvent` |
 | Mouse | `flatte.WithMouse(...)` plus `flatte.MouseEvent` |
+| Solved layout of a `Frame.Root` | handle `flatte.LayoutEvent` |
 | Inline (non-fullscreen) mode | `flatte.WithInline()` |
 | Handle Ctrl+C yourself | `flatte.WithoutDefaultQuit()` |
 
@@ -155,10 +156,13 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 With `Frame.Root` set, the runtime composes the tree at the terminal width
 and height (alt screen) or at the root's own height (inline), ignores
 `Content`, and fills `MouseEvent.Target` with the ID of the topmost ID'd node
-under the pointer — so `View` needs no size bookkeeping and `Handle` needs no
-hit-test solve. `flatest.Driver` composes `Root` and fills `Target` the same
-way, at its width and the last `ResizeEvent` height. `flatte.ComposeFrame`
-is the shared helper both use.
+under the pointer (and `TargetRect` with that node's solved rect) — so `View`
+needs no size bookkeeping and `Handle` needs no hit-test solve. Before
+painting, it delivers a `LayoutEvent` whenever the solved rects changed (see
+[Geometry in state](#geometry-in-state)). `flatest.Driver` does all of this the
+same way, at its width and the last `ResizeEvent` height: both go through
+`flatte.SettleFrame` (and `flatte.ComposeFrame`), which an app hosting another
+app can call too.
 
 Call the solver yourself when you need the geometry somewhere else:
 
@@ -209,10 +213,43 @@ case flatte.MouseEvent:
 	}
 ```
 
-Apps still solve at event time when widget state depends on geometry — for
-example a list whose visible row count comes from its solved rect, or a hosted
-app sized to a pane. Because `SolveAndCompose` records every ID'd node's rect,
-that path is a map lookup too — no coordinate math in app code. For tabs:
+`TargetRect` makes the click node-local without a rect lookup:
+
+```go
+if ev.Target == "list" {
+	s.list.Select(s.list.Offset() + ev.Y - ev.TargetRect.Y)
+}
+```
+
+### Geometry in state
+
+When widget state depends on solved geometry — a list whose visible row count
+comes from its pane, a detail pane's width, a hosted app sized to a pane —
+handle `flatte.LayoutEvent` the way you handle `ResizeEvent`:
+
+```go
+case flatte.LayoutEvent:
+	s.rects = ev.Rects // keep it if other code needs geometry later
+	s.list.SetHeight(ev.Rects["list"].H - 2)
+```
+
+With `Frame.Root`, the runtime solves the tree and, if the ID'd rects differ
+from the ones it last delivered, delivers them **before painting**, then
+renders again — up to two times per frame, which covers the usual chain
+(pane size → list rows → row rects). The frame on screen therefore already
+reflects adopted sizes. Geometry still changing after two passes is painted
+as-is and re-delivered on the next render, so a non-converging app cannot
+stall the loop. Effects queued while handling a `LayoutEvent` run right after
+that frame.
+
+A `LayoutEvent` arrives only when geometry **changes**. If your state starts
+consuming geometry without it changing — for example switching between two
+screens with identical layouts — adopt the rects from the last `LayoutEvent`
+you kept; unchanged, they still describe the frame.
+
+Without `Frame.Root` (string frames), solve at event time yourself. Because
+`SolveAndCompose` records every ID'd node's rect, that path is a map lookup
+too — no coordinate math in app code. For tabs:
 
 ```go
 // Build once; WithID tags the strip and each tab with a layout ID.

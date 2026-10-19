@@ -20,7 +20,7 @@ import (
 
 func resizedState(width, height int) *State {
 	s := NewState()
-	Handle(s, flatte.ResizeEvent{Width: width, Height: height}, flatte.Effects[State]{})
+	send(s, flatte.ResizeEvent{Width: width, Height: height}, flatte.Effects[State]{})
 	return s
 }
 
@@ -64,18 +64,21 @@ func TestNewStateOwnsMutableSampleData(t *testing.T) {
 	}
 }
 
-func TestIgnoredMouseMotionDoesNotReflow(t *testing.T) {
+func TestIgnoredMouseMotionDeliversNoLayout(t *testing.T) {
 	s := resizedState(80, 24)
-	before := s.reflowCount
-	Handle(s, flatte.MouseEvent{Action: flatte.MouseMotion, Button: flatte.MouseNone, X: 3, Y: 3}, flatte.Effects[State]{})
-	if s.reflowCount != before {
-		t.Fatalf("ignored mouse motion reflowed geometry: count %d -> %d", before, s.reflowCount)
+	before := hostFor(s).layouts
+	send(s, flatte.MouseEvent{Action: flatte.MouseMotion, Button: flatte.MouseNone, X: 3, Y: 3}, flatte.Effects[State]{})
+	if got := hostFor(s).layouts; got != before {
+		t.Fatalf("ignored mouse motion changed geometry: layout events %d -> %d", before, got)
 	}
 }
 
 func TestViewDoesNotMutatePreparedGeometryOrWidgets(t *testing.T) {
 	s := resizedState(80, 24)
 	cloneRects := func(in map[string]layout.Rect) map[string]layout.Rect {
+		if in == nil {
+			return nil
+		}
 		out := make(map[string]layout.Rect, len(in))
 		for id, r := range in {
 			out[id] = r
@@ -107,7 +110,7 @@ func TestViewDoesNotMutatePreparedGeometryOrWidgets(t *testing.T) {
 	}
 }
 
-func TestResizePreparesFullFrameAndInteractiveGeometry(t *testing.T) {
+func TestResizeAndScreenSwitchPrepareGeometryBeforePaint(t *testing.T) {
 	s := resizedState(80, 24)
 	for _, id := range []string{"header", "list", "detail", "status"} {
 		r, ok := s.rects[id]
@@ -118,27 +121,34 @@ func TestResizePreparesFullFrameAndInteractiveGeometry(t *testing.T) {
 	if r, ok := s.containers.zones.Rect("list:1"); !ok || r.W <= 0 || r.H != 1 {
 		t.Fatalf("resize did not prepare list row geometry: %+v, %v", r, ok)
 	}
-	for name, rects := range map[string]map[string]layout.Rect{
-		"images":  s.images.rects,
-		"volumes": s.volumes.rects,
+	// Inactive screens are not pre-solved: switching to one delivers its
+	// geometry as a LayoutEvent before its first frame is painted.
+	for _, sw := range []struct {
+		key   rune
+		name  string
+		rects func() map[string]layout.Rect
+	}{
+		{'2', "images", func() map[string]layout.Rect { return s.images.rects }},
+		{'3', "volumes", func() map[string]layout.Rect { return s.volumes.rects }},
 	} {
-		if r, ok := rects["list"]; !ok || r.W <= 0 || r.H <= 0 {
-			t.Fatalf("resize did not prepare %s list geometry: %+v, %v", name, r, ok)
+		send(s, keyChar(sw.key), flatte.Effects[State]{})
+		if r, ok := sw.rects()["list"]; !ok || r.W <= 0 || r.H <= 0 {
+			t.Fatalf("switch did not prepare %s list geometry before paint: %+v, %v", sw.name, r, ok)
 		}
 	}
 }
 
 func TestEventReflowCoversModalScreenAndListEarlyReturns(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
 	if _, ok := s.rects["status"]; !ok {
 		t.Fatal("opening command modal lost full-frame status geometry")
 	}
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
 	if s.commandModal != nil {
 		t.Fatal("command modal did not close")
 	}
-	Handle(s, keyChar('2'), flatte.Effects[State]{})
+	send(s, keyChar('2'), flatte.Effects[State]{})
 	if s.screen != screenImages {
 		t.Fatal("screen switch did not apply")
 	}
@@ -146,7 +156,7 @@ func TestEventReflowCoversModalScreenAndListEarlyReturns(t *testing.T) {
 		t.Fatalf("screen early return did not reflow active geometry: rects=%v", s.rects)
 	}
 	start := s.images.list.Cursor()
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.images.list.Cursor() != start+1 {
 		t.Fatalf("list event did not apply after screen reflow: got %d, want %d", s.images.list.Cursor(), start+1)
 	}
@@ -155,7 +165,7 @@ func TestEventReflowCoversModalScreenAndListEarlyReturns(t *testing.T) {
 func TestSolveAndComposeMatchesPreparedGeometry(t *testing.T) {
 	s := resizedState(80, 24)
 	want := layout.Solve(s.frameTree(), 80, 24)
-	_ = View(s, flatte.RenderContext{Width: 80})
+	_ = render(s)
 	if !reflect.DeepEqual(s.rects, want) {
 		t.Fatalf("prepared geometry differs from the shared frame solve:\nprepared=%v\nwant=%v", s.rects, want)
 	}
@@ -168,17 +178,17 @@ func TestSolveAndComposeMatchesPreparedGeometry(t *testing.T) {
 func TestNumberKeysSwitchScreens(t *testing.T) {
 	s := resizedState(80, 24)
 
-	Handle(s, keyChar('2'), flatte.Effects[State]{})
+	send(s, keyChar('2'), flatte.Effects[State]{})
 	if s.screen != screenImages {
 		t.Fatalf("after 2: screen = %v, want images", s.screen)
 	}
 
-	Handle(s, keyChar('3'), flatte.Effects[State]{})
+	send(s, keyChar('3'), flatte.Effects[State]{})
 	if s.screen != screenVolumes {
 		t.Fatalf("after 3: screen = %v, want volumes", s.screen)
 	}
 
-	Handle(s, keyChar('1'), flatte.Effects[State]{})
+	send(s, keyChar('1'), flatte.Effects[State]{})
 	if s.screen != screenContainers {
 		t.Fatalf("after 1: screen = %v, want containers", s.screen)
 	}
@@ -188,7 +198,7 @@ func TestQQuits(t *testing.T) {
 	s := resizedState(80, 24)
 	var quit bool
 	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
-	Handle(s, keyChar('q'), fx)
+	send(s, keyChar('q'), fx)
 	if !quit {
 		t.Fatal("q did not quit")
 	}
@@ -198,7 +208,7 @@ func TestNonGlobalKeyFallsThroughToActiveScreen(t *testing.T) {
 	s := resizedState(80, 24)
 	before := s.screen
 
-	Handle(s, keyChar('x'), flatte.Effects[State]{})
+	send(s, keyChar('x'), flatte.Effects[State]{})
 	if s.screen != before {
 		t.Fatalf("non-global key changed screen from %v to %v", before, s.screen)
 	}
@@ -225,7 +235,7 @@ func TestHeaderBorderSpansFullHeaderWidth(t *testing.T) {
 
 func TestBodyYOffsetMatchesRenderedBodyStart(t *testing.T) {
 	s := resizedState(80, 24)
-	frame := View(s, flatte.RenderContext{Width: 80})
+	frame := render(s)
 
 	lines := strings.Split(ansi.Strip(frame.Content), "\n")
 	renderedY := -1
@@ -253,12 +263,13 @@ func TestSeparatorClaimsRenderedHeight(t *testing.T) {
 func TestViewTitleReflectsActiveScreen(t *testing.T) {
 	s := resizedState(80, 24)
 
-	if got := View(s, flatte.RenderContext{Width: 80}).Title; got != "flat-docker — containers" {
+	if got := render(s).Title; got != "flat-docker — containers" {
 		t.Fatalf("title = %q", got)
 	}
 
 	s.screen = screenImages
-	if got := View(s, flatte.RenderContext{Width: 80}).Title; got != "flat-docker — images" {
+	_ = render(s) // the switched screen is on screen before any click
+	if got := render(s).Title; got != "flat-docker — images" {
 		t.Fatalf("title = %q", got)
 	}
 }
@@ -266,7 +277,7 @@ func TestViewTitleReflectsActiveScreen(t *testing.T) {
 func TestViewRendersSharedChromeAndActiveScreenBody(t *testing.T) {
 	s := resizedState(80, 24)
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 
 	if !strings.Contains(content, "1 containers") {
 		t.Fatalf("containers tab label missing in:\n%s", content)
@@ -292,19 +303,22 @@ func TestFooterClaimsRenderedHeight(t *testing.T) {
 func TestViewMatchesContainersGolden(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenContainers
-	flatest.AssertGoldenFrame(t, "testdata/containers.golden", View(s, flatte.RenderContext{Width: 80}))
+	_ = render(s) // the switched screen is on screen before any click
+	flatest.AssertGoldenFrame(t, "testdata/containers.golden", render(s))
 }
 
 func TestViewMatchesImagesGolden(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
-	flatest.AssertGoldenFrame(t, "testdata/images.golden", View(s, flatte.RenderContext{Width: 80}))
+	_ = render(s) // the switched screen is on screen before any click
+	flatest.AssertGoldenFrame(t, "testdata/images.golden", render(s))
 }
 
 func TestViewMatchesVolumesGolden(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenVolumes
-	flatest.AssertGoldenFrame(t, "testdata/volumes.golden", View(s, flatte.RenderContext{Width: 80}))
+	_ = render(s) // the switched screen is on screen before any click
+	flatest.AssertGoldenFrame(t, "testdata/volumes.golden", render(s))
 }
 
 func TestContainersFocusStartsOnList(t *testing.T) {
@@ -318,7 +332,7 @@ func TestTabCyclesFocusForwardThroughListDetailFilter(t *testing.T) {
 	s := resizedState(80, 24)
 	want := []int{focusDetail, focusFilter, focusList}
 	for _, w := range want {
-		Handle(s, keyTab(false), flatte.Effects[State]{})
+		send(s, keyTab(false), flatte.Effects[State]{})
 		if !s.containers.focus.Focused(w) {
 			t.Fatalf("after Tab, focus = %d, want %d", s.containers.focus.Index(), w)
 		}
@@ -327,7 +341,7 @@ func TestTabCyclesFocusForwardThroughListDetailFilter(t *testing.T) {
 
 func TestShiftTabCyclesFocusBackward(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyTab(true), flatte.Effects[State]{})
+	send(s, keyTab(true), flatte.Effects[State]{})
 	if !s.containers.focus.Focused(focusFilter) {
 		t.Fatalf("after Shift-Tab from list, focus = %d, want %d (filter)", s.containers.focus.Index(), focusFilter)
 	}
@@ -338,7 +352,7 @@ func TestFilterTypingNarrowsList(t *testing.T) {
 	s.containers.focus.Select(focusFilter)
 
 	for _, r := range "nginx" {
-		Handle(s, keyChar(r), flatte.Effects[State]{})
+		send(s, keyChar(r), flatte.Effects[State]{})
 	}
 
 	want := []string{"nginx-proxy", "nginx-web"}
@@ -356,10 +370,10 @@ func TestFilterBackspaceRestoresItems(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusFilter)
 	for _, r := range "nginx" {
-		Handle(s, keyChar(r), flatte.Effects[State]{})
+		send(s, keyChar(r), flatte.Effects[State]{})
 	}
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyBackspace}, flatte.Effects[State]{})
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyBackspace}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyBackspace}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyBackspace}, flatte.Effects[State]{})
 
 	if got := len(s.containers.filtered); got != 2 {
 		t.Fatalf("after 'ngi' filter, filtered has %d items, want 2 (only nginx-proxy and nginx-web contain 'ngi')", got)
@@ -373,13 +387,13 @@ func TestListMovementOnlyWhenListFocused(t *testing.T) {
 	}
 	startCursor := s.containers.list.Cursor()
 
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.containers.list.Cursor() != startCursor+1 {
 		t.Fatalf("j on list focus: cursor = %d, want %d", s.containers.list.Cursor(), startCursor+1)
 	}
 
-	Handle(s, keyTab(false), flatte.Effects[State]{}) // list → detail
-	Handle(s, keyChar('j'), flatte.Effects[State]{})  // detail ignores j
+	send(s, keyTab(false), flatte.Effects[State]{}) // list → detail
+	send(s, keyChar('j'), flatte.Effects[State]{})  // detail ignores j
 	if s.containers.list.Cursor() != startCursor+1 {
 		t.Fatalf("j on detail focus should not move list, cursor = %d", s.containers.list.Cursor())
 	}
@@ -390,7 +404,7 @@ func TestFilterTypingDoesNotMoveList(t *testing.T) {
 	s.containers.focus.Select(focusFilter)
 	startCursor := s.containers.list.Cursor()
 
-	Handle(s, keyChar('j'), flatte.Effects[State]{}) // j edits filter, not list
+	send(s, keyChar('j'), flatte.Effects[State]{}) // j edits filter, not list
 	if s.containers.list.Cursor() != startCursor {
 		t.Fatalf("j on filter focus should not move list, cursor = %d", s.containers.list.Cursor())
 	}
@@ -401,9 +415,9 @@ func TestFilterTypingDoesNotMoveList(t *testing.T) {
 
 func TestDetailShowsSelectedContainer(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('j'), flatte.Effects[State]{}) // list focus, move to second item
+	send(s, keyChar('j'), flatte.Effects[State]{}) // list focus, move to second item
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "api-server") {
 		t.Fatalf("detail pane missing selected name in:\n%s", content)
 	}
@@ -416,10 +430,10 @@ func TestDetailShowsEmptyStateWhenNoMatches(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusFilter)
 	for _, r := range "zzz" {
-		Handle(s, keyChar(r), flatte.Effects[State]{})
+		send(s, keyChar(r), flatte.Effects[State]{})
 	}
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "no container selected") {
 		t.Fatalf("empty detail state missing in:\n%s", content)
 	}
@@ -450,17 +464,17 @@ func TestRightBracketSwitchesToNextTab(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusDetail)
 
-	Handle(s, keyChar(']'), flatte.Effects[State]{})
+	send(s, keyChar(']'), flatte.Effects[State]{})
 	if s.containers.tab != tabLogs {
 		t.Fatalf("after ] from stats, tab = %v, want logs", s.containers.tab)
 	}
 
-	Handle(s, keyChar(']'), flatte.Effects[State]{})
+	send(s, keyChar(']'), flatte.Effects[State]{})
 	if s.containers.tab != tabInspect {
 		t.Fatalf("after ] from logs, tab = %v, want inspect", s.containers.tab)
 	}
 
-	Handle(s, keyChar(']'), flatte.Effects[State]{})
+	send(s, keyChar(']'), flatte.Effects[State]{})
 	if s.containers.tab != tabStats {
 		t.Fatalf("after ] from inspect (wrap), tab = %v, want stats", s.containers.tab)
 	}
@@ -470,7 +484,7 @@ func TestLeftBracketSwitchesToPreviousTab(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusDetail)
 
-	Handle(s, keyChar('['), flatte.Effects[State]{})
+	send(s, keyChar('['), flatte.Effects[State]{})
 	if s.containers.tab != tabInspect {
 		t.Fatalf("after [ from stats (wrap), tab = %v, want inspect", s.containers.tab)
 	}
@@ -480,12 +494,12 @@ func TestHLAlsoSwitchTabs(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusDetail)
 
-	Handle(s, keyChar('l'), flatte.Effects[State]{})
+	send(s, keyChar('l'), flatte.Effects[State]{})
 	if s.containers.tab != tabLogs {
 		t.Fatalf("after l, tab = %v, want logs", s.containers.tab)
 	}
 
-	Handle(s, keyChar('h'), flatte.Effects[State]{})
+	send(s, keyChar('h'), flatte.Effects[State]{})
 	if s.containers.tab != tabStats {
 		t.Fatalf("after h, tab = %v, want stats", s.containers.tab)
 	}
@@ -495,17 +509,17 @@ func TestLeftRightArrowsAlsoSwitchTabs(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusDetail)
 
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
 	if s.containers.tab != tabLogs {
 		t.Fatalf("after Right arrow, tab = %v, want logs", s.containers.tab)
 	}
 
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyRight}, flatte.Effects[State]{})
 	if s.containers.tab != tabInspect {
 		t.Fatalf("after second Right, tab = %v, want inspect", s.containers.tab)
 	}
 
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
 	if s.containers.tab != tabLogs {
 		t.Fatalf("after Left from inspect, tab = %v, want logs", s.containers.tab)
 	}
@@ -515,12 +529,12 @@ func TestLeftArrowInFilterMovesCursor(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusFilter)
 	for _, r := range "abc" {
-		Handle(s, keyChar(r), flatte.Effects[State]{})
+		send(s, keyChar(r), flatte.Effects[State]{})
 	}
 	if s.containers.filter.Cursor != 3 {
 		t.Fatalf("filter cursor = %d, want 3", s.containers.filter.Cursor)
 	}
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyLeft}, flatte.Effects[State]{})
 	if s.containers.filter.Cursor != 2 {
 		t.Fatalf("after Left in filter, cursor = %d, want 2", s.containers.filter.Cursor)
 	}
@@ -545,11 +559,11 @@ func TestScrollbarLinesEmptyWhenContentFits(t *testing.T) {
 
 func TestInspectTabShowsScrollbarWhenContentOverflows(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80}) // populate zones
+	render(s) // populate zones
 	s.containers.focus.Select(focusDetail)
 	s.containers.tab = tabInspect
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "█") {
 		t.Fatalf("inspect scrollbar (thumb) not rendered:\n%s", content)
 	}
@@ -560,10 +574,10 @@ func TestInspectTabShowsScrollbarWhenContentOverflows(t *testing.T) {
 
 func TestMouseWheelScrollsListWhenOverListPane(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 	startCursor := s.containers.list.Cursor()
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseWheelDown,
 		X:      2, Y: 6,
@@ -577,13 +591,13 @@ func TestMouseWheelScrollsListWhenOverListPane(t *testing.T) {
 
 func TestMouseWheelScrollsDetailViewportWhenOverDetailPane(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 	s.containers.focus.Select(focusDetail)
 	s.containers.tab = tabInspect
 	startOffset := s.containers.inspect.Offset()
 
 	detailX := s.containers.listPaneWidth + 4
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseWheelDown,
 		X:      detailX, Y: 6,
@@ -600,7 +614,7 @@ func TestFKeyPagesDownInLogsTab(t *testing.T) {
 	s.containers.tab = tabLogs
 	startOffset := s.containers.logs.Offset()
 
-	Handle(s, keyChar('f'), flatte.Effects[State]{})
+	send(s, keyChar('f'), flatte.Effects[State]{})
 
 	if s.containers.logs.Offset() == startOffset && s.containers.logs.TotalLines() > s.containers.logs.VisibleLines() {
 		t.Fatalf("f did not page-down logs (offset stayed %d)", s.containers.logs.Offset())
@@ -622,7 +636,7 @@ func TestBKeyPagesUpInLogsTab(t *testing.T) {
 			s.containers.logs.TotalLines(), s.containers.logs.VisibleLines())
 	}
 
-	Handle(s, keyChar('b'), flatte.Effects[State]{})
+	send(s, keyChar('b'), flatte.Effects[State]{})
 
 	if s.containers.logs.Offset() >= startOffset {
 		t.Fatalf("b did not page-up logs (offset %d -> %d)", startOffset, s.containers.logs.Offset())
@@ -636,13 +650,13 @@ func TestDAndUHalfPageInspect(t *testing.T) {
 	s.containers.inspect.GotoBottom()
 	startOffset := s.containers.inspect.Offset()
 
-	Handle(s, keyChar('u'), flatte.Effects[State]{})
+	send(s, keyChar('u'), flatte.Effects[State]{})
 	if s.containers.inspect.Offset() >= startOffset {
 		t.Fatalf("u did not half-page-up inspect (offset %d -> %d)", startOffset, s.containers.inspect.Offset())
 	}
 
 	midOffset := s.containers.inspect.Offset()
-	Handle(s, keyChar('d'), flatte.Effects[State]{})
+	send(s, keyChar('d'), flatte.Effects[State]{})
 	if s.containers.inspect.Offset() <= midOffset {
 		t.Fatalf("d did not half-page-down inspect (offset %d -> %d)", midOffset, s.containers.inspect.Offset())
 	}
@@ -653,8 +667,8 @@ func TestPageKeysDoNothingWhenFilterFocused(t *testing.T) {
 	s.containers.focus.Select(focusFilter)
 	startValue := s.containers.filter.Value
 
-	Handle(s, keyChar('f'), flatte.Effects[State]{})
-	Handle(s, keyChar('b'), flatte.Effects[State]{})
+	send(s, keyChar('f'), flatte.Effects[State]{})
+	send(s, keyChar('b'), flatte.Effects[State]{})
 
 	if s.containers.filter.Value != startValue+"fb" {
 		t.Fatalf("f/b should edit filter when filter-focused; got %q want %q", s.containers.filter.Value, startValue+"fb")
@@ -663,7 +677,7 @@ func TestPageKeysDoNothingWhenFilterFocused(t *testing.T) {
 
 func TestColonOpensCommandBarFromListFocus(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
 	if s.commandModal == nil {
 		t.Fatal("command bar not opened after :")
 	}
@@ -672,7 +686,7 @@ func TestColonOpensCommandBarFromListFocus(t *testing.T) {
 func TestColonDoesNotOpenWhenFilterFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusFilter)
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
 	if s.commandModal != nil {
 		t.Fatal("command bar opened from filter focus — should have typed into filter instead")
 	}
@@ -683,11 +697,11 @@ func TestColonDoesNotOpenWhenFilterFocused(t *testing.T) {
 
 func TestCommandBarCapturesKeysUntilClosed(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
 
 	// j during command bar should NOT move the list
 	listCursorBefore := s.containers.list.Cursor()
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.containers.list.Cursor() != listCursorBefore {
 		t.Fatalf("j leaked through to list during command: %d -> %d", listCursorBefore, s.containers.list.Cursor())
 	}
@@ -698,8 +712,8 @@ func TestCommandBarCapturesKeysUntilClosed(t *testing.T) {
 
 func TestEscClosesCommandBar(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
 	if s.commandModal != nil {
 		t.Fatal("command bar not closed after Esc")
 	}
@@ -707,11 +721,11 @@ func TestEscClosesCommandBar(t *testing.T) {
 
 func TestEnterExecutesFilterCommand(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
 	for _, r := range "filter nginx" {
-		Handle(s, keyChar(r), flatte.Effects[State]{})
+		send(s, keyChar(r), flatte.Effects[State]{})
 	}
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
 	if s.commandModal != nil {
 		t.Fatal("command bar should auto-close after Enter (lazydocker convention)")
@@ -726,11 +740,11 @@ func TestEnterExecutesFilterCommand(t *testing.T) {
 
 func TestEnterGotoCommandClosesBar(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
 	for _, r := range "goto images" {
-		Handle(s, keyChar(r), flatte.Effects[State]{})
+		send(s, keyChar(r), flatte.Effects[State]{})
 	}
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
 	if s.commandModal != nil {
 		t.Fatal("command bar should close after :goto")
@@ -744,26 +758,26 @@ func TestCommandHistoryNavigation(t *testing.T) {
 	s := resizedState(80, 24)
 	// Execute three commands
 	for _, cmd := range []string{"filter a", "filter b", "filter c"} {
-		Handle(s, keyChar(':'), flatte.Effects[State]{})
+		send(s, keyChar(':'), flatte.Effects[State]{})
 		for _, r := range cmd {
-			Handle(s, keyChar(r), flatte.Effects[State]{})
+			send(s, keyChar(r), flatte.Effects[State]{})
 		}
-		Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+		send(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 	}
 
 	// Open fresh, press Up — should recall "filter c"
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
 	if s.commandModal.input.Value != "filter c" {
 		t.Fatalf("after one Up, input = %q, want 'filter c'", s.commandModal.input.Value)
 	}
 
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
 	if s.commandModal.input.Value != "filter b" {
 		t.Fatalf("after two Up, input = %q, want 'filter b'", s.commandModal.input.Value)
 	}
 
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyDown}, flatte.Effects[State]{})
 	if s.commandModal.input.Value != "filter c" {
 		t.Fatalf("after Up Up Down, input = %q, want 'filter c'", s.commandModal.input.Value)
 	}
@@ -772,11 +786,11 @@ func TestCommandHistoryNavigation(t *testing.T) {
 func TestCommandOutputRoutesToActivityFeed(t *testing.T) {
 	s := resizedState(80, 24)
 	before := len(s.containers.activity)
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
 	for _, r := range "help" {
-		Handle(s, keyChar(r), flatte.Effects[State]{})
+		send(s, keyChar(r), flatte.Effects[State]{})
 	}
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
 	after := len(s.containers.activity)
 	if after < before+2 {
@@ -790,13 +804,13 @@ func TestCommandOutputRoutesToActivityFeed(t *testing.T) {
 
 func TestCommandBarReplacesStatusLineWhenOpen(t *testing.T) {
 	s := resizedState(80, 24)
-	closedContent := View(s, flatte.RenderContext{Width: 80}).Content
+	closedContent := render(s).Content
 	if !strings.Contains(closedContent, "avg CPU") {
 		t.Fatalf("status line should show when command closed:\n%s", closedContent)
 	}
 
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
-	openContent := View(s, flatte.RenderContext{Width: 80}).Content
+	send(s, keyChar(':'), flatte.Effects[State]{})
+	openContent := render(s).Content
 	if strings.Contains(openContent, "avg CPU") {
 		t.Fatalf("status line should hide when command open:\n%s", openContent)
 	}
@@ -811,18 +825,18 @@ func TestStreamCommandInjectsWrappedStyledContent(t *testing.T) {
 	s.containers.tab = tabLogs
 	before := s.containers.logs.TotalLines()
 
-	Handle(s, keyChar(':'), flatte.Effects[State]{})
+	send(s, keyChar(':'), flatte.Effects[State]{})
 	for _, r := range "stream" {
-		Handle(s, keyChar(r), flatte.Effects[State]{})
+		send(s, keyChar(r), flatte.Effects[State]{})
 	}
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 
 	after := s.containers.logs.TotalLines()
 	if after <= before {
 		t.Fatalf("logs did not grow after :stream: %d -> %d", before, after)
 	}
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "ERROR") {
 		t.Fatalf("streamed content missing ERROR level (color exercise):\n%s", content)
 	}
@@ -853,7 +867,7 @@ func TestScrollingUpAwayFromBottomPausesFollow(t *testing.T) {
 	}
 
 	// Scroll up — should pause following
-	Handle(s, keyChar('k'), flatte.Effects[State]{})
+	send(s, keyChar('k'), flatte.Effects[State]{})
 	if s.containers.followTail {
 		t.Fatal("followTail should be false after scrolling up")
 	}
@@ -874,7 +888,7 @@ func TestGKeyResumesFollowingAndJumpsToBottom(t *testing.T) {
 	}
 	offsetBefore := s.containers.logs.Offset()
 
-	Handle(s, keyChar('G'), flatte.Effects[State]{})
+	send(s, keyChar('G'), flatte.Effects[State]{})
 
 	if !s.containers.followTail {
 		t.Fatal("followTail should be true after G")
@@ -926,8 +940,8 @@ func TestFollowIndicatorShowsWhenContentOverflows(t *testing.T) {
 		s.containers.appendLiveLog("a1b2c3d4e5", fmt.Sprintf("overflow line %d", i))
 	}
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
-	// Indicator is now rendered inside the tab bar row (right of "inspect"),
+	content := render(s).Content
+	// The indicator renders in the detail pane's bottom padding row,
 	// not as an extra body line. Look for either "↓ tail" or "↑ paused".
 	if !strings.Contains(content, "tail") && !strings.Contains(content, "paused") {
 		t.Fatalf("follow indicator missing after overflow:\n%s", content)
@@ -1055,14 +1069,14 @@ func TestDivider1XPositionMatchesActualDividerColumn(t *testing.T) {
 
 func TestDragDivider0WidensList(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80}) // populate state
+	render(s) // populate state
 	c := &s.containers
 	div0X := c.listPaneWidth
 	startList := c.listPaneWidth
 	startDetail := c.detailPaneWidth
 
 	// Press on divider 0
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: div0X, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1071,7 +1085,7 @@ func TestDragDivider0WidensList(t *testing.T) {
 	}
 
 	// Drag right by 5
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
 		X: div0X + 5, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1083,7 +1097,7 @@ func TestDragDivider0WidensList(t *testing.T) {
 	}
 
 	// Release
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseRelease, Button: flatte.MouseLeft,
 		X: div0X + 5, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1094,12 +1108,12 @@ func TestDragDivider0WidensList(t *testing.T) {
 
 func TestDragDivider1ShrinksActivity(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 	c := &s.containers
 	div1X := c.listPaneWidth + dividerWidth + c.detailPaneWidth
 	startActivity := c.activityPaneWidth
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: div1X, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1108,7 +1122,7 @@ func TestDragDivider1ShrinksActivity(t *testing.T) {
 	}
 
 	// Drag right by 4 — activity should shrink
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
 		X: div1X + 4, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1116,7 +1130,7 @@ func TestDragDivider1ShrinksActivity(t *testing.T) {
 		t.Fatalf("after drag right 4: activityWidth %d, want %d", c.activityPaneWidth, startActivity-4)
 	}
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseRelease, Button: flatte.MouseLeft,
 		X: div1X + 4, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1124,17 +1138,17 @@ func TestDragDivider1ShrinksActivity(t *testing.T) {
 
 func TestDragRespectsMinimumWidths(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 	c := &s.containers
 	div0X := c.listPaneWidth
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: div0X, Y: 5,
 	}, flatte.Effects[State]{})
 
 	// Drag WAY left — list should clamp at minListWidth
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
 		X: 0, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1142,7 +1156,7 @@ func TestDragRespectsMinimumWidths(t *testing.T) {
 		t.Fatalf("list width %d below min %d", c.listPaneWidth, minListWidth)
 	}
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseRelease, Button: flatte.MouseLeft,
 		X: 0, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1150,24 +1164,24 @@ func TestDragRespectsMinimumWidths(t *testing.T) {
 
 func TestDividerDragPersistsAfterResize(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 	c := &s.containers
 	div0X := c.listPaneWidth
 
 	// Drag list to be 5 wider
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft, X: div0X, Y: 5,
 	}, flatte.Effects[State]{})
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseMotion, Button: flatte.MouseLeft, X: div0X + 5, Y: 5,
 	}, flatte.Effects[State]{})
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseRelease, Button: flatte.MouseLeft, X: div0X + 5, Y: 5,
 	}, flatte.Effects[State]{})
 	adjustedList := c.listPaneWidth
 
 	// Resize
-	Handle(s, flatte.ResizeEvent{Width: 100, Height: 30}, flatte.Effects[State]{})
+	send(s, flatte.ResizeEvent{Width: 100, Height: 30}, flatte.Effects[State]{})
 
 	// List width should be preserved (user-adjusted, not reset to default)
 	if c.listPaneWidth != adjustedList {
@@ -1177,14 +1191,14 @@ func TestDividerDragPersistsAfterResize(t *testing.T) {
 
 func TestClickInsidePaneStillWorksDuringNonDrag(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80}) // populate auto-zones
+	render(s) // populate auto-zones
 	// Click a list row via zone-derived position — should still work
 	// (not confused by divider code)
 	rowRect, ok := s.containers.zones.Rect("list:1")
 	if !ok {
 		t.Fatal("list:1 zone not registered")
 	}
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: rowRect.X + 2, Y: rowRect.Y,
 	}, flatte.Effects[State]{})
@@ -1202,9 +1216,10 @@ func TestClickInsidePaneStillWorksDuringNonDrag(t *testing.T) {
 func TestImagesScreenMouseClickSelectsRow(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
+	_ = render(s) // the switched screen is on screen before any click
 	// bodyYOffset is dynamic. List layout: title(0), blank(1), item0(2), item1(3).
 	clickY := s.images.bodyYOffset + 3
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: 3, Y: clickY,
 	}, flatte.Effects[State]{})
@@ -1216,8 +1231,9 @@ func TestImagesScreenMouseClickSelectsRow(t *testing.T) {
 func TestImagesScreenMouseWheelScrollsList(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
+	_ = render(s) // the switched screen is on screen before any click
 	start := s.images.list.Cursor()
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseWheelDown,
 		X: 3, Y: 6,
 	}, flatte.Effects[State]{})
@@ -1229,17 +1245,18 @@ func TestImagesScreenMouseWheelScrollsList(t *testing.T) {
 func TestImagesScreenDragDividerResizes(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
-	View(s, flatte.RenderContext{Width: 80})
+	_ = render(s) // the switched screen is on screen before any click
+	render(s)
 
 	divX := s.images.listPaneWidth
 	startLeft := s.images.listPaneWidth
 	startRight := s.images.rects["detail"].W
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: divX, Y: 5,
 	}, flatte.Effects[State]{})
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
 		X: divX + 5, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1251,7 +1268,7 @@ func TestImagesScreenDragDividerResizes(t *testing.T) {
 		t.Fatalf("after drag: right pane %d, want %d", s.images.rects["detail"].W, startRight-5)
 	}
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseRelease, Button: flatte.MouseLeft,
 		X: divX + 5, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1262,8 +1279,9 @@ func TestImagesScreenDragDividerResizes(t *testing.T) {
 func TestVolumesScreenMouseClickSelectsRow(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenVolumes
+	_ = render(s) // the switched screen is on screen before any click
 	clickY := s.volumes.bodyYOffset + 3
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: 3, Y: clickY,
 	}, flatte.Effects[State]{})
@@ -1275,16 +1293,17 @@ func TestVolumesScreenMouseClickSelectsRow(t *testing.T) {
 func TestVolumesScreenDragDividerResizes(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenVolumes
-	View(s, flatte.RenderContext{Width: 80})
+	_ = render(s) // the switched screen is on screen before any click
+	render(s)
 
 	divX := s.volumes.listPaneWidth
 	startLeft := s.volumes.listPaneWidth
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: divX, Y: 5,
 	}, flatte.Effects[State]{})
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseMotion, Button: flatte.MouseLeft,
 		X: divX - 4, Y: 5,
 	}, flatte.Effects[State]{})
@@ -1300,13 +1319,13 @@ func TestVolumesScreenDragDividerResizes(t *testing.T) {
 // id, returning the click X for diagnostics.
 func clickTabCenter(t *testing.T, s *State, id string) int {
 	t.Helper()
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 	r, ok := s.rects[id]
 	if !ok {
 		t.Fatalf("no solved rect for tab %q; rects=%v", id, s.rects)
 	}
 	clickX := r.X + r.W/2
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress, Button: flatte.MouseLeft,
 		X: clickX, Y: r.Y,
 	}, flatte.Effects[State]{})
@@ -1336,7 +1355,7 @@ func TestHeaderTabMouseClickOnThirdTab(t *testing.T) {
 
 func TestHeaderTabKeyboardSyncsBarActive(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('2'), flatte.Effects[State]{})
+	send(s, keyChar('2'), flatte.Effects[State]{})
 	if s.headerTabs.Active() != 1 {
 		t.Fatalf("after pressing 2: headerTabs.Active() = %d, want 1", s.headerTabs.Active())
 	}
@@ -1345,7 +1364,7 @@ func TestHeaderTabKeyboardSyncsBarActive(t *testing.T) {
 func TestTabSwitchKeysOnlyWorkWhenDetailFocused(t *testing.T) {
 	s := resizedState(80, 24)
 	// focus starts on list
-	Handle(s, keyChar(']'), flatte.Effects[State]{})
+	send(s, keyChar(']'), flatte.Effects[State]{})
 	if s.containers.tab != tabStats {
 		t.Fatalf("] on list focus changed tab to %v, want stats", s.containers.tab)
 	}
@@ -1357,24 +1376,24 @@ func TestScrollOnlyAffectsActiveTab(t *testing.T) {
 
 	// On stats tab: j does nothing (stats not scrollable)
 	startCPUOffset := s.containers.logs.Offset()
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.containers.logs.Offset() != startCPUOffset {
 		t.Fatalf("j on stats tab moved logs offset: %d -> %d", startCPUOffset, s.containers.logs.Offset())
 	}
 
 	// Switch to logs, j scrolls logs
-	Handle(s, keyChar(']'), flatte.Effects[State]{}) // stats -> logs
+	send(s, keyChar(']'), flatte.Effects[State]{}) // stats -> logs
 	logsBefore := s.containers.logs.Offset()
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.containers.logs.Offset() == logsBefore && s.containers.logs.TotalLines() > s.containers.logs.VisibleLines() {
 		t.Fatalf("j on logs tab did not scroll logs (offset stayed %d)", s.containers.logs.Offset())
 	}
 
 	// Switch to inspect, j scrolls inspect (not logs)
-	Handle(s, keyChar(']'), flatte.Effects[State]{}) // logs -> inspect
+	send(s, keyChar(']'), flatte.Effects[State]{}) // logs -> inspect
 	logsAfter := s.containers.logs.Offset()
 	inspectBefore := s.containers.inspect.Offset()
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.containers.logs.Offset() != logsAfter {
 		t.Fatalf("j on inspect tab moved logs: %d -> %d", logsAfter, s.containers.logs.Offset())
 	}
@@ -1388,7 +1407,7 @@ func TestStatsTabShowsCPUMemBars(t *testing.T) {
 	s.containers.focus.Select(focusDetail)
 	s.containers.tab = tabStats
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "CPU") || !strings.Contains(content, "MEM") {
 		t.Fatalf("stats tab missing CPU/MEM in:\n%s", content)
 	}
@@ -1457,7 +1476,7 @@ func TestLogsTabShowsLogLines(t *testing.T) {
 	s.containers.focus.Select(focusDetail)
 	s.containers.tab = tabLogs
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	// Long lines wrap inside the narrow detail pane, so check for parts
 	// rather than the contiguous substring.
 	if !strings.Contains(content, "starting") || !strings.Contains(content, "nginx-proxy") {
@@ -1473,7 +1492,7 @@ func TestInspectTabShowsContainerFields(t *testing.T) {
 	s.containers.focus.Select(focusDetail)
 	s.containers.tab = tabInspect
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "name:") || !strings.Contains(content, "image:") {
 		t.Fatalf("inspect tab missing container fields in:\n%s", content)
 	}
@@ -1487,7 +1506,7 @@ func TestTabBarShowsActiveTabStyled(t *testing.T) {
 	s.containers.focus.Select(focusDetail)
 	s.containers.tab = tabLogs
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	// After ANSI strip, both "stats" and "logs" should appear (no brackets
 	// anymore — visual distinction is via background color, which is stripped).
 	if !strings.Contains(content, "logs") {
@@ -1502,10 +1521,10 @@ func TestChangingSelectedContainerUpdatesDetailTabs(t *testing.T) {
 	s := resizedState(80, 24)
 	s.containers.focus.Select(focusList)
 
-	Handle(s, keyChar('j'), flatte.Effects[State]{}) // move to api-server
+	send(s, keyChar('j'), flatte.Effects[State]{}) // move to api-server
 	s.containers.tab = tabInspect
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "myapp/api:2.1") {
 		t.Fatalf("inspect tab did not update after list move:\n%s", content)
 	}
@@ -1526,7 +1545,7 @@ func TestStatsTickSidestepUpdatesCurrentContainerOnly(t *testing.T) {
 	}
 
 	// Switch to second container and tick — first container's stats should not change
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	firstTick := s.containers.statsCache["a1b2c3d4e5"]
 	s.containers.tickStats(time.Now())
 	if s.containers.statsCache["a1b2c3d4e5"].Tick != firstTick.Tick {
@@ -1551,7 +1570,7 @@ func TestScopedLogsRestartOnSelectionChange(t *testing.T) {
 	}
 
 	// Move selection to second container — should cancel old, start new
-	Handle(s, keyChar('j'), fx)
+	send(s, keyChar('j'), fx)
 	if s.containers.logScope == nil {
 		t.Fatal("logScope became nil after selection change")
 	}
@@ -1720,7 +1739,7 @@ func TestAppendLiveLogDoesNotTouchOtherContainerBuffers(t *testing.T) {
 
 func TestStopKeyOpensConfirmModal(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	send(s, keyChar('s'), flatte.Effects[State]{})
 	if s.confirmModal == nil {
 		t.Fatal("no modal opened after s")
 	}
@@ -1734,7 +1753,7 @@ func TestStopKeyOpensConfirmModal(t *testing.T) {
 
 func TestRemoveKeyOpensConfirmModal(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('x'), flatte.Effects[State]{})
+	send(s, keyChar('x'), flatte.Effects[State]{})
 	if s.confirmModal == nil || s.confirmModal.action != "remove" {
 		t.Fatalf("after x, modal = %+v, want action=remove", s.confirmModal)
 	}
@@ -1742,14 +1761,14 @@ func TestRemoveKeyOpensConfirmModal(t *testing.T) {
 
 func TestModalCapturesInputUntilClosed(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	send(s, keyChar('s'), flatte.Effects[State]{})
 	if s.confirmModal == nil {
 		t.Fatal("modal not opened")
 	}
 
 	// j during modal should NOT move the list (modal captures it)
 	listCursorBefore := s.containers.list.Cursor()
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.containers.list.Cursor() != listCursorBefore {
 		t.Fatalf("j during modal moved list: %d -> %d", listCursorBefore, s.containers.list.Cursor())
 	}
@@ -1757,8 +1776,8 @@ func TestModalCapturesInputUntilClosed(t *testing.T) {
 
 func TestModalConfirmAppliesAction(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('s'), flatte.Effects[State]{})
-	Handle(s, keyChar('y'), flatte.Effects[State]{})
+	send(s, keyChar('s'), flatte.Effects[State]{})
+	send(s, keyChar('y'), flatte.Effects[State]{})
 
 	if s.confirmModal != nil {
 		t.Fatal("modal not closed after y")
@@ -1771,8 +1790,8 @@ func TestModalConfirmAppliesAction(t *testing.T) {
 func TestModalCancelDoesNotApplyAction(t *testing.T) {
 	s := resizedState(80, 24)
 	originalStatus := s.containers.containers[0].Status
-	Handle(s, keyChar('s'), flatte.Effects[State]{})
-	Handle(s, keyChar('n'), flatte.Effects[State]{})
+	send(s, keyChar('s'), flatte.Effects[State]{})
+	send(s, keyChar('n'), flatte.Effects[State]{})
 
 	if s.confirmModal != nil {
 		t.Fatal("modal not closed after n")
@@ -1784,8 +1803,8 @@ func TestModalCancelDoesNotApplyAction(t *testing.T) {
 
 func TestModalEscapeCloses(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('s'), flatte.Effects[State]{})
-	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
+	send(s, keyChar('s'), flatte.Effects[State]{})
+	send(s, flatte.KeyEvent{Key: flatte.KeyEscape}, flatte.Effects[State]{})
 	if s.confirmModal != nil {
 		t.Fatal("modal not closed after Esc")
 	}
@@ -1793,9 +1812,9 @@ func TestModalEscapeCloses(t *testing.T) {
 
 func TestModalRendersAsOverlayOverBase(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('s'), flatte.Effects[State]{})
+	send(s, keyChar('s'), flatte.Effects[State]{})
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "stop container") {
 		t.Fatalf("modal title missing in:\n%s", content)
 	}
@@ -1812,8 +1831,8 @@ func TestModalRendersAsOverlayOverBase(t *testing.T) {
 // children's), centered in the frame at the fixed modal width.
 func TestModalOverlayRecordsCenteredRects(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('s'), flatte.Effects[State]{})
-	View(s, flatte.RenderContext{Width: 80})
+	send(s, keyChar('s'), flatte.Effects[State]{})
+	render(s)
 
 	mr, ok := s.rects["modal"]
 	if !ok {
@@ -1836,13 +1855,13 @@ func TestModalOverlayRecordsCenteredRects(t *testing.T) {
 
 func TestMouseClickListRowSelectsIt(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80}) // populate zones
+	render(s) // populate zones
 
 	rowRect, ok := s.containers.zones.Rect("list:1")
 	if !ok {
 		t.Fatal("list:1 zone not registered after View")
 	}
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
 		X:      rowRect.X + 2, Y: rowRect.Y,
@@ -1862,21 +1881,22 @@ func TestMouseClickListRowSelectsIt(t *testing.T) {
 // detail pane content, and per-tab offsets come from each tab's natural layout
 // width (via the public Layout().Size()), so no retired label-width helper.
 func detailLogsClickX(s *State) (int, bool) {
-	stripW, _ := s.containers.detailTabs.Layout().Size()
-	statsW, _ := flatui.NewTabBar(flatui.TabItem{Label: "stats"}).WithGlyphs(pickGlyphs()).Layout().Size()
-	contentStartX := s.containers.listPaneWidth + dividerWidth + 1
-	contentWidth := s.containers.detailPaneWidth - paneBorderCols
-	localStart := contentWidth - stripW.Value
-	if localStart < 0 {
-		return 0, false
+	// Read the painted frame rather than re-deriving the layout: a helper that
+	// copies the code's geometry math cannot catch that math drifting.
+	for _, line := range strings.Split(ansi.Strip(render(s).Content), "\n") {
+		if !strings.Contains(line, "stats") || !strings.Contains(line, "inspect") {
+			continue
+		}
+		if i := strings.Index(line, "logs"); i >= 0 {
+			return lipgloss.Width(line[:i]) + 1, true
+		}
 	}
-	// +1 steps past the logs tab's leading edge glyph into its label band.
-	return contentStartX + localStart + statsW.Value + 1, true
+	return 0, false
 }
 
 func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 
 	logsX, ok := detailLogsClickX(s)
 	if !ok {
@@ -1884,7 +1904,7 @@ func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 	}
 	clickY := s.containers.bodyYOffset
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
 		X:      logsX, Y: clickY,
@@ -1897,7 +1917,7 @@ func TestMouseClickTabHeaderSwitchesTab(t *testing.T) {
 
 func TestMouseClickDetailTabUsesRenderedRow(t *testing.T) {
 	s := resizedState(80, 24)
-	frame := View(s, flatte.RenderContext{Width: 80})
+	frame := render(s)
 
 	lines := strings.Split(ansi.Strip(frame.Content), "\n")
 	renderedY := -1
@@ -1919,7 +1939,7 @@ func TestMouseClickDetailTabUsesRenderedRow(t *testing.T) {
 		t.Skip("pane too narrow for tabs")
 	}
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
 		X:      logsX, Y: renderedY,
@@ -1932,11 +1952,11 @@ func TestMouseClickDetailTabUsesRenderedRow(t *testing.T) {
 
 func TestMouseClickOutsideZonesIsNoOp(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 	originalTab := s.containers.tab
 	originalSelected := s.containers.selected()
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
 		X:      27, Y: 10,
@@ -1954,10 +1974,10 @@ func TestMouseClickOutsideZonesIsNoOp(t *testing.T) {
 
 func TestMouseMotionDoesNotTrigger(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
+	render(s)
 	originalTab := s.containers.tab
 
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.MouseEvent{
 		Action: flatte.MouseMotion,
 		Button: flatte.MouseLeft,
 		X:      28, Y: 3,
@@ -1970,8 +1990,8 @@ func TestMouseMotionDoesNotTrigger(t *testing.T) {
 
 func TestMouseZonesRecomputeOnResize(t *testing.T) {
 	s := resizedState(80, 24)
-	View(s, flatte.RenderContext{Width: 80})
-	Handle(s, flatte.MouseEvent{
+	render(s)
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
 		X:      2, Y: 4,
@@ -1980,9 +2000,9 @@ func TestMouseZonesRecomputeOnResize(t *testing.T) {
 		t.Fatalf("click Y=4 should select row 0, got cursor %d", s.containers.list.Cursor())
 	}
 
-	Handle(s, flatte.ResizeEvent{Width: 80, Height: 30}, flatte.Effects[State]{})
-	View(s, flatte.RenderContext{Width: 80})
-	Handle(s, flatte.MouseEvent{
+	send(s, flatte.ResizeEvent{Width: 80, Height: 30}, flatte.Effects[State]{})
+	render(s)
+	send(s, flatte.MouseEvent{
 		Action: flatte.MousePress,
 		Button: flatte.MouseLeft,
 		X:      2, Y: 4,
@@ -1995,11 +2015,12 @@ func TestMouseZonesRecomputeOnResize(t *testing.T) {
 func TestImagesScreenListMovesWithJK(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	_ = render(s) // the switched screen is on screen before any click
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.images.list.Cursor() != 1 {
 		t.Fatalf("images cursor after j = %d, want 1", s.images.list.Cursor())
 	}
-	Handle(s, keyChar('k'), flatte.Effects[State]{})
+	send(s, keyChar('k'), flatte.Effects[State]{})
 	if s.images.list.Cursor() != 0 {
 		t.Fatalf("images cursor after k = %d, want 0", s.images.list.Cursor())
 	}
@@ -2008,9 +2029,10 @@ func TestImagesScreenListMovesWithJK(t *testing.T) {
 func TestImagesScreenDetailShowsSelectedImage(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	_ = render(s) // the switched screen is on screen before any click
+	send(s, keyChar('j'), flatte.Effects[State]{})
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "myapp/api:2.1") || !strings.Contains(content, "sha256:b2c3d4e5") {
 		t.Fatalf("images detail missing selected image in:\n%s", content)
 	}
@@ -2019,14 +2041,15 @@ func TestImagesScreenDetailShowsSelectedImage(t *testing.T) {
 func TestImagesScreenTabCyclesFocus(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenImages
+	_ = render(s) // the switched screen is on screen before any click
 	if !s.images.focus.Focused(imgFocusList) {
 		t.Fatal("images focus should start on list")
 	}
-	Handle(s, keyTab(false), flatte.Effects[State]{})
+	send(s, keyTab(false), flatte.Effects[State]{})
 	if !s.images.focus.Focused(imgFocusDetail) {
 		t.Fatal("images focus should be on detail after Tab")
 	}
-	Handle(s, keyTab(false), flatte.Effects[State]{})
+	send(s, keyTab(false), flatte.Effects[State]{})
 	if !s.images.focus.Focused(imgFocusList) {
 		t.Fatal("images focus should wrap to list after second Tab")
 	}
@@ -2035,8 +2058,9 @@ func TestImagesScreenTabCyclesFocus(t *testing.T) {
 func TestVolumesScreenListMovesWithJK(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenVolumes
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	_ = render(s) // the switched screen is on screen before any click
+	send(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	if s.volumes.list.Cursor() != 2 {
 		t.Fatalf("volumes cursor after 2j = %d, want 2", s.volumes.list.Cursor())
 	}
@@ -2045,9 +2069,10 @@ func TestVolumesScreenListMovesWithJK(t *testing.T) {
 func TestVolumesScreenDetailShowsSelectedVolume(t *testing.T) {
 	s := resizedState(80, 24)
 	s.screen = screenVolumes
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	_ = render(s) // the switched screen is on screen before any click
+	send(s, keyChar('j'), flatte.Effects[State]{})
 
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "config") || !strings.Contains(content, "/var/lib/docker/volumes/config/_data") {
 		t.Fatalf("volumes detail missing selected volume in:\n%s", content)
 	}
@@ -2055,12 +2080,12 @@ func TestVolumesScreenDetailShowsSelectedVolume(t *testing.T) {
 
 func TestScreensAreIsolatedFromEachOther(t *testing.T) {
 	s := resizedState(80, 24)
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
 	containersCursor := s.containers.list.Cursor()
-	Handle(s, keyChar('2'), flatte.Effects[State]{})
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
-	Handle(s, keyChar('j'), flatte.Effects[State]{})
-	Handle(s, keyChar('1'), flatte.Effects[State]{})
+	send(s, keyChar('2'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('j'), flatte.Effects[State]{})
+	send(s, keyChar('1'), flatte.Effects[State]{})
 
 	if s.containers.list.Cursor() != containersCursor {
 		t.Fatalf("containers cursor drifted while on images: %d -> %d", containersCursor, s.containers.list.Cursor())
@@ -2150,7 +2175,7 @@ func TestCPUHistoryCapsAtThirtyEntries(t *testing.T) {
 
 func TestAnchorRightActivityPanePresentInContainersView(t *testing.T) {
 	s := resizedState(80, 24)
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "activity") {
 		t.Fatalf("anchor-right activity pane missing in:\n%s", content)
 	}
@@ -2158,7 +2183,7 @@ func TestAnchorRightActivityPanePresentInContainersView(t *testing.T) {
 
 func TestStatusLinePresentAtBottomOfContainersBody(t *testing.T) {
 	s := resizedState(80, 24)
-	content := View(s, flatte.RenderContext{Width: 80}).Content
+	content := render(s).Content
 	if !strings.Contains(content, "containers (") {
 		t.Fatalf("status line missing aggregate count in:\n%s", content)
 	}
@@ -2286,5 +2311,58 @@ func TestSessionStateCorruptFileReturnsDefault(t *testing.T) {
 	// Should get zero-value default, not crash
 	if loaded.Screen != 0 {
 		t.Fatalf("corrupt file: Screen=%d want 0 (default)", loaded.Screen)
+	}
+}
+
+// paintedDetailLabel finds a detail-tab label in the frame as actually painted
+// and returns a cell inside it — ground truth that does not re-derive the
+// layout the way the code under test does.
+func paintedDetailLabel(t *testing.T, s *State, label string) (int, int) {
+	t.Helper()
+	lines := strings.Split(ansi.Strip(render(s).Content), "\n")
+	for y, line := range lines {
+		if !strings.Contains(line, "stats") || !strings.Contains(line, "inspect") {
+			continue
+		}
+		i := strings.Index(line, label)
+		if i < 0 {
+			break
+		}
+		return lipgloss.Width(line[:i]) + 1, y
+	}
+	t.Fatalf("label %q not painted on the detail tab row:\n%s", label, strings.Join(lines, "\n"))
+	return 0, 0
+}
+
+func showFollowIndicator(t *testing.T, s *State) {
+	t.Helper()
+	s.containers.setTab(tabLogs)
+	s.containers.logs.SetWrappedContent(strings.Repeat("log line\n", 200))
+	s.containers.followTail = true
+	if frame := ansi.Strip(render(s).Content); !strings.Contains(frame, "tail") {
+		t.Fatalf("follow indicator not painted:\n%s", frame)
+	}
+}
+
+// TestDetailTabClicksHitPaintedLabelsWithFollowIndicator: the follow
+// indicator sits right of the tab strip on the logs tab, shifting the strip
+// left. Clicks must land on the labels where they are painted (regression:
+// hit rects assumed the strip was flush right and were offset by the
+// indicator's width).
+func TestDetailTabClicksHitPaintedLabelsWithFollowIndicator(t *testing.T) {
+	s := resizedState(100, 30)
+	for _, tc := range []struct {
+		label string
+		want  detailTab
+	}{
+		{"inspect", tabInspect},
+		{"stats", tabStats},
+	} {
+		showFollowIndicator(t, s)
+		x, y := paintedDetailLabel(t, s, tc.label)
+		send(s, flatte.MouseEvent{Action: flatte.MousePress, Button: flatte.MouseLeft, X: x, Y: y}, flatte.Effects[State]{})
+		if s.containers.tab != tc.want {
+			t.Fatalf("click on painted %q at (%d,%d): tab = %v, want %v", tc.label, x, y, s.containers.tab, tc.want)
+		}
 	}
 }

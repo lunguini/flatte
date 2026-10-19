@@ -106,7 +106,7 @@ func (v *volumesScreen) adopt(rects map[string]layout.Rect) {
 
 func (v *volumesScreen) Handle(s *State, ev flatte.Event, _ flatte.Effects[State]) {
 	if m, ok := ev.(flatte.MouseEvent); ok {
-		v.handleMouse(s, m)
+		v.handleMouse(m)
 		return
 	}
 	key, ok := ev.(flatte.KeyEvent)
@@ -140,7 +140,7 @@ func (v *volumesScreen) Handle(s *State, ev flatte.Event, _ flatte.Effects[State
 	}
 }
 
-func (v *volumesScreen) handleMouse(root *State, m flatte.MouseEvent) {
+func (v *volumesScreen) handleMouse(m flatte.MouseEvent) {
 	if v.drag != nil {
 		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
 			v.drag = nil
@@ -151,19 +151,18 @@ func (v *volumesScreen) handleMouse(root *State, m flatte.MouseEvent) {
 			newList := v.drag.startWidth + delta
 			maxList := v.width - minDetailWidth - dividerWidth
 			v.listPaneWidth = max(minListWidth, min(newList, maxList))
-			root.refreshActiveRects()
 			return
 		}
 		return
 	}
 
-	if m.Action == flatte.MousePress && v.rects["div0"].Contains(m.X, m.Y) {
+	if m.Action == flatte.MousePress && m.Target == "div0" {
 		v.drag = &splitDrag{startX: m.X, startWidth: v.listPaneWidth}
 		return
 	}
 
-	if listR := v.rects["list"]; listR.Contains(m.X, m.Y) {
-		v.handleVolumeListMouse(m, m.X-listR.X, m.Y-listR.Y)
+	if m.Target == "list" {
+		v.handleVolumeListMouse(m, m.X-m.TargetRect.X, m.Y-m.TargetRect.Y)
 	}
 }
 

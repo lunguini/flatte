@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/cmd/internal/dockerapp"
 	"github.com/lunguini/flatte/flatest"
 	"github.com/lunguini/flatte/flatui/layout"
 )
@@ -229,4 +230,31 @@ func TestCSSPixelsParsesComputedStyles(t *testing.T) {
 func TestShellViewMatchesSnapshot(t *testing.T) {
 	s := shellState(tabWhat)
 	flatest.AssertGolden(t, "testdata/landing.golden", View(s, flatte.RenderContext{Width: 92}).Content)
+}
+
+// TestAppTabHostsDocker: the docker app renders inside the content pane with
+// its list sized from its own settled layout (rows are visible).
+func TestAppTabHostsDocker(t *testing.T) {
+	s := shellState(tabApp)
+	clean := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 92}).Content)
+	for _, want := range []string{"containers", "nginx-proxy", "api-server"} {
+		if !strings.Contains(clean, want) {
+			t.Fatalf("app tab missing %q:\n%s", want, clean)
+		}
+	}
+}
+
+// TestAppTabForwardsMouseWithTarget: a click forwarded into the hosted docker
+// app carries the target from docker's own on-screen frame, so its tab strip
+// switches screens.
+func TestAppTabForwardsMouseWithTarget(t *testing.T) {
+	s := shellState(tabApp)
+	r, ok := s.dockerComp.Rects["header:images"]
+	if !ok {
+		t.Fatalf("docker header tab not solved: %v", s.dockerComp.Rects)
+	}
+	Handle(s, flatte.MouseEvent{X: s.coX + r.X, Y: s.coY + r.Y, Button: flatte.MouseLeft, Action: flatte.MousePress}, flatte.Effects[State]{})
+	if title := dockerapp.View(s.docker, flatte.RenderContext{}).Title; !strings.Contains(title, "images") {
+		t.Fatalf("docker screen after forwarded click = %q, want images", title)
+	}
 }

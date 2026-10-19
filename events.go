@@ -1,9 +1,12 @@
 package flatte
 
-// Event is the closed set of terminal inputs the loop delivers to Handle.
-// It is sealed: the framework defines every implementation, apps only
-// consume them with a type switch. This is not TEA — events are terminal
-// inputs, never app-defined messages; async results remain StateUpdates.
+import "github.com/lunguini/flatte/flatui/layout"
+
+// Event is the closed set of host inputs the loop delivers to Handle:
+// terminal input, resizes, and the solved layout of a Root frame. It is
+// sealed: the framework defines every implementation, apps only consume them
+// with a type switch. This is not TEA — events are host inputs, never
+// app-defined messages; async results remain StateUpdates.
 type Event interface{ isEvent() }
 
 type Key int
@@ -97,6 +100,16 @@ const (
 	MouseMotion
 )
 
+// LayoutEvent reports the solved rect of every ID'd node in a Root frame.
+// The host delivers it before painting whenever those rects differ from the
+// ones it last delivered, so state derived from geometry — a list's visible
+// rows, a pane's width — is adopted before the frame is shown. Handle it like
+// ResizeEvent: copy what you need into state, and the next View sees it.
+// Rects is the handler's own copy.
+type LayoutEvent struct {
+	Rects map[string]layout.Rect
+}
+
 // MouseEvent is a mouse press/release/motion/wheel; X/Y are zero-based
 // cell coordinates from the top-left of the frame (see WithMouse).
 type MouseEvent struct {
@@ -109,6 +122,9 @@ type MouseEvent struct {
 	// string frames, over an overlay area with no ID'd node, or where no
 	// ID'd node is painted.
 	Target string
+	// TargetRect is the solved rect of Target (zero when Target is ""), so a
+	// click can be made node-local with X - TargetRect.X, Y - TargetRect.Y.
+	TargetRect layout.Rect
 }
 
 func (KeyEvent) isEvent()       {}
@@ -117,3 +133,4 @@ func (PasteEvent) isEvent()     {}
 func (ClipboardEvent) isEvent() {}
 func (FocusEvent) isEvent()     {}
 func (MouseEvent) isEvent()     {}
+func (LayoutEvent) isEvent()    {}

@@ -82,3 +82,86 @@ func TestDriverLeavesStringFramesAndTargetsAlone(t *testing.T) {
 		t.Fatalf("string-frame target = %q, want empty (Run never sets one)", got)
 	}
 }
+
+type pane struct {
+	rows    int
+	layouts int
+	local   []int
+}
+
+// paneApp sizes a list from the LayoutEvent and records node-local click rows,
+// the two geometry needs LayoutEvent and TargetRect exist for.
+func paneApp() flatte.App[pane] {
+	return flatte.App[pane]{
+		State: &pane{},
+		Handle: func(s *pane, ev flatte.Event, _ flatte.Effects[pane]) {
+			switch ev := ev.(type) {
+			case flatte.LayoutEvent:
+				s.layouts++
+				s.rows = ev.Rects["pane"].H - 2
+			case flatte.MouseEvent:
+				if ev.Target == "list" {
+					s.local = append(s.local, ev.Y-ev.TargetRect.Y)
+				}
+			}
+		},
+		View: func(s *pane, _ flatte.RenderContext) flatte.Frame {
+			return flatte.Frame{Root: layout.Col{Children: []layout.Node{
+				layout.Text{NodeBase: layout.NodeBase{H: layout.Fixed(2)}, String: "head"},
+				layout.Col{NodeBase: layout.NodeBase{ID: "pane", H: layout.Grow(1), Bordered: true}, Children: []layout.Node{
+					layout.Text{NodeBase: layout.NodeBase{ID: "list", H: layout.Fixed(max(s.rows, 0))}, String: strings.Repeat("row\n", max(s.rows-1, 0)) + "row"},
+				}},
+			}}}
+		},
+	}
+}
+
+func TestDriverDeliversLayoutBeforeFirstFrame(t *testing.T) {
+	d := Start(paneApp(), 20)
+	if got := d.State().rows; got != 20 { // 24 rows - 2 head - 2 border
+		t.Fatalf("rows adopted at Start = %d, want 20", got)
+	}
+	if got := strings.Count(d.Frame().Content, "row"); got != 20 {
+		t.Fatalf("first frame shows %d rows, want 20", got)
+	}
+	layouts := d.State().layouts
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'x'}) // no geometry change
+	if d.State().layouts != layouts {
+		t.Fatalf("unchanged geometry re-delivered: %d -> %d", layouts, d.State().layouts)
+	}
+	d.Send(flatte.ResizeEvent{Width: 20, Height: 10})
+	if got := d.State().rows; got != 6 {
+		t.Fatalf("rows after resize = %d, want 6", got)
+	}
+}
+
+func TestDriverFillsTargetRect(t *testing.T) {
+	d := Start(paneApp(), 20)
+	d.Send(flatte.MouseEvent{X: 3, Y: 3, Action: flatte.MousePress}) // first list row: y=2 head, +1 border
+	d.Send(flatte.MouseEvent{X: 3, Y: 7, Action: flatte.MousePress})
+	if got := d.State().local; len(got) != 2 || got[0] != 0 || got[1] != 4 {
+		t.Fatalf("node-local rows = %v, want [0 4]", got)
+	}
+}
+
+func TestReplaySkipsRecordedLayoutEvents(t *testing.T) {
+	rec := &Recorder{}
+	app := paneApp()
+	app.Tracer = rec
+	d := Start(app, 20)
+	d.Send(flatte.MouseEvent{X: 3, Y: 3, Action: flatte.MousePress})
+
+	replayed := Replay(paneApp(), 20, rec)
+	count := func(r *Recorder) int {
+		n := 0
+		for _, ev := range r.Events() {
+			if _, ok := ev.(flatte.LayoutEvent); ok {
+				n++
+			}
+		}
+		return n
+	}
+	if got, want := count(replayed), count(rec); got != want || want == 0 {
+		t.Fatalf("replayed layout events = %d, recorded = %d", got, want)
+	}
+}

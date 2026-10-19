@@ -364,6 +364,8 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	// lastComp is the composition of the frame on screen; mouse events are
 	// hit-tested against it so Target matches what the user clicked.
 	var lastComp layout.Composition
+	// lastLayout is the rect set last delivered as a LayoutEvent.
+	var lastLayout map[string]layout.Rect
 	drew := false
 	cursorShown := false
 	currentCursorShape := -1
@@ -636,13 +638,27 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			return // terminal output failed; defer handles best-effort cleanup
 		}
 		renderCtx := RenderContextFor(out)
-		frame := app.View(app.State, renderCtx)
-		if frame.Root != nil {
-			_, terminalHeight := terminalSize(out)
-			frame, lastComp = ComposeFrame(frame, renderCtx.Width, rootHeight(frame.Root, terminalHeight, cfg.inline))
-		} else {
-			lastComp = layout.Composition{}
+		_, terminalHeight := terminalSize(out)
+		var handleLayout func(LayoutEvent)
+		if app.Handle != nil {
+			handleLayout = func(ev LayoutEvent) {
+				if quitRequested {
+					return
+				}
+				app.Tracer.Event(ev)
+				app.Handle(app.State, ev, effects)
+			}
 		}
+		frame, comp, delivered := settleFrame(
+			func() Frame { return app.View(app.State, renderCtx) },
+			handleLayout, lastLayout, renderCtx.Width,
+			func(root layout.Node) int { return rootHeight(root, terminalHeight, cfg.inline) },
+		)
+		lastLayout = delivered
+		if quitRequested {
+			return // a LayoutEvent handler quit: paint nothing more
+		}
+		lastComp = comp
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
 			if err := flushRenderer(); err == nil {
@@ -870,6 +886,21 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		}
 	}
 
+	// render draws, then runs any actions a LayoutEvent handler queued while
+	// the frame settled and redraws once, so they are not stranded until an
+	// unrelated later event. A further queue from that redraw waits for the
+	// next loop turn, keeping render bounded.
+	render := func() {
+		draw()
+		if sink.err != nil || quitRequested || len(pending) == 0 {
+			return
+		}
+		processActions()
+		if sink.err == nil && !quitRequested {
+			draw()
+		}
+	}
+
 	processActions() // Init and the initial resize Handle may have enqueued
 	if sink.err != nil {
 		return sink.err
@@ -877,9 +908,12 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	if quitRequested {
 		return nil
 	}
-	draw()
+	render()
 	if sink.err != nil {
 		return sink.err
+	}
+	if quitRequested {
+		return nil
 	}
 	for {
 		select {
@@ -904,7 +938,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				forceRepaint = true
 			}
 			if mouse, ok := result.event.(MouseEvent); ok {
-				mouse.Target = lastComp.HitTest(mouse.X, mouse.Y)
+				mouse.Target, mouse.TargetRect = lastComp.HitTest(mouse.X, mouse.Y)
 				result.event = mouse
 			}
 			// Trace before any exit decision so the recorder sees the
@@ -947,9 +981,12 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		if quitRequested {
 			return nil
 		}
-		draw()
+		render()
 		if sink.err != nil {
 			return sink.err
+		}
+		if quitRequested {
+			return nil
 		}
 	}
 }

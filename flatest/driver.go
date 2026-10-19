@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // Driver runs a flatte.App synchronously for tests. App-triggered async
@@ -16,14 +17,19 @@ import (
 // Settle; time-based effects (Every) are driven by a fake clock advanced
 // with Advance. The width is fixed so frames are deterministic.
 type Driver[S any] struct {
-	app     flatte.App[S]
-	width   int
-	height  int // from the last ResizeEvent; Root frames compose at width×height
-	updates []flatte.StateUpdate[S]
-	clock   *fakeClock
-	pending []func()
-	quit    bool
-	fx      flatte.Effects[S]
+	app    flatte.App[S]
+	width  int
+	height int // from the last ResizeEvent; Root frames compose at width×height
+	// delivered is the rect set last delivered as a LayoutEvent; comp is the
+	// composition of the last rendered frame, which mouse events hit-test
+	// against — the frame "on screen", as in Run.
+	delivered map[string]layout.Rect
+	comp      layout.Composition
+	updates   []flatte.StateUpdate[S]
+	clock     *fakeClock
+	pending   []func()
+	quit      bool
+	fx        flatte.Effects[S]
 }
 
 // Start builds a Driver, runs Init, delivers the initial ResizeEvent, and
@@ -51,6 +57,7 @@ func Start[S any](app flatte.App[S], width int) *Driver[S] {
 		app.Init(app.State, d.fx)
 	}
 	d.deliver(flatte.ResizeEvent{Width: width, Height: 24})
+	d.render()
 	return d
 }
 
@@ -59,17 +66,26 @@ func Start[S any](app flatte.App[S], width int) *Driver[S] {
 // are NOT applied here — call Settle.
 func (d *Driver[S]) Send(ev flatte.Event) flatte.Frame {
 	d.deliver(ev)
-	return d.Frame()
+	return d.render()
 }
+
+// render settles layout and renders, exactly as Run draws: LayoutEvents for a
+// Root frame are delivered (and their updates drained) before the frame is
+// returned, and the composition is kept for hit-testing the next mouse event.
+func (d *Driver[S]) render() flatte.Frame {
+	frame, comp, delivered := flatte.SettleFrame(d.view, d.deliverLayout, d.delivered, d.width, d.height)
+	d.delivered, d.comp = delivered, comp
+	return frame
+}
+
+func (d *Driver[S]) deliverLayout(ev flatte.LayoutEvent) { d.deliver(ev) }
 
 func (d *Driver[S]) deliver(ev flatte.Event) {
 	switch e := ev.(type) {
 	case flatte.ResizeEvent:
 		d.height = e.Height
 	case flatte.MouseEvent:
-		// Hit-test against the frame on screen, exactly as Run does.
-		_, comp := flatte.ComposeFrame(d.view(), d.width, d.height)
-		e.Target = comp.HitTest(e.X, e.Y)
+		e.Target, e.TargetRect = d.comp.HitTest(e.X, e.Y)
 		ev = e
 	}
 	if d.app.Tracer != nil {
@@ -106,7 +122,7 @@ func (d *Driver[S]) Settle() flatte.Frame {
 			d.drain()
 		}
 	}
-	return d.Frame()
+	return d.render()
 }
 
 // Advance moves the fake clock, firing due Every ticks (which queue

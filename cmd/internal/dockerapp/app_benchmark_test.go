@@ -6,8 +6,9 @@ import (
 	"github.com/lunguini/flatte"
 )
 
-// BenchmarkIgnoredMouseMotion guards the ordinary motion path: an event that
-// does not change geometry should not solve the three-screen frame tree.
+// BenchmarkIgnoredMouseMotion guards the ordinary motion path through Handle:
+// an event that changes nothing must stay cheap (the host, not Handle, solves
+// the frame).
 func BenchmarkIgnoredMouseMotion(b *testing.B) {
 	s := resizedState(120, 40)
 	ev := flatte.MouseEvent{Action: flatte.MouseMotion, Button: flatte.MouseNone, X: 4, Y: 4}

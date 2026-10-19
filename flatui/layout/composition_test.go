@@ -58,7 +58,7 @@ func TestCompositionHitTest(t *testing.T) {
 		{-1, 0, ""},
 		{0, 12, ""}, // below the frame
 	} {
-		if got := c.HitTest(tc.x, tc.y); got != tc.want {
+		if got, _ := c.HitTest(tc.x, tc.y); got != tc.want {
 			t.Errorf("HitTest(%d,%d) = %q, want %q", tc.x, tc.y, got, tc.want)
 		}
 	}
@@ -70,16 +70,16 @@ func TestCompositionHitTestOverlayBlocksBase(t *testing.T) {
 	if !ok {
 		t.Fatal("overlay child has no rect")
 	}
-	if got := c.HitTest(r.X, r.Y); got != "ok" {
-		t.Errorf("HitTest on overlay child = %q, want ok", got)
+	if got, gotRect := c.HitTest(r.X, r.Y); got != "ok" || gotRect != r {
+		t.Errorf("HitTest on overlay child = %q %+v, want ok %+v", got, gotRect, r)
 	}
 	// Inside the overlay but off its ID'd child: the layer absorbs the hit
 	// rather than letting it reach the base node painted underneath.
-	if got := c.HitTest(r.X, r.Y+2); got != "" {
-		t.Errorf("HitTest inside overlay = %q, want \"\"", got)
+	if got, gotRect := c.HitTest(r.X, r.Y+2); got != "" || gotRect != (Rect{}) {
+		t.Errorf("HitTest inside overlay = %q %+v, want empty", got, gotRect)
 	}
 	// Outside the overlay the base is still reachable.
-	if got := c.HitTest(0, 0); got != "header" {
+	if got, _ := c.HitTest(0, 0); got != "header" {
 		t.Errorf("HitTest outside overlay = %q, want header", got)
 	}
 }
@@ -88,10 +88,10 @@ func TestCompositionHitTestOverlayRoot(t *testing.T) {
 	root := Text{NodeBase: NodeBase{ID: "solo", Overlay: true, W: Fixed(4), H: Fixed(2)}, String: "x"}
 	c := Compose(root, 10, 6)
 	r := c.Rects["solo"]
-	if got := c.HitTest(r.X, r.Y); got != "solo" {
+	if got, _ := c.HitTest(r.X, r.Y); got != "solo" {
 		t.Errorf("HitTest on overlay root = %q, want solo", got)
 	}
-	if got := c.HitTest(0, 0); got != "" {
+	if got, _ := c.HitTest(0, 0); got != "" {
 		t.Errorf("HitTest outside overlay root = %q, want \"\"", got)
 	}
 }
@@ -102,11 +102,12 @@ func TestCompositionHitTestDuplicateIDsPaintOrder(t *testing.T) {
 		Text{NodeBase: NodeBase{ID: "dup", H: Fixed(1)}, String: "b"},
 	}}
 	c := Compose(root, 5, 2)
-	if got := c.HitTest(0, 0); got != "dup" {
-		t.Errorf("first duplicate = %q, want dup", got)
+	// Each duplicate reports its own rect, not the last-wins Rects entry.
+	if got, r := c.HitTest(0, 0); got != "dup" || r != (Rect{0, 0, 5, 1}) {
+		t.Errorf("first duplicate = %q %+v, want dup {0 0 5 1}", got, r)
 	}
-	if got := c.HitTest(0, 1); got != "dup" {
-		t.Errorf("second duplicate = %q, want dup", got)
+	if got, r := c.HitTest(0, 1); got != "dup" || r != (Rect{0, 1, 5, 1}) {
+		t.Errorf("second duplicate = %q %+v, want dup {0 1 5 1}", got, r)
 	}
 	if len(c.Diagnostics) != 1 {
 		t.Errorf("diagnostics = %d, want 1", len(c.Diagnostics))
@@ -115,8 +116,9 @@ func TestCompositionHitTestDuplicateIDsPaintOrder(t *testing.T) {
 
 func TestCompositionEmpty(t *testing.T) {
 	for _, c := range []Composition{Compose(hitTree(true), 0, 5), Compose(hitTree(true), 5, -1), {}} {
-		if c.Frame != "" || len(c.Rects) != 0 || c.HitTest(0, 0) != "" {
-			t.Errorf("empty composition = %+v", c)
+		id, r := c.HitTest(0, 0)
+		if c.Frame != "" || len(c.Rects) != 0 || id != "" || r != (Rect{}) {
+			t.Errorf("empty composition = %+v, hit %q %+v", c, id, r)
 		}
 	}
 }

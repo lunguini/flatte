@@ -66,6 +66,7 @@ flatte package flatte
   func ScopeGo[S any, T any](scope*Scope, fx Effects[S], work func(context.Context)(T, error), fold func(*S, T, error))
   func ScopeStream[S any, T any](scope*Scope, fx Effects[S], source func(context.Context, func(T)), fold func(*S, T))
   func SelectFile[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, FileSelection))
+  func SettleFrame(view func() Frame, handle func(LayoutEvent), last map[string] layout.Rect, width int, height int)(Frame, layout.Composition, map[string] layout.Rect)
   func Stream[S any, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T))
   func WithInline() Option
   func WithInput(in io.Reader) Option
@@ -144,6 +145,9 @@ flatte package flatte
   field KeyEvent.Rune rune [order=1]
   field KeyEvent.Mod Mod [order=2]
   struct KeyEvent fields=3 comparable=true
+  type LayoutEvent struct
+  field LayoutEvent.Rects map[string] layout.Rect [order=0]
+  struct LayoutEvent fields=1 comparable=false
   type Mod int
   type MouseAction int
   type MouseButton int
@@ -154,7 +158,8 @@ flatte package flatte
   field MouseEvent.Action MouseAction [order=3]
   field MouseEvent.Mod Mod [order=4]
   field MouseEvent.Target string [order=5]
-  struct MouseEvent fields=6 comparable=true
+  field MouseEvent.TargetRect layout.Rect [order=6]
+  struct MouseEvent fields=7 comparable=true
   type MouseMode int
   type NoopTracer struct
   struct NoopTracer fields=0 comparable=true
@@ -209,12 +214,14 @@ flatest package flatest
   field Driver.<unexported> flatte.App[S] [order=0]
   field Driver.<unexported> int [order=1]
   field Driver.<unexported> int [order=2]
-  field Driver.<unexported> []flatte.StateUpdate[S] [order=3]
-  field Driver.<unexported> *fakeClock [order=4]
-  field Driver.<unexported> []func() [order=5]
-  field Driver.<unexported> bool [order=6]
-  field Driver.<unexported> flatte.Effects[S] [order=7]
-  struct Driver fields=8 comparable=false
+  field Driver.<unexported> map[string] layout.Rect [order=3]
+  field Driver.<unexported> layout.Composition [order=4]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=5]
+  field Driver.<unexported> *fakeClock [order=6]
+  field Driver.<unexported> []func() [order=7]
+  field Driver.<unexported> bool [order=8]
+  field Driver.<unexported> flatte.Effects[S] [order=9]
+  struct Driver fields=10 comparable=false
   type Recorder struct
   field Recorder.Steps []Step [order=0]
   struct Recorder fields=1 comparable=false
@@ -608,7 +615,7 @@ flatui/layout package layout
   method Col.IsHorizontal() bool
   method Col.Render(rect Rect) string
   method Col.Size()(Size, Size)
-  method Composition.HitTest(x int, y int) string
+  method Composition.HitTest(x int, y int)(string, Rect)
   method NodeBase.GetID() string
   method NodeBase.IsOverlay() bool
   method NodeBase.Size()(Size, Size)

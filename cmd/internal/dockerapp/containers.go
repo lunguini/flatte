@@ -92,7 +92,6 @@ type containersScreen struct {
 	zones               flatui.ZoneMap // measured list-row hit regions
 	detailTabs          *flatui.TabBar // stats/logs/inspect tab strip with mouse support
 	listHeight          int
-	geometryDirty       bool
 
 	activity      []string
 	statusLine    string
@@ -381,11 +380,10 @@ func (c *containersScreen) bodyNode(status func(layout.Rect) string) layout.Node
 
 // adopt takes the solved frame geometry (absolute coordinates) and derives the
 // containers screen's dimensions and widget sizes from it. This is the single
-// site where pane geometry is consumed — the solve itself happens once, in the
-// frame solve (View) or the warm solve (resize/drag).
+// site where pane geometry is consumed; the host solves the frame and delivers
+// it as a LayoutEvent before painting.
 func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	c.rects = rects
-	c.geometryDirty = false
 	list := rects["list"]
 	c.bodyYOffset = list.Y
 	c.bodyContentHeight = list.H
@@ -397,7 +395,7 @@ func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	c.listHeight = max(listInnerHeight-listChromeRows, 0)
 	c.list.SetHeight(c.listHeight)
 
-	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
+	detailInnerWidth := detailContentWidth(c.detailPaneWidth)
 	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
 	const detailChromeRows = 2
 	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
@@ -422,27 +420,44 @@ func (c *containersScreen) registerListZones() {
 	}
 }
 
-// detailTabStripRects returns the detail tab strip's absolute rect keyed by its
-// layout ID. The strip is right-aligned in the pane's content header row (the
-// same placement renderDetailPane composes), and its width is the strip's own
-// natural layout size — so the per-label math stays private to the widget.
+// detailHeader builds the detail pane's header row: the container name, then
+// the tab strip flush right.
+// renderDetailPane paints it and detailTabStripRects solves it, both at
+// detailContentWidth, so hit rects are the painted rects.
+//
+// The name takes the remaining width and truncates first. A strip wider than
+// the pane is clipped at the pane edge rather than wrapped onto a second row:
+// clipped tabs stay where they are painted (and clickable while any of them
+// shows), where a wrap would move them away from their solved positions.
+func (c *containersScreen) detailHeader(selected *Container) layout.Node {
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
+	return layout.Row{Children: []layout.Node{
+		layout.Text{NodeBase: layout.NodeBase{W: layout.Grow(1)}, String: title},
+		c.detailTabs.Layout(),
+	}}
+}
+
+// detailContentWidth is the detail pane's content width: the pane minus its
+// side padding and the scrollbar column.
+func detailContentWidth(paneW int) int { return max(paneW-paneBorderCols-1, 1) }
+
+// detailTabStripRects solves the detail header exactly as renderDetailPane
+// paints it and returns the tab strip's and each tab's rect, offset to the
+// header's position on screen: the pane's content origin (left padding, no
+// top padding).
 func (c *containersScreen) detailTabStripRects() map[string]layout.Rect {
 	detailRect := c.rects["detail"]
-	stripW, _ := c.detailTabs.Layout().Size()
-	contentStartX := detailRect.X + panePadding
-	contentWidth := detailRect.W - paneBorderCols
-	localStart := contentWidth - stripW.Value
-	if localStart < 0 || detailRect.W == 0 {
+	selected := c.selected()
+	if detailRect.W == 0 || selected == nil {
 		return nil
 	}
-	return map[string]layout.Rect{
-		detailTabsID: {
-			X: contentStartX + localStart,
-			Y: detailRect.Y,
-			W: stripW.Value,
-			H: 1,
-		},
+	rects := layout.Solve(c.detailHeader(selected), detailContentWidth(detailRect.W), 1)
+	for id, r := range rects {
+		r.X += detailRect.X + panePadding
+		r.Y += detailRect.Y
+		rects[id] = r
 	}
+	return rects
 }
 
 // clampPaneWidths enforces minimums on list and activity widths given the
@@ -484,7 +499,6 @@ func (c *containersScreen) applyDrag(root *State, currentX int) {
 		maxActivity := c.width - c.listPaneWidth - minDetailWidth - 2*dividerWidth
 		c.activityPaneWidth = max(minActivityWidth, min(newActivity, maxActivity))
 	}
-	root.refreshActiveRects()
 	c.detailTabs.SetActive(int(c.tab))
 }
 
@@ -631,7 +645,6 @@ func (c *containersScreen) refreshFilter() {
 	c.list.SetCount(len(c.filtered))
 	c.syncDetail()
 	c.recomputeStatusLine()
-	c.geometryDirty = true
 }
 
 func (c *containersScreen) syncDetail() {
@@ -1195,7 +1208,7 @@ func (c *containersScreen) renderListChrome(r layout.Rect) string {
 }
 
 func (c *containersScreen) renderDetailPane(r layout.Rect) string {
-	detailInnerWidth := max(r.W-paneBorderCols-1, 1)
+	detailInnerWidth := detailContentWidth(r.W)
 	detailInnerHeight := max(r.H-paneBorderRows, 0)
 	contentStyle := lipgloss.NewStyle().Width(detailInnerWidth).Height(detailInnerHeight)
 
@@ -1205,37 +1218,22 @@ func (c *containersScreen) renderDetailPane(r layout.Rect) string {
 		return paneStyle(r.W, r.H, c.focus.Focused(focusDetail), false).Render(empty)
 	}
 
-	indicator := c.renderFollowIndicator()
-	rightChildren := []layout.Node{c.detailTabs.Layout()}
-	if indicator != "" {
-		rightChildren = append(rightChildren, layout.Text{String: " " + indicator})
-	}
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
-	headerNode := layout.Row{
-		Children: []layout.Node{
-			layout.Text{String: title},
-			layout.NewSpacer(),
-			layout.Row{Children: rightChildren},
-		},
-	}
-	// Compose at the row's natural width, not the (possibly narrower) pane
-	// width, so an over-wide tab strip is preserved instead of clipped. The
-	// enclosing contentStyle.Render(Width: detailInnerWidth) then wraps the
-	// overflow onto a second line — the same behavior the retired join-based
-	// layout.Render produced.
-	composeW := detailInnerWidth
-	if natW, _ := headerNode.Size(); natW.Value > composeW {
-		composeW = natW.Value
-	}
-	headerRow, _ := layout.SolveAndCompose(headerNode, composeW, 1)
+	headerRow, _ := layout.SolveAndCompose(c.detailHeader(selected), detailInnerWidth, 1)
 
 	body := c.renderActiveTab(selected)
 	inner := contentStyle.Render(strings.Join([]string{headerRow, "", body}, "\n"))
 	bar := c.detailScrollbar(detailInnerHeight)
 	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
 	combined := withScrollbar(inner, barStyled)
-	focused := c.focus.Focused(focusDetail)
-	return paneStyle(r.W, r.H, focused, false).Render(combined)
+	style := paneStyle(r.W, r.H, c.focus.Focused(focusDetail), false)
+	if indicator := c.renderFollowIndicator(); indicator != "" {
+		// The follow indicator takes the pane's bottom padding row, right-aligned:
+		// the header's width belongs to the tabs, and the pane height is unchanged.
+		footer := lipgloss.NewStyle().Width(detailInnerWidth + 1).Align(lipgloss.Right).Render(indicator)
+		combined += "\n" + footer
+		style = style.PaddingBottom(0)
+	}
+	return style.Render(combined)
 }
 
 func (c *containersScreen) detailScrollbar(detailInnerHeight int) string {
@@ -1287,9 +1285,10 @@ func (c *containersScreen) renderActiveTab(selected *Container) string {
 }
 
 // renderFollowIndicator returns the follow/paused indicator for the logs
-// tab. Rendered inside the tab-bar row (NOT as an extra body line, which
-// would overflow the pane's Height and corrupt the frame — see TTY-found
-// bug 2026-06-25).
+// tab. Rendered in the detail pane's bottom padding row (NOT as an extra body
+// line, which would overflow the pane's Height and corrupt the frame — see
+// TTY-found bug 2026-06-25; and not in the header row, where it pushed the
+// tab strip out of place).
 func (c *containersScreen) renderFollowIndicator() string {
 	if c.logs.TotalLines() == 0 || c.logs.TotalLines() <= c.logs.VisibleLines() {
 		return ""
