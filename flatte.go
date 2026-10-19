@@ -15,6 +15,8 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type App[S any] struct {
@@ -359,6 +361,9 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		return err
 	}
 	var lastFrame Frame
+	// lastComp is the composition of the frame on screen; mouse events are
+	// hit-tested against it so Target matches what the user clicked.
+	var lastComp layout.Composition
 	drew := false
 	cursorShown := false
 	currentCursorShape := -1
@@ -632,6 +637,12 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		}
 		renderCtx := RenderContextFor(out)
 		frame := app.View(app.State, renderCtx)
+		if frame.Root != nil {
+			_, terminalHeight := terminalSize(out)
+			frame, lastComp = ComposeFrame(frame, renderCtx.Width, rootHeight(frame.Root, terminalHeight, cfg.inline))
+		} else {
+			lastComp = layout.Composition{}
+		}
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
 			if err := flushRenderer(); err == nil {
@@ -891,6 +902,10 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				// invalidate the renderer's screen model and require a full
 				// repaint, even when the frame content is unchanged.
 				forceRepaint = true
+			}
+			if mouse, ok := result.event.(MouseEvent); ok {
+				mouse.Target = lastComp.HitTest(mouse.X, mouse.Y)
+				result.event = mouse
 			}
 			// Trace before any exit decision so the recorder sees the
 			// exit-causing event too (incl. a default-quit Ctrl-C).

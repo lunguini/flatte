@@ -104,6 +104,11 @@ type MouseEvent struct {
 	Button MouseButton
 	Action MouseAction
 	Mod    Mod
+	// Target is the ID of the topmost ID'd layout node under the pointer in
+	// the last drawn frame, when that frame set Frame.Root. It is "" for
+	// string frames, over an overlay area with no ID'd node, or where no
+	// ID'd node is painted.
+	Target string
 }
 
 func (KeyEvent) isEvent()       {}

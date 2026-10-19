@@ -144,8 +144,27 @@ whole viewport.
 
 ### Solving a frame
 
+The simplest path is to return the tree and let the runtime solve it:
+
+```go
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	return flatte.Frame{Root: s.tree()} // composed at the terminal size
+}
+```
+
+With `Frame.Root` set, the runtime composes the tree at the terminal width
+and height (alt screen) or at the root's own height (inline), ignores
+`Content`, and fills `MouseEvent.Target` with the ID of the topmost ID'd node
+under the pointer — so `View` needs no size bookkeeping and `Handle` needs no
+hit-test solve. `flatest.Driver` composes `Root` and fills `Target` the same
+way, at its width and the last `ResizeEvent` height. `flatte.ComposeFrame`
+is the shared helper both use.
+
+Call the solver yourself when you need the geometry somewhere else:
+
 | Call | Returns | Use |
 |---|---|---|
+| `layout.Compose(root, w, h)` | `Composition{Frame, Rects, Diagnostics}` + `HitTest(x, y)` | One solve+paint walk with hit-testing in paint order: children beat parents, overlays beat the base, and an overlay area with no ID'd node absorbs the hit (returns `""`). |
 | `layout.SolveAndCompose(root, w, h)` | `(content string, rects map[string]Rect)` | The frame path: one pass distributes rects and paints leaves into a cell buffer, so geometry and pixels cannot drift. Put `content` in `flatte.Frame`; keep `rects` for hit-testing. |
 | `layout.Solve(root, w, h)` | `map[string]Rect` | Geometry only, no painting. Run it from event-time reflow to prepare hit-testing before the next event. |
 | `layout.SolveWithDiagnostics` / `SolveAndComposeWithDiagnostics` | rects/content plus duplicate-ID reports | Opt-in diagnostics for repeated non-empty IDs; existing calls retain last-ID-wins behavior. |
@@ -181,8 +200,19 @@ frame tree instead of being rendered and positioned by hand:
 
 ### Geometry-based hit-testing
 
-Because `SolveAndCompose` records every ID'd node's rect, mouse routing is a
-map lookup — no coordinate math in app code. For tabs:
+With `Frame.Root`, route on the target ID directly:
+
+```go
+case flatte.MouseEvent:
+	if ev.Action == flatte.MousePress && ev.Target == "sidebar" {
+		s.focus = paneSidebar
+	}
+```
+
+Apps still solve at event time when widget state depends on geometry — for
+example a list whose visible row count comes from its solved rect, or a hosted
+app sized to a pane. Because `SolveAndCompose` records every ID'd node's rect,
+that path is a map lookup too — no coordinate math in app code. For tabs:
 
 ```go
 // Build once; WithID tags the strip and each tab with a layout ID.

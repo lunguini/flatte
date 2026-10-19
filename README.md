@@ -136,7 +136,8 @@ $env:FLATTE_WINDOWS_RESIZE_TTY = "1"
   `Progress`, `Spinner`, `Timer`, and `Stopwatch`.
 - `github.com/lunguini/flatte/flatui/layout` - flexbox-style layout engine
   (`Row`, `Col`, `Text`, `Spacer`) that solves a frame tree once into composed
-  content plus per-ID rects for geometry-based hit-testing.
+  content plus per-ID rects for geometry-based hit-testing; return the tree as
+  `Frame.Root` and the runtime composes it and fills `MouseEvent.Target`.
 - `github.com/lunguini/flatte/flatest` - deterministic app driver, golden
   assertions, frame rendering, and replay helpers.
 
@@ -217,5 +218,6 @@ silently replaced by defaults.
 
 See [Current terminal input scope](#current-terminal-input-scope) for the
 current input and resize limitations. Apps should size scrollable content with
-`flatui.Viewport` and use `layout.SolveAndCompose` when they need frame geometry
-for hit-testing.
+`flatui.Viewport`, return layout trees as `Frame.Root` so mouse events carry
+`Target`, and call `layout.Solve` themselves only when widget state depends on
+solved geometry.

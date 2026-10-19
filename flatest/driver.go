@@ -18,6 +18,7 @@ import (
 type Driver[S any] struct {
 	app     flatte.App[S]
 	width   int
+	height  int // from the last ResizeEvent; Root frames compose at width×height
 	updates []flatte.StateUpdate[S]
 	clock   *fakeClock
 	pending []func()
@@ -62,6 +63,15 @@ func (d *Driver[S]) Send(ev flatte.Event) flatte.Frame {
 }
 
 func (d *Driver[S]) deliver(ev flatte.Event) {
+	switch e := ev.(type) {
+	case flatte.ResizeEvent:
+		d.height = e.Height
+	case flatte.MouseEvent:
+		// Hit-test against the frame on screen, exactly as Run does.
+		_, comp := flatte.ComposeFrame(d.view(), d.width, d.height)
+		e.Target = comp.HitTest(e.X, e.Y)
+		ev = e
+	}
 	if d.app.Tracer != nil {
 		d.app.Tracer.Event(ev)
 	}
@@ -107,8 +117,14 @@ func (d *Driver[S]) Advance(by time.Duration) flatte.Frame {
 	return d.Settle()
 }
 
-// Frame renders the current state without changing it.
+// Frame renders the current state without changing it. A frame with a Root
+// is composed at the driver size, as Run composes it at the terminal size.
 func (d *Driver[S]) Frame() flatte.Frame {
+	frame, _ := flatte.ComposeFrame(d.view(), d.width, d.height)
+	return frame
+}
+
+func (d *Driver[S]) view() flatte.Frame {
 	return d.app.View(d.app.State, flatte.RenderContext{Width: d.width})
 }
 

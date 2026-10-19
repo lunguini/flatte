@@ -34,8 +34,46 @@ type DuplicateIDDiagnostic struct {
 // SolveAndComposeWithDiagnostics is SolveAndCompose with non-breaking
 // duplicate-ID diagnostics. Empty IDs remain valid and are not reported.
 func SolveAndComposeWithDiagnostics(root Node, width, height int) (string, map[string]Rect, []DuplicateIDDiagnostic) {
+	c := Compose(root, width, height)
+	return c.Frame, c.Rects, c.Diagnostics
+}
+
+// Composition is the result of one solve+paint walk: the composed frame, the
+// id→rect geometry, duplicate-ID diagnostics, and the paint order needed to
+// answer which node is on top at a cell.
+type Composition struct {
+	Frame       string
+	Rects       map[string]Rect
+	Diagnostics []DuplicateIDDiagnostic
+	hits        []hit
+}
+
+// hit is one hit-testable region in paint order. An empty id marks an
+// overlay layer: it absorbs hits that reach it, so a modal blocks the base
+// painted underneath even where it has no ID'd child.
+type hit struct {
+	id   string
+	rect Rect
+}
+
+// HitTest returns the ID of the topmost ID'd node containing cell (x, y):
+// the last one painted, so children beat parents and overlays beat the base.
+// It returns "" outside the frame, over an overlay area with no ID'd node,
+// or where no ID'd node is painted.
+func (c Composition) HitTest(x, y int) string {
+	for i := len(c.hits) - 1; i >= 0; i-- {
+		if c.hits[i].rect.Contains(x, y) {
+			return c.hits[i].id
+		}
+	}
+	return ""
+}
+
+// Compose is SolveAndCompose returning a Composition, which adds hit-testing
+// in paint order to the frame, rects, and diagnostics.
+func Compose(root Node, width, height int) Composition {
 	if width <= 0 || height <= 0 {
-		return "", map[string]Rect{}, nil
+		return Composition{Rects: map[string]Rect{}}
 	}
 	buf := uv.NewScreenBuffer(width, height)
 	rects := make(map[string]Rect)
@@ -56,15 +94,24 @@ func SolveAndComposeWithDiagnostics(root Node, width, height int) (string, map[s
 	for _, o := range findOverlays(root) {
 		mr := centerRect(o, width, height)
 		buf.FillArea(&uv.EmptyCell, uv.Rect(mr.X, mr.Y, mr.W, mr.H))
-		walk(o, mr, &buf, &state)
+		walkOverlay(o, mr, &buf, &state)
 	}
-	return buf.Render(), rects, state.diagnostics
+	return Composition{Frame: buf.Render(), Rects: rects, Diagnostics: state.diagnostics, hits: state.hits}
 }
 
 type walkState struct {
 	rects       map[string]Rect
 	first       map[string]Rect
 	diagnostics []DuplicateIDDiagnostic
+	hits        []hit
+}
+
+// walkOverlay walks an overlay layer after recording it as a hit barrier, so
+// the layer's own nodes (recorded during the walk) sit above the barrier and
+// the barrier sits above everything painted before it.
+func walkOverlay(o Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
+	state.hits = append(state.hits, hit{rect: r})
+	walk(o, r, buf, state)
 }
 
 // walk is the single solve+paint traversal shared by Solve and SolveAndCompose.
@@ -86,6 +133,7 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
 			state.first[id] = r
 		}
 		state.rects[id] = r
+		state.hits = append(state.hits, hit{id: id, rect: r})
 	}
 
 	container, isContainer := n.(childContainer)

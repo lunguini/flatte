@@ -560,7 +560,7 @@ func SolveWithDiagnostics(root Node, width, height int) (map[string]Rect, []Dupl
 	// SolveAndCompose's overlay walk for hit-test parity.
 	for _, o := range findOverlays(root) {
 		mr := centerRect(o, width, height)
-		walk(o, mr, nil, &state)
+		walkOverlay(o, mr, nil, &state)
 	}
 	return rects, state.diagnostics
 }

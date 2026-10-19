@@ -48,6 +48,7 @@ flatte package flatte
   const MouseWheelUp MouseButton = 4
   func ApplyUpdate[S any](s*S, tracer Tracer, update StateUpdate[S])
   func Cancel[S any](fx Effects[S], name string)
+  func ComposeFrame(frame Frame, width int, height int)(Frame, layout.Composition)
   func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) error
   func Exec[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, error))
   func Go[S any, T any](fx Effects[S], name string, work func(context.Context)(T, error), fold func(*S, T, error))
@@ -135,7 +136,8 @@ flatte package flatte
   field Frame.Content string [order=0]
   field Frame.Cursor *Cursor [order=1]
   field Frame.Title string [order=2]
-  struct Frame fields=3 comparable=true
+  field Frame.Root layout.Node [order=3]
+  struct Frame fields=4 comparable=true
   type Key int
   type KeyEvent struct
   field KeyEvent.Key Key [order=0]
@@ -151,7 +153,8 @@ flatte package flatte
   field MouseEvent.Button MouseButton [order=2]
   field MouseEvent.Action MouseAction [order=3]
   field MouseEvent.Mod Mod [order=4]
-  struct MouseEvent fields=5 comparable=true
+  field MouseEvent.Target string [order=5]
+  struct MouseEvent fields=6 comparable=true
   type MouseMode int
   type NoopTracer struct
   struct NoopTracer fields=0 comparable=true
@@ -205,12 +208,13 @@ flatest package flatest
   type Driver[S any] struct
   field Driver.<unexported> flatte.App[S] [order=0]
   field Driver.<unexported> int [order=1]
-  field Driver.<unexported> []flatte.StateUpdate[S] [order=2]
-  field Driver.<unexported> *fakeClock [order=3]
-  field Driver.<unexported> []func() [order=4]
-  field Driver.<unexported> bool [order=5]
-  field Driver.<unexported> flatte.Effects[S] [order=6]
-  struct Driver fields=7 comparable=false
+  field Driver.<unexported> int [order=2]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=3]
+  field Driver.<unexported> *fakeClock [order=4]
+  field Driver.<unexported> []func() [order=5]
+  field Driver.<unexported> bool [order=6]
+  field Driver.<unexported> flatte.Effects[S] [order=7]
+  struct Driver fields=8 comparable=false
   type Recorder struct
   field Recorder.Steps []Step [order=0]
   struct Recorder fields=1 comparable=false
@@ -587,6 +591,7 @@ flatui/layout package layout
   const SizeFixed SizeKind = 1
   const SizeGrow SizeKind = 2
   func Auto() Size
+  func Compose(root Node, width int, height int) Composition
   func Fixed(n int) Size
   func Grow(w float64) Size
   func NewSpacer() *Spacer
@@ -603,6 +608,7 @@ flatui/layout package layout
   method Col.IsHorizontal() bool
   method Col.Render(rect Rect) string
   method Col.Size()(Size, Size)
+  method Composition.HitTest(x int, y int) string
   method NodeBase.GetID() string
   method NodeBase.IsOverlay() bool
   method NodeBase.Size()(Size, Size)
@@ -638,6 +644,12 @@ flatui/layout package layout
   field Col.NodeBase NodeBase [order=0]
   field Col.Children []Node [order=1]
   struct Col fields=2 comparable=false
+  type Composition struct
+  field Composition.Frame string [order=0]
+  field Composition.Rects map[string] Rect [order=1]
+  field Composition.Diagnostics []DuplicateIDDiagnostic [order=2]
+  field Composition.<unexported> []hit [order=3]
+  struct Composition fields=4 comparable=false
   type DuplicateIDDiagnostic struct
   field DuplicateIDDiagnostic.ID string [order=0]
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]

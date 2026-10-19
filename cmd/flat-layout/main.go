@@ -14,8 +14,6 @@ import (
 
 // State is the single mutable state struct. All fields are gob-serializable.
 type State struct {
-	Width     int
-	Height    int
 	ShowModal bool
 	Cursor    int
 }
@@ -24,9 +22,6 @@ const stateFile = ".flatte-state.gob"
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flatte.ResizeEvent:
-		s.Width = ev.Width
-		s.Height = ev.Height
 	case flatte.KeyEvent:
 		switch ev.Key {
 		case flatte.KeyCharacter:
@@ -52,27 +47,16 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	w := ctx.Width
-	if s.Width > 0 {
-		w = s.Width
-	}
-	h := s.Height
-	if h <= 0 {
-		h = 24
-	}
-
-	tree := buildTree(s)
-	content, _ := layout.SolveAndCompose(tree, w, h)
-
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	hint := "m toggle modal  ·  j/k cursor  ·  q quit"
 	if s.ShowModal {
 		hint = fmt.Sprintf("esc/m close modal  ·  cursor: %d  ·  q quit", s.Cursor)
 	}
 
+	// The runtime solves and paints the tree at the terminal size.
 	return flatte.Frame{
-		Content: content,
-		Title:   "flat-layout — " + hint,
+		Root:  buildTree(s),
+		Title: "flat-layout — " + hint,
 	}
 }
 

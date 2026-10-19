@@ -40,7 +40,7 @@ go run ./flat-pages
 
 | Sample | Demonstrates |
 |---|---|
-| `flat-layout` | `flatui/layout` validation harness: builds a `Col`/`Row`/`Text` tree, composes it with `layout.SolveAndCompose`, and toggles an `Overlay: true` modal |
+| `flat-layout` | `flatui/layout` validation harness: returns a `Col`/`Row`/`Text` tree as `Frame.Root` (the runtime composes it at the terminal size and fills `MouseEvent.Target`) and toggles an `Overlay: true` modal |
 | `flat-docker` | Flagship dogfood: three screens share frame-tree builders; dirty event-time `layout.Solve` prepares widget and hit-test geometry, while `View` performs read-only `SolveAndCompose`; includes `TabBar.WithID`/`HitTest`, row/divider zones, drag-resizable panes, command bar, and confirm modal |
 
 ## Widgets
