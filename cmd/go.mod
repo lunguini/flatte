@@ -10,6 +10,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/ultraviolet v0.0.0-20260703014108-f5a850f9c2b7
 	github.com/charmbracelet/x/ansi v0.11.7
+	github.com/ebitengine/purego v0.11.2
 	github.com/lunguini/flatte v0.0.0
 	golang.org/x/term v0.45.0
 )
