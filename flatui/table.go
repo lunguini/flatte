@@ -5,6 +5,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // Column is a table column: a header title and a fixed display width. Cells are
@@ -88,6 +90,42 @@ func (t Table) ViewWithStyle(style TableStyle) string {
 			return style.Active.Render(text)
 		}
 		return style.Row.Render(text)
+	})
+}
+
+// HeaderLayout returns the column titles as a row of column-width Labels in
+// style; it composes to Header's text.
+func (t Table) HeaderLayout(style layout.TextStyle) layout.Row {
+	titles := make([]string, len(t.cols))
+	for i, c := range t.cols {
+		titles[i] = c.Title
+	}
+	return t.Cells(titles, style)
+}
+
+// Cells returns a row's cells as Labels in style, each exactly its column's
+// width (truncated or padded) and one column apart, so they line up in a
+// proportional font too; it composes to the aligned text View renders.
+// Missing cells are blank.
+func (t Table) Cells(cells []string, style layout.TextStyle) layout.Row {
+	row := layout.Row{NodeBase: layout.NodeBase{Gap: 1}}
+	for i, c := range t.cols {
+		text := ""
+		if i < len(cells) {
+			text = cells[i]
+		}
+		row.Children = append(row.Children, layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(max(c.Width, 0))}, Text: text, Style: style})
+	}
+	return row
+}
+
+// Rows returns the visible body rows as nodes, like List.Rows: row receives
+// each visible row's cells (usually passed to Cells) and whether it is
+// selected, and the result is wrapped in a Row with ID "id:index" whose Box
+// is marked Selected for the selected row.
+func (t Table) Rows(id string, row func(cells []string, selected bool) layout.Node) layout.Col {
+	return t.list.Rows(id, func(i int, selected bool) layout.Node {
+		return row(t.rows[i], selected)
 	})
 }
 

@@ -385,9 +385,12 @@ flatui package flatui
   method Spinner.View() string
   method Stopwatch.Elapsed() time.Duration
   method Stopwatch.Running() bool
+  method Table.Cells(cells[]string, style layout.TextStyle) layout.Row
   method Table.Cursor() int
   method Table.Header() string
+  method Table.HeaderLayout(style layout.TextStyle) layout.Row
   method Table.HeaderWithStyle(style TableStyle) string
+  method Table.Rows(id string, row func(cells[]string, selected bool) layout.Node) layout.Col
   method Table.SelectedRow()[]string
   method Table.View(renderRow func(text string, selected bool) string) string
   method Table.ViewWithStyle(style TableStyle) string
@@ -412,6 +415,7 @@ flatui package flatui
   method Timer.Remaining() time.Duration
   method Tree.CursorID() string
   method Tree.Offset() int
+  method Tree.Rows(id string, row func(row TreeRow, selected bool) layout.Node) layout.Col
   method Tree.View(render func(row TreeRow, selected bool) string) string
   method Tree.VisibleRows()[]TreeRow
   method Viewport.AtBottom() bool

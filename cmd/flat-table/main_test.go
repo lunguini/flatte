@@ -11,7 +11,7 @@ import (
 
 func ready() *State {
 	s := NewState()
-	s.layout(24)
+	settle(s, 72, 24)
 	return s
 }
 
@@ -34,7 +34,7 @@ func TestNavigationSelectsRows(t *testing.T) {
 
 func TestViewHasHeaderAndMarksSelection(t *testing.T) {
 	s := ready()
-	frame := View(s, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(s, flatte.RenderContext{Width: 72})).Content
 	for _, want := range []string{"Flat Table", "ID", "Name", "Status", "service-01", "[1/20]"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -76,4 +76,26 @@ func TestScrollSequenceSnapshot(t *testing.T) {
 		func(d *flatest.Driver[State]) { d.Send(key('G')) },
 	)
 	flatest.AssertFrames(t, "testdata/table-sequence.golden", frames)
+}
+
+// settle composes the view at width×height and delivers the solved rects as
+// the runtime does before painting.
+func settle(s *State, width, height int) {
+	_, comp := flatte.ComposeFrame(composed(View(s, flatte.RenderContext{Width: width})), width, height)
+	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
+}
+
+func TestClickSelectsTheRowUnderThePointer(t *testing.T) {
+	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View}, 72)
+	// Border, title, subtitle, blank, header, then rows 0, 1, 2: row 7.
+	d.Send(flatte.MouseEvent{X: 10, Y: 7, Button: flatte.MouseLeft, Action: flatte.MousePress})
+	if got := d.State().tb.Cursor(); got != 2 {
+		t.Fatalf("click at row 7 selected %d, want 2", got)
+	}
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

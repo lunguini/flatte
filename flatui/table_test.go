@@ -6,6 +6,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 func sampleTable() Table {
@@ -122,5 +125,41 @@ func TestTableViewWithStyle(t *testing.T) {
 	}
 	if ansi.Strip(gotBody) != tb.View(nil) {
 		t.Fatalf("stripped ViewWithStyle() = %q, want %q", ansi.Strip(gotBody), tb.View(nil))
+	}
+}
+
+// TestTableNodesMatchTheStringViews: the node forms of header and rows
+// compose to Header and View's text (cells padded, truncated, one column
+// apart), with the rows ID'd and the selected one marked like List.Rows.
+func TestTableNodesMatchTheStringViews(t *testing.T) {
+	tb := sampleTable()
+	tb.SetRows([][]string{{"Ann", "30"}, {"Bobbinsworth", "9"}, {"Cy"}}) // over-wide and short rows
+	tb.Select(1)
+	header, _ := layout.SolveAndCompose(tb.HeaderLayout(layout.TextStyle{}), 10, 1)
+	if header != tb.Header() {
+		t.Fatalf("HeaderLayout composed %q, want Header %q", header, tb.Header())
+	}
+	var gotCells [][]string
+	rows := tb.Rows("t", func(cells []string, selected bool) layout.Node {
+		gotCells = append(gotCells, cells)
+		return tb.Cells(cells, layout.TextStyle{})
+	})
+	body, rects := layout.SolveAndCompose(rows, 10, 3)
+	// Composed frames drop trailing blank cells; compare the visible text.
+	trim := func(s string) string {
+		lines := strings.Split(s, "\n")
+		for i := range lines {
+			lines[i] = strings.TrimRight(lines[i], " ")
+		}
+		return strings.Join(lines, "\n")
+	}
+	if want := tb.View(nil); trim(flatest.CleanFrame(body)) != trim(want) {
+		t.Fatalf("Rows composed %q, want View %q", body, want)
+	}
+	if len(gotCells) != 3 || gotCells[1][0] != "Bobbinsworth" {
+		t.Fatalf("row callback got %q, want each row's own cells", gotCells)
+	}
+	if rows.Children[1].(layout.Row).Box.Selected != true || rects["t:2"] != (layout.Rect{Y: 2, W: 10, H: 1}) {
+		t.Fatalf("selected/IDs wrong: %+v, t:2 = %+v", rows.Children[1], rects["t:2"])
 	}
 }

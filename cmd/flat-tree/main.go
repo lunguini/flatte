@@ -12,6 +12,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type focusArea int
@@ -23,17 +24,35 @@ const (
 )
 
 type State struct {
-	focus   flatui.FocusRing
-	tree    flatui.Tree
-	search  flatui.TextField
-	details flatui.Viewport
+	focus flatui.FocusRing
+	// tree is the whole tree as the user browses it; results is the tree of
+	// search matches, shown instead while the query is non-empty, so
+	// clearing the search returns to the tree exactly as it was.
+	tree      flatui.Tree
+	results   flatui.Tree
+	searching bool
+	rows      int // the tree pane's height, for both trees
+	search    flatui.TextField
+	details   flatui.Viewport
+}
+
+// activeTree is the tree on screen: the results while searching.
+func (s *State) activeTree() *flatui.Tree {
+	if s.searching {
+		return &s.results
+	}
+	return &s.tree
 }
 
 func NewState() *State {
 	s := &State{tree: flatui.NewTree(treeNodes())}
 	s.focus.SetCount(3)
 	s.tree.Toggle("workspace")
-	s.layout(72, 18)
+	// Until the first layout reports the panes' sizes.
+	s.rows = 5
+	s.tree.SetHeight(s.rows)
+	s.details.SetSize(20, 5)
+	s.syncDetails()
 	return s
 }
 
@@ -54,29 +73,25 @@ func treeNodes() []flatui.TreeNode {
 	}
 }
 
-func (s *State) layout(width, height int) {
-	_, _, detailsWidth := paneSizes(width)
-	bodyRows := max(flatui.CardBodyHeight(height, 5), 5)
-	bodyHeight := max(bodyRows-2, 1)
-	s.tree.SetHeight(bodyHeight)
-	s.details.SetSize(detailsWidth, bodyHeight)
-	s.syncDetails()
-}
-
-func paneSizes(width int) (left, right, detailsWidth int) {
-	bodyWidth := max(flatui.CardBodyWidth(width), 40)
-	left = max(bodyWidth*2/5, 20)
-	right = max(bodyWidth-left-2, 20)
-	if left+right+2 > bodyWidth {
-		left = max(bodyWidth-right-2, 12)
-	}
-	return left, right, max(right-4, 1)
-}
+// The panes' bodies are ID'd nodes: their solved sizes size the tree and the
+// details viewport.
+const (
+	treeBodyID    = "tree.rows"
+	detailsBodyID = "details.body"
+)
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(ev.Width, ev.Height)
+	case flatte.LayoutEvent:
+		if r, ok := ev.Rects[treeBodyID]; ok {
+			s.rows = max(r.H, 1)
+			s.tree.SetHeight(s.rows)
+			s.results.SetHeight(s.rows)
+		}
+		if r, ok := ev.Rects[detailsBodyID]; ok {
+			s.details.SetSize(max(r.W, 1), max(r.H, 1))
+			s.syncDetails()
+		}
 	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	}
@@ -103,26 +118,79 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 }
 
 func handleTreeKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
+	tree := s.activeTree()
 	switch key.Key {
 	case flatte.KeyDown:
-		s.tree.MoveDown()
+		tree.MoveDown()
 	case flatte.KeyUp:
-		s.tree.MoveUp()
+		tree.MoveUp()
 	case flatte.KeyEnter:
-		s.tree.Toggle(s.tree.CursorID())
+		tree.Toggle(tree.CursorID())
+	case flatte.KeyLeft:
+		collapseOrParent(tree)
+	case flatte.KeyRight:
+		expandOrChild(tree)
 	case flatte.KeyCharacter:
 		switch key.Rune {
 		case 'j':
-			s.tree.MoveDown()
+			tree.MoveDown()
 		case 'k':
-			s.tree.MoveUp()
+			tree.MoveUp()
+		case 'h':
+			collapseOrParent(tree)
+		case 'l':
+			expandOrChild(tree)
 		case ' ':
-			s.tree.Toggle(s.tree.CursorID())
+			tree.Toggle(tree.CursorID())
 		case 'q':
 			fx.Quit()
 		}
 	}
 	s.syncDetails()
+}
+
+// cursorRow returns the visible rows and the cursor's index among them.
+func cursorRow(t *flatui.Tree) ([]flatui.TreeRow, int) {
+	rows, id := t.VisibleRows(), t.CursorID()
+	for i, r := range rows {
+		if r.ID == id {
+			return rows, i
+		}
+	}
+	return rows, -1
+}
+
+// expandOrChild opens a closed node, or steps into an open one's first
+// child; on a leaf it does nothing.
+func expandOrChild(t *flatui.Tree) {
+	rows, i := cursorRow(t)
+	if i < 0 || !rows[i].Expandable {
+		return
+	}
+	if !rows[i].Expanded {
+		t.Toggle(rows[i].ID)
+		return
+	}
+	t.SelectVisible(i + 1) // an open node's first child is the next row
+}
+
+// collapseOrParent closes an open node, or steps out to the parent of a
+// closed node or leaf; at a closed root it does nothing.
+func collapseOrParent(t *flatui.Tree) {
+	rows, i := cursorRow(t)
+	if i < 0 {
+		return
+	}
+	if rows[i].Expanded {
+		t.Toggle(rows[i].ID)
+		return
+	}
+	for p := i - 1; p >= 0; p-- { // the parent is the nearest shallower row above
+		if rows[p].Depth < rows[i].Depth {
+			t.SelectVisible(p)
+			return
+		}
+	}
 }
 
 func handleSearchKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
@@ -138,6 +206,7 @@ func handleSearchKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	case flatte.KeyCharacter:
 		s.search.Insert(key.Rune)
 	}
+	s.syncSearch()
 	s.syncDetails()
 }
 
@@ -159,6 +228,48 @@ func handleDetailsKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
+// syncSearch rebuilds the results for the current query.
+func (s *State) syncSearch() {
+	query := strings.ToLower(strings.TrimSpace(s.search.Value))
+	s.searching = query != ""
+	if !s.searching {
+		return
+	}
+	matches := filterNodes(treeNodes(), query)
+	s.results = flatui.NewTree(matches)
+	s.results.SetHeight(s.rows)
+	expandAll(&s.results, matches)
+	for i, row := range s.results.VisibleRows() {
+		if strings.Contains(strings.ToLower(row.Label), query) {
+			s.results.SelectVisible(i)
+			break
+		}
+	}
+}
+
+// filterNodes keeps the nodes whose label contains query, each with its
+// whole subtree, and the ancestors of deeper matches.
+func filterNodes(nodes []flatui.TreeNode, query string) []flatui.TreeNode {
+	var out []flatui.TreeNode
+	for _, n := range nodes {
+		if strings.Contains(strings.ToLower(n.Label), query) {
+			out = append(out, n)
+		} else if kept := filterNodes(n.Children, query); len(kept) > 0 {
+			out = append(out, flatui.TreeNode{ID: n.ID, Label: n.Label, Children: kept})
+		}
+	}
+	return out
+}
+
+func expandAll(t *flatui.Tree, nodes []flatui.TreeNode) {
+	for _, n := range nodes {
+		if len(n.Children) > 0 {
+			t.Toggle(n.ID)
+			expandAll(t, n.Children)
+		}
+	}
+}
+
 func (s *State) syncDetails() {
 	row := s.selectedRow()
 	lines := []string{
@@ -175,8 +286,8 @@ func (s *State) syncDetails() {
 }
 
 func (s *State) selectedRow() flatui.TreeRow {
-	id := s.tree.CursorID()
-	for _, row := range s.tree.VisibleRows() {
+	id := s.activeTree().CursorID()
+	for _, row := range s.activeTree().VisibleRows() {
 		if row.ID == id {
 			return row
 		}
@@ -191,83 +302,84 @@ func searchValue(value string) string {
 	return value
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	leftWidth, rightWidth, _ := paneSizes(ctx.Width)
-	treePanel := panelStyle().Width(leftWidth).Render(strings.Join([]string{
-		sectionTitle("tree", s.focus.Focused(int(focusTree))),
-		"",
-		s.tree.View(renderTreeRow),
-	}, "\n"))
-	detailsPanel := panelStyle().Width(rightWidth).Render(strings.Join([]string{
-		sectionTitle("details", s.focus.Focused(int(focusDetails))),
-		"",
-		s.details.View(),
-	}, "\n"))
-	body := lipgloss.JoinHorizontal(lipgloss.Top, treePanel, "  ", detailsPanel)
-	searchLine := sectionTitle("search", s.focus.Focused(int(focusSearch))) + ": " + s.search.Value
-	footer := flatui.Subtle(keyMap(s).View())
-	lines := []string{
-		flatui.Title("Flat Tree"),
-		searchLine,
-		"",
-		body,
-		"",
-		footer,
+// View lays out the search field over the tree and details panels. The
+// search Input places the cursor while focused.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	var rows layout.Node = layout.Col{NodeBase: layout.NodeBase{ID: treeBodyID, H: layout.Grow(1)}, Children: []layout.Node{
+		layout.Label{Text: "no matches", Style: layout.TextStyle{Fg: lipgloss.Color("245")}},
+	}}
+	if len(s.activeTree().VisibleRows()) > 0 {
+		col := s.activeTree().Rows("node", treeRow)
+		col.ID, col.H = treeBodyID, layout.Grow(1)
+		rows = col
 	}
-	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
-	if s.focus.Focused(int(focusSearch)) {
-		x, y := flatui.CardOrigin()
-		frame.Cursor = &flatte.Cursor{
-			X: x + lipgloss.Width(sectionTitle("search", true)+": ") + s.search.CursorColumn(),
-			Y: y + 1,
-		}
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Tree", Style: layout.TextStyle{Role: layout.TextTitle}},
+		layout.Row{Children: []layout.Node{
+			sectionTitle("search", s.focus.Focused(int(focusSearch))),
+			layout.Label{Text: ": "},
+			s.search.Layout("search", s.focus.Focused(int(focusSearch))),
+		}},
+		layout.Label{},
+		layout.Row{NodeBase: layout.NodeBase{Gap: 2, H: layout.Grow(1)}, Children: []layout.Node{
+			panel(2, sectionTitle("tree", s.focus.Focused(int(focusTree))), rows),
+			panel(3, sectionTitle("details", s.focus.Focused(int(focusDetails))),
+				layout.Col{NodeBase: layout.NodeBase{ID: detailsBodyID, H: layout.Grow(1)}, Children: []layout.Node{
+					layout.Text{String: s.details.View()},
+				}}),
+		}},
+		layout.Label{},
+		layout.Label{Text: keyMap(s).View(), Style: layout.TextStyle{Role: layout.TextSubtle}},
+	)}
+}
+
+// panel is a bordered section: its title, a blank row, and body, taking
+// weight shares of the row.
+func panel(weight float64, title, body layout.Node) layout.Node {
+	return layout.Col{
+		NodeBase: layout.NodeBase{
+			W: layout.Grow(weight), PadLeft: 1, PadRight: 1,
+			Box: layout.Box{Border: layout.BorderRounded, BorderColor: lipgloss.Color("240")},
+		},
+		Children: []layout.Node{title, layout.Label{}, body},
 	}
-	return frame
 }
 
 func keyMap(s *State) flatui.KeyMap {
 	return flatui.KeyMap{
 		{Keys: []string{"tab"}, Help: "focus"},
 		{Keys: []string{"enter", "space"}, Help: "toggle", Disabled: !s.focus.Focused(int(focusTree))},
+		{Keys: []string{"←", "→"}, Help: "fold", Disabled: !s.focus.Focused(int(focusTree))},
 		{Keys: []string{"j", "k"}, Help: "move"},
 		{Keys: []string{"q"}, Help: "quit", Disabled: s.focus.Focused(int(focusSearch))},
 	}
 }
 
-func renderTreeRow(row flatui.TreeRow, selected bool) string {
-	cursor := "  "
+// treeRow is one node: the cursor marker (a chevron in a window, "> " in
+// the terminal), the indentation, the disclosure toggle (a triangle, or
+// "v "/"> "), and the label.
+func treeRow(row flatui.TreeRow, selected bool) layout.Node {
+	cursor := layout.Icon{Text: "  "}
 	if selected {
-		cursor = "> "
+		cursor = layout.Icon{Name: layout.IconChevronRight, Text: "> "}
 	}
-	toggle := "  "
+	toggle := layout.Icon{Text: "  "}
 	if row.Expandable && row.Expanded {
-		toggle = "v "
+		toggle = layout.Icon{Name: layout.IconDisclosureOpen, Text: "v "}
 	} else if row.Expandable {
-		toggle = "> "
+		toggle = layout.Icon{Name: layout.IconDisclosureClosed, Text: "> "}
 	}
-	return cursor + strings.Repeat("  ", row.Depth) + toggle + row.Label
+	return layout.Row{Children: []layout.Node{
+		cursor,
+		layout.Row{NodeBase: layout.NodeBase{PadLeft: 2 * row.Depth}, Children: []layout.Node{toggle, layout.Label{Text: row.Label}}},
+	}}
 }
 
-func sectionTitle(label string, focused bool) string {
+func sectionTitle(label string, focused bool) layout.Node {
 	if focused {
-		return activeStyle().Render("[" + label + "]")
+		return layout.Label{Text: "[" + label + "]", Style: layout.TextStyle{Bold: true, Fg: brand.Teal}}
 	}
-	return mutedStyle().Render(" " + label + " ")
-}
-
-func panelStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(0, 1)
-}
-
-func activeStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(brand.Teal)
-}
-
-func mutedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	return layout.Label{Text: " " + label + " ", Style: layout.TextStyle{Fg: lipgloss.Color("245")}}
 }
 
 func main() {

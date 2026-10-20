@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type State struct {
@@ -50,17 +52,16 @@ func status(i int) string {
 	}
 }
 
-// layout sizes the body to the rows left after the pinned chrome: title,
-// subtitle, blank, header, blank, footer = 6, plus the card border (2).
-func (s *State) layout(height int) {
-	const pinnedRows = 6 // title, subtitle, blank, header, blank, footer
-	s.tb.SetHeight(max(flatui.CardBodyHeight(height, pinnedRows), 1))
-}
+// bodyID names the table body; its rows are "rows:<index>", and its solved
+// height is the number of rows it shows.
+const bodyID = "rows"
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(e.Height)
+	case flatte.LayoutEvent:
+		if r, ok := e.Rects[bodyID]; ok {
+			s.tb.SetHeight(max(r.H, 1))
+		}
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	case flatte.MouseEvent:
@@ -69,6 +70,13 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 			s.tb.MoveUp()
 		case flatte.MouseWheelDown:
 			s.tb.MoveDown()
+		case flatte.MouseLeft:
+			// Each row is an ID'd node: the click names the row it hit.
+			if i, ok := strings.CutPrefix(e.Target, bodyID+":"); ok && e.Action == flatte.MousePress {
+				if n, err := strconv.Atoi(i); err == nil {
+					s.tb.Select(n)
+				}
+			}
 		}
 	}
 }
@@ -95,41 +103,37 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	selLabel := "none"
 	if sel := s.tb.SelectedRow(); len(sel) >= 2 {
 		selLabel = sel[1]
 	}
-	footer := flatui.Subtle(fmt.Sprintf(
-		"j/k move  g/G ends  q quit   selected: %s  [%d/%d]",
-		selLabel, s.tb.Cursor()+1, s.total))
-
-	body := s.tb.View(func(text string, selected bool) string {
+	body := s.tb.Rows(bodyID, func(cells []string, selected bool) layout.Node {
 		if selected {
-			return activeStyle().Render("> " + text)
+			return layout.Row{Children: []layout.Node{
+				layout.Icon{Name: layout.IconChevronRight, Text: "> ", Style: activeStyle},
+				s.tb.Cells(cells, activeStyle),
+			}}
 		}
-		return "  " + text
+		return layout.Row{Children: []layout.Node{layout.Icon{Text: "  "}, s.tb.Cells(cells, layout.TextStyle{})}}
 	})
-
-	lines := []string{
-		flatui.Title("Flat Table"),
-		flatui.Subtle("scrollable selectable table"),
-		"",
-		headerStyle().Render("  " + s.tb.Header()), // indent matches the row marker
-	}
-	lines = append(lines, strings.Split(body, "\n")...)
-	lines = append(lines, "", footer)
-
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+	body.ID, body.H = bodyID, layout.Grow(1)
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Table", Style: layout.TextStyle{Role: layout.TextTitle}},
+		layout.Label{Text: "scrollable selectable table", Style: layout.TextStyle{Role: layout.TextSubtle}},
+		layout.Label{},
+		// The header is indented to match the row marker.
+		layout.Row{NodeBase: layout.NodeBase{PadLeft: 2}, Children: []layout.Node{s.tb.HeaderLayout(headerStyle)}},
+		body,
+		layout.Label{},
+		layout.Label{Text: fmt.Sprintf("j/k move  g/G ends  q quit   selected: %s  [%d/%d]", selLabel, s.tb.Cursor()+1, s.total), Style: layout.TextStyle{Role: layout.TextSubtle}},
+	)}
 }
 
-func headerStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("252"))
-}
-
-func activeStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(brand.Teal)
-}
+var (
+	headerStyle = layout.TextStyle{Bold: true, Fg: lipgloss.Color("252")}
+	activeStyle = layout.TextStyle{Bold: true, Fg: brand.Teal}
+)
 
 func main() {
 	if err := flatte.Run(context.Background(), flatte.App[State]{

@@ -33,7 +33,7 @@ go run ./flat-pages
 |---|---|
 | `flat-pages` | Multi-screen navigation with a screen enum |
 | `flat-modal` | Overlay/modal state without a modal manager, as a `Frame.Root` tree of `Label` roles and `Box` cards; the modal's `TextField.Layout` input places the cursor, with no cursor arithmetic; `-gui` runs the same app in a native window (macOS) |
-| `flat-tree` | `flatui.Tree`, search field, focus ring, keymap footer |
+| `flat-tree` | `flatui.Tree.Rows` with disclosure `Icon`s, ←/→ (h/l) collapse/expand or step to parent/child (app key policy), search filtering to matches and their ancestors (a second results `Tree`, so clearing restores the browse state), bordered panels sized by the frame, search `Input`, focus ring, keymap footer |
 | `flat-workspace` | Capstone: three-pane layout-engine composition (tree, search, table, viewport, progress) with focus ring, grouped help, and a cursor placed from solved rects |
 
 ## Layout Engine
@@ -52,7 +52,7 @@ go run ./flat-pages
 | `flat-list` | `flatui.List.Rows` sized from its solved height, `layout.Icon` selection marker (chevron in a window), keyboard/mouse selection by row `Target`, keep-visible scroll |
 | `flat-spinner` | `flatui.Spinner` driven by `Every` |
 | `flat-progress` | `flatui.Progress` sized from its solved rect (`LayoutEvent`), pause/reset |
-| `flat-table` | `flatui.Table`, aligned columns, selected row |
+| `flat-table` | `flatui.Table` as nodes (`HeaderLayout`, `Rows`, `Cells`: column-width Labels), selected row, click to select |
 | `flat-timer` | `flatui.Timer` and `flatui.Stopwatch` |
 | `flat-filter` | Filtered list composition with `TextField` (an `Input` with a placeholder), `List.Rows`, `Paginator` sized from the list's solved height, and `KeyMap` |
 | `flat-zones` | `flatui.ZoneMap` fed from ID'd panel rects (`LayoutEvent`), explicit hit regions, local mouse coordinates |
