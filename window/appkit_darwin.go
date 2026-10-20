@@ -70,6 +70,10 @@ var (
 	cgContextSetLineWidth       func(ctx uintptr, w float64)
 	cgContextAddPath            func(ctx, path uintptr)
 	cgContextFillPath           func(ctx uintptr)
+	cgContextMoveToPoint        func(ctx uintptr, x, y float64)
+	cgContextAddLineToPoint     func(ctx uintptr, x, y float64)
+	cgContextAddArcToPoint      func(ctx uintptr, x1, y1, x2, y2, r float64)
+	cgContextClosePath          func(ctx uintptr)
 	cgContextStrokePath         func(ctx uintptr)
 	cgPathCreateWithRoundedRect func(r CGRect, cw, ch float64, t *CGAffineTransform) uintptr
 	cgPathRelease               func(path uintptr)
@@ -156,6 +160,10 @@ func bindFrameworks() error {
 		{&cgContextSetLineWidth, cg, "CGContextSetLineWidth"},
 		{&cgContextAddPath, cg, "CGContextAddPath"},
 		{&cgContextFillPath, cg, "CGContextFillPath"},
+		{&cgContextMoveToPoint, cg, "CGContextMoveToPoint"},
+		{&cgContextAddLineToPoint, cg, "CGContextAddLineToPoint"},
+		{&cgContextAddArcToPoint, cg, "CGContextAddArcToPoint"},
+		{&cgContextClosePath, cg, "CGContextClosePath"},
 		{&cgContextStrokePath, cg, "CGContextStrokePath"},
 		{&cgPathCreateWithRoundedRect, cg, "CGPathCreateWithRoundedRect"},
 		{&cgPathRelease, cg, "CGPathRelease"},

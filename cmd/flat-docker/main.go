@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -10,9 +11,12 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/cmd/internal/dockerapp"
 	"github.com/lunguini/flatte/cmd/internal/persist"
+	"github.com/lunguini/flatte/window"
 )
 
 func main() {
+	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	flag.Parse()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -28,7 +32,7 @@ func main() {
 	state := dockerapp.NewStateFromSession(session)
 
 	var saveErr error
-	runErr := flatte.Run(ctx, flatte.App[dockerapp.State]{
+	app := flatte.App[dockerapp.State]{
 		State:  state,
 		Init:   dockerapp.Init,
 		Handle: dockerapp.Handle,
@@ -36,7 +40,13 @@ func main() {
 		OnExit: func(s *dockerapp.State) {
 			saveErr = persist.Save(dockerapp.SessionFile, s.Session(), loadErr)
 		},
-	}, flatte.WithMouse(flatte.MouseModeCellMotion))
+	}
+	var runErr error
+	if *gui {
+		runErr = window.Run(ctx, app, window.Options{Title: "flat-docker", Width: 100, Height: 30})
+	} else {
+		runErr = flatte.Run(ctx, app, flatte.WithMouse(flatte.MouseModeCellMotion))
+	}
 	// Run has restored the terminal before returning; report persistence
 	// failures only after that cleanup and fail the process visibly.
 	if runErr != nil {

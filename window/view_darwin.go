@@ -121,10 +121,11 @@ func viewMethods() []objc.MethodDef {
 			st.ui.resize(b.Size.Width, b.Size.Height)
 			scene := st.ui.render()
 			ctx := uintptr(class("NSGraphicsContext").Send(sel("currentContext")).Send(sel("CGContext")))
-			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked}
+			scale := objc.Send[float64](st.window, sel("backingScaleFactor"))
+			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale}
 			p.draw(scene, b.Size.Width, b.Size.Height)
 			if c := st.ui.frameCursor(); c != nil {
-				p.caretAt(float64(c.X)*st.m.Column, float64(c.Y)*st.m.Line, fontFor(fontKey{mono: true}))
+				p.caretAt(float64(c.X)*st.m.Column, float64(c.Y)*st.m.Line, st.m.Line, fontFor(fontKey{mono: true}))
 			}
 			st.caret, st.caretOK = p.caret, p.caretOK
 			st.setTitle(st.ui.frameTitle())

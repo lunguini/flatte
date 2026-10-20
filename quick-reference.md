@@ -356,11 +356,14 @@ err := window.Run(ctx, app, window.Options{Title: "My App", Width: 80, Height: 2
 ```
 
 `Run` must be called from the main goroutine. The window draws `Label`s in
-the system font by role, `Box`es as rounded or plain rects, and `Input`s as
-text fields with input-method support; ANSI `Text`, `Chrome`, and string
-frames show as a monospace cell grid, so every app runs. Layout runs in
-points — `Fixed` sizes are columns and lines of the UI font, `Pad`/`Gap` are
-8pt steps — while `ResizeEvent`, `LayoutEvent`, and `MouseEvent` stay in
+the system font by role (titles semibold), `Box` borders as rounded strokes
+(an overlay's box as a raised surface), and `Input`s as outlined text fields
+with input-method support; ANSI `Text`, `Chrome`, and string frames show as
+a monospace cell grid with line-drawing, block, and Powerline characters
+drawn as shapes, so every app runs. Layout runs in points — `Fixed` sizes
+are columns and lines (a line is the UI font's height plus line spacing),
+`Pad`/`Gap` are 8pt steps, and a border takes a 12pt band with its stroke
+down the middle, as a terminal border takes a cell — while `ResizeEvent`, `LayoutEvent`, and `MouseEvent` stay in
 cells (`X - TargetRect.X` is exact inside the target). Ctrl-C goes to
 `Handle`; quit with ⌘Q or by closing the window. `window.Snapshot` renders
 the first frame to an image for visual tests. Backend authors draw the five

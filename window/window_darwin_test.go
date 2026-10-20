@@ -51,8 +51,12 @@ func TestMetricsFromFonts(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := metrics()
-	if !(m.Column > 4 && m.Column < 12) || !(m.Line > 12 && m.Line < 24) || m.Step != 8 || m.Border != 1 {
+	if !(m.Column > 4 && m.Column < 12) || !(m.Line > 12 && m.Line < 28) || m.Step != 8 || m.Border != borderBand {
 		t.Fatalf("metrics = %+v", m)
+	}
+	// A line is the body font's height with room around it, on whole points.
+	if body := fontFor(fontKey{}).lineHeight(); !(m.Line >= body*1.2) || m.Line != math.Round(m.Line) {
+		t.Fatalf("line %v for a %vpt-high body font", m.Line, body)
 	}
 	w1, h1 := m.MeasureText("abc", layout.TextStyle{})
 	w2, h2 := m.MeasureText("abcabc\nx", layout.TextStyle{})
@@ -64,6 +68,17 @@ func TestMetricsFromFonts(t *testing.T) {
 	wr, _ := m.MeasureText("Bold", layout.TextStyle{})
 	if !(ht > h1) || !(wb > wr) {
 		t.Fatalf("title height %v vs %v, bold width %v vs %v", ht, h1, wb, wr)
+	}
+	// Titles are semibold: heavier than body text, lighter than bold.
+	wt, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle})
+	wtb, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle, Bold: true})
+	if !(wtb > wt) {
+		t.Fatalf("bold title %v is not wider than the semibold title %v", wtb, wt)
+	}
+	// Fonts are cached per style: asking for the bold title must not change
+	// the plain one.
+	if again, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle}); again != wt {
+		t.Fatalf("title width %v after a bold title, was %v", again, wt)
 	}
 }
 
@@ -148,9 +163,18 @@ func TestSnapshotDrawsScene(t *testing.T) {
 		}
 		scene := layout.LayoutScene(root(), 40*m.Column, 10*m.Line, m)
 		card, title, in, cells := scene.Rects["card"], scene.Rects["title"], scene.Rects["in"], scene.Rects["cells"]
-		// The border is drawn in its color along the card's left edge.
-		if !region(img, layout.PointRect{X: card.X, Y: card.Y + 10, W: 2, H: 10}, scale, color.RGBA{255, 0, 0, 255}, 40) {
-			t.Errorf("scale %v: no red border on the card's left edge", scale)
+		// The border is a stroke in the middle of its band, as a
+		// box-drawing character sits mid-cell: nothing at the card's outer
+		// edge, red half a band in.
+		if !region(img, layout.PointRect{X: card.X + borderBand/2 - 1, Y: card.Y + 20, W: 2, H: 10}, scale, color.RGBA{255, 0, 0, 255}, 40) {
+			t.Errorf("scale %v: no red border in the middle of the card's left band", scale)
+		}
+		if region(img, layout.PointRect{X: card.X, Y: card.Y + 20, W: 2, H: 10}, scale, color.RGBA{255, 0, 0, 255}, 80) {
+			t.Errorf("scale %v: border drawn at the card's outer edge", scale)
+		}
+		// The focused input is outlined in the focus color.
+		if !region(img, layout.PointRect{X: in.X + in.W/2, Y: in.Y, W: 1, H: 2}, scale, toColor(darkTheme.caret), 40) {
+			t.Errorf("scale %v: focused input has no focus outline", scale)
 		}
 		// Glyphs: the title draws something other than background.
 		if !differs(img, title, scale) {
@@ -234,6 +258,121 @@ func TestSnapshotConcurrent(t *testing.T) {
 	for range 64 {
 		if err := <-errs; err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+// column returns the colors of the pixel column at x (points) from y0 to y1.
+func column(img image.Image, x, y0, y1, scale float64) []color.Color {
+	var cs []color.Color
+	for y := int(y0 * scale); y < int(y1*scale); y++ {
+		cs = append(cs, img.At(int(x*scale), y))
+	}
+	return cs
+}
+
+// TestSnapshotGridGlyphsJoinAcrossRows: rows are taller than the monospace
+// font, so line and block characters must be shapes that fill their cells;
+// drawn from the font, a vertical line breaks between every row.
+func TestSnapshotGridGlyphsJoinAcrossRows(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	m := metrics()
+	white := color.RGBA{255, 255, 255, 255}
+	app := flatte.App[snapState]{
+		State: &snapState{},
+		View: func(*snapState, flatte.RenderContext) flatte.Frame {
+			st := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff"))
+			return flatte.Frame{Content: st.Render("│ █\n│ █\n│ █")}
+		},
+	}
+	for _, scale := range []float64{1, 2} {
+		img, err := Snapshot(app, Options{Width: 10, Height: 4}, scale)
+		if err != nil {
+			t.Fatal(err)
+		}
+		line, _ := cellGlyph('│', 0, 0, m.Column, m.Line)
+		lx := line.rects[0].X + 0.5
+		for i, c := range column(img, lx, 0, 3*m.Line, scale) {
+			if !near(c, white, 40) {
+				t.Fatalf("scale %v: │ has a gap at pixel row %d (%v)", scale, i, c)
+			}
+		}
+		for i, c := range column(img, 2*m.Column+m.Column/2, 0, 3*m.Line, scale) {
+			if !near(c, white, 40) {
+				t.Fatalf("scale %v: █ has a gap at pixel row %d (%v)", scale, i, c)
+			}
+		}
+	}
+}
+
+// TestSnapshotOverlayIsRaised: an overlay's box is a raised surface, so the
+// modal reads as above the page.
+func TestSnapshotOverlayIsRaised(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	root := func() layout.Node {
+		return layout.Col{Children: []layout.Node{
+			layout.Label{Text: "page"},
+			layout.Col{
+				NodeBase: layout.NodeBase{ID: "modal", Overlay: true, W: layout.Fixed(20), H: layout.Fixed(5), Box: layout.Box{Border: layout.BorderNormal}},
+				Children: []layout.Node{layout.Label{Text: "modal"}},
+			},
+		}}
+	}
+	m := metrics()
+	img, err := Snapshot(snapApp(root), Options{Width: 40, Height: 12}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := layout.LayoutScene(root(), 40*m.Column, 12*m.Line, m).Rects["modal"]
+	if c := img.At(int((r.X+r.W-borderBand-2)*2), int((r.Y+r.H-borderBand-2)*2)); !near(c, toColor(darkTheme.surface), 2) {
+		t.Errorf("inside the modal: %v, want the surface color", c)
+	}
+	if c := img.At(int((r.X+1)*2), int((r.Y+1)*2)); !near(c, toColor(darkTheme.bg), 2) {
+		t.Errorf("outside the modal's stroke: %v, want the window background", c)
+	}
+}
+
+// TestSnapshotGridHasNoSeams: columns are fractional, so adjacent cell
+// fills must meet on whole pixels; antialiased edges would leave a lighter
+// seam between every pair of cells.
+func TestSnapshotGridHasNoSeams(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	m := metrics()
+	white := color.RGBA{255, 255, 255, 255}
+	bg := lipgloss.Color("#ffffff")
+	app := flatte.App[snapState]{
+		State: &snapState{},
+		View: func(*snapState, flatte.RenderContext) flatte.Frame {
+			blocks := lipgloss.NewStyle().Foreground(bg).Render("██████████")
+			// Two runs (different foregrounds) on the same background.
+			a := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("#ff0000")).Render("     ")
+			b := lipgloss.NewStyle().Background(bg).Foreground(lipgloss.Color("#00ff00")).Render("     ")
+			shade := lipgloss.NewStyle().Foreground(bg).Render("░░░░░░░░░░")
+			return flatte.Frame{Content: blocks + "\n" + a + b + "\n" + shade}
+		},
+	}
+	for _, scale := range []float64{1, 2} {
+		img, err := Snapshot(app, Options{Width: 12, Height: 4}, scale)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for row := range 3 {
+			y := int((float64(row) + 0.5) * m.Line * scale)
+			want := color.Color(white)
+			if row == 2 { // a translucent shade: uniform, whatever its color
+				want = img.At(0, y)
+			}
+			for x := 0; x < int(10*m.Column*scale)-1; x++ {
+				if c := img.At(x, y); !near(c, want, 3) {
+					t.Fatalf("scale %v row %d: seam at pixel %d (%v, want %v)", scale, row, x, c, want)
+				}
+			}
 		}
 	}
 }

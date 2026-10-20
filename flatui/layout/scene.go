@@ -4,7 +4,9 @@ import "math"
 
 // Metrics sizes the layout vocabulary for a backend that lays out in points,
 // such as a GUI: Fixed sizes are columns and lines, Pad and Gap are spacing
-// steps, and a border is one stroke. MeasureText reports the size of a
+// steps, and Border is the space a border takes on each side (the backend
+// draws its stroke within that band, as a terminal draws a border within a
+// cell). MeasureText reports the size of a
 // Label's text in the backend's font for its style; nil measures text as
 // cells (one column per cell of width, one line per line).
 type Metrics struct {
@@ -45,8 +47,8 @@ func cellsOf(v, unit float64) int {
 // region (the frame narrowed by enclosing Scrolls); draw only inside it.
 type Op interface{ isOp() }
 
-// BoxOp draws a node's Box: fill Rect with Box.Background, then stroke its
-// border inside Rect.
+// BoxOp draws a node's Box: its border within the Metrics.Border band
+// around the inside of Rect, and Box.Background behind the content.
 type BoxOp struct {
 	Rect, Clip PointRect
 	Box        Box

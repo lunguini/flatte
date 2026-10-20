@@ -246,13 +246,13 @@ func renderImage(scene layout.Scene, m layout.Metrics, width, height, scale floa
 	// Top-left origin points, as in the flipped view.
 	cgContextTranslateCTM(ctx, 0, float64(ph))
 	cgContextScaleCTM(ctx, scale, -scale)
-	p := &painter{ctx: ctx, m: m, th: darkTheme}
+	p := &painter{ctx: ctx, m: m, th: darkTheme, scale: scale}
 	withPool(func() {
 		// Fill the whole bitmap, including the partial pixel the point size
 		// rounds up to.
 		p.draw(scene, float64(pw)/scale, float64(ph)/scale)
 		if cursor != nil {
-			p.caretAt(float64(cursor.X)*m.Column, float64(cursor.Y)*m.Line, fontFor(fontKey{mono: true}))
+			p.caretAt(float64(cursor.X)*m.Column, float64(cursor.Y)*m.Line, m.Line, fontFor(fontKey{mono: true}))
 		}
 	})
 	img := image.NewRGBA(image.Rect(0, 0, pw, ph))
