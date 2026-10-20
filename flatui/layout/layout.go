@@ -550,7 +550,7 @@ func SolveWithDiagnostics(root Node, width, height int) (map[string]Rect, []Dupl
 		return map[string]Rect{}, nil
 	}
 	rects := make(map[string]Rect)
-	state := walkState{rects: rects, first: make(map[string]Rect)}
+	state := walkState{rects: rects, first: make(map[string]Rect), clip: Rect{0, 0, width, height}}
 	// Match SolveAndCompose: an overlay root is resolved only at its centered
 	// layer rect, never once as a viewport-sized base node.
 	if !isOverlay(root) {

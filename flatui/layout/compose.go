@@ -50,20 +50,24 @@ type Composition struct {
 
 // hit is one hit-testable region in paint order. An empty id marks an
 // overlay layer: it absorbs hits that reach it, so a modal blocks the base
-// painted underneath even where it has no ID'd child.
+// painted underneath even where it has no ID'd child. area is the part of
+// rect that is visible (rect clipped by enclosing Scrolls); only it is hittable.
 type hit struct {
 	id   string
 	rect Rect
+	area Rect
 }
 
 // HitTest returns the ID and solved rect of the topmost ID'd node containing
 // cell (x, y): the last one painted, so children beat parents and overlays
 // beat the base. The rect is that node's own (not the last-wins entry in
-// Rects when IDs repeat). It returns "" and a zero Rect outside the frame,
-// over an overlay area with no ID'd node, or where no ID'd node is painted.
+// Rects when IDs repeat), and whole even where a Scroll clips it, so
+// x-rect.X and y-rect.Y are node-local coordinates. It returns "" and a zero
+// Rect outside the frame, over an overlay area with no ID'd node, or where no
+// ID'd node is painted.
 func (c Composition) HitTest(x, y int) (string, Rect) {
 	for i := len(c.hits) - 1; i >= 0; i-- {
-		if h := c.hits[i]; h.rect.Contains(x, y) {
+		if h := c.hits[i]; h.area.Contains(x, y) {
 			if h.id == "" {
 				return "", Rect{}
 			}
@@ -81,7 +85,7 @@ func Compose(root Node, width, height int) Composition {
 	}
 	buf := uv.NewScreenBuffer(width, height)
 	rects := make(map[string]Rect)
-	state := walkState{rects: rects, first: make(map[string]Rect)}
+	state := walkState{rects: rects, first: make(map[string]Rect), clip: Rect{0, 0, width, height}}
 	// Overlay roots do not participate in the base pass. They are painted by
 	// the centered overlay pass below; walking one here first would paint it at
 	// the viewport origin and then paint it a second time at its centered rect.
@@ -108,13 +112,16 @@ type walkState struct {
 	first       map[string]Rect
 	diagnostics []DuplicateIDDiagnostic
 	hits        []hit
+	// clip is the visible region: the frame, narrowed by each enclosing
+	// Scroll's window. Painting and hit areas are confined to it.
+	clip Rect
 }
 
 // walkOverlay walks an overlay layer after recording it as a hit barrier, so
 // the layer's own nodes (recorded during the walk) sit above the barrier and
 // the barrier sits above everything painted before it.
 func walkOverlay(o Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
-	state.hits = append(state.hits, hit{rect: r})
+	state.hits = append(state.hits, hit{rect: r, area: r.Intersect(state.clip)})
 	walk(o, r, buf, state)
 }
 
@@ -137,30 +144,26 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
 			state.first[id] = r
 		}
 		state.rects[id] = r
-		state.hits = append(state.hits, hit{id: id, rect: r})
+		state.hits = append(state.hits, hit{id: id, rect: r, area: r.Intersect(state.clip)})
+	}
+
+	if s, ok := n.(scroller); ok {
+		walkScroll(s, r, buf, state)
+		return
 	}
 
 	container, isContainer := n.(childContainer)
 	if !isContainer {
-		// Leaf: paint its render at r. drawInto clips to r, so an over-wide or
-		// over-tall string is bounded to the rect it was given.
+		// Leaf: paint its render at r. paintClipped clips to r, so an over-wide
+		// or over-tall string is bounded to the rect it was given, and to the
+		// visible region, so a leaf scrolled out of view is not rendered.
 		if buf != nil {
-			drawInto(*buf, n.Render(r), r)
+			paintClipped(*buf, r, state.clip, n.Render)
 		}
 		return
 	}
 
-	// Container: paint its own border/background chrome first (if any), then
-	// paint children on top inside the inset region. A custom Chrome painter
-	// replaces the default Pad/Bordered fill and is painted even with zero
-	// inset; the layout inset itself still comes from Pad/Bordered only.
-	if buf != nil {
-		if ch := getChrome(n); ch != nil {
-			drawInto(*buf, ch(r), r)
-		} else if getInsetSides(n).any() {
-			drawInto(*buf, fillRect("", r, getPadSides(n), isBordered(n)), r)
-		}
-	}
+	paintChrome(n, r, buf, state)
 
 	children := nonOverlayChildren(container.GetChildren())
 	if len(children) == 0 {
@@ -196,6 +199,63 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
 		walk(c, cr, buf, state)
 		step := satAdd(mainSizes[i], gap)
 		pos = min(innerEnd, satAdd(pos, step))
+	}
+}
+
+// paintChrome paints a container's own border/background chrome (if any)
+// before its children are painted on top inside the inset region. A custom
+// Chrome painter replaces the default Pad/Bordered fill and is painted even
+// with zero inset; the layout inset itself still comes from Pad/Bordered only.
+func paintChrome(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
+	if buf == nil {
+		return
+	}
+	if ch := getChrome(n); ch != nil {
+		paintClipped(*buf, r, state.clip, ch)
+	} else if getInsetSides(n).any() {
+		paintClipped(*buf, r, state.clip, func(r Rect) string {
+			return fillRect("", r, getPadSides(n), isBordered(n))
+		})
+	}
+}
+
+// paintClipped paints render(r) at r, confined to clip. A rect wholly inside
+// clip takes the direct path; one wholly outside is not rendered; one cut by
+// the clip edge is drawn into a scratch buffer whose visible window is copied
+// over, so styling that starts above the window still applies inside it.
+func paintClipped(buf uv.ScreenBuffer, r, clip Rect, render func(Rect) string) {
+	vis := r.Intersect(clip)
+	if vis.W <= 0 || vis.H <= 0 {
+		return
+	}
+	if vis == r {
+		drawInto(buf, render(r), r)
+		return
+	}
+	s := render(r)
+	if s == "" {
+		return
+	}
+	// Rows below the window are never needed; rows above it are, since a
+	// style can open there and carry on into the window.
+	dx, dy := vis.X-r.X, vis.Y-r.Y
+	scratch := uv.NewScreenBuffer(r.W, dy+vis.H)
+	uv.NewStyledString(s).Draw(scratch, scratch.Bounds())
+	for y := 0; y < vis.H; y++ {
+		for x := 0; x < vis.W; x++ {
+			buf.SetCell(vis.X+x, vis.Y+y, nil)
+		}
+	}
+	for y := 0; y < vis.H; y++ {
+		for x := 0; x < vis.W; {
+			c := scratch.CellAt(dx+x, dy+y)
+			if c == nil || c.IsZero() {
+				x++
+				continue
+			}
+			buf.SetCell(vis.X+x, vis.Y+y, c)
+			x += max(c.Width, 1)
+		}
 	}
 }
 

@@ -17,7 +17,7 @@ go run ./flat-pages
 | `flat-search` | `flatte.Latest`, stale result suppression, cancellable search |
 | `flat-chat` | `flatte.WithInline`, `fx.Print`/`fx.Printf`, native terminal scrollback |
 | `flat-game` | Real-time Snake: `flatte.ScopeEvery` tick pipeline with `Scope.Cancel` named ticker cancellation (pause/resume/restart), seeded-RNG deterministic state, `Chrome` board/panel panes, `Overlay` pause and game-over modals, `SaveState` high score |
-| `flat-landing` | Interactive WASM landing showcase: one Flatte app core running in terminal and browser, with tabs, searchable component catalog, viewport detail pane, layout rects, keyboard/mouse input, and a gzip-compressed standard Go WASM build. The browser build can post to an optional shared Snake leaderboard (see `leaderboard/`) that verifies each score by replaying the run server-side |
+| `flat-landing` | Interactive WASM landing showcase: one Flatte app core running in terminal and browser, with tabs, searchable component catalog, viewport detail pane, a `Frame.Root` page that scrolls (`layout.Scroll`) when the window is shorter than the shell, keyboard/mouse input, and a gzip-compressed standard Go WASM build. The browser build can post to an optional shared Snake leaderboard (see `leaderboard/`) that verifies each score by replaying the run server-side |
 
 ## Inputs And Editing
 
@@ -41,6 +41,7 @@ go run ./flat-pages
 | Sample | Demonstrates |
 |---|---|
 | `flat-layout` | `flatui/layout` validation harness: returns a `Col`/`Row`/`Text` tree as `Frame.Root` (the runtime composes it at the terminal size and fills `MouseEvent.Target`) and toggles an `Overlay: true` modal |
+| `flat-scroll` | `layout.Scroll` panes taller than their window: a 40-row service list that keeps its selection visible and a log scrolled by wheel or PgUp/PgDn; offsets are app state clamped with `layout.ClampScroll`, rows are clicked through `MouseEvent.Target` at any offset |
 | `flat-docker` | Flagship dogfood: returns one frame tree as `Frame.Root`; list heights, pane widths, and row zones are adopted from `LayoutEvent` before each paint, and pane clicks route on `MouseEvent.Target`/`TargetRect`; includes `TabBar.WithID`/`HitTest`, row/divider zones, drag-resizable panes, command bar, and confirm modal |
 
 ## Widgets

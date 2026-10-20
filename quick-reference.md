@@ -64,7 +64,8 @@ or piped Windows tests do not verify live console resizing.
 |---|---|---|
 | Text input, one line | `flatui.TextField` | `cmd/flat-form`, `cmd/flat-search` |
 | Text input, multiple lines | `flatui.Textarea` | `cmd/flat-editor` |
-| A scrollable body | `flatui.Viewport` | `cmd/flat-reader` |
+| A scrollable block of text | `flatui.Viewport` | `cmd/flat-reader` |
+| Layout taller than its window (a pane or the whole page) | `layout.Scroll` | `cmd/flat-scroll`, `cmd/flat-landing` |
 | Selection in a vertical list | `flatui.List` | `cmd/flat-list` |
 | Columnar rows | `flatui.Table` | `cmd/flat-table`, `cmd/flat-workspace` |
 | Expand/collapse hierarchy | `flatui.Tree` | `cmd/flat-tree`, `cmd/flat-workspace` |
@@ -142,6 +143,7 @@ whole viewport.
 | `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
 | `layout.Text{String: ...}` | Leaf carrying a pre-rendered string; auto-sizes to it. |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
+| `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY`. See [Scrolling](#scrolling). |
 
 ### Solving a frame
 
@@ -189,6 +191,44 @@ size comes from `Fixed`/`Content` (exact, clamped to the viewport), `Auto`
 (fills the viewport), or `Grow` (viewport fraction, per the weight rule above).
 `layout.Overlay(base, layer)` is a lower-level string compositor for tiny local
 blocks. Prefer an overlay node when composing an app frame.
+
+### Scrolling
+
+`layout.Scroll` shows a child taller than the space it gets. Its inner box
+(inside `Pad`/`Bordered`) is the window, and the child is laid out at its
+natural height behind it: a `Fixed` height is exact, measured content is at
+least the window (so wrapping a layout that fits changes nothing), and
+`Grow`/`Auto` is the window. Painting and hit-testing are clipped to the
+window, so rows scrolled out of view are neither drawn nor hittable. Overlays
+inside a Scroll stay centered on the frame.
+
+The offset is app state. Rects of nodes inside a Scroll arrive shifted by the
+offset (rows above the window have negative `Y`), and the content size is the
+child's own rect, so give the Scroll and its child IDs and clamp with the same
+rule the layout paints with:
+
+```go
+layout.Scroll{
+	NodeBase: layout.NodeBase{ID: "log"},
+	OffsetY:  s.logY,
+	Child:    layout.Text{NodeBase: layout.NodeBase{ID: "log.content"}, String: s.log},
+}
+
+case flatte.MouseEvent:
+	if ev.Button == flatte.MouseWheelDown && ev.Target == "log.content" {
+		s.logY = layout.ClampScroll(s.logY+3, s.rects["log"].H, s.rects["log.content"].H)
+	}
+case flatte.LayoutEvent:
+	s.rects = ev.Rects
+	s.logY = layout.ClampScroll(s.logY, s.rects["log"].H, s.rects["log.content"].H)
+```
+
+Clamping in state matters: an offset left past the end makes scrolling back
+appear stuck. Put chrome (borders, padding) on a wrapping container so the
+Scroll's rect is exactly its window. To keep a row visible, compare its
+content-relative position (`row.Y - content.Y`, the same at every offset) with
+the offset and window height. A whole page scrolls the same way, with a Scroll
+as the root. `cmd/flat-scroll` shows panes; `cmd/flat-landing` shows a page.
 
 ### Widgets in a layout tree
 
@@ -344,7 +384,8 @@ Bind Tab/Shift-Tab to `Next`/`Prev`, then branch input by `Focused(i)`. See
 
 ### Scrollable Page Body
 
-Use `flatui.Viewport`; size it from `ResizeEvent`, not from `View`:
+For a body of text, use `flatui.Viewport`; size it from `ResizeEvent`, not
+from `View`:
 
 ```go
 case ev := ev.(type) {
@@ -353,7 +394,8 @@ case flatte.ResizeEvent:
 }
 ```
 
-`View` should only render the current state.
+`View` should only render the current state. For a layout tree taller than the
+window, use `layout.Scroll` (see [Scrolling](#scrolling)).
 
 ## Testing Recipes
 

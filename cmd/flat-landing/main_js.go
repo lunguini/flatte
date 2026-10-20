@@ -28,9 +28,12 @@ func main() {
 	// The leaderboard is a browser-only DOM overlay; it reads the hosted game off
 	// each frame and never touches the shared Flatte core.
 	lb := newLeaderboard(state)
+	host := &pageHost{}
 	render := func() {
-		state.layout(browserColumns(surface), browserRows(surface))
-		frame := View(state, flatte.RenderContext{Width: state.width})
+		if cols, rows := browserColumns(surface), browserRows(surface); cols != state.width || rows != state.height {
+			host.handle(state, flatte.ResizeEvent{Width: cols, Height: rows})
+		}
+		frame := host.render(state)
 		surface.Set("innerHTML", ansiToHTML(frame.Content))
 		if frame.Title != "" {
 			doc.Set("title", frame.Title)
@@ -44,7 +47,7 @@ func main() {
 	// page keeps it at "/" instead of auto-appending "#game".
 	handleEvent := func(ev flatte.Event) {
 		before := state.active
-		Handle(state, ev, flatte.Effects[State]{})
+		host.handle(state, ev)
 		render()
 		if state.active != before {
 			syncHash(state)
@@ -69,8 +72,7 @@ func main() {
 		return nil
 	})
 	resize := js.FuncOf(func(this js.Value, args []js.Value) any {
-		Handle(state, flatte.ResizeEvent{Width: browserColumns(surface), Height: browserRows(surface)}, flatte.Effects[State]{})
-		render()
+		render() // picks up the new size
 		return nil
 	})
 	click := js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -92,7 +94,7 @@ func main() {
 		if args[0].Get("deltaY").Float() < 0 {
 			button = flatte.MouseWheelUp
 		}
-		Handle(state, flatte.MouseEvent{X: x, Y: y, Button: button, Action: flatte.MousePress}, flatte.Effects[State]{})
+		host.handle(state, flatte.MouseEvent{X: x, Y: y, Button: button, Action: flatte.MousePress})
 		render()
 		return nil
 	})

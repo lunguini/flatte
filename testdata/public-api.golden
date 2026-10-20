@@ -598,6 +598,7 @@ flatui/layout package layout
   const SizeFixed SizeKind = 1
   const SizeGrow SizeKind = 2
   func Auto() Size
+  func ClampScroll(offset int, viewport int, content int) int
   func Compose(root Node, width int, height int) Composition
   func Fixed(n int) Size
   func Grow(w float64) Size
@@ -627,12 +628,18 @@ flatui/layout package layout
   method Row.IsHorizontal() bool
   method Row.Render(rect Rect) string
   method Row.Size()(Size, Size)
+  method Scroll.GetChildren()[]Node
+  method Scroll.IsHorizontal() bool
+  method Scroll.Render(rect Rect) string
+  method Scroll.Size()(Size, Size)
   method Text.Render(r Rect) string
   method Text.Size()(Size, Size)
   methodset *Col.GetID() string
   methodset *Col.IsOverlay() bool
   methodset *Row.GetID() string
   methodset *Row.IsOverlay() bool
+  methodset *Scroll.GetID() string
+  methodset *Scroll.IsOverlay() bool
   methodset *Spacer.GetID() string
   methodset *Spacer.IsOverlay() bool
   methodset *Spacer.Size()(Size, Size)
@@ -642,6 +649,8 @@ flatui/layout package layout
   methodset Col.IsOverlay() bool
   methodset Row.GetID() string
   methodset Row.IsOverlay() bool
+  methodset Scroll.GetID() string
+  methodset Scroll.IsOverlay() bool
   methodset Spacer.GetID() string
   methodset Spacer.IsOverlay() bool
   methodset Spacer.Size()(Size, Size)
@@ -689,6 +698,11 @@ flatui/layout package layout
   field Row.NodeBase NodeBase [order=0]
   field Row.Children []Node [order=1]
   struct Row fields=2 comparable=false
+  type Scroll struct
+  field Scroll.NodeBase NodeBase [order=0]
+  field Scroll.OffsetY int [order=1]
+  field Scroll.Child Node [order=2]
+  struct Scroll fields=3 comparable=false
   type Size struct
   field Size.Kind SizeKind [order=0]
   field Size.Value int [order=1]

@@ -78,9 +78,15 @@ type State struct {
 	introFrame int
 	active     landingTab
 
+	// width/height are the window size from the last ResizeEvent; rects is the
+	// geometry last delivered as a LayoutEvent (in window coordinates, so
+	// already shifted by pageY).
 	width  int
 	height int
 	rects  map[string]layout.Rect
+	// pageY is the whole-page scroll offset: the shell is at least
+	// minRowsFor(active) tall and scrolls when the window is shorter.
+	pageY int
 	// coX/coY are the absolute top-left of the content pane's inner area (inside
 	// the border+padding). Mouse events are translated by this offset before
 	// being forwarded to a hosted app, whose own rects are frame-local.
@@ -131,7 +137,6 @@ func NewState() *State {
 		timer:    flatui.NewTimer(90 * time.Second),
 	}
 	s.catalog.SetCount(len(showcase))
-	s.reflow()
 	return s
 }
 
@@ -149,22 +154,12 @@ func sandboxFx[T any]() flatte.Effects[T] {
 	return flatte.NewHarnessEffects[T](context.Background(), ch, func() {}, func(func()) {}, noopClock{})
 }
 
-func (s *State) layout(width, height int) {
-	s.width = max(width, 64)
-	s.height = max(height, 20)
-	s.reflow()
-}
-
-// reflow is the sole geometry-adoption path. Handle calls it after events that
-// can change outer layout or interactive regions; View only paints the already
-// prepared state. The runtime delivers an initial ResizeEvent before the first
-// View, while NewState performs one default-size reflow for direct callers.
-func (s *State) reflow() {
-	st := newStyles()
-	width := max(s.width, 64)
-	height := max(s.height, minRowsFor(s.active))
-	s.rects = layout.Solve(shellTree(s, st), width, height)
-
+// adopt is the sole geometry-adoption path: it sizes the active tab's hosted
+// app and widgets from the rects last delivered as a LayoutEvent. Handle calls
+// it on every LayoutEvent and after every other event, because switching tabs
+// starts consuming geometry that may not have changed (and so is not
+// delivered again). View only paints the already prepared state.
+func (s *State) adopt() {
 	r, ok := s.rects["content"]
 	if !ok {
 		return
@@ -240,12 +235,19 @@ func Tick(s *State, now time.Time) {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	if _, ok := ev.(flatte.ResizeEvent); !ok {
-		defer s.reflow()
-	}
 	switch ev := ev.(type) {
 	case flatte.ResizeEvent:
-		s.layout(ev.Width, ev.Height)
+		// The new geometry arrives as a LayoutEvent before the next paint.
+		s.width, s.height = ev.Width, ev.Height
+		return
+	case flatte.LayoutEvent:
+		s.rects = ev.Rects
+		s.pageY = s.clampPage(s.pageY)
+		s.adopt()
+		return
+	}
+	defer s.adopt()
+	switch ev := ev.(type) {
 	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	case flatte.MouseEvent:
@@ -294,6 +296,12 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 				s.nextTab()
 			}
 			return
+		case flatte.KeyPageDown:
+			s.scrollPage(s.rects["page"].H)
+			return
+		case flatte.KeyPageUp:
+			s.scrollPage(-s.rects["page"].H)
+			return
 		}
 	}
 
@@ -331,16 +339,45 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 		}
 		return
 	}
+	if m.Button == flatte.MouseWheelUp || m.Button == flatte.MouseWheelDown {
+		// The docker app and the UI catalog scroll themselves; everywhere else
+		// the wheel scrolls the page.
+		if m.Target == "content" && (s.active == tabApp || s.active == tabUI) {
+			s.forwardMouse(m)
+			return
+		}
+		step := wheelStep
+		if m.Button == flatte.MouseWheelUp {
+			step = -step
+		}
+		s.scrollPage(step)
+		return
+	}
 	if m.Action != flatte.MousePress {
-		// Forward wheel to the hosted app so docker/game panes scroll.
 		s.forwardMouse(m)
 		return
 	}
-	if tab, ok := tabHit(s.rects, m.X, m.Y); ok {
+	if tab, ok := tabTarget(m.Target); ok {
 		s.active = tab
 		return
 	}
 	s.forwardMouse(m)
+}
+
+// wheelStep is how many rows one wheel notch scrolls the page.
+const wheelStep = 3
+
+func (s *State) scrollPage(by int) { s.pageY = s.clampPage(s.pageY + by) }
+
+// clampPage bounds a page offset by the window and shell heights, the same
+// rule the layout applies when painting.
+func (s *State) clampPage(offset int) int {
+	view, okV := s.rects["page"]
+	shell, okS := s.rects["shell"]
+	if !okV || !okS {
+		return max(offset, 0)
+	}
+	return layout.ClampScroll(offset, view.H, shell.H)
 }
 
 func (s *State) forwardMouse(m flatte.MouseEvent) {
@@ -389,15 +426,19 @@ func minRowsFor(active landingTab) int {
 	return 22
 }
 
+// View returns the shell as a page-sized Scroll: the shell is laid out at
+// least minRowsFor(active) tall so a hosted app is never squeezed, and a
+// shorter window scrolls it instead of cutting it off.
 func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	st := newStyles()
-	width := max(max(ctx.Width, s.width), 64)
-	height := max(s.height, minRowsFor(s.active))
 	if s.phase == phaseIntro {
-		return flatte.Frame{Content: trimRightLines(introView(s, st, width, height)), Title: "Flatte"}
+		width := max(ctx.Width, s.width)
+		return flatte.Frame{Content: trimRightLines(introView(s, st, width, s.height)), Title: "Flatte"}
 	}
-	content, _ := layout.SolveAndCompose(shellTree(s, st), width, height)
-	return flatte.Frame{Content: trimRightLines(content), Title: "Flatte"}
+	return flatte.Frame{
+		Root:  layout.Scroll{NodeBase: layout.NodeBase{ID: "page"}, OffsetY: s.pageY, Child: shellTree(s, st)},
+		Title: "Flatte",
+	}
 }
 
 func contentNodeBase() layout.NodeBase {
@@ -406,7 +447,7 @@ func contentNodeBase() layout.NodeBase {
 
 func shellTree(s *State, st styles) layout.Node {
 	return layout.Col{
-		NodeBase: layout.NodeBase{ID: "page", Gap: 1, PadLeft: 1, PadRight: 1},
+		NodeBase: layout.NodeBase{ID: "shell", H: layout.Fixed(max(s.height, minRowsFor(s.active))), Gap: 1, PadLeft: 1, PadRight: 1},
 		Children: []layout.Node{
 			tabBarRow(s, st),
 			landingBlock{
@@ -451,13 +492,17 @@ func tabNodes(s *State, st styles, lo, hi int) []layout.Node {
 	return out
 }
 
-func tabHit(rects map[string]layout.Rect, x, y int) (landingTab, bool) {
-	for i := 0; i < len(tabLabels); i++ {
-		if r, ok := rects[fmt.Sprintf("tab-%d", i)]; ok && r.Contains(x, y) {
-			return landingTab(i), true
-		}
+// tabTarget maps a hit target ("tab-N") to its tab.
+func tabTarget(target string) (landingTab, bool) {
+	n, ok := strings.CutPrefix(target, "tab-")
+	if !ok {
+		return 0, false
 	}
-	return 0, false
+	i, err := strconv.Atoi(n)
+	if err != nil || i < 0 || i >= len(tabLabels) {
+		return 0, false
+	}
+	return landingTab(i), true
 }
 
 func contentView(s *State, st styles, r layout.Rect, width int) string {
@@ -1027,6 +1072,33 @@ func exitOnError(err error) {
 	}
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
+}
+
+// pageHost does for the browser loop what Run does in a terminal: it settles
+// layout (delivering LayoutEvents) before each paint and hit-tests mouse
+// events against the frame on screen. It lives outside the js build so tests
+// drive the same path the browser does.
+type pageHost struct {
+	delivered map[string]layout.Rect
+	comp      layout.Composition
+}
+
+func (h *pageHost) handle(s *State, ev flatte.Event) {
+	if m, ok := ev.(flatte.MouseEvent); ok {
+		m.Target, m.TargetRect = h.comp.HitTest(m.X, m.Y)
+		ev = m
+	}
+	Handle(s, ev, flatte.Effects[State]{})
+}
+
+func (h *pageHost) render(s *State) flatte.Frame {
+	var frame flatte.Frame
+	frame, h.comp, h.delivered = flatte.SettleFrame(
+		func() flatte.Frame { return View(s, flatte.RenderContext{Width: s.width}) },
+		func(ev flatte.LayoutEvent) { Handle(s, ev, flatte.Effects[State]{}) },
+		h.delivered, s.width, s.height,
+	)
+	return frame
 }
 
 // settleDocker settles the hosted docker app's layout exactly as Run would

@@ -1,0 +1,25 @@
+ Flat Scroll   ·  40 services, 60 log lines each
+╭────────────────────────╮ ╭───────────────────────────────────────────────────╮
+│ > service-01 running   │ │service-01  running                                │
+│   service-02 running   │ │line 01  12:00:00  INFO   health check ok          │
+│   service-03 restarting│ │line 02  12:00:07  INFO   slow request (412ms)     │
+│   service-04 stopped   │ │line 03  12:00:14  DEBUG  accepted connection      │
+│   service-05 running   │ │line 04  12:00:21  WARN   rotated log file         │
+│   service-06 running   │ │line 05  12:00:28  INFO   flushed write buffer     │
+│   service-07 restarting│ │line 06  12:00:35  INFO   health check ok          │
+│   service-08 stopped   │ │line 07  12:00:42  DEBUG  slow request (412ms)     │
+│   service-09 running   │ │line 08  12:00:49  WARN   accepted connection      │
+│   service-10 running   │ │line 09  12:00:56  INFO   rotated log file         │
+│   service-11 restarting│ │line 10  12:00:03  INFO   flushed write buffer     │
+│   service-12 stopped   │ │line 11  12:00:10  DEBUG  health check ok          │
+│   service-13 running   │ │line 12  12:00:17  WARN   slow request (412ms)     │
+│   service-14 running   │ │line 13  12:00:24  INFO   accepted connection      │
+│   service-15 restarting│ │line 14  12:00:31  INFO   rotated log file         │
+│   service-16 stopped   │ │line 15  12:00:38  DEBUG  flushed write buffer     │
+│   service-17 running   │ │line 16  12:00:45  WARN   health check ok          │
+│   service-18 running   │ │line 17  12:00:52  INFO   slow request (412ms)     │
+│   service-19 restarting│ │line 18  12:00:59  INFO   accepted connection      │
+│   service-20 stopped   │ │line 19  12:00:06  DEBUG  rotated log file         │
+╰────────────────────────╯ ╰───────────────────────────────────────────────────╯
+j/k select · wheel scrolls pane · pgup/pgdn log · q quit  [1/40 · log 1–19/60]
+[title flat-scroll — service-01]

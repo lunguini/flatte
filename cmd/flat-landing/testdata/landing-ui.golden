@@ -1,0 +1,28 @@
+  Game   App                                                          Flatte   Layout   UI 
+
+ ╭────────────────────────────────────────────────────────────────────────────────────────╮
+ │ Components           TextField · input                                                 │
+ │ ▸ TextField          Grapheme-correct single-line input with app-owned focus policy.   │
+ │   Textarea                                                                             │
+ │   List               name Ada Lovelace▌                                                │
+ │   Table              Grapheme-correct, app-owned cursor.                               │
+ │   Tree                                                                                 │
+ │   Viewport                                                                             │
+ │   Progress                                                                             │
+ │   Spinner                                                                              │
+ │   Timer                                                                                │
+ │   TabBar                                                                               │
+ │   Layout                                                                               │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ ╰────────────────────────────────────────────────────────────────────────────────────────╯
+
+ ▚ UI · j/k or ↑/↓ pick a component  Ctrl+←/→ tabs · click to switch
