@@ -165,3 +165,22 @@ func TestReplaySkipsRecordedLayoutEvents(t *testing.T) {
 		t.Fatalf("replayed layout events = %d, recorded = %d", got, want)
 	}
 }
+
+func TestDriverFillsMouseCaret(t *testing.T) {
+	type st struct{ caret int }
+	d := Start(flatte.App[st]{
+		State: &st{caret: -1},
+		Handle: func(s *st, ev flatte.Event, _ flatte.Effects[st]) {
+			if m, ok := ev.(flatte.MouseEvent); ok && m.HasCaret {
+				s.caret = m.Caret
+			}
+		},
+		View: func(*st, flatte.RenderContext) flatte.Frame {
+			return flatte.Frame{Root: layout.Input{NodeBase: layout.NodeBase{ID: "in"}, Value: "hello"}}
+		},
+	}, 20)
+	d.Send(flatte.MouseEvent{X: 2, Y: 0, Button: flatte.MouseLeft, Action: flatte.MousePress})
+	if d.State().caret != 2 {
+		t.Fatalf("caret = %d, want 2", d.State().caret)
+	}
+}

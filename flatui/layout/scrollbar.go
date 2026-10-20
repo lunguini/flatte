@@ -73,3 +73,33 @@ func (b ScrollBar) fraction() (start, length float64, ok bool) {
 	offset := min(max(b.Offset, 0), b.Total-b.Visible)
 	return float64(offset) / float64(b.Total), float64(b.Visible) / float64(b.Total), true
 }
+
+// OffsetAt is the offset a press or drag at line y of the bar asks for, on a
+// bar height lines tall (y and height as in its rect, so y is node-local):
+// the one whose thumb is centered nearest y, so the top line scrolls to the
+// start and the bottom line to the end. It is Offset unchanged when there
+// is nothing to scroll.
+func (b ScrollBar) OffsetAt(y, height int) int {
+	_, size, ok := b.thumb(height)
+	if !ok {
+		return b.Offset
+	}
+	track, scrollable := height-size, b.Total-b.Visible
+	if track <= 0 {
+		return min(max(b.Offset, 0), scrollable)
+	}
+	top := min(max(y-size/2, 0), track)
+	// The thumb's line rounds down from offset/scrollable×track: start from
+	// the rounded inverse and take the nearest of its neighbours.
+	best, bestD := 0, track+1
+	guess := (top*scrollable + track/2) / track
+	for off := max(guess-1, 0); off <= min(guess+1, scrollable); off++ {
+		c := b
+		c.Offset = off
+		pos, _, _ := c.thumb(height)
+		if d := max(pos-top, top-pos); d < bestD {
+			best, bestD = off, d
+		}
+	}
+	return best
+}

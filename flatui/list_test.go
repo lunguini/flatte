@@ -159,3 +159,27 @@ func TestListRowsEmpty(t *testing.T) {
 		t.Fatalf("empty list rows = %+v (row func called: %v)", rows, called)
 	}
 }
+
+func TestListScrollTo(t *testing.T) {
+	var l List
+	l.SetCount(20)
+	l.SetHeight(5)
+	l.Select(2)
+	l.ScrollTo(10)
+	if l.Offset() != 10 || l.Cursor() != 10 {
+		t.Fatalf("offset %d cursor %d, want 10 and the cursor pulled to 10", l.Offset(), l.Cursor())
+	}
+	l.Select(13)
+	l.ScrollTo(99)
+	if l.Offset() != 15 || l.Cursor() != 15 {
+		t.Fatalf("offset %d cursor %d, want clamped to 15", l.Offset(), l.Cursor())
+	}
+	l.ScrollTo(12) // cursor 15 still visible: stays
+	if l.Offset() != 12 || l.Cursor() != 15 {
+		t.Fatalf("offset %d cursor %d, want 12 and 15", l.Offset(), l.Cursor())
+	}
+	l.ScrollTo(-4)
+	if l.Offset() != 0 || l.Cursor() != 4 {
+		t.Fatalf("offset %d cursor %d, want 0 and 4", l.Offset(), l.Cursor())
+	}
+}

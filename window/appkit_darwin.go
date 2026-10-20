@@ -103,6 +103,7 @@ var (
 	ctLineDraw                       func(line, ctx uintptr)
 	ctLineGetTypographicBounds       func(line uintptr, ascent, descent, leading *float64) float64
 	ctLineGetOffsetForStringIndex    func(line uintptr, index int, secondary *float64) float64
+	ctLineGetStringIndexForPosition  func(line uintptr, p CGPoint) int
 	cfRelease                        func(ref uintptr)
 
 	dispatchAsyncF       func(queue, ctx, fn uintptr)
@@ -195,6 +196,7 @@ func bindFrameworks() error {
 		{&ctLineDraw, ct, "CTLineDraw"},
 		{&ctLineGetTypographicBounds, ct, "CTLineGetTypographicBounds"},
 		{&ctLineGetOffsetForStringIndex, ct, "CTLineGetOffsetForStringIndex"},
+		{&ctLineGetStringIndexForPosition, ct, "CTLineGetStringIndexForPosition"},
 		{&cfRelease, cf, "CFRelease"},
 		{&dispatchAsyncF, sys, "dispatch_async_f"},
 		{&pthreadMainNP, sys, "pthread_main_np"},

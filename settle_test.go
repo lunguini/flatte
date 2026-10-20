@@ -266,3 +266,69 @@ func TestRunFillsMouseTargetRect(t *testing.T) {
 		t.Fatalf("target rects = %+v", state.rects)
 	}
 }
+
+func TestRunFillsMouseCaretAndSuper(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { reader.Close(); writer.Close() })
+	type state struct {
+		carets []int
+		keys   []KeyEvent
+	}
+	s := &state{}
+	out := &lockedBuffer{}
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(context.Background(), App[state]{
+			State: s,
+			Handle: func(s *state, ev Event, fx Effects[state]) {
+				switch ev := ev.(type) {
+				case MouseEvent:
+					if ev.Action == MousePress {
+						c := -1
+						if ev.HasCaret {
+							c = ev.Caret
+						}
+						s.carets = append(s.carets, c)
+					}
+				case KeyEvent:
+					if ev.Rune == 'q' {
+						fx.Quit()
+						return
+					}
+					s.keys = append(s.keys, ev)
+				}
+			},
+			View: func(*state, RenderContext) Frame {
+				return Frame{Root: layout.Col{Children: []layout.Node{
+					layout.Input{NodeBase: layout.NodeBase{ID: "in"}, Value: "hello"},
+					layout.Label{NodeBase: layout.NodeBase{ID: "below"}, Text: "ready"},
+				}}}
+			},
+		}, WithInput(reader), WithOutput(out), WithMouse(MouseModeCellMotion))
+	}()
+	waitFor(t, out, "ready")
+	// Clicks at (3,0) in the input and (3,1) on the label; then ⌘C as a
+	// kitty-protocol key (modifiers 1+8: super), and ⌘← and ⇧⌘← as Warp
+	// sends them in the xterm encoding (modifier bit 8: meta).
+	if _, err := writer.Write([]byte("\x1b[<0;4;1M\x1b[<0;4;2M\x1b[99;9u\x1b[1;9D\x1b[1;10Dq")); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if len(s.carets) != 2 || s.carets[0] != 3 || s.carets[1] != -1 {
+		t.Fatalf("carets = %v, want [3 -1]", s.carets)
+	}
+	if len(s.keys) != 3 || s.keys[0].Rune != 'c' || !s.keys[0].Mod.Contains(ModSuper) {
+		t.Fatalf("keys = %+v, want super+c first", s.keys)
+	}
+	if k := s.keys[1]; k.Key != KeyLeft || k.Mod != ModSuper {
+		t.Fatalf("⌘← (CSI 1;9D) = %+v, want super+left", k)
+	}
+	if k := s.keys[2]; k.Key != KeyLeft || k.Mod != ModSuper|ModShift {
+		t.Fatalf("⇧⌘← (CSI 1;10D) = %+v, want super+shift+left", k)
+	}
+}

@@ -97,7 +97,8 @@ type containersScreen struct {
 	statusLine    string
 	followTail    bool
 	drag          *dragState // non-nil while a divider is being dragged
-	pendingCursor int        // restored from session after layout sets list count
+	barDrag       scrollDrag
+	pendingCursor int // restored from session after layout sets list count
 }
 
 type dragState struct {
@@ -270,7 +271,7 @@ func (c *containersScreen) listNode() layout.Node {
 				layout.Label{},
 				rows,
 			}},
-			layout.ScrollBar{Offset: c.list.Offset(), Visible: c.listHeight, Total: c.list.Count(), Color: pal.panel},
+			listBar(c.list),
 		}}},
 	}
 }
@@ -357,12 +358,12 @@ func (c *containersScreen) tabBody(selected *Container) []layout.Node {
 		if c.logs.VisibleLines() == 0 {
 			return []layout.Node{layout.Label{Text: "(no logs)", Style: layout.TextStyle{Fg: pal.muted}}}
 		}
-		return []layout.Node{c.logs.Layout()}
+		return []layout.Node{viewportBody(logsBodyID, c.logs)}
 	case tabInspect:
 		if c.inspect.VisibleLines() == 0 {
 			return []layout.Node{layout.Label{Text: "(no inspect data)", Style: layout.TextStyle{Fg: pal.muted}}}
 		}
-		return []layout.Node{c.inspect.Layout()}
+		return []layout.Node{viewportBody(inspectBodyID, c.inspect)}
 	}
 	return nil
 }
@@ -459,6 +460,10 @@ func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
 	c.logs.SetSize(detailInnerWidth, contentHeight)
 	c.inspect.SetSize(detailInnerWidth, contentHeight)
+	// The active tab's viewport, laid out, scrolls over the lines the host
+	// wrapped it into (a window wraps in its font).
+	c.logs.Adopt(rects, logsBodyID)
+	c.inspect.Adopt(rects, inspectBodyID)
 	c.cpu.SetWidth(max(detailInnerWidth-16, 4))
 	c.mem.SetWidth(max(detailInnerWidth-16, 4))
 
@@ -583,6 +588,19 @@ func (c *containersScreen) recomputeStatusLine() {
 }
 
 func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m flatte.MouseEvent) {
+	// A press or drag on a scroll bar scrolls its pane.
+	if bar, y, h, handled := c.barDrag.event(m, listBarID, detailBarID); handled {
+		switch bar {
+		case listBarID:
+			if scrollList(&c.list, y, h) {
+				c.onSelectionChange(root, fx)
+			}
+		case detailBarID:
+			d := c.detailScrollBar()
+			c.scrollActiveTab(d.OffsetAt(y, h) - d.Offset)
+		}
+		return
+	}
 	// Ongoing drag — track motion and release
 	if c.drag != nil {
 		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
@@ -1147,8 +1165,23 @@ func (c *containersScreen) keyHints() string {
 
 // detailScrollBar is the active tab's scroll bar: the logs' or inspect
 // viewport's position, blank on the stats tab.
+// logsBodyID and inspectBodyID name the space the logs and inspect
+// viewports fill, so they adopt the host's layout of their text.
+const (
+	logsBodyID    = "detail:logs"
+	inspectBodyID = "detail:inspect"
+)
+
+// viewportBody is a tab's viewport in the space left below the header.
+func viewportBody(id string, v flatui.Viewport) layout.Node {
+	return layout.Col{NodeBase: layout.NodeBase{ID: id, H: layout.Grow(1)}, Children: []layout.Node{v.Layout()}}
+}
+
+// detailBarID names the detail pane's scroll bar.
+const detailBarID = "detailbar"
+
 func (c *containersScreen) detailScrollBar() layout.ScrollBar {
-	bar := layout.ScrollBar{Color: pal.panel}
+	bar := layout.ScrollBar{NodeBase: layout.NodeBase{ID: detailBarID}, Color: pal.panel}
 	switch c.tab {
 	case tabLogs:
 		bar.Offset, bar.Visible, bar.Total = c.logs.Offset(), c.logs.VisibleLines(), c.logs.TotalLines()

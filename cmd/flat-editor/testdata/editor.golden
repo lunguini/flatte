@@ -20,6 +20,6 @@
 │                                                                      │
 │                                                                      │
 │                                                                      │
-│  arrows move  enter newline  esc quit                                │
+│  arrows move  click/drag select  ctrl+c copy  esc quit               │
 └──────────────────────────────────────────────────────────────────────┘
 [cursor 3,4]

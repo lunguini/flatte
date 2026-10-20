@@ -58,6 +58,10 @@ type Effects[S any] struct {
 	latest     *latestRegistry
 	dispatch   func(func())
 	clock      Clock
+	// setClipboard and readClipboard replace the terminal's OSC52 clipboard
+	// for a host with its own (WithHostClipboard).
+	setClipboard  func(string)
+	readClipboard func()
 }
 
 // cancelReaderFactory is a seam for the input lifecycle tests. Keeping the
@@ -113,6 +117,15 @@ func NewHarnessEffects[S any](ctx context.Context, updates chan<- StateUpdate[S]
 	return fx
 }
 
+// WithHostClipboard returns fx with SetClipboard and ReadClipboard routed to
+// set and read: a host with a system clipboard of its own (a window) writes
+// it and answers read with a ClipboardEvent. Like NewHarnessEffects it is
+// host plumbing, not application API.
+func WithHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S] {
+	fx.setClipboard, fx.readClipboard = set, read
+	return fx
+}
+
 // NewHarnessEffectsQueue builds a deterministic test Effects value backed by
 // an enqueue callback instead of a channel. It is intended for synchronous
 // harnesses such as flatest, where a burst of updates must not block a fake
@@ -157,20 +170,30 @@ func (fx Effects[S]) Quit() {
 	}
 }
 
-// SetClipboard writes text to the system clipboard via OSC52 on the next
-// flush. Loop-goroutine-only, like Quit. Terminals without OSC52 support
-// ignore it. Safe on a zero Effects value.
+// SetClipboard writes text to the system clipboard: via OSC52 on the next
+// flush in a terminal, directly in a window. Loop-goroutine-only, like
+// Quit. Terminals without OSC52 support ignore it. Safe on a zero Effects
+// value.
 func (fx Effects[S]) SetClipboard(text string) {
+	if fx.setClipboard != nil {
+		fx.setClipboard(text)
+		return
+	}
 	if fx.enqueue != nil {
 		fx.enqueue(action{write: ansi.SetSystemClipboard(text)})
 	}
 }
 
-// ReadClipboard asks the terminal for its clipboard content via OSC52.
-// A supporting terminal answers with a ClipboardEvent; unsupported
-// terminals never answer — treat the event as optional and do not wait
-// for it. Loop-goroutine-only, like Quit. Safe on a zero Effects value.
+// ReadClipboard asks for the clipboard content: the terminal via OSC52, or
+// the window's pasteboard. A window or supporting terminal answers with a
+// ClipboardEvent; unsupported terminals never answer — treat the event as
+// optional and do not wait for it. Loop-goroutine-only, like Quit. Safe on
+// a zero Effects value.
 func (fx Effects[S]) ReadClipboard() {
+	if fx.readClipboard != nil {
+		fx.readClipboard()
+		return
+	}
 	if fx.enqueue != nil {
 		fx.enqueue(action{write: ansi.RequestSystemClipboard})
 	}
@@ -940,6 +963,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			}
 			if mouse, ok := result.event.(MouseEvent); ok {
 				mouse.Target, mouse.TargetRect = lastComp.HitTest(mouse.X, mouse.Y)
+				mouse.Caret, mouse.HasCaret = lastComp.CaretAt(mouse.X, mouse.Y)
 				result.event = mouse
 			}
 			// Trace before any exit decision so the recorder sees the

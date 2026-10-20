@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"image/color"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -119,10 +120,12 @@ type State struct {
 	spin    flatui.Spinner
 	prog    flatui.Progress
 	timer   flatui.Timer
+	demo    demo
 }
 
 func NewState() *State {
 	s := &State{
+		demo:     newDemo(),
 		width:    96,
 		height:   32,
 		rects:    map[string]layout.Rect{},
@@ -184,6 +187,7 @@ func (s *State) adopt() {
 		}
 		if r, ok := s.rects["ui.preview"]; ok {
 			s.prog.SetWidth(clampInt(previewWrapWidth(r.W)-6, 8, 32))
+			s.demo.size(previewWrapWidth(r.W), r.H-4)
 		}
 	}
 }
@@ -250,6 +254,10 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		handleKey(s, ev, fx)
 	case flatte.MouseEvent:
 		handleMouse(s, ev)
+	case flatte.PasteEvent:
+		if s.active == tabUI {
+			s.demo.paste(ev.Text)
+		}
 	}
 }
 
@@ -276,6 +284,11 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 			s.nextTab()
 			return
 		}
+	}
+
+	// A text preview being edited takes the keys (Esc stops editing).
+	if s.active == tabUI && s.demo.key(key) {
+		return
 	}
 
 	// The doc/UI tabs don't steer anything, so plain arrows and Tab switch too.
@@ -340,7 +353,10 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 	if m.Button == flatte.MouseWheelUp || m.Button == flatte.MouseWheelDown {
 		// The docker app and the UI catalog scroll themselves; everywhere else
 		// the wheel scrolls the page.
-		if (s.active == tabApp && m.Target == "content") || (s.active == tabUI && m.Target == "ui.list") {
+		if s.active == tabUI && s.demo.mouse(m, s.rects) {
+			return // a preview scrolls itself
+		}
+		if (s.active == tabApp && m.Target == "content") || (s.active == tabUI && overCatalog(m.Target)) {
 			s.forwardMouse(m)
 			return
 		}
@@ -386,21 +402,33 @@ func (s *State) forwardMouse(m flatte.MouseEvent) {
 		local := m
 		local.X, local.Y = m.X-s.coX, m.Y-s.coY
 		local.Target, local.TargetRect = s.dockerComp.HitTest(local.X, local.Y)
+		local.Caret, local.HasCaret = s.dockerComp.CaretAt(local.X, local.Y)
 		dockerapp.Handle(s.docker, local, s.dockerFx)
 	case tabUI:
-		if m.Target != "ui.list" {
+		if !overCatalog(m.Target) {
+			s.demo.mouse(m, s.rects)
 			return
 		}
-		r := m.TargetRect
+		if m.Action == flatte.MousePress {
+			s.demo.editing = ""
+		}
 		switch m.Button {
 		case flatte.MouseWheelDown:
 			s.catalog.MoveDown()
 		case flatte.MouseWheelUp:
 			s.catalog.MoveUp()
 		default:
-			s.catalog.Select(s.catalog.Offset() + (m.Y - r.Y))
+			if i, err := strconv.Atoi(strings.TrimPrefix(m.Target, "ui.item:")); err == nil {
+				s.catalog.Select(i)
+			}
 		}
 	}
+}
+
+// overCatalog reports whether a pointer target is the UI tab's component
+// list or one of its rows.
+func overCatalog(target string) bool {
+	return target == "ui.list" || strings.HasPrefix(target, "ui.item:")
 }
 
 func (s *State) nextTab() { s.active = (s.active + 1) % 5 }
@@ -449,17 +477,14 @@ func shellTree(s *State, st styles) layout.Node {
 		Children: []layout.Node{
 			tabBarRow(s, st),
 			contentNode(s, st),
-			landingBlock{
-				NodeBase:      layout.NodeBase{ID: "footer", H: layout.Fixed(1)},
-				RenderContent: func(_ layout.Rect, width int) string { return footerView(s, st, width) },
-			},
+			footerNode(s, st),
 		},
 	}
 }
 
 var tabLabels = []string{"Game", "App", "Flatte", "Layout", "UI"}
 
-// tabBarRow renders the split top bar as one Row of ID'd Text leaves — apps on
+// tabBarRow renders the split top bar as one Row of ID'd Labels — apps on
 // the left, docs on the right, a Grow spacer between. A single tab is
 // highlighted across both groups, which the two-TabBar model can't express
 // (SetActive can't clear a group), and each leaf's rect drives hit testing.
@@ -479,9 +504,10 @@ func tabNodes(s *State, st styles, lo, hi int) []layout.Node {
 		if landingTab(i) == s.active {
 			style = st.tabActive
 		}
-		out = append(out, layout.Text{
+		out = append(out, layout.Label{
 			NodeBase: layout.NodeBase{ID: fmt.Sprintf("tab-%d", i), W: layout.Fixed(lipgloss.Width(label))},
-			String:   style.Render(label),
+			Text:     label,
+			Style:    style,
 		})
 	}
 	return out
@@ -504,71 +530,96 @@ func tabTarget(target string) (landingTab, bool) {
 // the frame tree, so its list rows are hit-tested and sized by the frame
 // walk; the other tabs render as one leaf.
 func contentNode(s *State, st styles) layout.Node {
-	if s.active == tabUI {
-		return layout.Col{NodeBase: contentNodeBase(), Children: []layout.Node{uiTabNode(s, st)}}
-	}
-	return landingBlock{
-		NodeBase:      contentNodeBase(),
-		RenderContent: func(r layout.Rect, width int) string { return contentView(s, st, r, width) },
-	}
-}
-
-func contentView(s *State, st styles, r layout.Rect, width int) string {
-	height := max(r.H-2, 1)
+	pane := layout.Col{NodeBase: contentNodeBase()}
 	switch s.active {
-	case tabGame:
-		return snakeapp.View(s.game, flatte.RenderContext{Width: width}).Content
-	case tabApp:
-		frame, _ := flatte.ComposeFrame(dockerapp.View(s.docker, flatte.RenderContext{Width: s.appW}), s.appW, s.appH)
-		return frame.Content
+	case tabUI:
+		pane.Children = []layout.Node{uiTabNode(s, st)}
 	case tabLayout:
-		return layoutTabView(st, width, height)
+		pane.Children = layoutTabNodes(st)
+	case tabWhat:
+		pane.Children = whatTabNodes(st, contentWidth(s))
 	default:
-		return whatTabView(st, width)
+		// A hosted app is its terminal frame: cells, by design.
+		return landingBlock{
+			NodeBase:      contentNodeBase(),
+			RenderContent: func(r layout.Rect, width int) string { return hostedView(s, width) },
+		}
 	}
+	return pane
 }
 
-func whatTabView(st styles, width int) string {
-	w := max(min(width, 82), 1)
-	rows := []string{
-		st.section.Render("What Flatte is"),
-		"",
-		st.body.Render(wrapText("Flatte is a Go-native TUI foundation. You keep one mutable state struct, mutate it directly in Handle, and render one pure frame in View — no Msg/Cmd/Update loop, no message plumbing.", w)),
-		"",
-		st.selected.Render("state") + st.subtle.Render("   is your struct — the single source of truth"),
-		st.selected.Render("view ") + st.subtle.Render("   is a pure function: state in, frame out"),
-		st.selected.Render("async") + st.subtle.Render("   is one named, self-applying update"),
-		"",
-		st.body.Render(wrapText("Everything on these tabs — the snake game, the docker TUI, this text — is one Flatte app hosting others. Apps compose because they are just State + Handle + View.", w)),
-		"",
-		st.accent.Render("→ ") + st.subtle.Render("Ctrl+←/→ or click a tab to explore"),
+// contentWidth is the text width inside the content pane.
+func contentWidth(s *State) int {
+	if r, ok := s.rects["content"]; ok {
+		return innerWidth(contentNodeBase(), r.W)
 	}
-	return strings.Join(rows, "\n")
+	return innerWidth(contentNodeBase(), s.width-2)
 }
 
-func layoutTabView(st styles, width, height int) string {
-	// The demo spans the full content width so it reads as a real, functional
-	// solve; prose wraps to the same width.
-	w := max(width, 1)
-	demo, _ := layout.SolveAndCompose(layout.Row{
-		NodeBase: layout.NodeBase{Gap: 1, H: layout.Fixed(5)},
-		Children: []layout.Node{
-			layout.Text{NodeBase: layout.NodeBase{ID: "d1", Bordered: true, W: layout.Grow(1), H: layout.Fixed(5), PadLeft: 1}, String: st.accent.Render("sidebar\nGrow(1)")},
-			layout.Text{NodeBase: layout.NodeBase{ID: "d2", Bordered: true, W: layout.Grow(2), H: layout.Fixed(5), PadLeft: 1}, String: st.body.Render("content\nGrow(2)")},
-			layout.Text{NodeBase: layout.NodeBase{ID: "d3", Bordered: true, W: layout.Fixed(12), H: layout.Fixed(5), PadLeft: 1}, String: st.accent2.Render("aside\nFixed(12)")},
-		},
-	}, w, 5)
-	rows := []string{
-		st.section.Render("The layout engine"),
-		"",
-		st.body.Render(wrapText("flatui/layout is the app composition vocabulary. Build a Node tree of Row / Col / Text / Spacer, call SolveAndCompose once, and get composed cells plus per-ID rects from the same walk — so hit-testing and pixels never drift.", w)),
-		"",
-		demo,
-		"",
-		st.subtle.Render(wrapText("This whole page is one solved node tree; the panel above is a live solve at the full content width.", w)),
+// hostedView is a hosted app's frame, as its own terminal would show it.
+func hostedView(s *State, width int) string {
+	if s.active == tabGame {
+		return snakeapp.View(s.game, flatte.RenderContext{Width: width}).Content
 	}
-	_ = height
-	return strings.Join(rows, "\n")
+	frame, _ := flatte.ComposeFrame(dockerapp.View(s.docker, flatte.RenderContext{Width: s.appW}), s.appW, s.appH)
+	return frame.Content
+}
+
+// prose is a paragraph wrapped by words at its width, in style.
+func prose(text string, style layout.TextStyle) layout.Label {
+	return layout.Label{Text: text, Style: style, Wrap: true}
+}
+
+// pair is a highlighted term and its explanation on one line.
+func pair(term, rest string, st styles) layout.Node {
+	return layout.Row{Children: []layout.Node{
+		layout.Label{Text: term, Style: st.selected},
+		layout.Label{Text: rest, Style: st.subtle},
+	}}
+}
+
+func whatTabNodes(st styles, width int) []layout.Node {
+	// Prose reads best at most 82 columns wide.
+	text := layout.Col{NodeBase: layout.NodeBase{W: layout.Fixed(max(min(width, 82), 1))}, Children: []layout.Node{
+		layout.Label{Text: "What Flatte is", Style: st.section},
+		layout.Label{},
+		prose("Flatte is a Go-native TUI foundation. You keep one mutable state struct, mutate it directly in Handle, and render one pure frame in View — no Msg/Cmd/Update loop, no message plumbing.", st.body),
+		layout.Label{},
+		pair("state", "   is your struct — the single source of truth", st),
+		pair("view ", "   is a pure function: state in, frame out", st),
+		pair("async", "   is one named, self-applying update", st),
+		layout.Label{},
+		prose("Everything on these tabs — the snake game, the docker TUI, this text — is one Flatte app hosting others. Apps compose because they are just State + Handle + View.", st.body),
+		layout.Label{},
+		layout.Row{Children: []layout.Node{
+			layout.Label{Text: "→ ", Style: st.accent},
+			layout.Label{Text: "Ctrl+←/→ or click a tab to explore", Style: st.subtle},
+		}},
+	}}
+	return []layout.Node{text}
+}
+
+// layoutTabNodes is the layout tab: prose and a live demo solve spanning
+// the content width.
+func layoutTabNodes(st styles) []layout.Node {
+	box := func(id string, w layout.Size, text string, style layout.TextStyle) layout.Node {
+		return layout.Col{NodeBase: layout.NodeBase{ID: id, Bordered: true, W: w, H: layout.Fixed(5), PadLeft: 1}, Children: []layout.Node{
+			layout.Label{Text: text, Style: style},
+		}}
+	}
+	return []layout.Node{
+		layout.Label{Text: "The layout engine", Style: st.section},
+		layout.Label{},
+		prose("flatui/layout is the app composition vocabulary. Build a Node tree of Row / Col / Text / Spacer, call SolveAndCompose once, and get composed cells plus per-ID rects from the same walk — so hit-testing and pixels never drift.", st.body),
+		layout.Label{},
+		layout.Row{NodeBase: layout.NodeBase{Gap: 1, H: layout.Fixed(5)}, Children: []layout.Node{
+			box("d1", layout.Grow(1), "sidebar\nGrow(1)", st.accent),
+			box("d2", layout.Grow(2), "content\nGrow(2)", st.body),
+			box("d3", layout.Fixed(12), "aside\nFixed(12)", st.accent2),
+		}},
+		layout.Label{},
+		prose("This whole page is one solved node tree; the panel above is a live solve at the full content width.", st.subtle),
+	}
 }
 
 // uiListWidth is the component list's width for a content pane r wide.
@@ -580,132 +631,135 @@ func uiListWidth(r layout.Rect) int {
 func previewWrapWidth(w int) int { return max(w-2, 8) }
 
 // uiTabNode is the component picker: a fixed-width list ("ui.list", whose
-// rect sizes the catalog and maps clicks to rows) beside the live preview.
+// rect sizes the catalog; its rows "ui.item:i" map clicks to items) beside
+// the live preview, each widget shown as its own node.
 func uiTabNode(s *State, st styles) layout.Node {
 	listW := uiListWidth(s.rects["content"])
-	list := s.catalog.View(func(i int, selected bool) string {
-		prefix, style := "  ", st.body
+	list := s.catalog.Rows("ui.item", func(i int, selected bool) layout.Node {
+		marker, style := layout.Icon{Text: "  "}, st.body
 		if selected {
-			prefix, style = "▸ ", st.selected
+			marker, style = layout.Icon{Name: layout.IconChevronRight, Text: "▸ ", Style: st.selected}, st.selected
 		}
-		return style.Render(truncate(prefix+showcase[i].Name, listW))
+		return layout.Row{Children: []layout.Node{marker, layout.Label{Text: showcase[i].Name, Style: style}}}
 	})
+	list.ID, list.H = "ui.list", layout.Grow(1)
+	item := s.selectedItem()
 	return layout.Row{
 		NodeBase: layout.NodeBase{Gap: 1, H: layout.Grow(1)},
 		Children: []layout.Node{
 			layout.Col{NodeBase: layout.NodeBase{W: layout.Fixed(listW)}, Children: []layout.Node{
-				layout.Text{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, String: st.section.Render("Components")},
-				layout.Text{NodeBase: layout.NodeBase{ID: "ui.list", H: layout.Grow(1)}, String: list},
+				layout.Label{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Text: "Components", Style: st.section},
+				list,
 			}},
-			landingBlock{
-				NodeBase: layout.NodeBase{ID: "ui.preview", W: layout.Grow(1), H: layout.Grow(1)},
-				RenderContent: func(r layout.Rect, _ int) string {
-					item := s.selectedItem()
-					w := previewWrapWidth(r.W)
-					return strings.Join([]string{
-						st.section.Render(item.Name) + " " + st.subtle.Render("· "+item.Kind),
-						st.subtle.Render(wrapText(item.Summary, w)),
-						"",
-						previewBody(s, st, item.Name, w, max(r.H-4, 1)),
-					}, "\n")
-				},
-			},
+			// Text wraps two columns short of the preview's edge.
+			layout.Col{NodeBase: layout.NodeBase{ID: "ui.preview", W: layout.Grow(1), H: layout.Grow(1), PadRight: 2}, Children: append([]layout.Node{
+				layout.Row{Children: []layout.Node{
+					layout.Label{Text: item.Name, Style: st.section},
+					layout.Label{Text: " · " + item.Kind, Style: st.subtle},
+				}},
+				prose(item.Summary, st.subtle),
+				layout.Label{},
+			}, previewNodes(s, st, item.Name)...)},
 		},
 	}
 }
 
-// previewBody renders the selected widget in one or more live forms.
-func previewBody(s *State, st styles, name string, width, height int) string {
-	width, height = max(width, 1), max(height, 1)
+// previewNodes shows the selected widget live, as the widget's own nodes:
+// the demo's state, so clicks on them act (see demo.mouse).
+func previewNodes(s *State, st styles, name string) []layout.Node {
+	d := &s.demo
+	note := func(text string) layout.Node { return prose(text, st.subtle) }
 	switch name {
 	case "Spinner":
-		return st.accent.Render(s.spin.View()) + " " + st.body.Render("working…") + "\n" +
-			st.subtle.Render(wrapText("flatte.Every advances one frame per tick.", width))
+		return []layout.Node{
+			layout.Row{Children: []layout.Node{
+				layout.Label{Text: s.spin.View(), Style: st.accent},
+				layout.Label{Text: " working…", Style: st.body},
+			}},
+			note("flatte.Every advances one frame per tick."),
+		}
 	case "Progress":
-		return st.accent.Render(s.prog.View()) + "\n" + st.subtle.Render(wrapText("Resize-aware, deterministic.", width))
+		return []layout.Node{
+			layout.Row{Children: []layout.Node{
+				layout.Meter{NodeBase: layout.NodeBase{W: layout.Fixed(s.prog.Width())}, Value: s.prog.Percent() / 100, Fill: st.accent.Fg, Track: st.accent.Fg},
+				layout.Label{Text: fmt.Sprintf("  %3d%%", int(math.Round(s.prog.Percent()))), Style: st.accent},
+			}},
+			note("Resize-aware, deterministic."),
+		}
 	case "Timer":
 		rem := s.timer.Remaining()
-		return st.selected.Render(fmt.Sprintf("%02d:%02d", int(rem/time.Minute), int((rem%time.Minute)/time.Second))) + "\n" +
-			st.subtle.Render(wrapText("Countdown · fake-clock testable.", width))
+		return []layout.Node{
+			layout.Label{Text: fmt.Sprintf("%02d:%02d", int(rem/time.Minute), int((rem%time.Minute)/time.Second)), Style: st.selected},
+			note("Countdown · fake-clock testable."),
+		}
 	case "TextField":
-		return st.body.Render("name ") + st.selected.Render("Ada Lovelace") + st.accent.Render("▌") + "\n" +
-			st.subtle.Render(wrapText("Grapheme-correct, app-owned cursor.", width))
+		field := d.field.Layout(demoFieldID, d.editing == demoFieldID)
+		field.Style = st.selected
+		return []layout.Node{
+			layout.Row{Children: []layout.Node{layout.Label{Text: "name ", Style: st.body}, field}},
+			note("Grapheme-correct, app-owned cursor. Click to edit; Esc stops."),
+		}
 	case "Textarea":
-		var ta flatui.Textarea
-		ta.SetSize(width, height)
-		ta.SetValue("Multiline editing\nwith soft wrap and\nreal cursor cells.")
-		return st.body.Render(ta.View())
+		in := d.area.Layout(demoTextareaID, d.editing == demoTextareaID)
+		in.Style = st.body
+		return []layout.Node{in}
 	case "List":
-		items := []string{"inbox", "starred", "sent", "drafts", "archive"}
-		var l flatui.List
-		l.SetHeight(min(height, len(items)))
-		l.SetCount(len(items))
-		l.Select(1)
-		return l.View(func(i int, selected bool) string {
+		return []layout.Node{d.list.Rows(demoListID, func(i int, selected bool) layout.Node {
 			if selected {
-				return st.selected.Render("▸ " + items[i])
+				return layout.Label{Text: "▸ " + demoListItems[i], Style: st.selected}
 			}
-			return st.body.Render("  " + items[i])
-		})
+			return layout.Label{Text: "  " + demoListItems[i], Style: st.body}
+		})}
 	case "Table":
-		var t flatui.Table
-		t.SetColumns([]flatui.Column{{Title: "STEP", Width: 6}, {Title: "KIND", Width: 6}, {Title: "STATE", Width: 5}})
-		t.SetRows([][]string{{"loop", "core", "ok"}, {"view", "pure", "ok"}, {"async", "named", "ok"}})
-		t.SetHeight(4)
-		body := t.View(func(text string, selected bool) string {
-			if selected {
-				return st.selected.Render(text)
-			}
-			return st.body.Render(text)
-		})
-		return st.section.Render(t.Header()) + "\n" + body
-	case "Tree":
-		tr := flatui.NewTree([]flatui.TreeNode{
-			{ID: "state", Label: "State", Children: []flatui.TreeNode{{ID: "count", Label: "count"}, {ID: "items", Label: "items"}}},
-			{ID: "view", Label: "View"},
-		})
-		tr.Toggle("state")
-		tr.SetHeight(height)
-		return tr.View(func(row flatui.TreeRow, selected bool) string {
-			glyph := "  "
-			if row.Expandable {
-				if row.Expanded {
-					glyph = "▾ "
-				} else {
-					glyph = "▸ "
+		return []layout.Node{
+			d.table.HeaderLayout(st.section),
+			d.table.Rows(demoTableID, func(cells []string, selected bool) layout.Node {
+				if selected {
+					return d.table.Cells(cells, st.selected)
 				}
-			}
-			line := strings.Repeat("  ", row.Depth) + glyph + row.Label
+				return d.table.Cells(cells, st.body)
+			}),
+		}
+	case "Tree":
+		return []layout.Node{d.tree.Rows(demoTreeID, func(row flatui.TreeRow, selected bool) layout.Node {
+			style := st.body
 			if selected {
-				return st.selected.Render(line)
+				style = st.selected
 			}
-			return st.body.Render(line)
-		})
+			glyph := layout.Icon{Text: "  ", Style: style}
+			switch {
+			case row.Expandable && row.Expanded:
+				glyph.Name, glyph.Text = layout.IconDisclosureOpen, "▾ "
+			case row.Expandable:
+				glyph.Name, glyph.Text = layout.IconDisclosureClosed, "▸ "
+			}
+			return layout.Row{Children: []layout.Node{
+				layout.Label{Text: strings.Repeat("  ", row.Depth), Style: style},
+				glyph,
+				layout.Label{Text: row.Label, Style: style},
+			}}
+		})}
 	case "Viewport":
-		var vp flatui.Viewport
-		vp.SetSize(width, height)
-		vp.SetWrappedContent("Viewport keeps body content scrollable while the chrome stays pinned. Wheel and paging are app bindings, not framework policy.")
-		return st.body.Render(vp.View())
+		return []layout.Node{layout.Col{NodeBase: layout.NodeBase{ID: demoViewportID}, Children: []layout.Node{d.view.Layout()}}}
 	case "TabBar":
-		bar := flatui.NewTabBar(rightTabs...).WithGlyphs(flatui.TabGlyphsSafe).WithColors(brand.Teal, lipgloss.Color("240"), nil)
-		bar.SetActive(1)
-		content, _ := layout.SolveAndCompose(bar.Layout(), width, 1)
-		return content + "\n" + st.subtle.Render(wrapText("Rect-backed hit testing.", width))
+		return []layout.Node{d.tabs.Layout(), note("Rect-backed hit testing: click a tab.")}
 	case "Layout":
-		content, _ := layout.SolveAndCompose(layout.Row{
-			NodeBase: layout.NodeBase{Gap: 1, H: layout.Fixed(3)},
-			Children: []layout.Node{
-				layout.Text{NodeBase: layout.NodeBase{Bordered: true, W: layout.Grow(1), H: layout.Fixed(3), PadLeft: 1}, String: st.accent.Render("side")},
-				layout.Text{NodeBase: layout.NodeBase{Bordered: true, W: layout.Grow(2), H: layout.Fixed(3), PadLeft: 1}, String: st.body.Render("content")},
-			},
-		}, width, 3)
-		return content
+		box := func(w layout.Size, text string, style layout.TextStyle) layout.Node {
+			return layout.Col{NodeBase: layout.NodeBase{Bordered: true, W: w, H: layout.Fixed(3), PadLeft: 1}, Children: []layout.Node{
+				layout.Label{Text: text, Style: style},
+			}}
+		}
+		return []layout.Node{layout.Row{NodeBase: layout.NodeBase{Gap: 1, H: layout.Fixed(3)}, Children: []layout.Node{
+			box(layout.Grow(1), "side", st.accent),
+			box(layout.Grow(2), "content", st.body),
+		}}}
 	default:
-		return st.subtle.Render(wrapText("Select a component to preview it live.", width))
+		return []layout.Node{note("Select a component to preview it live.")}
 	}
 }
 
-func footerView(s *State, st styles, width int) string {
+// footerNode is the footer: the active tab's hint and the tab navigation.
+func footerNode(s *State, st styles) layout.Node {
 	var hint string
 	switch s.active {
 	case tabGame:
@@ -719,8 +773,15 @@ func footerView(s *State, st styles, width int) string {
 	default:
 		hint = "Flatte · direct mutation, pure views, no messages"
 	}
-	nav := st.subtle.Render("  Ctrl+←/→ tabs · click to switch")
-	return st.accent.Render("▚ ") + st.body.Render(truncate(hint, max(width-24, 1))) + nav
+	width := s.width - 2 // the shell's padding
+	if r, ok := s.rects["footer"]; ok {
+		width = r.W
+	}
+	return layout.Row{NodeBase: layout.NodeBase{ID: "footer", H: layout.Fixed(1)}, Children: []layout.Node{
+		layout.Label{Text: "▚ ", Style: st.accent},
+		layout.Label{Text: truncate(hint, max(width-24, 1)), Style: st.body},
+		layout.Label{Text: "  Ctrl+←/→ tabs · click to switch", Style: st.subtle},
+	}}
 }
 
 // ------------------------------------------------------------------- intro
@@ -808,34 +869,31 @@ func center(s string, width int) string {
 
 // -------------------------------------------------------------------- styles
 
+// styles are the page's text styles: nodes take them as is, and Render
+// gives a string frame (the intro) the same look.
 type styles struct {
-	logo      lipgloss.Style
-	title     lipgloss.Style
-	lead      lipgloss.Style
-	body      lipgloss.Style
-	subtle    lipgloss.Style
-	section   lipgloss.Style
-	selected  lipgloss.Style
-	accent    lipgloss.Style
-	accent2   lipgloss.Style
-	tab       lipgloss.Style
-	tabActive lipgloss.Style
+	lead      layout.TextStyle
+	body      layout.TextStyle
+	subtle    layout.TextStyle
+	section   layout.TextStyle
+	selected  layout.TextStyle
+	accent    layout.TextStyle
+	accent2   layout.TextStyle
+	tab       layout.TextStyle
+	tabActive layout.TextStyle
 }
 
 func newStyles() styles {
-	base := lipgloss.NewStyle()
 	return styles{
-		logo:      base.Bold(true).Foreground(brand.Teal),
-		title:     base.Bold(true).Foreground(lipgloss.Color("252")),
-		lead:      base.Foreground(brand.Blue),
-		body:      base.Foreground(lipgloss.Color("252")),
-		subtle:    base.Foreground(lipgloss.Color("245")),
-		section:   base.Bold(true).Foreground(brand.Pink),
-		selected:  base.Bold(true).Foreground(brand.Teal),
-		accent:    base.Foreground(brand.Teal),
-		accent2:   base.Foreground(brand.Pink),
-		tab:       base.Foreground(lipgloss.Color("245")),
-		tabActive: base.Bold(true).Foreground(lipgloss.Color("231")).Background(brand.Teal),
+		lead:      layout.TextStyle{Fg: brand.Blue},
+		body:      layout.TextStyle{Fg: lipgloss.Color("252")},
+		subtle:    layout.TextStyle{Fg: lipgloss.Color("245")},
+		section:   layout.TextStyle{Bold: true, Fg: brand.Pink},
+		selected:  layout.TextStyle{Bold: true, Fg: brand.Teal},
+		accent:    layout.TextStyle{Fg: brand.Teal},
+		accent2:   layout.TextStyle{Fg: brand.Pink},
+		tab:       layout.TextStyle{Fg: lipgloss.Color("245")},
+		tabActive: layout.TextStyle{Bold: true, Fg: lipgloss.Color("231"), Bg: brand.Teal},
 	}
 }
 
@@ -1070,7 +1128,12 @@ func hex2(n int) string {
 // ---------------------------------------------------------------- terminal
 
 func runTerminal() error {
-	app := flatte.App[State]{
+	return flatte.Run(context.Background(), landingApp(), flatte.WithMouse(flatte.MouseModeCellMotion))
+}
+
+// landingApp is the page as an app, ticking the intro and hosted apps.
+func landingApp() flatte.App[State] {
+	return flatte.App[State]{
 		State: NewState(),
 		Init: func(_ *State, fx flatte.Effects[State]) {
 			if err := flatte.Every(fx, "host-tick", tickInterval, tickFold); err != nil {
@@ -1080,7 +1143,6 @@ func runTerminal() error {
 		Handle: Handle,
 		View:   View,
 	}
-	return flatte.Run(context.Background(), app, flatte.WithMouse(flatte.MouseModeCellMotion))
 }
 
 func tickFold(s *State, now time.Time) { Tick(s, now) }
@@ -1105,6 +1167,7 @@ type pageHost struct {
 func (h *pageHost) handle(s *State, ev flatte.Event) {
 	if m, ok := ev.(flatte.MouseEvent); ok {
 		m.Target, m.TargetRect = h.comp.HitTest(m.X, m.Y)
+		m.Caret, m.HasCaret = h.comp.CaretAt(m.X, m.Y)
 		ev = m
 	}
 	Handle(s, ev, flatte.Effects[State]{})

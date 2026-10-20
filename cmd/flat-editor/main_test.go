@@ -303,8 +303,8 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	if frame.Cursor.X != 3 || frame.Cursor.Y != 4 {
 		t.Fatalf("cursor = %+v, want (3,4)", *frame.Cursor)
 	}
-	if frame.Cursor.Style == nil || frame.Cursor.Style.Shape != flatte.CursorShapeBar || frame.Cursor.Style.Blink {
-		t.Fatalf("cursor style = %+v, want steady bar", frame.Cursor.Style)
+	if frame.Cursor.Style == nil || frame.Cursor.Style.Shape != flatte.CursorShapeBlock || !frame.Cursor.Style.Blink || frame.Cursor.Style.Color != nil {
+		t.Fatalf("cursor style = %+v, want a blinking block in the terminal's color", frame.Cursor.Style)
 	}
 }
 
@@ -342,4 +342,153 @@ func TestInitialSnapshot(t *testing.T) {
 	s := NewState()
 	settle(s, 72, 24)
 	flatest.AssertGoldenFrame(t, "testdata/editor.golden", composed(s, 72, 24))
+}
+
+func TestMouseClickAndDragPlaceTheCaret(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello world")
+	press := flatte.MouseEvent{Target: editorID, HasCaret: true, Caret: 6, Button: flatte.MouseLeft, Action: flatte.MousePress}
+	Handle(s, press, flatte.Effects[State]{})
+	if s.ta.Col() != 6 {
+		t.Fatalf("click caret col %d, want 6", s.ta.Col())
+	}
+	drag := press
+	drag.Action, drag.Caret = flatte.MouseMotion, 11
+	Handle(s, drag, flatte.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "world" {
+		t.Fatalf("drag selected %q, want world", got)
+	}
+	// Shift-click extends; clicks elsewhere or without a caret do nothing.
+	shift := press
+	shift.Mod, shift.Caret = flatte.ModShift, 0
+	Handle(s, shift, flatte.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "hello " {
+		t.Fatalf("shift-click selected %q", got)
+	}
+	Handle(s, flatte.MouseEvent{Target: "other", HasCaret: true, Caret: 3, Button: flatte.MouseLeft}, flatte.Effects[State]{})
+	Handle(s, flatte.MouseEvent{Target: editorID, Button: flatte.MouseLeft}, flatte.Effects[State]{})
+	if s.ta.Col() != 0 {
+		t.Fatalf("stray clicks moved the caret to %d", s.ta.Col())
+	}
+}
+
+func TestSuperChordsCopyCutSelectAllAndPaste(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "one two")
+	var clip []string
+	fx := flatte.WithHostClipboard(flatte.Effects[State]{}, func(text string) { clip = append(clip, text) }, nil)
+	super := func(r rune) {
+		Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModSuper}, fx)
+	}
+	super('a')
+	super('c')
+	if len(clip) != 1 || clip[0] != "one two" || s.ta.Value() != "one two" {
+		t.Fatalf("copy: clipboard %q, value %q", clip, s.ta.Value())
+	}
+	super('x')
+	if len(clip) != 2 || clip[1] != "one two" || s.ta.Value() != "" {
+		t.Fatalf("cut: clipboard %q, value %q", clip, s.ta.Value())
+	}
+	super('b') // unbound: not text
+	if s.ta.Value() != "" {
+		t.Fatalf("an unbound ⌘ chord typed %q", s.ta.Value())
+	}
+	Handle(s, flatte.PasteEvent{Text: "pasted\nlines"}, fx)
+	if s.ta.Value() != "pasted\nlines" || s.ta.Row() != 1 {
+		t.Fatalf("paste: %q at row %d", s.ta.Value(), s.ta.Row())
+	}
+}
+
+func TestVerticalKeysUseTheHostsCaret(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "abc")
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	typeRunes(s, "defgh")
+	// A window computed the row above as offset 1.
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp, HasCaret: true, Caret: 1}, flatte.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != 1 {
+		t.Fatalf("host up -> %d:%d, want 0:1", s.ta.Row(), s.ta.Col())
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown, Mod: flatte.ModShift, HasCaret: true, Caret: 6}, flatte.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "bc\nde" {
+		t.Fatalf("host shift-down selected %q", got)
+	}
+	// Without one, the textarea's own rows.
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
+	if s.ta.Row() != 0 {
+		t.Fatalf("plain up -> row %d", s.ta.Row())
+	}
+}
+
+func TestSuperArrowsMoveAndSelectLinesAndText(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "one two")
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	typeRunes(s, "three")
+	super := func(k flatte.Key, mod flatte.Mod) {
+		Handle(s, flatte.KeyEvent{Key: k, Mod: flatte.ModSuper | mod}, flatte.Effects[State]{})
+	}
+	super(flatte.KeyLeft, flatte.ModShift)
+	if got := s.ta.SelectedText(); got != "three" {
+		t.Fatalf("super+shift+left selected %q, want the line", got)
+	}
+	super(flatte.KeyRight, 0)
+	if s.ta.Col() != 5 {
+		t.Fatalf("super+right col %d, want the line end", s.ta.Col())
+	}
+	super(flatte.KeyUp, flatte.ModShift)
+	if got := s.ta.SelectedText(); got != "one two\nthree" {
+		t.Fatalf("super+shift+up selected %q, want everything", got)
+	}
+	super(flatte.KeyDown, 0)
+	if s.ta.Row() != 1 || s.ta.Col() != 5 {
+		t.Fatalf("super+down -> %d:%d, want the end", s.ta.Row(), s.ta.Col())
+	}
+	super(flatte.KeyBackspace, 0)
+	if s.ta.Value() != "one two\n" {
+		t.Fatalf("super+backspace left %q", s.ta.Value())
+	}
+}
+
+func TestCtrlKeysCopyCutQuitAndMoveLines(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello")
+	var clip []string
+	quit := false
+	fx := flatte.WithHostClipboard(flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil),
+		func(text string) { clip = append(clip, text) }, nil)
+	ctrl := func(r rune) { Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModCtrl}, fx) }
+	ctrl('a')
+	if s.ta.Col() != 0 {
+		t.Fatalf("ctrl+a col %d", s.ta.Col())
+	}
+	ctrl('e')
+	if s.ta.Col() != 5 {
+		t.Fatalf("ctrl+e col %d", s.ta.Col())
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModShift}, fx)
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCtrlC}, fx)
+	if quit || len(clip) != 1 || clip[0] != "o" {
+		t.Fatalf("ctrl+c with a selection: quit %v clip %q", quit, clip)
+	}
+	ctrl('x')
+	if s.ta.Value() != "hell" || len(clip) != 2 {
+		t.Fatalf("ctrl+x: value %q clip %q", s.ta.Value(), clip)
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCtrlC}, fx)
+	if !quit {
+		t.Fatal("ctrl+c without a selection did not quit")
+	}
+}
+
+func TestCursorIsABarWhileSelecting(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello")
+	if c := composed(s, 72, 24).Cursor; c == nil || c.Style.Shape != flatte.CursorShapeBlock {
+		t.Fatalf("cursor without a selection = %+v, want a block", c)
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModShift}, flatte.Effects[State]{})
+	if c := composed(s, 72, 24).Cursor; c == nil || c.Style.Shape != flatte.CursorShapeBar || !c.Style.Blink {
+		t.Fatalf("cursor while selecting = %+v, want a blinking bar", c)
+	}
 }

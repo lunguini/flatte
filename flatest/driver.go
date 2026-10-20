@@ -86,6 +86,7 @@ func (d *Driver[S]) deliver(ev flatte.Event) {
 		d.height = e.Height
 	case flatte.MouseEvent:
 		e.Target, e.TargetRect = d.comp.HitTest(e.X, e.Y)
+		e.Caret, e.HasCaret = d.comp.CaretAt(e.X, e.Y)
 		ev = e
 	}
 	if d.app.Tracer != nil {

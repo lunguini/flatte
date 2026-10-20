@@ -1,11 +1,13 @@
 package dockerapp
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
 )
@@ -97,7 +99,7 @@ func namedListPane(width int, title string, list flatui.List, name func(i int) s
 				layout.Label{},
 				rows,
 			}},
-			layout.ScrollBar{Offset: list.Offset(), Visible: list.Height(), Total: list.Count(), Color: pal.panel},
+			listBar(list),
 		}}},
 	}
 }
@@ -134,4 +136,45 @@ func listRowTarget(target string) (int, bool) {
 	}
 	n, err := strconv.Atoi(i)
 	return n, err == nil
+}
+
+// scrollDrag follows a press and drag on a scroll bar: the bar pressed
+// keeps the drag, wherever the pointer goes, until the button is released.
+type scrollDrag struct {
+	id   string
+	rect layout.Rect
+}
+
+// event reports whether m belongs to a scroll bar — a left press on one of
+// ids, or any event during a drag — and, when it scrolls one, which bar
+// and the line on it (node-local, of a bar height lines tall).
+func (d *scrollDrag) event(m flatte.MouseEvent, ids ...string) (bar string, y, height int, handled bool) {
+	if d.id != "" {
+		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
+			d.id = ""
+			return "", 0, 0, true
+		}
+		return d.id, m.Y - d.rect.Y, d.rect.H, m.Action == flatte.MouseMotion || m.Action == flatte.MousePress
+	}
+	if m.Action != flatte.MousePress || m.Button != flatte.MouseLeft || !slices.Contains(ids, m.Target) {
+		return "", 0, 0, false
+	}
+	d.id, d.rect = m.Target, m.TargetRect
+	return d.id, m.Y - d.rect.Y, d.rect.H, true
+}
+
+// listBarID names a list pane's scroll bar.
+const listBarID = "listbar"
+
+// listBar is a list's scroll bar.
+func listBar(list flatui.List) layout.ScrollBar {
+	return layout.ScrollBar{NodeBase: layout.NodeBase{ID: listBarID}, Offset: list.Offset(), Visible: list.Height(), Total: list.Count(), Color: pal.panel}
+}
+
+// scrollList scrolls list for a press or drag at line y of its bar,
+// reporting whether the cursor moved with it.
+func scrollList(list *flatui.List, y, height int) bool {
+	before := list.Cursor()
+	list.ScrollTo(listBar(*list).OffsetAt(y, height))
+	return list.Cursor() != before
 }

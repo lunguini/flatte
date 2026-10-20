@@ -253,10 +253,14 @@ type painter struct {
 	// marked is the input method's uncommitted text, shown at the focused
 	// input's caret.
 	marked string
-	// caret is where the focused input's caret was drawn (for the input
-	// method's candidate window); ok reports whether one was.
-	caret   CGRect
-	caretOK bool
+	// caret is where the focused input's caret goes (for the input
+	// method's candidate window, and paintCaret); ok reports whether there
+	// is one; caretClip is the field it must stay inside.
+	caret     CGRect
+	caretOK   bool
+	caretClip layout.PointRect
+	// clip is the clip of the op being drawn.
+	clip layout.PointRect
 	// layer is the rect of the overlay layer just started: its box, the
 	// next op, is a raised surface.
 	layer   layout.PointRect
@@ -283,6 +287,7 @@ func (p *painter) clipped(r layout.PointRect, f func()) {
 }
 
 func (p *painter) draw(s layout.Scene, width, height float64) {
+	p.clip = layout.PointRect{W: width, H: height}
 	p.fill(p.th.bg)
 	cgContextFillRect(p.ctx, cgRect(0, 0, width, height))
 	// The space is flipped; flip glyphs back.
@@ -303,7 +308,8 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 		case layout.TextOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.text(op) })
 		case layout.InputOp:
-			p.clipped(intersect(op.Rect, op.Clip), func() { p.input(op) })
+			p.clip = intersect(op.Rect, op.Clip)
+			p.clipped(p.clip, func() { p.input(op) })
 		case layout.IconOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.icon(op) })
 		case layout.MeterOp:
@@ -467,9 +473,8 @@ func (p *painter) text(op layout.TextOp) {
 }
 
 // input draws a text field: an outlined, filled rounded rect (outlined in
-// the focus color when focused) with the value (or the placeholder),
-// scrolled so the caret stays visible, and the caret and any input-method
-// text when focused.
+// the focus color when focused) with its text laid out by field — rows,
+// scroll, selection, input-method text — and the caret when focused.
 func (p *painter) input(op layout.InputOp) {
 	r := op.Rect
 	field := cgRect(r.X+0.5, r.Y+0.5, max(r.W-1, 0), max(r.H-1, 0))
@@ -483,114 +488,157 @@ func (p *painter) input(op layout.InputOp) {
 	p.stroke(outline)
 	cgContextSetLineWidth(p.ctx, strokeWidth)
 	p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
-	if op.Multiline {
-		p.area(op)
-		return
-	}
-	f := p.th.styleFont(op.Style)
-	y := r.Y + (r.H-f.lineHeight())/2
-	x0 := r.X + fieldInset
-	avail := max(r.W-2*fieldInset, 1)
-	if op.Value == "" && (!op.Focused || p.marked == "") {
-		p.line(op.Placeholder, f, x0, r.Y, r.H, p.th.subtle, nil, false, false)
-		if op.Focused {
-			p.caretAt(x0, r.Y, r.H, f)
-		}
-		return
-	}
-	caret := min(max(op.Caret, 0), len(op.Value))
-	for caret > 0 && caret < len(op.Value) && !runeStart(op.Value, caret) {
-		caret--
-	}
-	text, markStart, markEnd := op.Value, caret, caret
-	if op.Focused && p.marked != "" {
-		text = op.Value[:caret] + p.marked + op.Value[caret:]
-		markEnd = caret + len(p.marked)
-	}
-	l := shape(text, f)
-	caretX := l.offset(text, markEnd)
-	l.release()
-	scroll := 0.0
-	if op.Focused && caretX > avail-2 {
-		scroll = caretX - avail + 2
-	}
-	p.line(text, f, x0-scroll, r.Y, r.H, p.roleColor(op.Style), nil, op.Style.Underline, op.Style.Strikethrough)
-	if markEnd > markStart {
-		ml := shape(text, f)
-		a, b := ml.offset(text, markStart), ml.offset(text, markEnd)
-		ml.release()
-		p.fill(p.th.marked)
-		cgContextFillRect(p.ctx, cgRect(x0-scroll+a, y+f.lineHeight()-1.5, b-a, 1.5))
-	}
-	if op.Focused {
-		p.caretAt(x0-scroll+caretX, r.Y, r.H, f)
-	}
-}
 
-// area draws a multi-line field's text inside its frame: rows at "\n" and,
-// when wrapping, by words at the field's width; scrolled from the op's
-// OffsetY as little as keeps the caret's row in view (and, unwrapped,
-// sideways to keep the caret visible); the selection highlighted, and the
-// caret and any input-method text when focused.
-func (p *painter) area(op layout.InputOp) {
-	r := op.Rect
-	f := p.th.styleFont(op.Style)
-	pitch := f.pitch()
-	x0, avail := r.X+fieldInset, max(r.W-2*fieldInset, 1)
-	caret := min(max(op.Caret, 0), len(op.Value))
-	for caret > 0 && caret < len(op.Value) && !runeStart(op.Value, caret) {
-		caret--
-	}
-	text, mark := op.Value, 0
-	if op.Focused && p.marked != "" {
-		text, mark = op.Value[:caret]+p.marked+op.Value[caret:], len(p.marked)
-	}
-	// Bytes after the caret move right by the marked text.
-	shift := func(i int) int {
-		if i > caret {
-			return i + mark
+	fl := p.th.layoutField(op, p.marked)
+	if fl.text == "" {
+		p.line(op.Placeholder, fl.f, fl.x0, fl.y0, fl.pitch, p.th.subtle, nil, false, false)
+		if op.Focused {
+			p.caretAt(fl.x0, fl.y0, fl.pitch, fl.f)
 		}
-		return i
+		return
 	}
-	at := caret + mark
-	selStart, selEnd := shift(min(op.SelStart, op.SelEnd)), shift(max(op.SelStart, op.SelEnd))
-	rows := areaRows(text, avail, op.Wrap, f.width)
-	cr := caretRow(rows, at)
-	first := firstRow(op.OffsetY, cr, int(r.H/pitch), len(rows))
-	scroll := 0.0
-	if !op.Wrap && op.Focused {
-		row := rows[cr]
-		if x := f.width(text[row.start:at]); x > avail-2 {
-			scroll = x - avail + 2
-		}
-	}
-	if text == "" {
-		p.line(op.Placeholder, f, x0, r.Y, pitch, p.th.subtle, nil, false, false)
-	}
-	space := f.width(" ")
-	for i := first; i < len(rows) && float64(i-first)*pitch < r.H; i++ {
-		row, y := rows[i], r.Y+float64(i-first)*pitch
-		s := text[row.start:row.end]
-		l := shape(s, f)
-		x := func(b int) float64 { return x0 - scroll + l.offset(s, b-row.start) }
+	selStart, selEnd := fl.shift(min(op.SelStart, op.SelEnd)), fl.shift(max(op.SelStart, op.SelEnd))
+	space := fl.f.width(" ")
+	cr := caretRow(fl.rows, fl.at)
+	for i := fl.first; i < len(fl.rows) && float64(i-fl.first)*fl.pitch < r.H; i++ {
+		row, y := fl.rows[i], fl.y0+float64(i-fl.first)*fl.pitch
+		s := fl.text[row.start:row.end]
+		l := shape(s, fl.f)
+		x := func(b int) float64 { return fl.x0 - fl.scroll + l.offset(s, b-row.start) }
 		if a, b := max(selStart, row.start), min(selEnd, row.end); a < b || (row.lineEnd && selStart <= row.end && selEnd > row.end) {
 			w := x(b) - x(a)
 			if row.lineEnd && selEnd > row.end {
 				w += space // the selected line break
 			}
 			p.fill(p.th.selection)
-			cgContextFillRect(p.ctx, cgRect(x(a), y, w, pitch))
+			cgContextFillRect(p.ctx, cgRect(x(a), y, w, fl.pitch))
 		}
-		p.line(s, f, x0-scroll, y, pitch, p.roleColor(op.Style), nil, op.Style.Underline, op.Style.Strikethrough)
-		if a, b := max(caret, row.start), min(caret+mark, row.end); mark > 0 && a < b {
+		p.line(s, fl.f, fl.x0-fl.scroll, y, fl.pitch, p.roleColor(op.Style), nil, op.Style.Underline, op.Style.Strikethrough)
+		if a, b := max(fl.caret, row.start), min(fl.at, row.end); fl.mark > 0 && a < b {
 			p.fill(p.th.marked)
-			cgContextFillRect(p.ctx, cgRect(x(a), y+(pitch+f.lineHeight())/2-1.5, x(b)-x(a), 1.5))
+			cgContextFillRect(p.ctx, cgRect(x(a), y+(fl.pitch+fl.f.lineHeight())/2-1.5, x(b)-x(a), 1.5))
 		}
 		if op.Focused && i == cr {
-			p.caretAt(x(at), y, pitch, f)
+			p.caretAt(x(fl.at), y, fl.pitch, fl.f)
 		}
 		l.release()
 	}
+}
+
+// fieldText is a field's text as the window lays it out — the one layout
+// painting and caret hit-testing share. Rows are visual rows of text (one
+// for a single-line field); rows from first show from (x0, y0), pitch
+// apart, shifted left by scroll.
+type fieldText struct {
+	f           font
+	pitch       float64
+	text        string // the value, with any input-method text at the caret
+	rows        []areaRow
+	first       int
+	scroll      float64
+	x0, y0      float64
+	caret, mark int // the caret in the value; the input-method text's length
+	at          int // the caret in text: after the input-method text
+	single      bool
+}
+
+// shift maps a byte offset into the value to one into text.
+func (fl fieldText) shift(i int) int {
+	if i > fl.caret {
+		return i + fl.mark
+	}
+	return i
+}
+
+// x is the x of byte b of text in row i, from the row's start.
+func (fl fieldText) x(i, b int) float64 {
+	row := fl.rows[i]
+	s := fl.text[row.start:row.end]
+	l := shape(s, fl.f)
+	defer l.release()
+	return l.offset(s, b-row.start)
+}
+
+// index is the byte offset into text of the caret position in row i
+// nearest x (from the row's start).
+func (fl fieldText) index(i int, x float64) int {
+	row := fl.rows[i]
+	s := fl.text[row.start:row.end]
+	l := shape(s, fl.f)
+	defer l.release()
+	return row.start + byteOfUTF16(s, ctLineGetStringIndexForPosition(l.ref, CGPoint{X: x}))
+}
+
+// byteOfUTF16 is the byte offset in s of UTF-16 index u, clamped into s.
+func byteOfUTF16(s string, u int) int {
+	n := 0
+	for i, r := range s {
+		if n >= u {
+			return i
+		}
+		n += utf16.RuneLen(r)
+	}
+	return len(s)
+}
+
+// layoutField lays out op's text in th's type, with marked input-method
+// text at a focused field's caret.
+func (th theme) layoutField(op layout.InputOp, marked string) fieldText {
+	r := op.Rect
+	fl := fieldText{f: th.styleFont(op.Style), x0: r.X + fieldInset, y0: r.Y, single: !op.Multiline}
+	avail := max(r.W-2*fieldInset, 1)
+	caret := min(max(op.Caret, 0), len(op.Value))
+	for caret > 0 && caret < len(op.Value) && !runeStart(op.Value, caret) {
+		caret--
+	}
+	fl.text, fl.caret, fl.at = op.Value, caret, caret
+	if op.Focused && marked != "" {
+		fl.text, fl.mark = op.Value[:caret]+marked+op.Value[caret:], len(marked)
+		fl.at = caret + fl.mark
+	}
+	if fl.single {
+		fl.pitch = r.H
+		fl.rows = []areaRow{{start: 0, end: len(fl.text), lineEnd: true}}
+	} else {
+		fl.pitch = fl.f.pitch()
+		fl.rows = areaRows(fl.text, avail, op.Wrap, fl.f.width)
+		fl.first = firstRow(op.OffsetY, caretRow(fl.rows, fl.at), int(r.H/fl.pitch), len(fl.rows))
+	}
+	// Unwrapped text scrolls sideways to keep a focused caret visible.
+	if op.Focused && (fl.single || !op.Wrap) {
+		if x := fl.x(caretRow(fl.rows, fl.at), fl.at); x > avail-2 {
+			fl.scroll = x - avail + 2
+		}
+	}
+	return fl
+}
+
+// windowText is the window's textLayout: carets in fields as the painter
+// lays them out, in the window's current theme.
+type windowText struct{ th func() theme }
+
+func (w windowText) caretAt(op layout.InputOp, x, y float64) int {
+	fl := w.th().layoutField(op, "")
+	i := 0
+	if !fl.single {
+		i = min(max(fl.first+int(math.Floor((y-fl.y0)/fl.pitch)), 0), len(fl.rows)-1)
+	}
+	return fl.index(i, x-fl.x0+fl.scroll)
+}
+
+func (w windowText) caretX(op layout.InputOp, caret int) float64 {
+	fl := w.th().layoutField(op, "")
+	return fl.x(caretRow(fl.rows, caret), caret)
+}
+
+func (w windowText) caretStep(op layout.InputOp, caret, dir int, x float64) int {
+	fl := w.th().layoutField(op, "")
+	from := caretRow(fl.rows, caret)
+	to := min(max(from+dir, 0), len(fl.rows)-1)
+	if to == from {
+		return caret
+	}
+	return fl.index(to, x)
 }
 
 // runeStart reports whether byte i of s starts a rune (or is the end).
@@ -600,9 +648,19 @@ func runeStart(s string, i int) bool { return i == len(s) || s[i]&0xC0 != 0x80 }
 // text and centered like it.
 func (p *painter) caretAt(x, y, h float64, f font) {
 	p.caret = cgRect(x, y+(h-f.lineHeight())/2, 1.5, f.lineHeight())
-	p.caretOK = true
-	p.fill(p.th.caret)
-	cgContextFillRect(p.ctx, p.caret)
+	p.caretOK, p.caretClip = true, p.clip
+}
+
+// paintCaret draws the caret placed while drawing, clipped to its field. It
+// is separate so a window can blink it.
+func (p *painter) paintCaret() {
+	if !p.caretOK {
+		return
+	}
+	p.clipped(p.caretClip, func() {
+		p.fill(p.th.caret)
+		cgContextFillRect(p.ctx, p.caret)
+	})
 }
 
 // cells draws terminal content as a monospace grid: runs of same-styled

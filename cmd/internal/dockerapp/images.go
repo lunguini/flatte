@@ -34,6 +34,7 @@ type imagesScreen struct {
 	listPaneWidth int
 	rects         map[string]layout.Rect
 	drag          *splitDrag
+	barDrag       scrollDrag
 }
 
 const (
@@ -120,6 +121,12 @@ func (i *imagesScreen) Handle(s *State, ev flatte.Event, _ flatte.Effects[State]
 }
 
 func (i *imagesScreen) handleMouse(m flatte.MouseEvent) {
+	if bar, y, h, handled := i.barDrag.event(m, listBarID); handled {
+		if bar == listBarID {
+			scrollList(&i.list, y, h)
+		}
+		return
+	}
 	if i.drag != nil {
 		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
 			i.drag = nil

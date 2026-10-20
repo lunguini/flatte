@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"image/color"
+	"math"
 	"os"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -15,6 +18,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 type focusArea int
@@ -60,11 +64,6 @@ type State struct {
 	height   int
 
 	results []WorkItem
-
-	// rects is the geometry the single per-frame SolveAndCompose records for
-	// every ID'd node. View adopts it to place the hardware cursor from the
-	// search line's solved rect — no re-parsing of the rendered frame.
-	rects map[string]layout.Rect
 }
 
 func NewState() *State {
@@ -132,7 +131,71 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		s.layout(e.Width, e.Height)
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
+	case flatte.MouseEvent:
+		handleMouse(s, e)
 	}
+}
+
+// handleMouse makes the panes clickable: a press focuses the pane under the
+// pointer and acts on what it hit — a tree row selects it (again: toggles
+// it), a work row selects it, the search field places its caret — and the
+// wheel scrolls the pane under it.
+func handleMouse(s *State, m flatte.MouseEvent) {
+	area, ok := areaOf(m.Target)
+	if !ok {
+		return
+	}
+	switch m.Button {
+	case flatte.MouseWheelUp, flatte.MouseWheelDown:
+		s.focus.Select(int(area))
+		delta := 1
+		if m.Button == flatte.MouseWheelUp {
+			delta = -1
+		}
+		handleVertical(s, delta)
+		return
+	case flatte.MouseLeft:
+	default:
+		return
+	}
+	if m.Action != flatte.MousePress {
+		return
+	}
+	s.focus.Select(int(area))
+	switch {
+	case strings.HasPrefix(m.Target, "tree:"):
+		id := strings.TrimPrefix(m.Target, "tree:")
+		if id == s.tree.CursorID() {
+			s.tree.Toggle(id)
+			return
+		}
+		for i, row := range s.tree.VisibleRows() {
+			if row.ID == id {
+				s.tree.SelectVisible(i)
+			}
+		}
+	case strings.HasPrefix(m.Target, "work:"):
+		if i, err := strconv.Atoi(strings.TrimPrefix(m.Target, "work:")); err == nil {
+			s.table.Select(i)
+			s.syncDetails()
+		}
+	case m.Target == "search" && m.HasCaret:
+		s.search.SetCursor(m.Caret)
+	}
+}
+
+// areaOf is the focus area a pointer target belongs to: a pane, or a node
+// inside one.
+func areaOf(target string) (focusArea, bool) {
+	switch {
+	case target == "left" || strings.HasPrefix(target, "tree:"):
+		return focusTree, true
+	case target == "center" || target == "search" || strings.HasPrefix(target, "work:"):
+		return focusSearch, true
+	case target == "right":
+		return focusDetails, true
+	}
+	return 0, false
 }
 
 func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
@@ -312,100 +375,45 @@ func defaultPalette() palette {
 	}
 }
 
-type styles struct {
-	title    lipgloss.Style
-	subtle   lipgloss.Style
-	section  lipgloss.Style
-	selected lipgloss.Style
-	table    flatui.TableStyle
-	progress flatui.ProgressStyle
-}
-
-func newStyles(p palette) styles {
-	base := lipgloss.NewStyle()
-	return styles{
-		title:    base.Bold(true).Foreground(p.accent),
-		subtle:   base.Foreground(p.muted),
-		section:  base.Bold(true).Foreground(p.base),
-		selected: base.Bold(true).Foreground(p.selected),
-		table: flatui.TableStyle{
-			Header: base.Bold(true).Foreground(p.accent),
-			Row:    base.Foreground(p.base),
-			Active: base.Bold(true).Foreground(p.selected),
-		},
-		progress: flatui.ProgressStyle{
-			Filled: base.Foreground(p.good),
-			Empty:  base.Foreground(p.panel),
-			Label:  base.Bold(true).Foreground(p.base),
-		},
-	}
-}
-
-// View builds one layout tree and resolves it with a single SolveAndCompose.
-// The frame is a Col — header, focus tabs, a blank rule, the three-pane body
-// Row, a growing spacer that pins the footer to the bottom, and the footer.
-// Panes size themselves from the responsive column widths; the search line
-// carries an ID so the cursor is placed from its solved rect, and the tab strip
-// is a leaf that fills its own rect width. No manual coordinate math survives.
+// View returns the workspace as a Frame.Root tree — header, focus tabs, a
+// blank row, the three-pane body Row, a growing spacer that pins the footer
+// to the bottom, and the footer — built from widget nodes (Tree.Rows,
+// Table.Rows, the search Input, a Meter, the details Viewport), so a window
+// draws native components and the search Input places the cursor.
 func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	p := defaultPalette()
-	st := newStyles(p)
 	width := max(ctx.Width, 64)
-	height := s.height
-	if height <= 0 {
-		height = 24
-	}
 	leftOuter, centerOuter, rightOuter := columnWidths(width)
+	muted := layout.TextStyle{Fg: p.muted}
 
-	header := layout.Text{
-		NodeBase: layout.NodeBase{H: layout.Fixed(1)},
-		String: lipgloss.JoinHorizontal(lipgloss.Top,
-			st.title.Width(leftOuter+centerOuter-2).Render("Flat Workspace"),
-			st.subtle.Render(fmt.Sprintf("focus %s | %d visible", focusName(s), len(s.results))),
-		),
-	}
-
+	header := layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Children: []layout.Node{
+		layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(leftOuter + centerOuter - 2)}, Text: "Flat Workspace", Style: layout.TextStyle{Bold: true, Fg: p.accent}},
+		layout.Label{Text: fmt.Sprintf("focus %s | %d visible", focusName(s), len(s.results)), Style: muted},
+	}}
 	body := layout.Row{
 		NodeBase: layout.NodeBase{Gap: paneGap},
 		Children: []layout.Node{
-			treePane(s, st, p, leftOuter),
-			centerPane(s, st, p, centerOuter),
-			detailsPane(s, st, p, rightOuter),
+			pane("left", leftOuter-2, paneBorderColor(p, s.focus.Focused(int(focusTree))), treeChildren(s, p)),
+			pane("center", centerOuter-2, paneBorderColor(p, s.focus.Focused(int(focusSearch))), centerChildren(s, p)),
+			pane("right", rightOuter-2, paneBorderColor(p, s.focus.Focused(int(focusDetails))), detailsChildren(s, p)),
 		},
 	}
-
-	footer := layout.Text{
+	footer := layout.Label{
 		NodeBase: layout.NodeBase{H: layout.Fixed(1)},
-		String:   st.subtle.Render(keyGroups(s).ViewWithOptions(flatui.KeyMapOptions{Mode: flatui.KeyMapFull, Width: width})),
+		Text:     keyGroups(s).ViewWithOptions(flatui.KeyMapOptions{Mode: flatui.KeyMapFull, Width: width}),
+		Style:    muted,
 	}
-
-	root := layout.Col{Children: []layout.Node{
+	return flatte.Frame{Root: layout.Col{Children: []layout.Node{
 		header,
-		tabsNode{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, state: s},
-		layout.Text{NodeBase: layout.NodeBase{H: layout.Fixed(1)}},
+		tabs(s, width),
+		layout.Label{NodeBase: layout.NodeBase{H: layout.Fixed(1)}},
 		body,
 		layout.NewSpacer(),
 		footer,
-	}}
-
-	content, rects := layout.SolveAndCompose(root, width, height)
-	s.rects = rects
-
-	frame := flatte.Frame{Content: content}
-	if s.focus.Focused(int(focusSearch)) {
-		if r, ok := rects["search"]; ok {
-			frame.Cursor = &flatte.Cursor{
-				X: r.X + lipgloss.Width(" "+searchPrefix) + s.search.CursorColumn(),
-				Y: r.Y,
-			}
-		}
-	}
-	return frame
+	}}}
 }
 
-// searchPrefix is the fixed text before the editable value on the search line.
-// The cursor is placed at its solved rect plus this prefix (and the one-column
-// pane padding baked into the line) plus the field's cursor column.
+// searchPrefix labels the search field.
 const searchPrefix = "search: "
 
 // columnWidths splits the frame into the three responsive body columns (outer
@@ -426,186 +434,158 @@ func columnWidths(width int) (leftOuter, centerOuter, rightOuter int) {
 	return leftOuter, centerOuter, rightOuter
 }
 
-// pane builds a bordered Col whose Chrome paints a rounded rule in fg. Its
-// height is pinned to the content so the three panes stay ragged (top-aligned)
-// the way the independent lipgloss blocks used to.
+// pane is a rounded border in fg around kids, one column in. Its height is
+// pinned to the content so the three panes stay ragged (top-aligned).
 func pane(id string, outerW int, fg color.Color, kids []layout.Node) layout.Node {
 	return layout.Col{
 		NodeBase: layout.NodeBase{
-			ID:       id,
-			W:        layout.Fixed(outerW),
-			H:        layout.Fixed(len(kids) + 2),
-			Bordered: true,
-			Chrome:   borderChrome(fg),
+			ID:      id,
+			W:       layout.Fixed(outerW),
+			H:       layout.Fixed(rows(kids) + 2),
+			PadLeft: 1,
+			Box:     layout.Box{Border: layout.BorderRounded, BorderColor: fg},
 		},
 		Children: kids,
 	}
 }
 
-// line is one interior row of a pane: a fixed-height Text with the pane's
-// one-column left padding baked in (the border inset supplies the rest).
-func line(id, content string) layout.Node {
-	return layout.Text{
-		NodeBase: layout.NodeBase{ID: id, H: layout.Fixed(1)},
-		String:   " " + content,
+// rows is how many lines kids take: a Col's children's, a fixed height's
+// lines, else one.
+func rows(kids []layout.Node) int {
+	n := 0
+	for _, k := range kids {
+		if c, ok := k.(layout.Col); ok {
+			n += rows(c.Children)
+			continue
+		}
+		if _, h := k.Size(); h.Kind == layout.SizeFixed {
+			n += h.Value
+			continue
+		}
+		n++
 	}
+	return n
 }
 
-func treePane(s *State, st styles, p palette, leftOuter int) layout.Node {
-	var kids []layout.Node
-	for _, ln := range treeLines(s, st, leftOuter-4) {
-		kids = append(kids, line("", ln))
+// section is a pane's bracketed title and the blank row under it.
+func section(title string, p palette) []layout.Node {
+	return []layout.Node{layout.Label{Text: title, Style: layout.TextStyle{Bold: true, Fg: p.base}}, layout.Label{}}
+}
+
+func treeChildren(s *State, p palette) []layout.Node {
+	kids := section("[tree]", p)
+	if len(s.tree.VisibleRows()) == 0 {
+		return kids
 	}
-	return pane("left", leftOuter-2, paneBorderColor(p, s.focus.Focused(int(focusTree))), kids)
-}
-
-func centerPane(s *State, st styles, p palette, centerOuter int) layout.Node {
-	return pane("center", centerOuter-2, paneBorderColor(p, s.focus.Focused(int(focusSearch))), centerChildren(s, st, centerOuter-6))
-}
-
-func detailsPane(s *State, st styles, p palette, rightOuter int) layout.Node {
-	var kids []layout.Node
-	for _, ln := range detailsLines(s, st, rightOuter-6) {
-		kids = append(kids, line("", ln))
-	}
-	return pane("right", rightOuter-2, paneBorderColor(p, s.focus.Focused(int(focusDetails))), kids)
-}
-
-func treeLines(s *State, st styles, width int) []string {
-	lines := []string{st.section.Render("[tree]"), ""}
-	view := s.tree.View(func(row flatui.TreeRow, selected bool) string {
-		icon := " "
-		if row.Expandable && row.Expanded {
-			icon = "▾"
-		} else if row.Expandable {
-			icon = "▸"
+	selected := layout.TextStyle{Bold: true, Fg: p.selected}
+	rows := s.tree.Rows("tree", func(row flatui.TreeRow, sel bool) layout.Node {
+		marker, style := layout.Icon{Text: "  "}, layout.TextStyle{}
+		if sel {
+			marker, style = layout.Icon{Name: layout.IconChevronRight, Text: "> ", Style: selected}, selected
+		}
+		icon := layout.Icon{Text: " ", Style: style}
+		switch {
+		case row.Expandable && row.Expanded:
+			icon.Name, icon.Text = layout.IconDisclosureOpen, "▾"
+		case row.Expandable:
+			icon.Name, icon.Text = layout.IconDisclosureClosed, "▸"
 		}
 		indent := ""
 		if row.Depth > 0 {
 			indent = " "
 		}
-		text := indent + icon + " " + row.Label
-		text = fit(text, max(width-2, 0))
-		if selected {
-			return st.selected.Render("> " + text)
-		}
-		return "  " + text
+		return layout.Row{Children: []layout.Node{
+			marker,
+			layout.Label{Text: indent, Style: style},
+			icon,
+			layout.Label{Text: " " + row.Label, Style: style},
+		}}
 	})
-	if view != "" {
-		lines = append(lines, strings.Split(view, "\n")...)
-	}
-	return lines
+	return append(kids, rows)
 }
 
-func centerChildren(s *State, st styles, width int) []layout.Node {
-	searchLine := searchPrefix + s.search.Value
-	if s.search.Value == "" {
-		searchLine = searchPrefix + "(empty)"
+func centerChildren(s *State, p palette) []layout.Node {
+	focused := s.focus.Focused(int(focusSearch))
+	prefix := layout.Label{Text: searchPrefix}
+	search := s.search.Layout("search", focused)
+	search.Placeholder = "(empty)"
+	if focused {
+		prefix.Style = layout.TextStyle{Bold: true, Fg: p.selected}
+		search.Style = prefix.Style
 	}
-	if s.focus.Focused(int(focusSearch)) {
-		searchLine = st.selected.Render(searchLine)
-	}
-	kids := []layout.Node{
-		line("", st.section.Render("[work]")),
-		line("search", fit(searchLine, width)),
-		line("", ""),
-		line("", st.table.Header.Render(s.table.Header())),
-	}
-	body := s.table.View(func(row string, selected bool) string {
-		row = fit(row, width)
-		if selected {
-			return st.table.Active.Render(row)
-		}
-		return st.table.Row.Render(row)
-	})
-	if body == "" {
-		kids = append(kids, line("", st.subtle.Render("no matching work")))
+	kids := append(section("[work]", p)[:1],
+		layout.Row{Children: []layout.Node{prefix, search}},
+		layout.Label{},
+		s.table.HeaderLayout(layout.TextStyle{Bold: true, Fg: p.accent}),
+	)
+	if len(s.results) == 0 {
+		kids = append(kids, layout.Label{Text: "no matching work", Style: layout.TextStyle{Fg: p.muted}})
 	} else {
-		for _, row := range strings.Split(body, "\n") {
-			kids = append(kids, line("", row))
-		}
+		kids = append(kids, s.table.Rows("work", func(cells []string, selected bool) layout.Node {
+			style := layout.TextStyle{Fg: p.base}
+			if selected {
+				style = layout.TextStyle{Bold: true, Fg: p.selected}
+			}
+			return s.table.Cells(cells, style)
+		}))
 	}
-	kids = append(kids, line("", ""), line("", s.progress.ViewWithStyle(st.progress)))
-	return kids
+	return append(kids, layout.Label{}, progressNode(s.progress, p))
 }
 
-func detailsLines(s *State, st styles, width int) []string {
+// progressNode is the progress bar in the workspace's colors: a Meter and
+// its bold percentage.
+func progressNode(pr flatui.Progress, p palette) layout.Node {
+	return layout.Row{Children: []layout.Node{
+		layout.Meter{NodeBase: layout.NodeBase{W: layout.Fixed(pr.Width())}, Value: pr.Percent() / 100, Fill: p.good, Track: p.panel},
+		layout.Label{Text: fmt.Sprintf("  %3d%%", int(math.Round(pr.Percent()))), Style: layout.TextStyle{Bold: true, Fg: p.base}},
+	}}
+}
+
+func detailsChildren(s *State, p palette) []layout.Node {
 	title := "[details]"
 	if s.focus.Focused(int(focusDetails)) {
 		title = "[details scroll]"
 	}
-	lines := []string{st.section.Render(title), ""}
-	view := s.details.View()
-	if view == "" {
-		view = "No details"
+	kids := section(title, p)
+	if s.details.VisibleLines() == 0 {
+		return append(kids, layout.Label{Text: "No details"})
 	}
-	for _, l := range strings.Split(view, "\n") {
-		lines = append(lines, fit(l, width))
-	}
-	return lines
+	return append(kids, layout.Col{Children: []layout.Node{s.details.Layout()}})
 }
 
-// tabsNode is the focus legend: a full-width dashed rule with the three area
-// names centered across it, the active one bracketed. It is a leaf, so it draws
-// itself to whatever width the solver hands it (the frame width) — the segment
-// split is a rendering detail, not layout the parent has to pre-compute.
-type tabsNode struct {
-	layout.NodeBase
-	state *State
-}
-
-func (t tabsNode) Render(r layout.Rect) string {
+// tabs is the focus legend: a rule width columns wide with the three area
+// names centered in equal segments, the active one bracketed.
+func tabs(s *State, width int) layout.Node {
 	labels := []struct {
 		name    string
 		focused bool
 	}{
-		{name: "Tree", focused: t.state.focus.Focused(int(focusTree))},
-		{name: "Search", focused: t.state.focus.Focused(int(focusSearch))},
-		{name: "Details", focused: t.state.focus.Focused(int(focusDetails))},
+		{name: "Tree", focused: s.focus.Focused(int(focusTree))},
+		{name: "Search", focused: s.focus.Focused(int(focusSearch))},
+		{name: "Details", focused: s.focus.Focused(int(focusDetails))},
 	}
-	parts := make([]string, 0, len(labels))
-	remaining := r.W
+	row := layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(1)}}
+	remaining := width
 	for i, label := range labels {
-		segmentWidth := remaining / (len(labels) - i)
-		remaining -= segmentWidth
+		segment := remaining / (len(labels) - i)
+		remaining -= segment
 		text := label.name
 		if label.focused {
 			text = "[" + text + "]"
 		}
-		parts = append(parts, centerFill(text, segmentWidth))
+		text = fit(text, segment)
+		pad := segment - lipgloss.Width(text)
+		row.Children = append(row.Children, layout.Row{Children: []layout.Node{
+			rule(pad / 2), layout.Label{Text: text}, rule(pad - pad/2),
+		}})
 	}
-	return strings.Join(parts, "")
+	return row
 }
 
-// centerFill centers text in width columns over a horizontal rule of dashes.
-func centerFill(text string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	text = fit(text, width)
-	pad := width - lipgloss.Width(text)
-	left := pad / 2
-	right := pad - left
-	return strings.Repeat("─", left) + text + strings.Repeat("─", right)
-}
-
-// borderChrome paints a rounded pane border in fg, leaving the interior for the
-// pane's children to draw over (flat-game's convention, without a title rule).
-func borderChrome(fg color.Color) func(layout.Rect) string {
-	return func(r layout.Rect) string {
-		if r.W < 2 || r.H < 2 {
-			return ""
-		}
-		b := lipgloss.NewStyle().Foreground(fg)
-		rows := make([]string, r.H)
-		rows[0] = b.Render("╭" + strings.Repeat("─", r.W-2) + "╮")
-		side := b.Render("│") + strings.Repeat(" ", r.W-2) + b.Render("│")
-		for i := 1; i < r.H-1; i++ {
-			rows[i] = side
-		}
-		rows[r.H-1] = b.Render("╰" + strings.Repeat("─", r.W-2) + "╯")
-		return strings.Join(rows, "\n")
-	}
+// rule is a horizontal line n columns wide (drawn as a line in a window,
+// like any box-drawing cells).
+func rule(n int) layout.Node {
+	return layout.Text{NodeBase: layout.NodeBase{W: layout.Fixed(n)}, String: strings.Repeat("─", max(n, 0))}
 }
 
 func paneBorderColor(p palette, focused bool) color.Color {
@@ -688,11 +668,20 @@ func fit(s string, width int) string {
 }
 
 func main() {
-	if err := flatte.Run(context.Background(), flatte.App[State]{
+	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	flag.Parse()
+	app := flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}); err != nil {
+	}
+	var err error
+	if *gui {
+		err = window.Run(context.Background(), app, window.Options{Title: "Flat Workspace", Width: 86, Height: 24})
+	} else {
+		err = flatte.Run(context.Background(), app, flatte.WithMouse(flatte.MouseModeCellMotion))
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

@@ -3,6 +3,7 @@ package window
 import (
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ebitengine/purego/objc"
 
@@ -14,6 +15,7 @@ import (
 type ui interface {
 	resize(width, height float64)
 	key(flatte.KeyEvent)
+	paste()
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
 	render() layout.Scene
 	frameTitle() string
@@ -38,6 +40,33 @@ type windowState struct {
 	caret   CGRect
 	caretOK bool
 	wheel   wheelAccumulator
+	// caretMoved is when the caret last moved; blink redraws at its next
+	// blink phase.
+	caretMoved time.Time
+	blink      *time.Timer
+}
+
+// caretBlink is a caret blink phase, as macOS fields blink.
+const caretBlink = 530 * time.Millisecond
+
+// caretOn reports whether a caret that moved since ago shows: on for a
+// phase, off for a phase, and so on.
+func caretOn(since time.Duration) bool { return since < 0 || (since/caretBlink)%2 == 0 }
+
+// blinkIn redraws the window after d, for the caret's next blink phase.
+func (st *windowState) blinkIn(d time.Duration) {
+	redraw := func() {
+		post(func() {
+			if current == st {
+				st.window.Send(sel("contentView")).Send(sel("setNeedsDisplay:"), true)
+			}
+		})
+	}
+	if st.blink == nil {
+		st.blink = time.AfterFunc(d, redraw)
+		return
+	}
+	st.blink.Reset(d)
 }
 
 var current *windowState
@@ -143,7 +172,18 @@ func viewMethods() []objc.MethodDef {
 			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale}
 			p.draw(scene, b.Size.Width, b.Size.Height)
 			if c := st.ui.frameCursor(); c != nil {
+				p.clip = layout.PointRect{W: b.Size.Width, H: b.Size.Height}
 				p.caretAt(float64(c.X)*st.m.Column, float64(c.Y)*st.m.Line, st.m.Line, st.th.font(fontKey{mono: true}))
+			}
+			if p.caretOK {
+				now := time.Now()
+				if !st.caretOK || p.caret != st.caret {
+					st.caretMoved = now // a moved caret shows at once
+				}
+				if caretOn(now.Sub(st.caretMoved)) {
+					p.paintCaret()
+				}
+				st.blinkIn(caretBlink - now.Sub(st.caretMoved)%caretBlink)
 			}
 			st.caret, st.caretOK = p.caret, p.caretOK
 			st.setTitle(st.ui.frameTitle())
@@ -157,6 +197,10 @@ func viewMethods() []objc.MethodDef {
 			flags := objc.Send[uint](event, sel("modifierFlags"))
 			if st.marked == "" && len(chars) == 1 {
 				if ev, ok := macKey(chars[0], flags); ok {
+					if ev == (flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'v', Mod: flatte.ModSuper}) {
+						st.ui.paste() // ⌘V pastes, as in a terminal
+						return
+					}
 					st.ui.key(ev)
 					return
 				}

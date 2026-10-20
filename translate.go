@@ -147,5 +147,11 @@ func translateMod(mod uv.KeyMod) Mod {
 	if mod.Contains(uv.ModCtrl) {
 		m |= ModCtrl
 	}
+	// Command reaches an app as Super (kitty protocol) or, in the xterm
+	// modifier encoding macOS terminals use (Warp: ⌘← is CSI 1;9D), as
+	// Meta. Both are ModSuper, so an app binds one modifier.
+	if mod.Contains(uv.ModSuper) || mod.Contains(uv.ModMeta) {
+		m |= ModSuper
+	}
 	return m
 }

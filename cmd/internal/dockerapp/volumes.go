@@ -30,6 +30,7 @@ type volumesScreen struct {
 	listPaneWidth int
 	rects         map[string]layout.Rect
 	drag          *splitDrag
+	barDrag       scrollDrag
 }
 
 const (
@@ -116,6 +117,12 @@ func (v *volumesScreen) Handle(s *State, ev flatte.Event, _ flatte.Effects[State
 }
 
 func (v *volumesScreen) handleMouse(m flatte.MouseEvent) {
+	if bar, y, h, handled := v.barDrag.event(m, listBarID); handled {
+		if bar == listBarID {
+			scrollList(&v.list, y, h)
+		}
+		return
+	}
 	if v.drag != nil {
 		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
 			v.drag = nil

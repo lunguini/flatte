@@ -4,8 +4,8 @@
  │ Components           TextField · input                                                 │
  │ ▸ TextField          Grapheme-correct single-line input with app-owned focus policy.   │
  │   Textarea                                                                             │
- │   List               name Ada Lovelace▌                                                │
- │   Table              Grapheme-correct, app-owned cursor.                               │
+ │   List               name Ada Lovelace                                                 │
+ │   Table              Grapheme-correct, app-owned cursor. Click to edit; Esc stops.     │
  │   Tree                                                                                 │
  │   Viewport                                                                             │
  │   Progress                                                                             │

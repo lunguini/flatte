@@ -34,6 +34,7 @@ flatte package flatte
   const ModAlt Mod = 2
   const ModCtrl Mod = 4
   const ModShift Mod = 1
+  const ModSuper Mod = 8
   const MouseLeft MouseButton = 1
   const MouseMiddle MouseButton = 2
   const MouseModeAllMotion MouseMode = 2
@@ -68,6 +69,7 @@ flatte package flatte
   func SelectFile[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, FileSelection))
   func SettleFrame(view func() Frame, handle func(LayoutEvent), last map[string] layout.Rect, width int, height int)(Frame, layout.Composition, map[string] layout.Rect)
   func Stream[S any, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T))
+  func WithHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S]
   func WithInline() Option
   func WithInput(in io.Reader) Option
   func WithMouse(mode MouseMode) Option
@@ -123,7 +125,9 @@ flatte package flatte
   field Effects.<unexported> *latestRegistry [order=5]
   field Effects.<unexported> func(func()) [order=6]
   field Effects.<unexported> Clock [order=7]
-  struct Effects fields=8 comparable=false
+  field Effects.<unexported> func(string) [order=8]
+  field Effects.<unexported> func() [order=9]
+  struct Effects fields=10 comparable=false
   type Event interface
   interface Event method isEvent()
   type FileSelection struct
@@ -145,7 +149,9 @@ flatte package flatte
   field KeyEvent.Key Key [order=0]
   field KeyEvent.Rune rune [order=1]
   field KeyEvent.Mod Mod [order=2]
-  struct KeyEvent fields=3 comparable=true
+  field KeyEvent.Caret int [order=3]
+  field KeyEvent.HasCaret bool [order=4]
+  struct KeyEvent fields=5 comparable=true
   type LayoutEvent struct
   field LayoutEvent.Rects map[string] layout.Rect [order=0]
   struct LayoutEvent fields=1 comparable=false
@@ -160,7 +166,9 @@ flatte package flatte
   field MouseEvent.Mod Mod [order=4]
   field MouseEvent.Target string [order=5]
   field MouseEvent.TargetRect layout.Rect [order=6]
-  struct MouseEvent fields=7 comparable=true
+  field MouseEvent.Caret int [order=7]
+  field MouseEvent.HasCaret bool [order=8]
+  struct MouseEvent fields=9 comparable=true
   type MouseMode int
   type NoopTracer struct
   struct NoopTracer fields=0 comparable=true
@@ -260,6 +268,7 @@ flatui package flatui
   method *FocusRing.SetCount(n int)
   method *List.MoveDown()
   method *List.MoveUp()
+  method *List.ScrollTo(offset int)
   method *List.Select(i int)
   method *List.SetCount(n int)
   method *List.SetHeight(h int)
@@ -315,6 +324,7 @@ flatui package flatui
   method *Textarea.DeleteWordRight()
   method *Textarea.Insert(r rune)
   method *Textarea.InsertNewline()
+  method *Textarea.InsertText(s string)
   method *Textarea.MoveDown()
   method *Textarea.MoveDownSelecting()
   method *Textarea.MoveLeft()
@@ -325,12 +335,15 @@ flatui package flatui
   method *Textarea.MoveLineStartSelecting()
   method *Textarea.MoveRight()
   method *Textarea.MoveRightSelecting()
+  method *Textarea.MoveTo(offset int)
+  method *Textarea.MoveToSelecting(offset int)
   method *Textarea.MoveUp()
   method *Textarea.MoveUpSelecting()
   method *Textarea.MoveWordLeft()
   method *Textarea.MoveWordLeftSelecting()
   method *Textarea.MoveWordRight()
   method *Textarea.MoveWordRightSelecting()
+  method *Textarea.SelectAll()
   method *Textarea.SetSize(width int, height int)
   method *Textarea.SetSoftWrap(enabled bool)
   method *Textarea.SetValue(s string)
@@ -342,6 +355,7 @@ flatui package flatui
   method *Tree.SetHeight(h int)
   method *Tree.SetNodes(nodes[]TreeNode)
   method *Tree.Toggle(id string)
+  method *Viewport.Adopt(rects map[string] layout.Rect, id string)
   method *Viewport.GotoBottom()
   method *Viewport.GotoTop()
   method *Viewport.HalfPageDown()
@@ -588,7 +602,10 @@ flatui package flatui
   field Viewport.<unexported> int [order=3]
   field Viewport.<unexported> int [order=4]
   field Viewport.<unexported> int [order=5]
-  struct Viewport fields=6 comparable=false
+  field Viewport.<unexported> string [order=6]
+  field Viewport.<unexported> int [order=7]
+  field Viewport.<unexported> bool [order=8]
+  struct Viewport fields=9 comparable=false
   type ZoneMap struct
   field ZoneMap.<unexported> []string [order=0]
   field ZoneMap.<unexported> map[string] Rect [order=1]
@@ -639,6 +656,7 @@ flatui/layout package layout
   method Col.IsHorizontal() bool
   method Col.Render(rect Rect) string
   method Col.Size()(Size, Size)
+  method Composition.CaretAt(x int, y int)(offset int, ok bool)
   method Composition.Cursor()(x int, y int, ok bool)
   method Composition.HitTest(x int, y int)(string, Rect)
   method Icon.Render(r Rect) string
@@ -666,6 +684,7 @@ flatui/layout package layout
   method Scroll.IsHorizontal() bool
   method Scroll.Render(rect Rect) string
   method Scroll.Size()(Size, Size)
+  method ScrollBar.OffsetAt(y int, height int) int
   method ScrollBar.Render(r Rect) string
   method ScrollBar.Size()(Size, Size)
   method Text.Render(r Rect) string
@@ -745,7 +764,8 @@ flatui/layout package layout
   field Composition.Diagnostics []DuplicateIDDiagnostic [order=2]
   field Composition.<unexported> []hit [order=3]
   field Composition.<unexported> *caretPos [order=4]
-  struct Composition fields=5 comparable=false
+  field Composition.<unexported> map[string] placedInput [order=5]
+  struct Composition fields=6 comparable=false
   type DuplicateIDDiagnostic struct
   field DuplicateIDDiagnostic.ID string [order=0]
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]

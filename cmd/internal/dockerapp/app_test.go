@@ -2378,3 +2378,58 @@ func TestImageAndVolumeRowClicksSelectTheirItem(t *testing.T) {
 		t.Fatalf("title click selected %d", got)
 	}
 }
+
+func TestScrollBarPressAndDragScrollTheList(t *testing.T) {
+	s := resizedState(100, 11) // the containers list overflows
+	render(s)
+	bar, ok := s.containers.rects[listBarID]
+	if !ok || s.containers.list.Count() <= s.containers.list.Height() {
+		t.Fatalf("no overflowing list bar: rect %v ok %v", bar, ok)
+	}
+	press := flatte.MouseEvent{Action: flatte.MousePress, Button: flatte.MouseLeft, X: bar.X, Y: bar.Y + bar.H - 1}
+	send(s, press, flatte.Effects[State]{})
+	end := s.containers.list.Count() - s.containers.list.Height()
+	if s.containers.list.Offset() != end || s.containers.list.Cursor() < end {
+		t.Fatalf("press at the bar's bottom: offset %d cursor %d, want offset %d", s.containers.list.Offset(), s.containers.list.Cursor(), end)
+	}
+	// Dragged above the bar (off it): the drag keeps it, scrolling to the top.
+	send(s, flatte.MouseEvent{Action: flatte.MouseMotion, Button: flatte.MouseLeft, X: bar.X + 20, Y: 0}, flatte.Effects[State]{})
+	if s.containers.list.Offset() != 0 {
+		t.Fatalf("drag to the top: offset %d, want 0", s.containers.list.Offset())
+	}
+	send(s, flatte.MouseEvent{Action: flatte.MouseRelease, Button: flatte.MouseLeft, X: bar.X, Y: 0}, flatte.Effects[State]{})
+	// After release, motion no longer scrolls.
+	s.containers.list.ScrollTo(end)
+	send(s, flatte.MouseEvent{Action: flatte.MouseMotion, Button: flatte.MouseLeft, X: bar.X, Y: bar.Y}, flatte.Effects[State]{})
+	if s.containers.list.Offset() != end {
+		t.Fatalf("motion after release scrolled to %d", s.containers.list.Offset())
+	}
+}
+
+func TestDetailScrollBarScrollsTheInspectTab(t *testing.T) {
+	s := resizedState(80, 24)
+	s.containers.tab = tabInspect
+	render(s)
+	bar, ok := s.containers.rects[detailBarID]
+	if !ok || s.containers.inspect.TotalLines() <= s.containers.inspect.VisibleLines() {
+		t.Fatalf("no overflowing inspect bar: %v %v", bar, ok)
+	}
+	send(s, flatte.MouseEvent{Action: flatte.MousePress, Button: flatte.MouseLeft, X: bar.X, Y: bar.Y + bar.H - 1}, flatte.Effects[State]{})
+	if !s.containers.inspect.AtBottom() {
+		t.Fatalf("press at the bottom: offset %d, want the end", s.containers.inspect.Offset())
+	}
+}
+
+func TestImagesListBarScrolls(t *testing.T) {
+	s := resizedState(100, 11)
+	send(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '2'}, flatte.Effects[State]{})
+	render(s)
+	bar, ok := s.images.rects[listBarID]
+	if !ok || s.images.list.Count() <= s.images.list.Height() {
+		t.Skipf("images list fits at this size (rect %v)", bar)
+	}
+	send(s, flatte.MouseEvent{Action: flatte.MousePress, Button: flatte.MouseLeft, X: bar.X, Y: bar.Y + bar.H - 1}, flatte.Effects[State]{})
+	if want := s.images.list.Count() - s.images.list.Height(); s.images.list.Offset() != want {
+		t.Fatalf("images offset %d, want %d", s.images.list.Offset(), want)
+	}
+}

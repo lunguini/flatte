@@ -106,6 +106,31 @@ func (in Input) caret(r Rect) (x, y int, ok bool) {
 	return satAdd(inner.X, in.caretColumn()-in.scroll(inner.W)), inner.Y, true
 }
 
+// caretAt is the byte offset into Value of the caret position at cell
+// (x, y) for the Input solved at r: the boundary before the grapheme under
+// the cell, or the end of the row past its text. Points outside the field
+// clamp to its nearest row and column.
+func (in Input) caretAt(r Rect, x, y int) int {
+	inner := r.insetBy(in.insetSides())
+	lx, ly := max(x-inner.X, 0), min(max(y-inner.Y, 0), max(inner.H-1, 0))
+	if !in.Multiline {
+		return textedit.ByteOffsetForColumn(in.Value, in.scroll(inner.W)+lx)
+	}
+	a, s := in.area(inner)
+	var row, col int
+	if a.Wrap {
+		row, col = textedit.PositionForVisualCell(a.Lines, s.WrapOffset+ly, lx, a.Width)
+	} else {
+		row = min(s.Offset+ly, len(a.Lines)-1)
+		col = textedit.ByteOffsetForColumn(a.Lines[row], s.XOffset+lx)
+	}
+	at := col
+	for _, line := range a.Lines[:row] {
+		at += len(line) + 1
+	}
+	return at
+}
+
 // area is a Multiline Input laid out in inner, scrolled from its offsets to
 // keep the caret visible.
 func (in Input) area(inner Rect) (textedit.Area, textedit.Scroll) {

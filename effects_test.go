@@ -229,3 +229,17 @@ func (r *latestRegistry) contains(name string) bool {
 	_, ok := r.entries[name]
 	return ok
 }
+
+func TestWithHostClipboardRoutesClipboard(t *testing.T) {
+	var set []string
+	reads := 0
+	fx := WithHostClipboard(NewHarnessEffects[struct{}](context.Background(), nil, nil, nil, nil),
+		func(s string) { set = append(set, s) }, func() { reads++ })
+	fx.SetClipboard("copied")
+	fx.ReadClipboard()
+	if len(set) != 1 || set[0] != "copied" || reads != 1 {
+		t.Fatalf("set %q, reads %d", set, reads)
+	}
+	// Without a host clipboard, harness effects stay no-ops.
+	NewHarnessEffects[struct{}](context.Background(), nil, nil, nil, nil).SetClipboard("x")
+}

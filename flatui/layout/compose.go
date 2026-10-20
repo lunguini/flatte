@@ -48,6 +48,25 @@ type Composition struct {
 	Diagnostics []DuplicateIDDiagnostic
 	hits        []hit
 	caret       *caretPos
+	inputs      map[string]placedInput
+}
+
+// placedInput is an ID'd Input as painted, for caret hit-testing.
+type placedInput struct {
+	in Input
+	r  Rect
+}
+
+// CaretAt reports, for cell (x, y) over an ID'd Input (the HitTest target),
+// the byte offset into its Value of the caret position at that cell: the
+// boundary before the grapheme there, or the end of the row past its text.
+func (c Composition) CaretAt(x, y int) (offset int, ok bool) {
+	id, _ := c.HitTest(x, y)
+	pi, ok := c.inputs[id]
+	if id == "" || !ok {
+		return 0, false
+	}
+	return pi.in.caretAt(pi.r, x, y), true
 }
 
 // caretPos is a hardware-cursor cell.
@@ -100,7 +119,7 @@ func Compose(root Node, width, height int) Composition {
 	}
 	p := &cellPainter{buf: uv.NewScreenBuffer(width, height)}
 	s := solveTree[int](cells{}, root, width, height, p)
-	c := Composition{Rects: cellRects(s), Diagnostics: cellDiagnostics(s), caret: p.caret}
+	c := Composition{Rects: cellRects(s), Diagnostics: cellDiagnostics(s), caret: p.caret, inputs: p.inputs}
 	c.hits = make([]hit, len(s.hits))
 	for i, h := range s.hits {
 		c.hits[i] = hit{id: h.id, rect: Rect(h.rect), area: Rect(h.area)}
@@ -137,6 +156,8 @@ type cellPainter struct {
 	buf uv.ScreenBuffer
 	// caret is the last visible focused Input caret in paint order.
 	caret *caretPos
+	// inputs are the ID'd Inputs painted, by ID (the last one wins).
+	inputs map[string]placedInput
 }
 
 func (p *cellPainter) leaf(n Node, rr, cc rect[int]) {
@@ -150,6 +171,12 @@ func (p *cellPainter) leaf(n Node, rr, cc rect[int]) {
 	paintClipped(p.buf, r, clip, n.Render)
 	if under != nil {
 		keepBackgrounds(p.buf, vis, under)
+	}
+	if in, ok := n.(Input); ok && in.ID != "" {
+		if p.inputs == nil {
+			p.inputs = map[string]placedInput{}
+		}
+		p.inputs[in.ID] = placedInput{in, r}
 	}
 	if cn, ok := n.(caretNode); ok {
 		if x, y, ok := cn.caret(r); ok && clip.Contains(x, y) {

@@ -5,6 +5,7 @@ import (
 	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
+	"github.com/rivo/uniseg"
 
 	"github.com/lunguini/flatte/flatui/internal/textedit"
 	"github.com/lunguini/flatte/flatui/layout"
@@ -138,6 +139,84 @@ func (t *Textarea) Insert(r rune) {
 	line := t.lines[t.row]
 	t.lines[t.row] = line[:t.col] + s + line[t.col:]
 	t.col += len(s)
+	t.syncGoal()
+	t.keepVisible()
+}
+
+// InsertText inserts s at the cursor, replacing the selection: "\n" (and
+// "\r\n" or "\r") break lines, so a paste lands as typed. The cursor ends
+// after the inserted text.
+func (t *Textarea) InsertText(s string) {
+	t.ensure()
+	t.deleteSelection()
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
+	parts := strings.Split(s, "\n")
+	line := t.lines[t.row]
+	left, right := line[:t.col], line[t.col:]
+	if len(parts) == 1 {
+		t.lines[t.row] = left + s + right
+		t.col += len(s)
+	} else {
+		last := len(parts) - 1
+		next := make([]string, 0, len(t.lines)+last)
+		next = append(next, t.lines[:t.row]...)
+		next = append(next, left+parts[0])
+		next = append(next, parts[1:last]...)
+		next = append(next, parts[last]+right)
+		next = append(next, t.lines[t.row+1:]...)
+		t.lines = next
+		t.row += last
+		t.col = len(parts[last])
+	}
+	t.syncGoal()
+	t.keepVisible()
+}
+
+// MoveTo puts the cursor at byte offset into Value — clamped, and backed off
+// to a grapheme boundary — and clears the selection: for a click (a
+// MouseEvent's Caret) or a host's row move (a KeyEvent's Caret).
+func (t *Textarea) MoveTo(offset int) {
+	t.moveTo(offset)
+	t.ClearSelection()
+}
+
+// MoveToSelecting is MoveTo extending the selection, for a drag or a
+// selecting row move.
+func (t *Textarea) MoveToSelecting(offset int) {
+	t.startSelection()
+	t.moveTo(offset)
+}
+
+// SelectAll selects the whole value, with the cursor at its end.
+func (t *Textarea) SelectAll() {
+	t.ensure()
+	t.anchorRow, t.anchorCol, t.selectionActive = 0, 0, true
+	t.row = len(t.lines) - 1
+	t.col = len(t.lines[t.row])
+	t.syncGoal()
+	t.keepVisible()
+}
+
+func (t *Textarea) moveTo(offset int) {
+	t.ensure()
+	offset = max(offset, 0)
+	row := 0
+	for row < len(t.lines)-1 && offset > len(t.lines[row]) {
+		offset -= len(t.lines[row]) + 1
+		row++
+	}
+	line := t.lines[row]
+	col, at := min(offset, len(line)), 0
+	// The last grapheme boundary at or before col.
+	g := uniseg.NewGraphemes(line)
+	for g.Next() {
+		_, to := g.Positions()
+		if to > col {
+			break
+		}
+		at = to
+	}
+	t.row, t.col = row, at
 	t.syncGoal()
 	t.keepVisible()
 }

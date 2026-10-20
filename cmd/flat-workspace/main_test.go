@@ -42,7 +42,7 @@ func TestFocusCyclesBetweenWorkspaceSections(t *testing.T) {
 
 func TestFocusTabsSpanFullWidth(t *testing.T) {
 	s := ready()
-	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 86}).Content)
+	frame := flatest.CleanFrame(composed(s, 86).Content)
 	line, _ := cleanLineContaining(frame, "Tree")
 	for _, want := range []string{"Tree", "Search", "Details"} {
 		if !strings.Contains(line, want) {
@@ -59,7 +59,7 @@ func TestFocusTabsSpanFullWidth(t *testing.T) {
 
 func TestHelpLinePinnedToBottom(t *testing.T) {
 	s := ready()
-	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 86}).Content)
+	frame := flatest.CleanFrame(composed(s, 86).Content)
 	lines := strings.Split(frame, "\n")
 	if len(lines) != 24 {
 		t.Fatalf("frame line count = %d, want terminal height 24:\n%s", len(lines), frame)
@@ -181,7 +181,7 @@ func TestSearchCursorTracksTypedText(t *testing.T) {
 	Handle(s, key('p'), flatte.Effects[State]{})
 	Handle(s, key('i'), flatte.Effects[State]{})
 
-	frame := View(s, flatte.RenderContext{Width: 86})
+	frame := composed(s, 86)
 	if frame.Cursor == nil {
 		t.Fatal("search-focused frame has no cursor")
 	}
@@ -199,7 +199,7 @@ func TestFocusDetailsIsVisibleAndDescribesScroll(t *testing.T) {
 		Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
 	}
 
-	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 86}).Content)
+	frame := flatest.CleanFrame(composed(s, 86).Content)
 	for _, want := range []string{"focus details", "[details scroll]", "j/k scroll"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("details-focused frame missing %q:\n%s", want, frame)
@@ -209,7 +209,7 @@ func TestFocusDetailsIsVisibleAndDescribesScroll(t *testing.T) {
 
 func TestTreeRowsShowExpansionMarkers(t *testing.T) {
 	s := ready()
-	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 86}).Content)
+	frame := flatest.CleanFrame(composed(s, 86).Content)
 	for _, want := range []string{"▾ workspace", " ▸ services", " ▸ ops"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("tree frame missing %q:\n%s", want, frame)
@@ -219,7 +219,7 @@ func TestTreeRowsShowExpansionMarkers(t *testing.T) {
 
 func TestStyledProgressRendersANSI(t *testing.T) {
 	s := ready()
-	frame := View(s, flatte.RenderContext{Width: 86}).Content
+	frame := composed(s, 86).Content
 	if !strings.Contains(frame, "\x1b[") {
 		t.Fatalf("view has no ANSI styling:\n%s", frame)
 	}
@@ -231,7 +231,7 @@ func TestStyledProgressRendersANSI(t *testing.T) {
 func TestNarrowFrameFitsWidth(t *testing.T) {
 	s := NewState()
 	s.layout(70, 22)
-	frame := flatest.CleanFrame(View(s, flatte.RenderContext{Width: 70}).Content)
+	frame := flatest.CleanFrame(composed(s, 70).Content)
 	for i, line := range strings.Split(frame, "\n") {
 		if width := lipgloss.Width(line); width > 70 {
 			t.Fatalf("line %d width = %d, want <= 70:\n%s", i+1, width, frame)
@@ -241,7 +241,7 @@ func TestNarrowFrameFitsWidth(t *testing.T) {
 
 func TestWorkspaceSnapshot(t *testing.T) {
 	s := ready()
-	flatest.AssertGoldenFrame(t, "testdata/workspace.golden", View(s, flatte.RenderContext{Width: 86}))
+	flatest.AssertGoldenFrame(t, "testdata/workspace.golden", composed(s, 86))
 }
 
 func resultTitles(results []WorkItem) []string {
@@ -267,4 +267,52 @@ func cleanLineContaining(content, needle string) (line string, y int) {
 		}
 	}
 	return "", -1
+}
+
+// composed is View's frame as the runtime paints it: composed at width
+// columns and the state's height.
+func composed(s *State, width int) flatte.Frame {
+	f, _ := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, s.height)
+	return f
+}
+
+func TestClicksFocusAndActOnPanes(t *testing.T) {
+	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View}, 86)
+	_, comp := flatte.ComposeFrame(d.Frame(), 86, 24)
+	click := func(id string, dx int) {
+		t.Helper()
+		r, ok := comp.Rects[id]
+		if !ok {
+			t.Fatalf("no rect for %q", id)
+		}
+		d.Send(flatte.MouseEvent{X: r.X + dx, Y: r.Y, Button: flatte.MouseLeft, Action: flatte.MousePress})
+		_, comp = flatte.ComposeFrame(d.Frame(), 86, 24)
+	}
+	s := d.State()
+	click("work:2", 1)
+	if !s.focus.Focused(int(focusSearch)) || s.table.Cursor() != 2 || !strings.Contains(s.details.View(), "API schema") {
+		t.Fatalf("work row click: focus %d cursor %d details %q", s.focus.Index(), s.table.Cursor(), s.details.View())
+	}
+	click("tree:services", 4)
+	if !s.focus.Focused(int(focusTree)) || s.tree.CursorID() != "services" {
+		t.Fatalf("tree click: focus %d cursor %q", s.focus.Index(), s.tree.CursorID())
+	}
+	before := len(s.tree.VisibleRows())
+	click("tree:services", 4) // again: toggles it open
+	if len(s.tree.VisibleRows()) <= before {
+		t.Fatalf("second click did not expand: %d rows", len(s.tree.VisibleRows()))
+	}
+	click("search", 0)
+	for _, r := range "api" {
+		d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r})
+	}
+	_, comp = flatte.ComposeFrame(d.Frame(), 86, 24)
+	click("right", 2)
+	if !s.focus.Focused(int(focusDetails)) {
+		t.Fatalf("details click: focus %d", s.focus.Index())
+	}
+	click("search", 1) // the caret after the first letter
+	if !s.focus.Focused(int(focusSearch)) || s.search.Cursor != 1 {
+		t.Fatalf("search click: focus %d cursor %d", s.focus.Index(), s.search.Cursor)
+	}
 }

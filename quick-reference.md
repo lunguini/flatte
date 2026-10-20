@@ -272,13 +272,13 @@ frame tree instead of being rendered and positioned by hand:
 | Widget | `Layout()` produces |
 |---|---|
 | `flatui.TabBar` | A `Row` of tabs, each a `Row` of blank-in-a-window cap `Icon`s around a filled, padded `Label` on a `Round` box (the same cells in the terminal; spaced pills in a window), or one bordered `Text`; tags rects when `WithID` is set. |
-| `flatui.List` | `Rows(id, row)`: the visible rows as nodes — each wrapped in a `Row` with ID `id:index` (click `Target`) and `Box.Selected` on the selected one; the returned Col is the app's: give it an ID and `H: layout.Grow(1)` to size the list from its solved height. `Layout()`: a `Text` leaf of the visible rows via `RenderRow`. |
+| `flatui.List` | `ScrollTo(offset)` scrolls the window, keeping the cursor in it (for a scroll bar). `Rows(id, row)`: the visible rows as nodes — each wrapped in a `Row` with ID `id:index` (click `Target`) and `Box.Selected` on the selected one; the returned Col is the app's: give it an ID and `H: layout.Grow(1)` to size the list from its solved height. `Layout()`: a `Text` leaf of the visible rows via `RenderRow`. |
 | `flatui.Table` | `HeaderLayout(style)` and `Cells(cells, style)`: Rows of column-width Labels one column apart (they line up in a window too); `Rows(id, row)`: body rows like `List.Rows`. |
 | `flatui.Tree` | `Rows(id, row)`: the visible rows like `List.Rows`, each ID'd `id:<node ID>` (stable as the tree expands). |
-| `flatui.Viewport` | A `layout.Scroll` over its lines at the current offset, as tall as the visible slice: a `Label` when plain (for `SetWrappedContent`, a wrapping `Label` of the raw text, so a window wraps it in its font), a `Text` when styled. Wrapped content breaks at words. |
+| `flatui.Viewport` | A `layout.Scroll` over its lines at the current offset, as tall as the visible slice: a `Label` when plain (for `SetWrappedContent`, a wrapping `Label` of the raw text, so a window wraps it in its font), a `Text` when styled. Wrapped content breaks at words. Call `Adopt(rects, id)` with each `LayoutEvent` (id: the node holding `Layout()`) instead of `SetSize`: it sizes the viewport from that node and scrolls over the lines the host laid the text out in, so a window's scroll range, `AtBottom`, and `ScrollPercent` are its own; a viewport sent to the bottom stays there. |
 | `flatui.Progress` | A `layout.Meter` of the bar's width and the percent label: the same text in the terminal, a native bar in a window. |
 | `flatui.TextField` | `Layout(id, focused)`: a `layout.Input` showing the value and caret. |
-| `flatui.Textarea` | `Layout(id, focused)`: a multi-line `layout.Input` with the value, cursor, selection, soft-wrap, and scroll — in the terminal the same cells as `ViewWithSelection`. Size it from the node's rect (`LayoutEvent`). In a window it wraps by words in the UI font, while up/down still move by the terminal's rows. |
+| `flatui.Textarea` | `Layout(id, focused)`: a multi-line `layout.Input` with the value, cursor, selection, soft-wrap, and scroll — in the terminal the same cells as `ViewWithSelection`. Size it from the node's rect (`LayoutEvent`). In a window it wraps by words in the UI font; use the events' carets for clicks and ↑/↓ (`MoveTo`, `MoveToSelecting`), `InsertText` for pastes, `SelectAll`. |
 
 ### Geometry-based hit-testing
 
@@ -298,6 +298,27 @@ if ev.Target == "list" {
 	s.list.Select(s.list.Offset() + ev.Y - ev.TargetRect.Y)
 }
 ```
+
+Over an ID'd `layout.Input`, `MouseEvent.HasCaret` is set and `Caret` is the
+byte offset into its value under the pointer, as the host laid the text out
+(exact in cells, and in a window's proportional font) — pass it to
+`Textarea.MoveTo` / `MoveToSelecting` for click and drag. In a window, a drag
+that began on an Input keeps targeting it until release. While a multi-line
+Input has focus, a window also sets `KeyEvent.HasCaret`/`Caret` on ↑/↓ to the
+caret one of its visual rows away; terminals leave it unset (the widget's
+rows are the terminal's):
+
+```go
+case flatte.KeyDown:
+	if key.HasCaret {
+		s.ta.MoveTo(key.Caret)
+	} else {
+		s.ta.MoveDown()
+	}
+```
+
+`layout.ScrollBar.OffsetAt(y, height)` maps a press or drag on a bar to the
+offset that centers its thumb there (`List.ScrollTo`, `Viewport.ScrollToLine`).
 
 ### Geometry in state
 
@@ -375,7 +396,10 @@ are columns and lines (a line is the UI font's height plus line spacing),
 down the middle, as a terminal border takes a cell — while `ResizeEvent`, `LayoutEvent`, and `MouseEvent` stay in
 cells (`X - TargetRect.X` is exact inside the target). Ctrl-C goes to
 `Handle`; quit with ⌘Q or by closing the window. ⌘←/⌘→ arrive as
-`KeyHome`/`KeyEnd` (Shift kept); other ⌘ chords belong to the menu. `window.Snapshot` renders
+`KeyHome`/`KeyEnd` (Shift kept), ⌘V as a `PasteEvent`, and other ⌘ chords
+the menu does not own (⌘Q, ⌘W) as keys with `flatte.ModSuper` — copy, cut,
+and select-all bindings are the app's. Fields' carets blink and stay inside
+their fields. `window.Snapshot` renders
 the first frame to an image for visual tests. Backend authors draw the ops
 of `layout.LayoutScene`.
 
@@ -415,7 +439,7 @@ or relocation before 1.0.
 | Print above inline frame | `fx.Print(...)` / `fx.Printf(...)` | Requires `flatte.WithInline()`. |
 | Shell out to editor/tool | `flatte.Exec(fx, name, cmd, fold)` | Releases terminal, runs command, restores. |
 | File picker | `flatte.SelectFile(fx, name, cmd, fold)` | App chooses command; `cmd/flat-file-select` shows platform picker selection. |
-| Clipboard write/read | `fx.SetClipboard`, `fx.ReadClipboard`, `flatte.ClipboardEvent` | Reads are best-effort; unsupported terminals may never answer. |
+| Clipboard write/read | `fx.SetClipboard`, `fx.ReadClipboard`, `flatte.ClipboardEvent` | Reads are best-effort; unsupported terminals may never answer. A window uses the system pasteboard (hosts route it with `flatte.WithHostClipboard`). Pastes arrive as `PasteEvent` (⌘V in a window). |
 | Suspend | `fx.Suspend()` | Releases and restores terminal state; Unix sends job-control suspend when supported. Apps should not assume a process stop on platforms without job control. |
 
 ## Navigation Recipes
@@ -461,8 +485,8 @@ Bind Tab/Shift-Tab to `Next`/`Prev`, then branch input by `Focused(i)`. See
 
 ### Scrollable Page Body
 
-For a body of text, use `flatui.Viewport`; size it from `ResizeEvent`, not
-from `View`:
+For a body of text, use `flatui.Viewport`; size it from `ResizeEvent` (or,
+in a `Frame.Root` tree, with `Adopt` on `LayoutEvent`), not from `View`:
 
 ```go
 case ev := ev.(type) {

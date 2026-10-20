@@ -105,3 +105,45 @@ func TestSceneScrollBar(t *testing.T) {
 		t.Fatalf("bar rect %+v, want a column wide and the full height", r)
 	}
 }
+
+func TestScrollBarOffsetAt(t *testing.T) {
+	for height := 1; height <= 12; height++ {
+		for total := 2; total <= 30; total++ {
+			for visible := 1; visible < total; visible++ {
+				b := ScrollBar{Visible: visible, Total: total}
+				_, size, _ := b.thumb(height)
+				limit := total - visible
+				if got := b.OffsetAt(0, height); got != 0 {
+					t.Fatalf("h%d t%d v%d: top -> %d, want 0", height, total, visible, got)
+				}
+				if got := b.OffsetAt(height-1, height); got != limit && height > size {
+					t.Fatalf("h%d t%d v%d: bottom -> %d, want %d", height, total, visible, got, limit)
+				}
+				prev := -1
+				for y := -2; y < height+2; y++ {
+					off := b.OffsetAt(y, height)
+					if off < prev || off < 0 || off > limit {
+						t.Fatalf("h%d t%d v%d: OffsetAt(%d) = %d after %d", height, total, visible, y, off, prev)
+					}
+					prev = off
+					// No offset puts the thumb nearer the asked line.
+					want := min(max(y-size/2, 0), height-size)
+					dist := func(o int) int {
+						c := b
+						c.Offset = o
+						pos, _, _ := c.thumb(height)
+						return max(pos-want, want-pos)
+					}
+					for o := 0; o <= limit; o++ {
+						if dist(o) < dist(off) {
+							t.Fatalf("h%d t%d v%d: y %d -> offset %d (thumb off by %d), but %d is nearer", height, total, visible, y, off, dist(off), o)
+						}
+					}
+				}
+			}
+		}
+	}
+	if got := (ScrollBar{Offset: 3, Visible: 5, Total: 5}).OffsetAt(2, 4); got != 3 {
+		t.Fatalf("nothing to scroll changed the offset to %d", got)
+	}
+}

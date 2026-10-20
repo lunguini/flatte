@@ -48,8 +48,9 @@ var macCommandKeys = map[rune]flatte.Key{0xF702: flatte.KeyHome, 0xF703: flatte.
 // macKey decides what a key press means before text input sees it: a
 // non-text key, or a Control chord, becomes a key event directly; anything
 // else is text for the input system (which also runs input methods) and
-// macKey reports false. Command chords belong to the menu and report false
-// with no event — except Command-Left and -Right, the platform's line start
+// macKey reports false. Command chords the menu does not claim (it sees
+// them first) are keys with ModSuper — letters lowercased, as Control
+// chords are — except Command-Left and -Right, the platform's line start
 // and end, which become Home and End (as AppKit's moveToBeginningOfLine:
 // does), keeping Shift so they can select.
 func macKey(chars rune, flags uint) (flatte.KeyEvent, bool) {
@@ -57,6 +58,12 @@ func macKey(chars rune, flags uint) (flatte.KeyEvent, bool) {
 	if flags&macCommand != 0 {
 		if k, ok := macCommandKeys[chars]; ok {
 			return flatte.KeyEvent{Key: k, Mod: mod}, true
+		}
+		if k, ok := macSpecialKeys[chars]; ok {
+			return flatte.KeyEvent{Key: k, Mod: mod | flatte.ModSuper}, true
+		}
+		if unicode.IsPrint(chars) {
+			return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: unicode.ToLower(chars), Mod: mod | flatte.ModSuper}, true
 		}
 		return flatte.KeyEvent{}, false
 	}

@@ -116,7 +116,15 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	}
 	h := newHost(ctx, app, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
 	current = &windowState{ui: h, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, title: title}
-	defer func() { current = nil }()
+	st := current
+	h.text = windowText{th: func() theme { return st.th }}
+	h.clip = pasteboard{}
+	defer func() {
+		if st := current; st != nil && st.blink != nil {
+			st.blink.Stop()
+		}
+		current = nil
+	}()
 
 	delegate, err := newDelegate(stop)
 	if err != nil {
@@ -256,8 +264,10 @@ func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, 
 		// rounds up to.
 		p.draw(scene, float64(pw)/scale, float64(ph)/scale)
 		if cursor != nil {
+			p.clip = layout.PointRect{W: width, H: height}
 			p.caretAt(float64(cursor.X)*m.Column, float64(cursor.Y)*m.Line, m.Line, th.font(fontKey{mono: true}))
 		}
+		p.paintCaret() // a snapshot shows the caret, unblinking
 	})
 	img := image.NewRGBA(image.Rect(0, 0, pw, ph))
 	data, stride := cgBitmapContextGetData(ctx), int(cgBitmapContextGetBytesPer(ctx))
@@ -266,4 +276,34 @@ func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, 
 		copy(img.Pix[y*img.Stride:y*img.Stride+pw*4], src[y*stride:y*stride+pw*4])
 	}
 	return img
+}
+
+// pasteboard is the system clipboard: NSPasteboard's general pasteboard
+// (or, for tests, a private one by name), as plain text.
+type pasteboard struct{ name string }
+
+// nsPasteboardTypeString is NSPasteboardTypeString's value.
+const nsPasteboardTypeString = "public.utf8-plain-text"
+
+func (b pasteboard) board() objc.ID {
+	if b.name == "" {
+		return class("NSPasteboard").Send(sel("generalPasteboard"))
+	}
+	return class("NSPasteboard").Send(sel("pasteboardWithName:"), nsString(b.name))
+}
+
+func (b pasteboard) get() string {
+	var text string
+	withPool(func() {
+		text = plainString(b.board().Send(sel("stringForType:"), nsString(nsPasteboardTypeString)))
+	})
+	return text
+}
+
+func (b pasteboard) set(text string) {
+	withPool(func() {
+		pb := b.board()
+		pb.Send(sel("clearContents"))
+		pb.Send(sel("setString:forType:"), nsString(text), nsString(nsPasteboardTypeString))
+	})
 }

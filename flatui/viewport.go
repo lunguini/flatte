@@ -21,6 +21,47 @@ type Viewport struct {
 	width   int
 	height  int
 	offset  int // index of the top visible line
+	// id and hostLines come from Adopt: the ID the app gave the viewport's
+	// space, and the content's line count as the host laid it out (0: the
+	// viewport's own).
+	id        string
+	hostLines int
+	// pinned records that the view was sent to the bottom (GotoBottom, or a
+	// scroll that ended there): Adopt keeps it there as the line count
+	// changes.
+	pinned bool
+}
+
+// contentSuffix names the content node of an adopted viewport's Layout:
+// its ID is the adopted ID plus this.
+const contentSuffix = ":content"
+
+// Adopt sizes the viewport from rects[id] — the space the app gave it, an
+// ID'd node holding Layout() — and scrolls over as many lines as the host
+// laid the content out in, which a window that wraps in its font can make
+// more or fewer than the viewport's own: the offset range, TotalLines,
+// AtBottom, and ScrollPercent follow the host. Call it with every
+// LayoutEvent's rects instead of SetSize. A viewport sent to the bottom
+// (GotoBottom, or scrolled there) stays at the bottom as lines come and go.
+func (v *Viewport) Adopt(rects map[string]layout.Rect, id string) {
+	v.id = id
+	r, ok := rects[id]
+	if !ok {
+		// Not laid out (say, on a hidden tab): no host count to follow.
+		v.hostLines = 0
+		v.clamp()
+		return
+	}
+	v.SetSize(max(r.W, 1), max(r.H, 1))
+	v.hostLines = 0
+	if c, ok := rects[id+contentSuffix]; ok {
+		v.hostLines = max(c.H, 0)
+	}
+	if v.pinned {
+		v.offset = v.maxOffset()
+	} else {
+		v.clamp()
+	}
 }
 
 // SetLines sets pre-laid-out lines verbatim: no splitting, no wrapping. Lines
@@ -93,11 +134,27 @@ func (v Viewport) Layout() layout.Node {
 	if v.width > 0 {
 		w = layout.Fixed(v.width)
 	}
+	if v.id != "" {
+		child = withID(child, v.id+contentSuffix)
+	}
 	return layout.Scroll{
 		NodeBase: layout.NodeBase{W: w, H: layout.Fixed(v.VisibleLines())},
 		OffsetY:  v.offset,
 		Child:    child,
 	}
+}
+
+// withID is n (a Label or Text) with ID id.
+func withID(n layout.Node, id string) layout.Node {
+	switch n := n.(type) {
+	case layout.Label:
+		n.ID = id
+		return n
+	case layout.Text:
+		n.ID = id
+		return n
+	}
+	return n
 }
 
 // View returns the visible slice joined by newlines. Lines wider than the
@@ -122,19 +179,33 @@ func (v Viewport) View() string {
 
 // maxOffset is the largest valid top-line index.
 func (v Viewport) maxOffset() int {
-	return max(0, len(v.lines)-v.height)
+	return max(0, v.TotalLines()-v.height)
 }
 
 func (v *Viewport) clamp() {
 	v.offset = min(max(v.offset, 0), v.maxOffset())
 }
 
-// TotalLines is the number of content lines after ingestion/wrapping.
-func (v Viewport) TotalLines() int { return len(v.lines) }
+// TotalLines is the number of content lines after ingestion/wrapping — as
+// the host laid them out, once adopted (see Adopt).
+func (v Viewport) TotalLines() int {
+	if v.hostLines > 0 {
+		return v.hostLines
+	}
+	return len(v.lines)
+}
 
 // LineDown scrolls down by n lines (clamped). LineUp scrolls up.
-func (v *Viewport) LineDown(n int) { v.offset += n; v.clamp() }
-func (v *Viewport) LineUp(n int)   { v.offset -= n; v.clamp() }
+func (v *Viewport) LineDown(n int) { v.scrollTo(v.offset + n) }
+func (v *Viewport) LineUp(n int)   { v.scrollTo(v.offset - n) }
+
+// scrollTo moves the top line to i (clamped), pinning the view to the bottom
+// when it lands there with something to scroll.
+func (v *Viewport) scrollTo(i int) {
+	v.offset = i
+	v.clamp()
+	v.pinned = v.maxOffset() > 0 && v.offset == v.maxOffset()
+}
 
 // HalfPageDown/Up and PageDown/Up scroll by half / a full visible window.
 func (v *Viewport) HalfPageDown() { v.LineDown(v.height / 2) }
@@ -143,11 +214,11 @@ func (v *Viewport) PageDown()     { v.LineDown(v.height) }
 func (v *Viewport) PageUp()       { v.LineUp(v.height) }
 
 // GotoTop/GotoBottom jump to the first/last window.
-func (v *Viewport) GotoTop()    { v.offset = 0 }
-func (v *Viewport) GotoBottom() { v.offset = v.maxOffset() }
+func (v *Viewport) GotoTop()    { v.offset, v.pinned = 0, false }
+func (v *Viewport) GotoBottom() { v.offset, v.pinned = v.maxOffset(), true }
 
 // ScrollToLine positions the window so line i is at the top (clamped).
-func (v *Viewport) ScrollToLine(i int) { v.offset = i; v.clamp() }
+func (v *Viewport) ScrollToLine(i int) { v.scrollTo(i) }
 
 // AtTop / AtBottom report whether the window is at an extreme.
 func (v Viewport) AtTop() bool    { return v.offset <= 0 }
@@ -168,6 +239,6 @@ func (v Viewport) Offset() int { return v.offset }
 
 // VisibleLines is how many content rows View currently emits.
 func (v Viewport) VisibleLines() int {
-	n := min(len(v.lines)-v.offset, v.height)
+	n := min(v.TotalLines()-v.offset, v.height)
 	return max(n, 0)
 }

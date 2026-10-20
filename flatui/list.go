@@ -104,6 +104,18 @@ func (l List) View(render func(index int, selected bool) string) string {
 	return strings.Join(rows, "\n")
 }
 
+// ScrollTo shows the window starting at row offset (clamped), keeping the
+// cursor inside it: a cursor scrolled out moves to the nearest visible row.
+// For a scroll bar press or drag (layout.ScrollBar.OffsetAt).
+func (l *List) ScrollTo(offset int) {
+	if l.height <= 0 {
+		return
+	}
+	l.offset = min(max(offset, 0), max(l.count-l.height, 0))
+	l.cursor = min(max(l.cursor, l.offset), l.offset+l.height-1)
+	l.clamp()
+}
+
 // clamp keeps the cursor in range and the window on the cursor.
 func (l *List) clamp() {
 	l.cursor = min(max(l.cursor, 0), max(l.count-1, 0))

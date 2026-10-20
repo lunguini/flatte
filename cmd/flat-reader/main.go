@@ -60,9 +60,9 @@ const wheelLines = 3
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
 	case flatte.LayoutEvent:
-		if r, ok := e.Rects[bodyID]; ok {
-			s.vp.SetSize(max(r.W, 1), max(r.H, 1))
-		}
+		// Sized from the body, scrolling over the lines the host laid the
+		// text out in (a window wraps it in its font).
+		s.vp.Adopt(e.Rects, bodyID)
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	case flatte.MouseEvent:

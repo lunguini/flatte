@@ -49,15 +49,30 @@ const (
 	ModShift Mod = 1 << iota
 	ModAlt
 	ModCtrl
+	// ModSuper is the Command key on macOS (the Windows or Super key
+	// elsewhere): reported by a window, and by terminals that report it —
+	// as Super, or as the xterm encoding's Meta bit (CSI 1;9D for ⌘←).
+	ModSuper
 )
 
 func (m Mod) Contains(mods Mod) bool { return m&mods == mods }
 
 // KeyEvent is a key press. Rune is set when Key is KeyCharacter.
+//
+// HasCaret reports that the host placed Caret: for KeyUp and KeyDown while
+// a multi-line layout.Input has focus in a host that lays its text out
+// differently from the app's widget (a window wraps by words in its font),
+// Caret is the byte offset into that Input's Value one visual row up or
+// down, at the column the caret is moving along. Pass it to the widget
+// (flatui.Textarea.MoveTo) instead of its own row move. Terminal hosts
+// leave it unset: the widget's rows are the terminal's.
 type KeyEvent struct {
 	Key  Key
 	Rune rune
 	Mod  Mod
+
+	Caret    int
+	HasCaret bool
 }
 
 // ResizeEvent reports the terminal size in cells. The loop delivers one at
@@ -125,6 +140,13 @@ type MouseEvent struct {
 	// TargetRect is the solved rect of Target (zero when Target is ""), so a
 	// click can be made node-local with X - TargetRect.X, Y - TargetRect.Y.
 	TargetRect layout.Rect
+	// HasCaret reports that the pointer is over a layout.Input with an ID
+	// (Target) and Caret is the byte offset into its Value nearest the
+	// pointer, as the host laid the text out — so a click or drag can place
+	// the caret exactly whatever the font. A window keeps reporting carets
+	// for the Input a drag began on, clamped to it.
+	Caret    int
+	HasCaret bool
 }
 
 func (KeyEvent) isEvent()       {}

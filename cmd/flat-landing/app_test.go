@@ -430,3 +430,97 @@ func TestUITabWheelOwnership(t *testing.T) {
 		t.Fatalf("click on the fourth row of the scrolled page selected %d", s.catalog.Cursor())
 	}
 }
+
+// pick selects a catalog item on the UI tab.
+func pick(t *testing.T, s *State, host *pageHost, name string) {
+	t.Helper()
+	for i, item := range showcase {
+		if item.Name == name {
+			s.catalog.Select(i)
+			host.render(s)
+			return
+		}
+	}
+	t.Fatalf("no showcase item %q", name)
+}
+
+func clickAt(s *State, host *pageHost, id string, dx int) {
+	r := s.rects[id]
+	send(s, host, flatte.MouseEvent{X: r.X + dx, Y: r.Y, Button: flatte.MouseLeft, Action: flatte.MousePress})
+}
+
+func TestUIPreviewsAreClickable(t *testing.T) {
+	s, host := shellState(tabUI)
+
+	pick(t, s, host, "TabBar")
+	clickAt(s, host, demoTabsID+":ui", 1)
+	if s.demo.tabs.Active() != 2 {
+		t.Fatalf("tab bar click: active %d, want 2", s.demo.tabs.Active())
+	}
+
+	pick(t, s, host, "List")
+	clickAt(s, host, demoListID+":3", 0)
+	if s.demo.list.Cursor() != 3 {
+		t.Fatalf("list click: cursor %d, want 3", s.demo.list.Cursor())
+	}
+
+	pick(t, s, host, "Table")
+	clickAt(s, host, demoTableID+":2", 0)
+	if s.demo.table.Cursor() != 2 {
+		t.Fatalf("table click: cursor %d, want 2", s.demo.table.Cursor())
+	}
+
+	pick(t, s, host, "Tree")
+	clickAt(s, host, demoTreeID+":view", 0)
+	if s.demo.tree.CursorID() != "view" {
+		t.Fatalf("tree click: cursor %q, want view", s.demo.tree.CursorID())
+	}
+	clickAt(s, host, demoTreeID+":state", 0)
+	clickAt(s, host, demoTreeID+":state", 0) // again: closes it
+	if len(s.demo.tree.VisibleRows()) != 2 {
+		t.Fatalf("tree toggle: %d rows, want the two roots", len(s.demo.tree.VisibleRows()))
+	}
+
+	pick(t, s, host, "Viewport")
+	r := s.rects[demoViewportID]
+	send(s, host, flatte.MouseEvent{X: r.X, Y: r.Y, Button: flatte.MouseWheelDown, Action: flatte.MousePress})
+	if s.demo.view.Offset() == 0 && s.demo.view.TotalLines() > s.demo.view.VisibleLines() {
+		t.Fatal("wheel over the viewport preview did not scroll it")
+	}
+	if s.pageY != 0 {
+		t.Fatalf("wheel over a preview scrolled the page to %d", s.pageY)
+	}
+}
+
+func TestUITextPreviewsEdit(t *testing.T) {
+	s, host := shellState(tabUI)
+	pick(t, s, host, "TextField")
+	clickAt(s, host, demoFieldID, 3) // after "Ada"
+	if s.demo.editing != demoFieldID || s.demo.field.Cursor != 3 {
+		t.Fatalf("field click: editing %q cursor %d", s.demo.editing, s.demo.field.Cursor)
+	}
+	frame := send(s, host, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'j'})
+	if s.demo.field.Value != "Adaj Lovelace" || s.catalog.Cursor() != 0 {
+		t.Fatalf("typing while editing: value %q catalog %d", s.demo.field.Value, s.catalog.Cursor())
+	}
+	if frame.Cursor == nil {
+		t.Fatal("editing preview shows no cursor")
+	}
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyEscape})
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'j'})
+	if s.demo.editing != "" || s.catalog.Cursor() != 1 {
+		t.Fatalf("after Esc: editing %q catalog %d, want j to pick again", s.demo.editing, s.catalog.Cursor())
+	}
+
+	pick(t, s, host, "Textarea")
+	clickAt(s, host, demoTextareaID, 0)
+	send(s, host, flatte.PasteEvent{Text: "> "})
+	if !strings.HasPrefix(s.demo.area.Value(), "> Multiline") {
+		t.Fatalf("paste into the text area: %q", s.demo.area.Value())
+	}
+	// A click on the catalog stops editing.
+	clickAt(s, host, "ui.item:0", 2)
+	if s.demo.editing != "" {
+		t.Fatalf("catalog click left editing %q", s.demo.editing)
+	}
+}

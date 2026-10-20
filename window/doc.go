@@ -36,9 +36,17 @@
 // macOS only for now, with no cgo: the system frameworks are bound at run
 // time through purego. On other platforms Run returns ErrUnsupported.
 //
+// Editing: the clipboard effects use the system pasteboard (ReadClipboard
+// answers with a ClipboardEvent), ⌘V delivers a PasteEvent, and ⌘ chords
+// the menu does not own (it owns ⌘Q and ⌘W) arrive as keys with ModSuper —
+// except ⌘← and ⌘→, which arrive as Home and End (with Shift when held).
+// Pointer events over an Input carry the caret under the pointer, and ↑/↓
+// in a focused multi-line Input carry the caret a visual row away, both in
+// the window's own text layout (see MouseEvent.Caret, KeyEvent.Caret). The
+// caret blinks.
+//
 // Differences from the terminal host: Ctrl-C is delivered to Handle (quit
-// with ⌘Q or by closing the window); ⌘← and ⌘→ arrive as Home and End
-// (with Shift when held), other ⌘ chords belong to the menu; Effects.Print, Suspend, Exec, and the
-// clipboard methods are no-ops; Frame.Cursor shows only for frames without
-// a Root (a Root frame's cursor is the focused Input's caret).
+// with ⌘Q or by closing the window); Effects.Print, Suspend, and Exec are
+// no-ops; Frame.Cursor shows only for frames without a Root (a Root frame's
+// cursor is the focused Input's caret).
 package window

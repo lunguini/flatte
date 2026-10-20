@@ -130,3 +130,54 @@ func TestTextareaLayoutFields(t *testing.T) {
 		t.Fatal("soft wrap not carried")
 	}
 }
+
+func TestTextareaInsertText(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("head tail")
+	ta.MoveTo(5)
+	ta.InsertText("one\r\ntwo\nthree ")
+	if got := ta.Value(); got != "head one\ntwo\nthree tail" {
+		t.Fatalf("value %q", got)
+	}
+	if ta.Row() != 2 || ta.Col() != len("three ") {
+		t.Fatalf("cursor %d:%d, want after the paste", ta.Row(), ta.Col())
+	}
+	// A selection is replaced; text without breaks stays on its line.
+	ta.MoveTo(0)
+	ta.MoveToSelecting(4)
+	ta.InsertText("HEAD")
+	if got := ta.Value(); got != "HEAD one\ntwo\nthree tail" || ta.Col() != 4 {
+		t.Fatalf("replace: %q col %d", got, ta.Col())
+	}
+}
+
+func TestTextareaMoveToAndSelectAll(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("ab\néx\n界")
+	for _, tc := range []struct{ to, row, col int }{
+		{0, 0, 0}, {2, 0, 2}, {3, 1, 0},
+		{4, 1, 0}, // inside "é": backs off to its start
+		{6, 1, 3}, {7, 1, 4}, {8, 2, 0}, {99, 2, 3}, {-5, 0, 0},
+	} {
+		ta.MoveTo(tc.to)
+		if ta.Row() != tc.row || ta.Col() != tc.col {
+			t.Errorf("MoveTo(%d) = %d:%d, want %d:%d", tc.to, ta.Row(), ta.Col(), tc.row, tc.col)
+		}
+		if _, sel := ta.Selection(); sel {
+			t.Errorf("MoveTo(%d) left a selection", tc.to)
+		}
+	}
+	ta.MoveTo(1)
+	ta.MoveToSelecting(6)
+	if got := ta.SelectedText(); got != "b\ne\u0301" {
+		t.Fatalf("dragged selection %q", got)
+	}
+	// The node's caret is the offset MoveTo took.
+	if in := ta.Layout("ed", true); in.Caret != 6 || in.SelStart != 1 || in.SelEnd != 6 {
+		t.Fatalf("layout caret %d sel %d..%d", in.Caret, in.SelStart, in.SelEnd)
+	}
+	ta.SelectAll()
+	if got := ta.SelectedText(); got != ta.Value() || ta.Row() != 2 || ta.Col() != len("界") {
+		t.Fatalf("SelectAll selected %q, cursor %d:%d", got, ta.Row(), ta.Col())
+	}
+}
