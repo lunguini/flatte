@@ -30,9 +30,14 @@ type metric[T unit] interface {
 	spread(rem T, n int) (per T, extra int)
 	one() T
 
-	// leaf reports a leaf's own size claims (not a known container's).
-	leaf(n Node) (w, h sized[T])
+	// leaf reports a leaf's own size claims (not a known container's) when
+	// laid out width wide; width < 0 means the width is not known yet. Only
+	// a wrapping Label's height depends on it.
+	leaf(n Node, width T) (w, h sized[T])
 }
+
+// noWidth is the width passed when measuring before a width is known.
+func noWidth[T unit]() T { return T(-1) }
 
 // sized is a Size in solver units.
 type sized[T unit] struct {
@@ -99,7 +104,53 @@ func (cells) share(total int, ratio float64) int { return fractionOf(total, rati
 func (cells) half(a int) int                     { return a / 2 }
 func (cells) spread(rem, n int) (int, int)       { return rem / n, rem % n }
 func (cells) one() int                           { return 1 }
-func (cells) leaf(n Node) (w, h sized[int])      { return sizedOf(cells{}, n) }
+func (cells) leaf(n Node, width int) (w, h sized[int]) {
+	w, h = sizedOf(cells{}, n)
+	if l, ok := wrapping(n); ok {
+		h = toSized[int](cells{}, l.wrapHeight(width), false)
+	}
+	return w, h
+}
+
+// wraps reports whether n's height can depend on its width: it is, or holds
+// in its layout, a wrapping Label. Only such subtrees are measured again
+// once a width is known, so layouts without wrapping cost what they did.
+func wraps(n Node) bool {
+	if _, ok := wrapping(n); ok {
+		return true
+	}
+	if sc, ok := n.(scroller); ok {
+		child, _ := sc.scroll()
+		return child != nil && wraps(child)
+	}
+	if c, ok := n.(childContainer); ok {
+		return anyWraps(c.GetChildren())
+	}
+	return false
+}
+
+// anyWraps reports whether a non-overlay child wraps (see wraps).
+func anyWraps(children []Node) bool {
+	for _, c := range children {
+		if !isOverlay(c) && wraps(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// wrapping reports whether n is a Label that wraps.
+func wrapping(n Node) (Label, bool) {
+	switch l := n.(type) {
+	case Label:
+		return l, l.Wrap
+	case *Label:
+		if l != nil {
+			return *l, l.Wrap
+		}
+	}
+	return Label{}, false
+}
 func sizedOf[T unit](m metric[T], n Node) (w, h sized[T]) {
 	sw, sh := n.Size()
 	return toSized(m, sw, true), toSized(m, sh, false)
@@ -174,22 +225,26 @@ func insetsFrom[T unit](m metric[T], p sides, box Box) sidesOf[T] {
 	return s
 }
 
-// intrinsic is a node's size claims in solver units. Known containers are
-// measured here, in the metric's units; every other node reports through
-// the metric's leaf rule.
-func intrinsic[T unit](m metric[T], n Node) (w, h sized[T]) {
+// intrinsic is a node's size claims in solver units before its width is
+// known. Known containers are measured here, in the metric's units; every
+// other node reports through the metric's leaf rule.
+func intrinsic[T unit](m metric[T], n Node) (w, h sized[T]) { return measure(m, n, noWidth[T]()) }
+
+// measure is intrinsic for a node laid out width wide (width < 0: not
+// known): heights that depend on width — wrapped text — are measured at it.
+func measure[T unit](m metric[T], n Node, width T) (w, h sized[T]) {
 	switch c := n.(type) {
 	case Row:
-		return measureContainer(m, c.NodeBase, c.Children, true)
+		return measureContainer(m, c.NodeBase, c.Children, true, width)
 	case *Row:
 		if c != nil {
-			return measureContainer(m, c.NodeBase, c.Children, true)
+			return measureContainer(m, c.NodeBase, c.Children, true, width)
 		}
 	case Col:
-		return measureContainer(m, c.NodeBase, c.Children, false)
+		return measureContainer(m, c.NodeBase, c.Children, false, width)
 	case *Col:
 		if c != nil {
-			return measureContainer(m, c.NodeBase, c.Children, false)
+			return measureContainer(m, c.NodeBase, c.Children, false, width)
 		}
 	case Scroll:
 		return measureScroll(m, c)
@@ -198,18 +253,24 @@ func intrinsic[T unit](m metric[T], n Node) (w, h sized[T]) {
 			return measureScroll(m, *c)
 		}
 	}
-	return m.leaf(n)
+	return m.leaf(n, width)
 }
 
 // measureContainer is Row/Col sizing: on an Auto axis, prefer measured
 // content; if there is none but a child grows on that axis, grow.
-func measureContainer[T unit](m metric[T], nb NodeBase, children []Node, horizontal bool) (w, h sized[T]) {
+func measureContainer[T unit](m metric[T], nb NodeBase, children []Node, horizontal bool, width T) (w, h sized[T]) {
 	w, h = toSized(m, nb.W, true), toSized(m, nb.H, false)
 	if w.Kind != SizeAuto && h.Kind != SizeAuto {
 		return w, h
 	}
-	mainSize, crossSize, mainGrow, crossGrow := measureChildrenOf(m, children, horizontal, m.steps(max(nb.Gap, 0)))
 	inset := insetsBase(m, nb)
+	if w.Kind == SizeFixed {
+		width = w.Value
+	}
+	if width >= 0 {
+		width = max(m.sub(width, horizOf(m, inset)), 0)
+	}
+	mainSize, crossSize, mainGrow, crossGrow := measureChildrenOf(m, children, horizontal, m.steps(max(nb.Gap, 0)), width)
 	mainInset, crossInset := horizOf(m, inset), vertOf(m, inset)
 	mainAxis, crossAxis := &w, &h
 	if !horizontal {
@@ -234,11 +295,23 @@ func measureContainer[T unit](m metric[T], nb NodeBase, children []Node, horizon
 }
 
 // measureChildrenOf sums main-axis claims (with gaps) and takes the largest
-// cross-axis claim, reporting whether any child grows on either axis.
-func measureChildrenOf[T unit](m metric[T], children []Node, horizontal bool, gap T) (main, cross T, mainGrow, crossGrow bool) {
+// cross-axis claim, reporting whether any child grows on either axis. With
+// a known inner width, heights are measured at the width each child gets:
+// a Col's children get its width, a Row's the widths it distributes.
+func measureChildrenOf[T unit](m metric[T], children []Node, horizontal bool, gap, width T) (main, cross T, mainGrow, crossGrow bool) {
 	gap = max(gap, 0)
+	var rowWidths []T
+	if horizontal && width >= 0 && anyWraps(children) {
+		rowWidths = distribute(m, children, true, gap, width, noWidth[T]())
+	}
 	for i, c := range children {
 		cw, ch := intrinsic(m, c)
+		switch {
+		case rowWidths != nil:
+			_, ch = measure(m, c, rowWidths[i])
+		case !horizontal && width >= 0 && wraps(c):
+			_, ch = measure(m, c, crossOf(cw, width))
+		}
 		mn, cr := cw.normalized(), ch.normalized()
 		if !horizontal {
 			mn, cr = cr, mn
@@ -286,7 +359,7 @@ func measureScroll[T unit](m metric[T], s Scroll) (w, h sized[T]) {
 // distribute computes main-axis sizes for children in avail, with gap
 // between them: fixed and content claims first (in order, until avail runs
 // out), then grow children share the remainder by weight.
-func distribute[T unit](m metric[T], children []Node, horizontal bool, gap, avail T) []T {
+func distribute[T unit](m metric[T], children []Node, horizontal bool, gap, avail, cross T) []T {
 	n := len(children)
 	if n == 0 {
 		return nil
@@ -309,6 +382,9 @@ func distribute[T unit](m metric[T], children []Node, horizontal bool, gap, avai
 		if horizontal {
 			sizes[i] = cw.normalized()
 		} else {
+			if cross >= 0 && wraps(c) {
+				_, ch = measure(m, c, crossOf(cw, cross))
+			}
 			sizes[i] = ch.normalized()
 		}
 		switch sizes[i].Kind {
@@ -416,8 +492,10 @@ func layerLength[T unit](m metric[T], s sized[T], viewport T) T {
 }
 
 func centeredOf[T unit](m metric[T], n Node, vpW, vpH T) rect[T] {
-	w, h := intrinsic(m, n)
-	lw, lh := layerLength(m, w, vpW), layerLength(m, h, vpH)
+	w, _ := intrinsic(m, n)
+	lw := layerLength(m, w, vpW)
+	_, h := measure(m, n, lw)
+	lh := layerLength(m, h, vpH)
 	return rect[T]{m.half(vpW - lw), m.half(vpH - lh), lw, lh}
 }
 
@@ -538,7 +616,11 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 		avail, pos = inner.W, inner.X
 	}
 	gap := m.steps(getGap(n))
-	mainSizes := distribute(m, children, horizontal, gap, avail)
+	cross := inner.W
+	if horizontal {
+		cross = noWidth[T]()
+	}
+	mainSizes := distribute(m, children, horizontal, gap, avail, cross)
 	innerEnd := endOf(m, pos, avail)
 	for i, c := range children {
 		cw, ch := intrinsic(m, c)
@@ -567,7 +649,8 @@ func (s *solver[T]) walkScroll(n Node, sc scroller, r rect[T]) {
 		return
 	}
 	inner := insetOf(m, r, insetsOf[T](m, n))
-	cw, ch := intrinsic(m, child)
+	cw, _ := intrinsic(m, child)
+	_, ch := measure(m, child, crossOf(cw, inner.W))
 	contentH := scrollContentOf(ch, inner.H)
 	off := clampScrollOf(m, m.lines(offset), inner.H, contentH)
 	cr := rect[T]{inner.X, m.sub(inner.Y, off), crossOf(cw, inner.W), contentH}

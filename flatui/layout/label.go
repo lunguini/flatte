@@ -2,8 +2,10 @@ package layout
 
 import (
 	"image/color"
+	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // TextRole is what a piece of text is for. Backends map roles to their own
@@ -63,18 +65,52 @@ func (s TextStyle) lipgloss() lipgloss.Style {
 }
 
 // Label is a leaf of plain text with a semantic style. Text holds no escape
-// sequences (use Text for pre-styled strings); lines break only at "\n".
-// Like Text, it auto-sizes to its content on Auto axes.
+// sequences (use Text for pre-styled strings). Like Text, it auto-sizes to
+// its content on Auto axes, and lines break only at "\n" — unless Wrap is
+// set: then it also wraps by words at its width (a word wider than the
+// width breaks), in cells in the terminal and in the font in a GUI. A
+// wrapping Label fills the width on an Auto width, and its Auto height is
+// its wrapped line count at the width it gets.
 type Label struct {
 	NodeBase
 	Text  string
 	Style TextStyle
+	Wrap  bool
 }
 
 func (l Label) Size() (Size, Size) {
-	return Text{NodeBase: l.NodeBase, String: l.Style.Render(l.Text)}.Size()
+	w, h := Text{NodeBase: l.NodeBase, String: l.Style.Render(l.Text)}.Size()
+	if l.Wrap && l.W.Kind == SizeAuto {
+		w = Grow(1)
+	}
+	return w, h
 }
 
 func (l Label) Render(r Rect) string {
-	return fillBox(l.Style.Render(l.Text), r, l.padSides(), l.box())
+	text := l.Text
+	if l.Wrap {
+		text = wrapCells(text, r.insetBy(l.insetSides()).W)
+	}
+	return fillBox(l.Style.Render(text), r, l.padSides(), l.box())
+}
+
+// wrapHeight is a wrapping Label's Auto height in cells at a rect width
+// (its unwrapped height when the width is unknown, width < 0).
+func (l Label) wrapHeight(width int) Size {
+	_, h := l.Size()
+	if h.Kind != SizeContent || width < 0 {
+		return h
+	}
+	inset := l.insetSides()
+	lines := strings.Count(wrapCells(l.Text, satSub(width, inset.horiz())), "\n") + 1
+	return Size{Kind: SizeContent, Value: satAdd(lines, inset.vert())}
+}
+
+// wrapCells wraps text by words at width cells, breaking words wider than
+// the width; width <= 0 leaves it unwrapped. "\n" still breaks lines.
+func wrapCells(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	return ansi.Wrap(text, width, "")
 }

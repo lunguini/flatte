@@ -80,3 +80,28 @@ func TestViewportLayoutScrollsItsLines(t *testing.T) {
 		t.Fatalf("empty viewport composed %q", got)
 	}
 }
+
+// TestViewportWrapsByWords: wrapped content breaks at word boundaries (a
+// word wider than the width still breaks), and Layout hands the raw text to
+// a wrapping Label — composing to the same lines in the terminal, wrapped
+// natively in a window.
+func TestViewportWrapsByWords(t *testing.T) {
+	var v Viewport
+	v.SetWrappedContent("the quick brown fox jumps\nabcdefghijkl")
+	v.SetSize(10, 10)
+	if got := v.View(); got != "the quick\nbrown fox\njumps\nabcdefghij\nkl" {
+		t.Fatalf("View = %q", got)
+	}
+	sc := v.Layout().(layout.Scroll)
+	if l, ok := sc.Child.(layout.Label); !ok || !l.Wrap || l.Text != "the quick brown fox jumps\nabcdefghijkl" {
+		t.Fatalf("wrapped viewport child = %#v, want a wrapping Label of the raw text", sc.Child)
+	}
+	for _, off := range []int{0, 2} {
+		v.ScrollToLine(off)
+		v.SetSize(10, 3)
+		got, _ := layout.SolveAndCompose(v.Layout(), 10, v.VisibleLines())
+		if visibleText(got) != visibleText(v.View()) {
+			t.Fatalf("offset %d: Layout\n%s\nwant View\n%s", off, visibleText(got), v.View())
+		}
+	}
+}

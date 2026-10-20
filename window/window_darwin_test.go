@@ -58,26 +58,32 @@ func TestMetricsFromFonts(t *testing.T) {
 	if body := fontFor(fontKey{}).lineHeight(); !(m.Line >= body*1.2) || m.Line != math.Round(m.Line) {
 		t.Fatalf("line %v for a %vpt-high body font", m.Line, body)
 	}
-	w1, h1 := m.MeasureText("abc", layout.TextStyle{})
-	w2, h2 := m.MeasureText("abcabc\nx", layout.TextStyle{})
+	w1, h1 := m.MeasureText("abc", layout.TextStyle{}, 0)
+	w2, h2 := m.MeasureText("abcabc\nx", layout.TextStyle{}, 0)
 	if !(w1 > 0) || math.Abs(w2-2*w1) > 1 || h1 != m.Line || h2 != 2*m.Line {
 		t.Fatalf("measure: %v×%v, %v×%v (line %v)", w1, h1, w2, h2, m.Line)
 	}
-	_, ht := m.MeasureText("Title", layout.TextStyle{Role: layout.TextTitle})
-	wb, _ := m.MeasureText("Bold", layout.TextStyle{Bold: true})
-	wr, _ := m.MeasureText("Bold", layout.TextStyle{})
+	_, ht := m.MeasureText("Title", layout.TextStyle{Role: layout.TextTitle}, 0)
+	wb, _ := m.MeasureText("Bold", layout.TextStyle{Bold: true}, 0)
+	wr, _ := m.MeasureText("Bold", layout.TextStyle{}, 0)
 	if !(ht > h1) || !(wb > wr) {
 		t.Fatalf("title height %v vs %v, bold width %v vs %v", ht, h1, wb, wr)
 	}
 	// Titles are semibold: heavier than body text, lighter than bold.
-	wt, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle})
-	wtb, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle, Bold: true})
+	wt, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle}, 0)
+	wtb, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle, Bold: true}, 0)
 	if !(wtb > wt) {
 		t.Fatalf("bold title %v is not wider than the semibold title %v", wtb, wt)
 	}
+	// With a width, text wraps by words at it, in the font's advances.
+	limit, _ := m.MeasureText("the quick brown", layout.TextStyle{}, 0)
+	ww, wh := m.MeasureText("the quick brown fox", layout.TextStyle{}, limit)
+	if wh != 2*m.Line || ww != limit {
+		t.Fatalf("wrapped at %v: %v×%v, want 2 lines, the first exactly the limit", limit, ww, wh)
+	}
 	// Fonts are cached per style: asking for the bold title must not change
 	// the plain one.
-	if again, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle}); again != wt {
+	if again, _ := m.MeasureText("Title weight", layout.TextStyle{Role: layout.TextTitle}, 0); again != wt {
 		t.Fatalf("title width %v after a bold title, was %v", again, wt)
 	}
 }
@@ -472,5 +478,44 @@ func TestSnapshotMeter(t *testing.T) {
 	}
 	if got := at(d.X+d.W*0.25, d.Y+d.H/2); !near(got, toColor(darkTheme.caret), 30) {
 		t.Errorf("default fill %v, want the accent", got)
+	}
+}
+
+// TestSnapshotWrappedText: a wrapping Label is laid out and painted on as
+// many lines as the font needs at its width; unwrapped, the same text stays
+// on one line.
+func TestSnapshotWrappedText(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	m := metrics()
+	text := "the quick brown fox jumps over the lazy dog"
+	for _, wrap := range []bool{true, false} {
+		root := func() layout.Node {
+			return layout.Col{Children: []layout.Node{
+				layout.Row{Children: []layout.Node{
+					layout.Label{NodeBase: layout.NodeBase{ID: "p", W: layout.Fixed(14)}, Text: text, Wrap: wrap},
+					layout.NewSpacer(),
+				}},
+				layout.Label{NodeBase: layout.NodeBase{ID: "after"}, Text: "after"},
+			}}
+		}
+		img, err := Snapshot(snapApp(root), Options{Width: 40, Height: 8}, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := layout.LayoutScene(root(), 40*m.Column, 8*m.Line, m)
+		p := s.Rects["p"]
+		second := layout.PointRect{X: p.X, Y: p.Y + m.Line, W: p.W, H: m.Line}
+		if wrap {
+			if p.H < 3*m.Line || !differs(img, second, 2) {
+				t.Errorf("wrapped: label is %v tall (line %v); second line drawn: %v", p.H, m.Line, differs(img, second, 2))
+			}
+			if s.Rects["after"].Y != p.Y+p.H {
+				t.Errorf("next label at %v, want right after the wrapped text (%v)", s.Rects["after"].Y, p.Y+p.H)
+			}
+		} else if p.H != m.Line {
+			t.Errorf("unwrapped label is %v tall, want one line", p.H)
+		}
 	}
 }

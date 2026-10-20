@@ -87,6 +87,13 @@ func (f font) lineHeight() float64 { return f.ascent + f.descent + f.leading }
 // pitch is the height of one line of f's text, on whole points.
 func (f font) pitch() float64 { return math.Round(f.lineHeight() * lineSpacing) }
 
+// width is the advance width of s set in f.
+func (f font) width(s string) float64 {
+	l := shape(s, f)
+	defer l.release()
+	return l.width
+}
+
 var (
 	fontsMu sync.Mutex
 	fonts   = map[fontKey]font{}
@@ -191,14 +198,12 @@ func metrics() layout.Metrics {
 		Line:   fontFor(fontKey{}).pitch(),
 		Step:   stepPoints,
 		Border: borderBand,
-		MeasureText: func(text string, style layout.TextStyle) (float64, float64) {
+		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
 			f := styleFont(style)
-			lines := strings.Split(text, "\n")
+			lines := wrapWords(text, maxWidth, f.width)
 			w := 0.0
 			for _, s := range lines {
-				l := shape(s, f)
-				w = max(w, l.width)
-				l.release()
+				w = max(w, f.width(s))
 			}
 			return w, float64(len(lines)) * f.pitch()
 		},
@@ -374,7 +379,11 @@ func (p *painter) line(text string, f font, x, y, h float64, fg rgba, bg color.C
 func (p *painter) text(op layout.TextOp) {
 	f := styleFont(op.Style)
 	h := f.pitch()
-	for i, s := range strings.Split(op.Text, "\n") {
+	lines := strings.Split(op.Text, "\n")
+	if op.Wrap {
+		lines = wrapWords(op.Text, op.Rect.W, f.width)
+	}
+	for i, s := range lines {
 		p.line(s, f, op.Rect.X, op.Rect.Y+float64(i)*h, h, p.roleColor(op.Style), op.Style.Bg, op.Style.Underline, op.Style.Strikethrough)
 	}
 }

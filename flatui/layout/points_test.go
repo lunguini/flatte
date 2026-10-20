@@ -1,8 +1,10 @@
 package layout
 
 import (
+	"fmt"
 	"math"
 	"math/rand/v2"
+	"strings"
 	"testing"
 	"unicode/utf8"
 )
@@ -14,10 +16,35 @@ func scaledMetric(k float64) pointMetric {
 	col := 7.5 * k
 	return pointMetric{Metrics{
 		Column: col, Line: 17 * k, Step: 8 * k, Border: k,
-		MeasureText: func(text string, _ TextStyle) (float64, float64) {
-			return 0.8 * col * float64(utf8.RuneCountInString(text)), 17 * k
+		MeasureText: func(text string, _ TextStyle, maxWidth float64) (float64, float64) {
+			return measureWords(text, 0.8*col, 17*k, maxWidth)
 		},
 	}}
+}
+
+// measureWords measures text at advance points per rune and lineH per
+// line, wrapping greedily by words at maxWidth (> 0), words wider than it
+// on their own line — a stand-in for a font's word wrapping.
+func measureWords(text string, advance, lineH, maxWidth float64) (w, h float64) {
+	lines := 0
+	for _, para := range strings.Split(text, "\n") {
+		lineW := 0.0
+		lines++
+		for i, word := range strings.Split(para, " ") {
+			ww := advance * float64(utf8.RuneCountInString(word))
+			if i > 0 {
+				if maxWidth > 0 && lineW+advance+ww > maxWidth {
+					w, lineW = max(w, lineW), ww
+					lines++
+					continue
+				}
+				ww += advance
+			}
+			lineW += ww
+		}
+		w = max(w, lineW)
+	}
+	return w, float64(lines) * lineH
 }
 
 var pt = scaledMetric(1)
@@ -148,6 +175,51 @@ func TestPointsHomogeneous(t *testing.T) {
 					t.Fatalf("tree %d: %s field %d: %v×%v = %v, scaled solve %v", i, id, j, pair[0], k, pair[0]*k, pair[1])
 				}
 			}
+		}
+	}
+}
+
+// TestPointsHomogeneousWithWrapping: the homogeneity property over trees
+// with wrapping Labels — wrapping (measured at each node's width) must not
+// introduce an integer assumption either. k is 2 so scaling is exact in
+// floating point and line breaks cannot flip at a boundary.
+func TestPointsHomogeneousWithWrapping(t *testing.T) {
+	const k = 2
+	scaled := scaledMetric(k)
+	wrapped := 0
+	for i := range corpusTrees {
+		rng := rand.New(rand.NewPCG(uint64(i), 0x3a9))
+		g := &treeGen{rng: rng, wrap: true}
+		root := g.node(0)
+		if wraps(root) {
+			wrapped++
+		}
+		w, h := 1+rng.Float64()*500, 1+rng.Float64()*300
+		base := solveTree[float64](pt, root, w, h, nil).rects
+		big := solveTree[float64](scaled, root, w*k, h*k, nil).rects
+		for id, r := range base {
+			b := big[id]
+			for j, pair := range [][2]float64{{r.X, b.X}, {r.Y, b.Y}, {r.W, b.W}, {r.H, b.H}} {
+				if d := math.Abs(pair[0]*k - pair[1]); d > 1e-6*max(1, math.Abs(pair[1])) {
+					t.Fatalf("tree %d: %s field %d: %v×%v = %v, scaled solve %v", i, id, j, pair[0], k, pair[0]*k, pair[1])
+				}
+			}
+		}
+	}
+	if wrapped < corpusTrees/4 {
+		t.Fatalf("only %d of %d trees wrap; the property is not exercised", wrapped, corpusTrees)
+	}
+}
+
+// TestWrappingSolveMatchesCompose: in cells, the geometry-only solve and
+// the painting walk agree on every rect of trees with wrapping Labels.
+func TestWrappingSolveMatchesCompose(t *testing.T) {
+	for i := range corpusTrees {
+		rng := rand.New(rand.NewPCG(uint64(i), 0x3a9))
+		root := (&treeGen{rng: rng, wrap: true}).node(0)
+		w, h := 1+rng.IntN(60), 1+rng.IntN(30)
+		if c, s := Compose(root, w, h).Rects, Solve(root, w, h); fmt.Sprint(c) != fmt.Sprint(s) {
+			t.Fatalf("tree %d: Solve %v, Compose %v", i, s, c)
 		}
 	}
 }

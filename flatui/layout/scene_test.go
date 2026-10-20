@@ -16,7 +16,7 @@ import (
 // 20pt tall.
 var testMetrics = Metrics{
 	Column: 8, Line: 16, Step: 6, Border: 1,
-	MeasureText: func(text string, style TextStyle) (float64, float64) {
+	MeasureText: func(text string, style TextStyle, _ float64) (float64, float64) {
 		w := 0.0
 		lines := strings.Split(text, "\n")
 		for _, l := range lines {

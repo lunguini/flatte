@@ -10,13 +10,14 @@ import (
 // steps, and Border is the space a border takes on each side (the backend
 // draws its stroke within that band, as a terminal draws a border within a
 // cell). MeasureText reports the size of a
-// Label's text in the backend's font for its style; nil measures text as
-// cells (one column per cell of width, one line per line).
+// Label's text in the backend's font for its style, wrapped by words at
+// maxWidth points when maxWidth > 0 (a wrapping Label); nil measures text
+// as cells (one column per cell of width, one line per line).
 type Metrics struct {
 	Column, Line float64
 	Step         float64
 	Border       float64
-	MeasureText  func(text string, style TextStyle) (w, h float64)
+	MeasureText  func(text string, style TextStyle, maxWidth float64) (w, h float64)
 }
 
 // PointRect is a rect in points.
@@ -59,11 +60,13 @@ type BoxOp struct {
 }
 
 // TextOp draws a Label's text from the top-left of Rect (the label's content
-// box), one line per "\n".
+// box), one line per "\n" — and, when Wrap, wrapped by words at Rect's
+// width as MeasureText wraps it.
 type TextOp struct {
 	Rect, Clip PointRect
 	Text       string
 	Style      TextStyle
+	Wrap       bool
 }
 
 // InputOp draws a text field in Rect (the input's content box). Caret is a
@@ -183,10 +186,22 @@ func (pointMetric) share(total, ratio float64) float64 {
 // leaf measures the known leaves in points: text by the backend's font,
 // inputs as one line, and padding and borders in steps and strokes rather
 // than cells. Other nodes report their Size, read as columns and lines.
-func (p pointMetric) leaf(n Node) (w, h sized[float64]) {
+func (p pointMetric) leaf(n Node, width float64) (w, h sized[float64]) {
 	switch l := n.(type) {
 	case Label:
-		tw, th := p.text(l.Text, l.Style)
+		if l.Wrap {
+			maxWidth := 0.0 // not known yet: unwrapped
+			if width >= 0 {
+				maxWidth = max(width-horizOf[float64](p, insetsBase[float64](p, l.NodeBase)), 1e-9)
+			}
+			tw, th := p.text(l.Text, l.Style, maxWidth)
+			w, h = p.content(l.NodeBase, tw, th)
+			if l.W.Kind == SizeAuto {
+				w = growSized[float64]()
+			}
+			return w, h
+		}
+		tw, th := p.text(l.Text, l.Style, 0)
 		return p.content(l.NodeBase, tw, th)
 	case Text:
 		cw, ch := measureString(l.String)
@@ -225,9 +240,12 @@ func (p pointMetric) content(nb NodeBase, w, h float64) (sw, sh sized[float64]) 
 	return sw, sh
 }
 
-func (p pointMetric) text(text string, style TextStyle) (float64, float64) {
+func (p pointMetric) text(text string, style TextStyle, maxWidth float64) (float64, float64) {
 	if p.MeasureText != nil {
-		return p.MeasureText(text, style)
+		return p.MeasureText(text, style, maxWidth)
+	}
+	if maxWidth > 0 {
+		text = wrapCells(text, max(int(maxWidth/p.Column), 1))
 	}
 	w, h := measureString(style.Render(text))
 	return p.cols(w), p.lines(h)
@@ -270,7 +288,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	switch l := n.(type) {
 	case Label:
 		p.box(r, clip, l.box())
-		p.ops = append(p.ops, TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style})
+		p.ops = append(p.ops, TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap})
 	case Meter:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, MeterOp{Rect: p.content(n, r), Clip: PointRect(clip), Value: l.value(), Fill: l.Fill, Track: l.Track})

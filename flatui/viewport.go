@@ -41,9 +41,9 @@ func (v *Viewport) SetContent(content string) {
 	v.clamp()
 }
 
-// SetWrappedContent splits content on newlines and soft-wraps each line to the
-// viewport width — ANSI- and display-width-aware, so SGR styles and wide runes
-// are never split. Re-wraps automatically when the width changes via SetSize.
+// SetWrappedContent splits content on newlines and wraps each line by words
+// to the viewport width (a word wider than the width breaks) — ANSI- and
+// display-width-aware, so SGR styles and wide runes are never split. Re-wraps automatically when the width changes via SetSize.
 // If the width is not yet known, the wrap is deferred until SetSize provides
 // one.
 func (v *Viewport) SetWrappedContent(content string) {
@@ -63,7 +63,7 @@ func (v *Viewport) SetSize(width, height int) {
 func (v *Viewport) relayout() {
 	if v.wrapped {
 		if v.width > 0 {
-			v.lines = strings.Split(ansi.Hardwrap(v.content, v.width, false), "\n")
+			v.lines = strings.Split(ansi.Wrap(v.content, v.width, ""), "\n")
 		} else {
 			v.lines = nil
 		}
@@ -74,16 +74,20 @@ func (v *Viewport) relayout() {
 // Layout returns the viewport as a layout.Scroll over all its lines, offset
 // to the current top line and as tall as the visible slice (and as wide as
 // the viewport's width, when set): View's text in the terminal, scrolled in
-// points in a window. Plain lines are a Label, drawn natively in a window;
-// lines with escape sequences are a Text of cells.
+// points in a window. Plain lines are a Label, drawn natively in a window —
+// for wrapped content, a wrapping Label of the raw text, so a window wraps it
+// in its font; lines with escape sequences are a Text of cells.
 func (v Viewport) Layout() layout.Node {
 	if v.VisibleLines() == 0 {
 		return layout.Text{}
 	}
 	content := strings.Join(v.lines, "\n")
 	var child layout.Node = layout.Label{Text: content}
-	if strings.Contains(content, "\x1b") {
+	switch {
+	case strings.Contains(content, "\x1b"):
 		child = layout.Text{String: content}
+	case v.wrapped && v.width > 0:
+		child = layout.Label{Text: v.content, Wrap: true}
 	}
 	w := layout.Auto()
 	if v.width > 0 {

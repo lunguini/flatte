@@ -142,7 +142,7 @@ whole viewport.
 |---|---|
 | `layout.Row{Children: ...}` | Distribute children horizontally (main axis = width). |
 | `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
-| `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. |
+| `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. `Wrap: true` wraps it by words at its width (cells in the terminal, the font in a window): it fills an Auto width, and its Auto height is the wrapped line count at the width it gets. |
 | `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`) in the same columns. Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
 | `layout.Meter{Value: ..., Fill: ..., Track: ...}` | A horizontal gauge filled to `Value` (0..1): `█`/`░` cells in the terminal, a native bar in a window; fills the width on Auto, one line tall. |
 | `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. |
@@ -272,7 +272,7 @@ frame tree instead of being rendered and positioned by hand:
 | `flatui.List` | `Rows(id, row)`: the visible rows as nodes — each wrapped in a `Row` with ID `id:index` (click `Target`) and `Box.Selected` on the selected one; the returned Col is the app's: give it an ID and `H: layout.Grow(1)` to size the list from its solved height. `Layout()`: a `Text` leaf of the visible rows via `RenderRow`. |
 | `flatui.Table` | `HeaderLayout(style)` and `Cells(cells, style)`: Rows of column-width Labels one column apart (they line up in a window too); `Rows(id, row)`: body rows like `List.Rows`. |
 | `flatui.Tree` | `Rows(id, row)`: the visible rows like `List.Rows`, each ID'd `id:<node ID>` (stable as the tree expands). |
-| `flatui.Viewport` | A `layout.Scroll` over its lines at the current offset, as tall as the visible slice (a `Label` when plain, so a window draws it natively; a `Text` when styled). |
+| `flatui.Viewport` | A `layout.Scroll` over its lines at the current offset, as tall as the visible slice: a `Label` when plain (for `SetWrappedContent`, a wrapping `Label` of the raw text, so a window wraps it in its font), a `Text` when styled. Wrapped content breaks at words. |
 | `flatui.Progress` | A `layout.Meter` of the bar's width and the percent label: the same text in the terminal, a native bar in a window. |
 | `flatui.TextField` | `Layout(id, focused)`: a `layout.Input` showing the value and caret. |
 

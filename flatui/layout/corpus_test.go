@@ -95,6 +95,9 @@ func describeComposition(b *strings.Builder, i int, root Node, w, h int) {
 type treeGen struct {
 	rng *rand.Rand
 	ids int
+	// wrap turns some Labels into wrapping paragraphs. Off for the golden
+	// corpus, which it would otherwise change.
+	wrap bool
 }
 
 func (g *treeGen) size() Size {
@@ -180,6 +183,13 @@ func (g *treeGen) node(depth int) Node {
 	case 5:
 		return Text{NodeBase: g.base(), String: g.word()}
 	case 6:
+		if g.wrap {
+			words := make([]string, 1+g.rng.IntN(8))
+			for i := range words {
+				words[i] = g.word()
+			}
+			return Label{NodeBase: g.base(), Text: strings.Join(words, " "), Wrap: true}
+		}
 		return Label{NodeBase: g.base(), Text: g.word(), Style: TextStyle{Role: TextRole(g.rng.IntN(4))}}
 	case 7:
 		v := g.word()
