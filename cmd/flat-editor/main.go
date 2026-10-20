@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/cmd/internal/brand"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 type State struct {
@@ -23,28 +26,20 @@ type State struct {
 func NewState() *State {
 	s := &State{debugKeys: os.Getenv("FLAT_DEBUG_KEYS") != ""}
 	s.ta.SetValue("Edit me.\nMultiple lines.\nGrapheme-correct.")
+	s.ta.SetSoftWrap(true)
 	return s
 }
 
-// layout sizes the textarea to the rows left after the pinned chrome (title,
-// subtitle, blank, blank, footer = 5) and the card's top+bottom border (2).
-func (s *State) layout(width, height int) {
-	const pinnedRows = 5 // title, subtitle, blank, blank, footer
-	extraRows := 0
-	if s.debugKeys {
-		extraRows = 1
-	}
-	s.ta.SetSize(
-		max(flatui.CardBodyWidth(width), 1),
-		max(flatui.CardBodyHeight(height, pinnedRows+extraRows), 1),
-	)
-	s.ta.SetSoftWrap(true)
-}
+// editorID names the textarea's node: the card's space left after the
+// pinned rows, as the frame solved it.
+const editorID = "editor"
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(e.Width, e.Height)
+	case flatte.LayoutEvent:
+		if r, ok := e.Rects[editorID]; ok {
+			s.ta.SetSize(max(r.W, 1), max(r.H, 1))
+		}
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	}
@@ -244,50 +239,45 @@ func keyName(key flatte.Key) string {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	lines := []string{
-		flatui.Title("Flat Editor"),
-		flatui.Subtle("multi-line textarea sample"),
-		"",
+// View shows the textarea as Textarea.Layout, a multi-line Input: the
+// terminal draws its cells and places the cursor at its caret; a window
+// draws a native text area.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	editor := s.ta.Layout(editorID, true)
+	editor.SelectionStyle = layout.TextStyle{Fg: lipgloss.Color("16"), Bg: brand.Teal}
+	subtle := layout.TextStyle{Role: layout.TextSubtle}
+	rows := []layout.Node{
+		layout.Label{Text: "Flat Editor", Style: layout.TextStyle{Role: layout.TextTitle}},
+		layout.Label{Text: "multi-line textarea sample", Style: subtle},
+		layout.Label{},
+		editor,
+		layout.Label{},
+		layout.Label{Text: "arrows move  enter newline  esc quit", Style: subtle},
 	}
-	lines = append(lines, strings.Split(s.ta.ViewWithSelection(renderSelection), "\n")...)
-	lines = append(lines, "", flatui.Subtle("arrows move  enter newline  esc quit"))
 	if s.debugKeys {
-		lines = append(lines, flatui.Subtle(fmt.Sprintf("last: %s -> %s", s.lastKey, s.lastAction)))
+		rows = append(rows, layout.Label{Text: fmt.Sprintf("last: %s -> %s", s.lastKey, s.lastAction), Style: subtle})
 	}
-
-	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
-	// Place the hardware cursor: card origin + the three pinned lines (title,
-	// subtitle, blank) that precede the textarea body + the cell within it.
-	ox, oy := flatui.CardOrigin()
-	cx, cy := s.ta.CursorCell()
-	frame.Cursor = &flatte.Cursor{
-		X: ox + cx,
-		Y: oy + 3 + cy,
-		Style: &flatte.CursorStyle{
-			Shape: flatte.CursorShapeBar,
-			Blink: false,
-		},
+	return flatte.Frame{
+		Root:        flatui.CardLayout(rows...),
+		CursorStyle: &flatte.CursorStyle{Shape: flatte.CursorShapeBar},
 	}
-	return frame
-}
-
-func renderSelection(text string, selected bool) string {
-	if !selected {
-		return text
-	}
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("16")).
-		Background(brand.Teal).
-		Render(text)
 }
 
 func main() {
-	if err := flatte.Run(context.Background(), flatte.App[State]{
+	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	flag.Parse()
+	app := flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}); err != nil {
+	}
+	var err error
+	if *gui {
+		err = window.Run(context.Background(), app, window.Options{Title: "Flat Editor", Width: 72, Height: 20})
+	} else {
+		err = flatte.Run(context.Background(), app)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

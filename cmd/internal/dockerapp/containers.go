@@ -237,10 +237,6 @@ func (c *containersScreen) injectStreamDemo(id string) {
 	}
 }
 
-// listHeaderLines is the count of rows the list pane draws before the first
-// list row: the filter line plus a blank separator row.
-const listHeaderLines = 2
-
 // listNode builds the list pane as a frame subtree: the filter line, a blank
 // row, and the visible rows from List.Rows ("list:i", so hit-testing reads
 // the solved row rects), beside the scrollbar column, inside the pane's
@@ -259,11 +255,6 @@ func (c *containersScreen) listNode() layout.Node {
 	if c.list.Count() > 0 {
 		rows = c.list.Rows("list", c.listRow)
 	}
-	innerHeight := c.listHeight + listHeaderLines
-	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), innerHeight)
-	if strings.TrimSpace(bar) != "" { // style the track only when there is one
-		bar = lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
-	}
 	return layout.Col{
 		NodeBase: layout.NodeBase{
 			ID:        "list",
@@ -279,7 +270,7 @@ func (c *containersScreen) listNode() layout.Node {
 				layout.Label{},
 				rows,
 			}},
-			layout.Text{NodeBase: layout.NodeBase{W: layout.Fixed(1)}, String: bar},
+			layout.ScrollBar{Offset: c.list.Offset(), Visible: c.listHeight, Total: c.list.Count(), Color: pal.panel},
 		}}},
 	}
 }
@@ -323,13 +314,9 @@ func (c *containersScreen) detailNode() layout.Node {
 		return pane
 	}
 	body := append([]layout.Node{c.detailHeader(selected), layout.Label{}}, c.tabBody(selected)...)
-	bar := c.detailScrollbar(max(c.bodyContentHeight-paneBorderRows, 0))
-	if strings.TrimSpace(bar) != "" { // style the track only when there is one
-		bar = lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
-	}
 	pane.Children = []layout.Node{layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1)}, Children: []layout.Node{
 		layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Children: body},
-		layout.Text{NodeBase: layout.NodeBase{W: layout.Fixed(1)}, String: bar},
+		c.detailScrollBar(),
 	}}}
 	if indicator := c.followIndicator(); indicator != nil {
 		pane.PadBottom = 0
@@ -1158,15 +1145,17 @@ func (c *containersScreen) keyHints() string {
 	return "1/2/3 switch  q quit"
 }
 
-func (c *containersScreen) detailScrollbar(detailInnerHeight int) string {
+// detailScrollBar is the active tab's scroll bar: the logs' or inspect
+// viewport's position, blank on the stats tab.
+func (c *containersScreen) detailScrollBar() layout.ScrollBar {
+	bar := layout.ScrollBar{Color: pal.panel}
 	switch c.tab {
 	case tabLogs:
-		return scrollbarLines(c.logs.Offset(), c.logs.VisibleLines(), c.logs.TotalLines(), detailInnerHeight)
+		bar.Offset, bar.Visible, bar.Total = c.logs.Offset(), c.logs.VisibleLines(), c.logs.TotalLines()
 	case tabInspect:
-		return scrollbarLines(c.inspect.Offset(), c.inspect.VisibleLines(), c.inspect.TotalLines(), detailInnerHeight)
-	default:
-		return strings.Repeat(" ", detailInnerHeight)
+		bar.Offset, bar.Visible, bar.Total = c.inspect.Offset(), c.inspect.VisibleLines(), c.inspect.TotalLines()
 	}
+	return bar
 }
 
 // followIndicator is the logs' follow/paused indicator, or nil while the

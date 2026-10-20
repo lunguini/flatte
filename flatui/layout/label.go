@@ -35,6 +35,12 @@ func (s TextStyle) Render(text string) string {
 	return s.lipgloss().Render(text)
 }
 
+// zero reports whether s sets nothing. (Colors are interfaces, which ==
+// would panic on for an uncomparable implementation.)
+func (s TextStyle) zero() bool {
+	return s.Role == TextBody && s.Fg == nil && s.Bg == nil && !s.Bold && !s.Italic && !s.Underline && !s.Strikethrough
+}
+
 func (s TextStyle) lipgloss() lipgloss.Style {
 	st := lipgloss.NewStyle()
 	switch s.Role {

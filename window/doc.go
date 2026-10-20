@@ -7,7 +7,9 @@
 //
 // The window draws the app's Frame.Root as real components: Labels in the
 // theme's font by text role, Boxes as rounded strokes (an overlay's box as a
-// raised surface), Inputs as outlined text fields with input-method support.
+// raised surface, a titled border's title in its stroke), Inputs as outlined
+// text fields (multi-line ones as text areas) with input-method support,
+// and scroll bars as thin thumbs.
 // Layout runs in points (see layout.LayoutScene): sizes are columns and
 // lines of the UI font, padding is spacing steps, and a border takes a band
 // with its stroke down the middle, as a terminal border takes a cell — so a
@@ -35,7 +37,8 @@
 // time through purego. On other platforms Run returns ErrUnsupported.
 //
 // Differences from the terminal host: Ctrl-C is delivered to Handle (quit
-// with ⌘Q or by closing the window); Effects.Print, Suspend, Exec, and the
+// with ⌘Q or by closing the window); ⌘← and ⌘→ arrive as Home and End
+// (with Shift when held), other ⌘ chords belong to the menu; Effects.Print, Suspend, Exec, and the
 // clipboard methods are no-ops; Frame.Cursor shows only for frames without
 // a Root (a Root frame's cursor is the focused Input's caret).
 package window

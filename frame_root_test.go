@@ -145,6 +145,11 @@ func TestComposeFrameCursorFollowsFocusedInput(t *testing.T) {
 	if frame, _ := ComposeFrame(Frame{Root: tree(true), Cursor: explicit}, 20, 1); frame.Cursor != explicit {
 		t.Fatalf("explicit cursor replaced: %+v", frame.Cursor)
 	}
+	// CursorStyle styles the caret's cursor.
+	bar := &CursorStyle{Shape: CursorShapeBar}
+	if frame, _ := ComposeFrame(Frame{Root: tree(true), CursorStyle: bar}, 20, 1); frame.Cursor == nil || frame.Cursor.Style != bar || frame.Cursor.X != 7 {
+		t.Fatalf("styled caret cursor = %+v, want {7 0 bar}", frame.Cursor)
+	}
 }
 
 // D1: the root runtime and the layout vocabulary are backend-neutral, so

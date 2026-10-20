@@ -538,23 +538,6 @@ func TestLeftArrowInFilterMovesCursor(t *testing.T) {
 	}
 }
 
-func TestScrollbarLinesShowsThumbInMiddle(t *testing.T) {
-	bar := scrollbarLines(5, 4, 14, 10)
-	if !strings.Contains(bar, "█") {
-		t.Fatalf("scrollbar missing thumb char: %q", bar)
-	}
-	if !strings.Contains(bar, "░") {
-		t.Fatalf("scrollbar missing track char: %q", bar)
-	}
-}
-
-func TestScrollbarLinesEmptyWhenContentFits(t *testing.T) {
-	bar := scrollbarLines(0, 10, 5, 10)
-	if strings.Contains(bar, "█") || strings.Contains(bar, "░") {
-		t.Fatalf("scrollbar should be blank when content fits: %q", bar)
-	}
-}
-
 func TestInspectTabShowsScrollbarWhenContentOverflows(t *testing.T) {
 	s := resizedState(80, 24)
 	render(s) // populate zones

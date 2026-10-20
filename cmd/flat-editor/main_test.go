@@ -12,10 +12,24 @@ import (
 	"github.com/lunguini/flatte/flatest"
 )
 
+// settle sizes the textarea as a run does: compose the view at the frame
+// size and deliver its rects.
+func settle(s *State, width, height int) {
+	_, comp := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, height)
+	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
+}
+
+// composed is the frame View gives at width×height, as the host paints it.
+func composed(s *State, width, height int) flatte.Frame {
+	f, _ := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, height)
+	return f
+}
+
 func emptyState() *State {
 	s := &State{}
 	s.ta.SetValue("")
-	s.layout(80, 24)
+	s.ta.SetSoftWrap(true)
+	settle(s, 80, 24)
 	return s
 }
 
@@ -280,8 +294,8 @@ func TestEscQuits(t *testing.T) {
 
 func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	s := NewState()
-	s.layout(72, 24)
-	frame := View(s, flatte.RenderContext{Width: 72})
+	settle(s, 72, 24)
+	frame := composed(s, 72, 24)
 	if frame.Cursor == nil {
 		t.Fatal("editor view has no cursor")
 	}
@@ -296,13 +310,13 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 
 func TestViewSoftWrapsLongLineAndKeepsCursorInsideTextareaBody(t *testing.T) {
 	s := emptyState()
-	s.layout(18, 10)
+	settle(s, 18, 10)
 	typeRunes(s, "abcdefghijklmnopqrstuvwxyz")
 
 	if got := s.ta.View(); got != "abcdefghijkl\nmnopqrstuvwx\nyz" {
 		t.Fatalf("textarea view = %q, want wrapped rows", got)
 	}
-	frame := View(s, flatte.RenderContext{Width: 18})
+	frame := composed(s, 18, 10)
 	if frame.Cursor == nil {
 		t.Fatal("editor view has no cursor")
 	}
@@ -314,11 +328,11 @@ func TestViewSoftWrapsLongLineAndKeepsCursorInsideTextareaBody(t *testing.T) {
 func TestDebugViewShowsLastDecodedKeyAndAction(t *testing.T) {
 	s := emptyState()
 	s.debugKeys = true
-	s.layout(72, 24)
+	settle(s, 72, 24)
 	typeRunes(s, "hello world")
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'w', Mod: flatte.ModCtrl}, flatte.Effects[State]{})
 
-	frame := View(s, flatte.RenderContext{Width: 72})
+	frame := composed(s, 72, 24)
 	if !strings.Contains(frame.Content, "last: character 'w' ctrl -> delete-word-left") {
 		t.Fatalf("debug footer missing last key/action:\n%s", frame.Content)
 	}
@@ -326,6 +340,6 @@ func TestDebugViewShowsLastDecodedKeyAndAction(t *testing.T) {
 
 func TestInitialSnapshot(t *testing.T) {
 	s := NewState()
-	s.layout(72, 24)
-	flatest.AssertGoldenFrame(t, "testdata/editor.golden", View(s, flatte.RenderContext{Width: 72}))
+	settle(s, 72, 24)
+	flatest.AssertGoldenFrame(t, "testdata/editor.golden", composed(s, 72, 24))
 }

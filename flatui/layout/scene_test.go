@@ -226,3 +226,24 @@ func TestPointRectCells(t *testing.T) {
 		t.Errorf("non-finite = %+v", got)
 	}
 }
+
+func TestSceneMultilineInputGrows(t *testing.T) {
+	root := Col{Children: []Node{
+		Input{NodeBase: NodeBase{ID: "ed"}, Value: "a\nb", Multiline: true, Wrap: true, SelStart: 2, SelEnd: 3, OffsetY: 1},
+		Label{Text: "footer"},
+	}}
+	s := LayoutScene(root, 20*testMetrics.Column, 10*testMetrics.Line, testMetrics)
+	if r := s.Rects["ed"]; r.H != 9*testMetrics.Line {
+		t.Fatalf("multi-line input %+v, want the 9 lines the footer leaves", r)
+	}
+	for _, op := range s.Ops {
+		if in, ok := op.(InputOp); ok && (!in.Multiline || !in.Wrap || in.SelStart != 2 || in.SelEnd != 3 || in.OffsetY != 1) {
+			t.Fatalf("InputOp lost multi-line fields: %+v", in)
+		}
+	}
+	// The terminal agrees.
+	_, rects := SolveAndCompose(root, 20, 10)
+	if rects["ed"].H != 9 {
+		t.Fatalf("terminal multi-line input %+v, want 9 lines", rects["ed"])
+	}
+}

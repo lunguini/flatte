@@ -33,7 +33,11 @@ func TestMacKey(t *testing.T) {
 		{"plain letter is text", 'j', 0, flatte.KeyEvent{}, false},
 		{"option letter is text", 'b', macOption, flatte.KeyEvent{}, false},
 		{"command chord is the menu's", 'q', macCommand, flatte.KeyEvent{}, false},
-		{"command arrow is the menu's", 0xF700, macCommand, flatte.KeyEvent{}, false},
+		{"command up has no key", 0xF700, macCommand, flatte.KeyEvent{}, false},
+		{"command-left is line start", 0xF702, macCommand, flatte.KeyEvent{Key: flatte.KeyHome}, true},
+		{"command-right is line end", 0xF703, macCommand, flatte.KeyEvent{Key: flatte.KeyEnd}, true},
+		{"shift-command-left selects to line start", 0xF702, macCommand | macShift, flatte.KeyEvent{Key: flatte.KeyHome, Mod: flatte.ModShift}, true},
+		{"shift-command-right selects to line end", 0xF703, macCommand | macShift, flatte.KeyEvent{Key: flatte.KeyEnd, Mod: flatte.ModShift}, true},
 	} {
 		got, ok := macKey(tc.chars, tc.flags)
 		if got != tc.want || ok != tc.ok {

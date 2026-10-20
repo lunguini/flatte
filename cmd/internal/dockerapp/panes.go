@@ -23,56 +23,6 @@ type splitDrag struct {
 	startWidth int
 }
 
-func scrollbarLines(offset, visible, total, height int) string {
-	if total <= visible || height <= 0 || visible <= 0 {
-		return strings.Repeat(" ", height)
-	}
-	maxOffset := total - visible
-	thumbSize := max(1, height*visible/total)
-	if thumbSize > height {
-		thumbSize = height
-	}
-	thumbPos := int(float64(offset) / float64(maxOffset) * float64(height-thumbSize))
-	if thumbPos < 0 {
-		thumbPos = 0
-	}
-	if thumbPos+thumbSize > height {
-		thumbPos = height - thumbSize
-	}
-	rows := make([]string, height)
-	for i := 0; i < height; i++ {
-		if i >= thumbPos && i < thumbPos+thumbSize {
-			rows[i] = "█"
-		} else {
-			rows[i] = "░"
-		}
-	}
-	return strings.Join(rows, "\n")
-}
-
-func withScrollbar(content, bar string) string {
-	if bar == "" {
-		return content
-	}
-	contentLines := strings.Split(content, "\n")
-	barLines := strings.Split(bar, "\n")
-	n := max(len(contentLines), len(barLines))
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		var line, barChar string
-		if i < len(contentLines) {
-			line = contentLines[i]
-		}
-		if i < len(barLines) {
-			barChar = barLines[i]
-		} else {
-			barChar = " "
-		}
-		out[i] = line + barChar
-	}
-	return strings.Join(out, "\n")
-}
-
 // renderDragDivider produces a 1-col-wide, height-tall divider with a
 // background color matching the pane borders, and a single │ in the
 // vertical center as a visible grip indicator. The bg fills the column
@@ -139,11 +89,6 @@ func namedListPane(width int, title string, list flatui.List, name func(i int) s
 		}
 		return layout.Row{Children: []layout.Node{marker, label}}
 	})
-	contentHeight := list.Height() + 2
-	bar := ""
-	if list.Count() > list.Height() {
-		bar = lipgloss.NewStyle().Foreground(pal.panel).Render(scrollbarLines(list.Offset(), list.Height(), list.Count(), contentHeight))
-	}
 	return layout.Col{
 		NodeBase: paneBase("list", layout.Fixed(width)),
 		Children: []layout.Node{layout.Row{Children: []layout.Node{
@@ -152,7 +97,7 @@ func namedListPane(width int, title string, list flatui.List, name func(i int) s
 				layout.Label{},
 				rows,
 			}},
-			layout.Text{NodeBase: layout.NodeBase{W: layout.Fixed(1)}, String: bar},
+			layout.ScrollBar{Offset: list.Offset(), Visible: list.Height(), Total: list.Count(), Color: pal.panel},
 		}}},
 	}
 }

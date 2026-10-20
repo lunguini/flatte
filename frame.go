@@ -16,6 +16,9 @@ type Frame struct {
 	// ((0,0) is the frame's top-left). nil hides the cursor — unless Root
 	// holds a focused layout.Input, whose caret then places it.
 	Cursor *Cursor
+	// CursorStyle styles the cursor a focused layout.Input's caret places
+	// (when Cursor is nil); nil is the terminal's default.
+	CursorStyle *CursorStyle
 	// Title sets the terminal window title when non-empty. It is emitted
 	// only when it changes, and reset on exit if it was ever set.
 	Title string
@@ -63,7 +66,7 @@ func ComposeFrame(frame Frame, width, height int) (Frame, layout.Composition) {
 	frame.Content = c.Frame
 	if frame.Cursor == nil {
 		if x, y, ok := c.Cursor(); ok {
-			frame.Cursor = &Cursor{X: x, Y: y}
+			frame.Cursor = &Cursor{X: x, Y: y, Style: frame.CursorStyle}
 		}
 	}
 	return frame, c

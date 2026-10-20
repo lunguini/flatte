@@ -276,3 +276,26 @@ func TestPerSidePaddingStringPathMatchesCompose(t *testing.T) {
 		t.Fatalf("child should sit at row 1 col 3:\n%s", strings.Join(want, "\n"))
 	}
 }
+
+func TestBoxTitleInTheTopRule(t *testing.T) {
+	box := func(title string, w int) string {
+		root := Col{NodeBase: NodeBase{Box: Box{Border: BorderRounded, Title: title, TitleStyle: TextStyle{Bold: true}}}, Children: []Node{Label{Text: "body"}}}
+		return ansi.Strip(Compose(root, w, 3).Frame)
+	}
+	if got, want := box("stop", 12), "╭─ stop ───╮\n│body      │\n╰──────────╯"; got != want {
+		t.Fatalf("titled box:\n%s\nwant:\n%s", got, want)
+	}
+	// Cut to fit, keeping both corners.
+	if got := strings.SplitN(box("a long title", 8), "\n", 2)[0]; got != "╭─ a lo╮" {
+		t.Fatalf("narrow title row %q", got)
+	}
+	// Too narrow for any title: the plain rule.
+	if got := strings.SplitN(box("x", 3), "\n", 2)[0]; got != "╭─╮" {
+		t.Fatalf("tiny title row %q", got)
+	}
+	// The title is styled; the rule is not bold.
+	frame := Compose(Col{NodeBase: NodeBase{Box: Box{Border: BorderNormal, Title: "t", TitleStyle: TextStyle{Bold: true}}}}, 8, 2).Frame
+	if !strings.Contains(frame, "\x1b[1m") {
+		t.Fatalf("title not bold: %q", frame)
+	}
+}

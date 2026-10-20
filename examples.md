@@ -24,7 +24,7 @@ go run ./flat-pages
 | Sample | Demonstrates |
 |---|---|
 | `flat-form` | Multiple `flatui.TextField` values as `Input` nodes, focus; the focused field's caret places the cursor |
-| `flat-editor` | `flatui.Textarea`, multiline editing, soft-wrap, selection, Home/End line movement |
+| `flat-editor` | `flatui.Textarea`, multiline editing, soft-wrap, selection, Home/End line movement; `Textarea.Layout` sized from `LayoutEvent`, a steady bar cursor via `Frame.CursorStyle`; `-gui` runs it as a native text area |
 | `flat-keys` | Raw terminal key diagnostics for terminal-specific chords |
 
 ## Navigation And Composition
@@ -42,7 +42,7 @@ go run ./flat-pages
 |---|---|
 | `flat-layout` | `flatui/layout` validation harness: returns a `Col`/`Row`/`Text` tree as `Frame.Root` (the runtime composes it at the terminal size and fills `MouseEvent.Target`) and toggles an `Overlay: true` modal; `-gui` runs it in a native window |
 | `flat-scroll` | `layout.Scroll` panes taller than their window: a 40-row service list that keeps its selection visible and a log scrolled by wheel or PgUp/PgDn; offsets are app state clamped with `layout.ClampScroll`, rows are clicked through `MouseEvent.Target` at any offset |
-| `flat-docker` | Flagship dogfood: returns one frame tree as `Frame.Root`; list heights, pane widths, and row zones are adopted from `LayoutEvent` before each paint, and pane clicks route on `MouseEvent.Target`/`TargetRect`; includes `TabBar.WithID`/`HitTest`, row/divider zones, drag-resizable panes, command bar (an `Input`), and confirm modal; every pane is layout nodes (Labels, Icons, `List.Rows`, Meters, Viewports), so `-gui` runs it as native components |
+| `flat-docker` | Flagship dogfood: returns one frame tree as `Frame.Root`; list heights, pane widths, and row zones are adopted from `LayoutEvent` before each paint, and pane clicks route on `MouseEvent.Target`/`TargetRect`; includes `TabBar.WithID`/`HitTest`, row/divider zones, drag-resizable panes, command bar (an `Input`), confirm modal (a `Box` with a `Title`), and `ScrollBar`s; every pane is layout nodes (Labels, Icons, `List.Rows`, Meters, Viewports), so `-gui` runs it as native components |
 
 ## Widgets
 

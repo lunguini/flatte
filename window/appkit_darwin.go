@@ -64,6 +64,7 @@ var (
 	cgContextSaveGState         func(ctx uintptr)
 	cgContextRestoreGState      func(ctx uintptr)
 	cgContextClipToRect         func(ctx uintptr, r CGRect)
+	cgContextClipToRects        func(ctx uintptr, rects *CGRect, count uintptr)
 	cgContextSetRGBFillColor    func(ctx uintptr, r, g, b, a float64)
 	cgContextSetRGBStrokeColor  func(ctx uintptr, r, g, b, a float64)
 	cgContextFillRect           func(ctx uintptr, r CGRect)
@@ -156,6 +157,7 @@ func bindFrameworks() error {
 		{&cgContextSaveGState, cg, "CGContextSaveGState"},
 		{&cgContextRestoreGState, cg, "CGContextRestoreGState"},
 		{&cgContextClipToRect, cg, "CGContextClipToRect"},
+		{&cgContextClipToRects, cg, "CGContextClipToRects"},
 		{&cgContextSetRGBFillColor, cg, "CGContextSetRGBFillColor"},
 		{&cgContextSetRGBStrokeColor, cg, "CGContextSetRGBStrokeColor"},
 		{&cgContextFillRect, cg, "CGContextFillRect"},

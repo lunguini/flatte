@@ -585,3 +585,77 @@ func TestSnapshotRoundBox(t *testing.T) {
 		t.Errorf("pill top middle %v, want the fill", c)
 	}
 }
+
+// TestSnapshotTitledBox: the title sits on the top stroke, which breaks
+// around it and runs on past it.
+func TestSnapshotTitledBox(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	red := lipgloss.Color("#ff0000")
+	green := lipgloss.Color("#00ff00")
+	root := func() layout.Node {
+		return layout.Col{Children: []layout.Node{
+			layout.Col{NodeBase: layout.NodeBase{ID: "box", H: layout.Fixed(4), Box: layout.Box{
+				Border: layout.BorderRounded, BorderColor: red, Title: "WWWW", TitleStyle: layout.TextStyle{Fg: green},
+			}}},
+		}}
+	}
+	m := metrics()
+	img, err := Snapshot(snapApp(root), Options{Width: 30, Height: 4}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := layout.LayoutScene(root(), 30*m.Column, 4*m.Line, m).Rects["box"]
+	in := strokeRect(r, borderBand)
+	rad := darkTheme.radiusOf(layout.BorderRounded)
+	gap0 := in.Origin.X + max(rad, titleGap) + titleGap
+	stroke := func(x0, x1 float64) layout.PointRect {
+		return layout.PointRect{X: x0, Y: in.Origin.Y - 1, W: x1 - x0, H: 2}
+	}
+	if !region(img, stroke(gap0+titleGap, gap0+titleGap+20), 2, color.RGBA{0, 255, 0, 255}, 60) {
+		t.Error("title not drawn on the top stroke")
+	}
+	if region(img, stroke(gap0+1, gap0+titleGap+20), 2, color.RGBA{255, 0, 0, 255}, 40) {
+		t.Error("stroke not broken under the title")
+	}
+	if !region(img, stroke(r.X+r.W/2+20, r.X+r.W-30), 2, color.RGBA{255, 0, 0, 255}, 40) {
+		t.Error("stroke does not run on after the title")
+	}
+}
+
+// TestSnapshotScrollBar: a thumb as far down its track as the window is
+// down its content, and nothing when the content fits.
+func TestSnapshotScrollBar(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	green := lipgloss.Color("#00ff00")
+	root := func() layout.Node {
+		return layout.Col{Children: []layout.Node{layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(10)}, Children: []layout.Node{
+			layout.ScrollBar{NodeBase: layout.NodeBase{ID: "top"}, Offset: 0, Visible: 10, Total: 40, Color: green},
+			layout.ScrollBar{NodeBase: layout.NodeBase{ID: "end"}, Offset: 30, Visible: 10, Total: 40, Color: green},
+			layout.ScrollBar{NodeBase: layout.NodeBase{ID: "fits"}, Visible: 10, Total: 10, Color: green},
+		}}}}
+	}
+	m := metrics()
+	img, err := Snapshot(snapApp(root), Options{Width: 10, Height: 10}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := layout.LayoutScene(root(), 10*m.Column, 10*m.Line, m)
+	g := color.RGBA{0, 255, 0, 255}
+	band := func(id string, from, to float64) layout.PointRect {
+		r := s.Rects[id]
+		return layout.PointRect{X: r.X + r.W/2 - 1, Y: r.Y + from*r.H, W: 2, H: (to - from) * r.H}
+	}
+	if !region(img, band("top", 0.02, 0.2), 2, g, 30) || region(img, band("top", 0.3, 1), 2, g, 30) {
+		t.Error("a scrolled-to-top thumb is not the top quarter")
+	}
+	if !region(img, band("end", 0.8, 0.98), 2, g, 30) || region(img, band("end", 0, 0.7), 2, g, 30) {
+		t.Error("a scrolled-to-end thumb is not the bottom quarter")
+	}
+	if region(img, band("fits", 0, 1), 2, g, 60) {
+		t.Error("content that fits shows a thumb")
+	}
+}

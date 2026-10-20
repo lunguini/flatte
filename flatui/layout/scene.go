@@ -47,7 +47,7 @@ func cellsOf(v, unit float64) int {
 }
 
 // Op is one drawing operation of a Scene, in paint order. The set is closed:
-// a backend draws these seven and nothing else. Every op's Clip is the visible
+// a backend draws these eight and nothing else. Every op's Clip is the visible
 // region (the frame narrowed by enclosing Scrolls); draw only inside it.
 type Op interface{ isOp() }
 
@@ -72,6 +72,10 @@ type TextOp struct {
 // InputOp draws a text field in Rect (the input's content box). Caret is a
 // byte offset into Value; a focused field shows it and receives text input.
 // Scrolling a long value to keep the caret visible is the backend's job.
+// A Multiline field breaks lines at "\n" (and wraps them at its width when
+// Wrap), highlights the bytes SelStart..SelEnd, and scrolls from line
+// OffsetY (the app's, in terminal rows: a hint) as little as keeps the
+// caret's line visible.
 type InputOp struct {
 	ID          string
 	Rect, Clip  PointRect
@@ -80,6 +84,10 @@ type InputOp struct {
 	Placeholder string
 	Focused     bool
 	Style       TextStyle
+
+	Multiline, Wrap  bool
+	SelStart, SelEnd int
+	OffsetY          int
 }
 
 // IconOp draws an Icon's named shape in Rect (the icon's content box), in
@@ -99,6 +107,17 @@ type MeterOp struct {
 	Fill, Track color.Color
 }
 
+// ScrollBarOp draws a ScrollBar's thumb in Rect (its content box): it
+// starts Start of the way down the track and is Length of it long (both
+// fractions of Rect's height). Show reports whether there is anything to
+// scroll; when false, draw nothing. A nil Color is the backend's default.
+type ScrollBarOp struct {
+	Rect, Clip    PointRect
+	Start, Length float64
+	Show          bool
+	Color         color.Color
+}
+
 // CellsOp draws terminal content — a Text leaf's ANSI string, a container's
 // Chrome, or any node the scene does not know — as a grid of Cols×Lines
 // monospace cells from the top-left of Rect. It is how every existing node
@@ -113,13 +132,14 @@ type CellsOp struct {
 // before drawing the ops that follow, as the terminal clears its cells.
 type LayerOp struct{ Rect PointRect }
 
-func (BoxOp) isOp()   {}
-func (TextOp) isOp()  {}
-func (InputOp) isOp() {}
-func (IconOp) isOp()  {}
-func (MeterOp) isOp() {}
-func (CellsOp) isOp() {}
-func (LayerOp) isOp() {}
+func (BoxOp) isOp()       {}
+func (TextOp) isOp()      {}
+func (InputOp) isOp()     {}
+func (IconOp) isOp()      {}
+func (MeterOp) isOp()     {}
+func (ScrollBarOp) isOp() {}
+func (CellsOp) isOp()     {}
+func (LayerOp) isOp()     {}
 
 // Scene is a frame solved in points: its drawing operations, the rect of
 // every ID'd node, and the paint-order hit list.
@@ -184,8 +204,9 @@ func (pointMetric) share(total, ratio float64) float64 {
 }
 
 // leaf measures the known leaves in points: text by the backend's font,
-// inputs as one line, and padding and borders in steps and strokes rather
-// than cells. Other nodes report their Size, read as columns and lines.
+// inputs as one line (a multi-line one grows), and padding and borders in
+// steps and strokes rather than cells. Other nodes report their Size, read
+// as columns and lines.
 func (p pointMetric) leaf(n Node, width float64) (w, h sized[float64]) {
 	switch l := n.(type) {
 	case Label:
@@ -220,6 +241,9 @@ func (p pointMetric) leaf(n Node, width float64) (w, h sized[float64]) {
 		w, h = p.content(l.NodeBase, 0, p.Line)
 		if l.W.Kind == SizeAuto {
 			w = growSized[float64]()
+		}
+		if l.Multiline && l.H.Kind == SizeAuto {
+			h = growSized[float64]()
 		}
 		return w, h
 	}
@@ -295,11 +319,16 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	case Icon:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, IconOp{Rect: p.content(n, r), Clip: PointRect(clip), Name: l.Name, Text: l.Text, Style: l.Style})
+	case ScrollBar:
+		p.box(r, clip, l.box())
+		start, length, show := l.fraction()
+		p.ops = append(p.ops, ScrollBarOp{Rect: p.content(n, r), Clip: PointRect(clip), Start: start, Length: length, Show: show, Color: l.Color})
 	case Input:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, InputOp{
 			ID: l.ID, Rect: p.content(n, r), Clip: PointRect(clip),
 			Value: l.Value, Caret: l.Caret, Placeholder: l.Placeholder, Focused: l.Focused, Style: l.Style,
+			Multiline: l.Multiline, Wrap: l.Wrap, SelStart: l.SelStart, SelEnd: l.SelEnd, OffsetY: l.OffsetY,
 		})
 	case *Spacer:
 		bg := l.bg

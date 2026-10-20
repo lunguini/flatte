@@ -42,14 +42,22 @@ var macSpecialKeys = map[rune]flatte.Key{
 	0x1b: flatte.KeyEscape, 0x7f: flatte.KeyBackspace,
 }
 
+// macCommandKeys are the Command chords with a Flatte key.
+var macCommandKeys = map[rune]flatte.Key{0xF702: flatte.KeyHome, 0xF703: flatte.KeyEnd}
+
 // macKey decides what a key press means before text input sees it: a
 // non-text key, or a Control chord, becomes a key event directly; anything
 // else is text for the input system (which also runs input methods) and
 // macKey reports false. Command chords belong to the menu and report false
-// with no event.
+// with no event — except Command-Left and -Right, the platform's line start
+// and end, which become Home and End (as AppKit's moveToBeginningOfLine:
+// does), keeping Shift so they can select.
 func macKey(chars rune, flags uint) (flatte.KeyEvent, bool) {
 	mod := macMods(flags)
 	if flags&macCommand != 0 {
+		if k, ok := macCommandKeys[chars]; ok {
+			return flatte.KeyEvent{Key: k, Mod: mod}, true
+		}
 		return flatte.KeyEvent{}, false
 	}
 	if k, ok := macSpecialKeys[chars]; ok {

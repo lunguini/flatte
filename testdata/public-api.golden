@@ -136,9 +136,10 @@ flatte package flatte
   type Frame struct
   field Frame.Content string [order=0]
   field Frame.Cursor *Cursor [order=1]
-  field Frame.Title string [order=2]
-  field Frame.Root layout.Node [order=3]
-  struct Frame fields=4 comparable=true
+  field Frame.CursorStyle *CursorStyle [order=2]
+  field Frame.Title string [order=3]
+  field Frame.Root layout.Node [order=4]
+  struct Frame fields=5 comparable=true
   type Key int
   type KeyEvent struct
   field KeyEvent.Key Key [order=0]
@@ -400,6 +401,7 @@ flatui package flatui
   method TextField.Selection()(start int, end int, ok bool)
   method Textarea.Col() int
   method Textarea.CursorCell()(x int, y int)
+  method Textarea.Layout(id string, focused bool) layout.Input
   method Textarea.Offset() int
   method Textarea.Row() int
   method Textarea.SelectedText() string
@@ -664,6 +666,8 @@ flatui/layout package layout
   method Scroll.IsHorizontal() bool
   method Scroll.Render(rect Rect) string
   method Scroll.Size()(Size, Size)
+  method ScrollBar.Render(r Rect) string
+  method ScrollBar.Size()(Size, Size)
   method Text.Render(r Rect) string
   method Text.Size()(Size, Size)
   method TextStyle.Render(text string) string
@@ -681,6 +685,8 @@ flatui/layout package layout
   methodset *Row.IsOverlay() bool
   methodset *Scroll.GetID() string
   methodset *Scroll.IsOverlay() bool
+  methodset *ScrollBar.GetID() string
+  methodset *ScrollBar.IsOverlay() bool
   methodset *Spacer.GetID() string
   methodset *Spacer.IsOverlay() bool
   methodset *Spacer.Size()(Size, Size)
@@ -700,6 +706,8 @@ flatui/layout package layout
   methodset Row.IsOverlay() bool
   methodset Scroll.GetID() string
   methodset Scroll.IsOverlay() bool
+  methodset ScrollBar.GetID() string
+  methodset ScrollBar.IsOverlay() bool
   methodset Spacer.GetID() string
   methodset Spacer.IsOverlay() bool
   methodset Spacer.Size()(Size, Size)
@@ -712,7 +720,9 @@ flatui/layout package layout
   field Box.Background color.Color [order=2]
   field Box.Selected bool [order=3]
   field Box.Round bool [order=4]
-  struct Box fields=5 comparable=true
+  field Box.Title string [order=5]
+  field Box.TitleStyle TextStyle [order=6]
+  struct Box fields=7 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
@@ -762,7 +772,14 @@ flatui/layout package layout
   field Input.Placeholder string [order=3]
   field Input.Focused bool [order=4]
   field Input.Style TextStyle [order=5]
-  struct Input fields=6 comparable=false
+  field Input.Multiline bool [order=6]
+  field Input.Wrap bool [order=7]
+  field Input.SelStart int [order=8]
+  field Input.SelEnd int [order=9]
+  field Input.SelectionStyle TextStyle [order=10]
+  field Input.OffsetX int [order=11]
+  field Input.OffsetY int [order=12]
+  struct Input fields=13 comparable=false
   type InputOp struct
   field InputOp.ID string [order=0]
   field InputOp.Rect PointRect [order=1]
@@ -772,7 +789,12 @@ flatui/layout package layout
   field InputOp.Placeholder string [order=5]
   field InputOp.Focused bool [order=6]
   field InputOp.Style TextStyle [order=7]
-  struct InputOp fields=8 comparable=true
+  field InputOp.Multiline bool [order=8]
+  field InputOp.Wrap bool [order=9]
+  field InputOp.SelStart int [order=10]
+  field InputOp.SelEnd int [order=11]
+  field InputOp.OffsetY int [order=12]
+  struct InputOp fields=13 comparable=true
   type Label struct
   field Label.NodeBase NodeBase [order=0]
   field Label.Text string [order=1]
@@ -848,6 +870,21 @@ flatui/layout package layout
   field Scroll.OffsetY int [order=1]
   field Scroll.Child Node [order=2]
   struct Scroll fields=3 comparable=false
+  type ScrollBar struct
+  field ScrollBar.NodeBase NodeBase [order=0]
+  field ScrollBar.Offset int [order=1]
+  field ScrollBar.Visible int [order=2]
+  field ScrollBar.Total int [order=3]
+  field ScrollBar.Color color.Color [order=4]
+  struct ScrollBar fields=5 comparable=false
+  type ScrollBarOp struct
+  field ScrollBarOp.Rect PointRect [order=0]
+  field ScrollBarOp.Clip PointRect [order=1]
+  field ScrollBarOp.Start float64 [order=2]
+  field ScrollBarOp.Length float64 [order=3]
+  field ScrollBarOp.Show bool [order=4]
+  field ScrollBarOp.Color color.Color [order=5]
+  struct ScrollBarOp fields=6 comparable=true
   type Size struct
   field Size.Kind SizeKind [order=0]
   field Size.Value int [order=1]

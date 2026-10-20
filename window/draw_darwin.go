@@ -308,6 +308,8 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.icon(op) })
 		case layout.MeterOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.meter(op) })
+		case layout.ScrollBarOp:
+			p.clipped(intersect(op.Rect, op.Clip), func() { p.scrollBar(op) })
 		case layout.CellsOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.cells(op) })
 		}
@@ -330,7 +332,7 @@ func (p *painter) box(op layout.BoxOp) {
 	if op.Box.Selected {
 		r := rectOf(op.Rect)
 		p.fill(p.th.selection)
-		p.roundedPath(r, min(4, r.Size.Width/2, r.Size.Height/2), func() { cgContextFillPath(p.ctx) })
+		p.roundedPath(r, min(p.th.radiusOf(layout.BorderNormal), r.Size.Width/2, r.Size.Height/2), func() { cgContextFillPath(p.ctx) })
 	}
 	bg, hasBg := rgba{}, false
 	if op.Box.Background != nil && op.Box.Background != color.Transparent {
@@ -361,9 +363,47 @@ func (p *painter) box(op layout.BoxOp) {
 	if op.Box.BorderColor != nil {
 		c = rgbaOf(op.Box.BorderColor)
 	}
-	p.stroke(c)
-	cgContextSetLineWidth(p.ctx, strokeWidth)
-	p.roundedPath(in, rad, func() { cgContextStrokePath(p.ctx) })
+	stroke := func() {
+		p.stroke(c)
+		cgContextSetLineWidth(p.ctx, strokeWidth)
+		p.roundedPath(in, rad, func() { cgContextStrokePath(p.ctx) })
+	}
+	if op.Box.Title == "" {
+		stroke()
+		return
+	}
+	p.legend(op, in, rad, stroke)
+}
+
+// titleGap is the space between a box title and the stroke broken around it.
+const titleGap = 4.0
+
+// legend draws a titled border: the title on the top stroke, past the
+// corner, with the stroke broken around it (cut to fit the box).
+func (p *painter) legend(op layout.BoxOp, in CGRect, rad float64, stroke func()) {
+	f := p.th.styleFont(op.Box.TitleStyle)
+	pitch := f.pitch()
+	right := in.Origin.X + in.Size.Width - rad - titleGap
+	gap0 := in.Origin.X + max(rad, titleGap) + titleGap
+	gap1 := min(gap0+titleGap+f.width(op.Box.Title)+titleGap, right)
+	if gap1 <= gap0+2*titleGap {
+		stroke()
+		return
+	}
+	r := op.Rect
+	keep := [3]CGRect{
+		cgRect(r.X, r.Y, gap0-r.X, r.H),
+		cgRect(gap1, r.Y, r.X+r.W-gap1, r.H),
+		cgRect(r.X, in.Origin.Y+strokeWidth, r.W, r.H),
+	}
+	cgContextSaveGState(p.ctx)
+	cgContextClipToRects(p.ctx, &keep[0], uintptr(len(keep)))
+	stroke()
+	cgContextRestoreGState(p.ctx)
+	p.clipped(layout.PointRect{X: gap0, Y: in.Origin.Y - pitch/2, W: gap1 - gap0, H: pitch}, func() {
+		st := op.Box.TitleStyle
+		p.line(op.Box.Title, f, gap0+titleGap, in.Origin.Y-pitch/2, pitch, p.roleColor(st), nil, st.Underline, st.Strikethrough)
+	})
 }
 
 // strokeRect is the centerline of a border stroke: half a band inside r,
@@ -433,7 +473,7 @@ func (p *painter) text(op layout.TextOp) {
 func (p *painter) input(op layout.InputOp) {
 	r := op.Rect
 	field := cgRect(r.X+0.5, r.Y+0.5, max(r.W-1, 0), max(r.H-1, 0))
-	rad := min(4, field.Size.Height/2)
+	rad := min(p.th.radiusOf(layout.BorderNormal), field.Size.Height/2)
 	p.fill(p.th.field)
 	p.roundedPath(field, rad, func() { cgContextFillPath(p.ctx) })
 	outline := p.th.border
@@ -443,6 +483,10 @@ func (p *painter) input(op layout.InputOp) {
 	p.stroke(outline)
 	cgContextSetLineWidth(p.ctx, strokeWidth)
 	p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
+	if op.Multiline {
+		p.area(op)
+		return
+	}
 	f := p.th.styleFont(op.Style)
 	y := r.Y + (r.H-f.lineHeight())/2
 	x0 := r.X + fieldInset
@@ -480,6 +524,72 @@ func (p *painter) input(op layout.InputOp) {
 	}
 	if op.Focused {
 		p.caretAt(x0-scroll+caretX, r.Y, r.H, f)
+	}
+}
+
+// area draws a multi-line field's text inside its frame: rows at "\n" and,
+// when wrapping, by words at the field's width; scrolled from the op's
+// OffsetY as little as keeps the caret's row in view (and, unwrapped,
+// sideways to keep the caret visible); the selection highlighted, and the
+// caret and any input-method text when focused.
+func (p *painter) area(op layout.InputOp) {
+	r := op.Rect
+	f := p.th.styleFont(op.Style)
+	pitch := f.pitch()
+	x0, avail := r.X+fieldInset, max(r.W-2*fieldInset, 1)
+	caret := min(max(op.Caret, 0), len(op.Value))
+	for caret > 0 && caret < len(op.Value) && !runeStart(op.Value, caret) {
+		caret--
+	}
+	text, mark := op.Value, 0
+	if op.Focused && p.marked != "" {
+		text, mark = op.Value[:caret]+p.marked+op.Value[caret:], len(p.marked)
+	}
+	// Bytes after the caret move right by the marked text.
+	shift := func(i int) int {
+		if i > caret {
+			return i + mark
+		}
+		return i
+	}
+	at := caret + mark
+	selStart, selEnd := shift(min(op.SelStart, op.SelEnd)), shift(max(op.SelStart, op.SelEnd))
+	rows := areaRows(text, avail, op.Wrap, f.width)
+	cr := caretRow(rows, at)
+	first := firstRow(op.OffsetY, cr, int(r.H/pitch), len(rows))
+	scroll := 0.0
+	if !op.Wrap && op.Focused {
+		row := rows[cr]
+		if x := f.width(text[row.start:at]); x > avail-2 {
+			scroll = x - avail + 2
+		}
+	}
+	if text == "" {
+		p.line(op.Placeholder, f, x0, r.Y, pitch, p.th.subtle, nil, false, false)
+	}
+	space := f.width(" ")
+	for i := first; i < len(rows) && float64(i-first)*pitch < r.H; i++ {
+		row, y := rows[i], r.Y+float64(i-first)*pitch
+		s := text[row.start:row.end]
+		l := shape(s, f)
+		x := func(b int) float64 { return x0 - scroll + l.offset(s, b-row.start) }
+		if a, b := max(selStart, row.start), min(selEnd, row.end); a < b || (row.lineEnd && selStart <= row.end && selEnd > row.end) {
+			w := x(b) - x(a)
+			if row.lineEnd && selEnd > row.end {
+				w += space // the selected line break
+			}
+			p.fill(p.th.selection)
+			cgContextFillRect(p.ctx, cgRect(x(a), y, w, pitch))
+		}
+		p.line(s, f, x0-scroll, y, pitch, p.roleColor(op.Style), nil, op.Style.Underline, op.Style.Strikethrough)
+		if a, b := max(caret, row.start), min(caret+mark, row.end); mark > 0 && a < b {
+			p.fill(p.th.marked)
+			cgContextFillRect(p.ctx, cgRect(x(a), y+(pitch+f.lineHeight())/2-1.5, x(b)-x(a), 1.5))
+		}
+		if op.Focused && i == cr {
+			p.caretAt(x(at), y, pitch, f)
+		}
+		l.release()
 	}
 }
 
@@ -647,6 +757,37 @@ func (p *painter) meter(op layout.MeterOp) {
 
 // icon draws an Icon's shape in its style's color, or its text when the
 // name has no shape.
+// Scroll bar thumb sizes in points: its width, and its shortest length.
+const (
+	thumbWidth = 5.0
+	thumbMin   = 16.0
+)
+
+// scrollBar draws a thin rounded thumb centered in the bar's column, in
+// the bar's color or a translucent subtle grey, and nothing when the
+// content fits.
+func (p *painter) scrollBar(op layout.ScrollBarOp) {
+	if !op.Show {
+		return
+	}
+	r := op.Rect
+	w := min(thumbWidth, r.W)
+	h := min(max(op.Length*r.H, thumbMin), r.H)
+	// The thumb moves over the track less its length, as the content
+	// moves under the window.
+	y := r.Y
+	if op.Length < 1 {
+		y += op.Start / (1 - op.Length) * (r.H - h)
+	}
+	c := p.th.subtle
+	c.A *= 0.6
+	if op.Color != nil {
+		c = rgbaOf(op.Color)
+	}
+	p.fill(c)
+	p.roundedPath(cgRect(r.X+(r.W-w)/2, y, w, h), w/2, func() { cgContextFillPath(p.ctx) })
+}
+
 func (p *painter) icon(op layout.IconOp) {
 	if g, ok := iconShape(op.Name, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H, p.m.Column); ok {
 		p.shape(g, p.roleColor(op.Style))

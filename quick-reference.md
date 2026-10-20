@@ -117,7 +117,7 @@ shared geometry and add their own fields.
 | `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). |
 | `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
 | `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Box` fill; layout inset still comes from `Pad` and the border. Terminal-only: prefer `Box` when it can say what you need. |
-| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). `Round` asks a window to round a background's corners (a pill when one line tall); the terminal draws it square. |
+| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`, `Round`, `Title`, `TitleStyle`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). `Round` asks a window to round a background's corners (a pill when one line tall); the terminal draws it square. `Title` labels a border: the terminal writes ` Title ` in `TitleStyle` into the top rule, a window sets it in the stroke. |
 
 ### Size kinds
 
@@ -145,7 +145,8 @@ whole viewport.
 | `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. `Wrap: true` wraps it by words at its width (cells in the terminal, the font in a window): it fills an Auto width, and its Auto height is the wrapped line count at the width it gets. |
 | `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`; `IconBlank` draws nothing — terminal-only decoration) in the same columns. Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
 | `layout.Meter{Value: ..., Fill: ..., Track: ...}` | A horizontal gauge filled to `Value` (0..1): `█`/`░` cells in the terminal, a native bar in a window; fills the width on Auto, one line tall. |
-| `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. |
+| `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. `Multiline: true` makes it a text area (usually from `Textarea.Layout`): `Wrap` soft-wraps, `SelStart`/`SelEnd` select bytes (shown in `SelectionStyle`, reverse video when zero), `OffsetX`/`OffsetY` are the widget's scroll, and its Auto height grows. |
+| `layout.ScrollBar{Offset: ..., Visible: ..., Total: ..., Color: ...}` | Where a scrolled window is: `█` thumb on `░` track in the terminal (blank when everything fits), a thin native thumb in a window. One column wide, fills the height. |
 | `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
 | `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY`. See [Scrolling](#scrolling). |
@@ -257,8 +258,10 @@ layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
 }}
 ```
 
-A focused Input scrolls horizontally to keep its caret visible. Set
-`Frame.Cursor` yourself when you need a cursor somewhere else; it wins.
+A focused Input scrolls horizontally to keep its caret visible.
+`Frame.CursorStyle` styles that cursor (for example a steady bar for an
+editor). Set `Frame.Cursor` yourself when you need a cursor somewhere else;
+it wins.
 `cmd/flat-modal` shows the shape.
 
 ### Widgets in a layout tree
@@ -275,6 +278,7 @@ frame tree instead of being rendered and positioned by hand:
 | `flatui.Viewport` | A `layout.Scroll` over its lines at the current offset, as tall as the visible slice: a `Label` when plain (for `SetWrappedContent`, a wrapping `Label` of the raw text, so a window wraps it in its font), a `Text` when styled. Wrapped content breaks at words. |
 | `flatui.Progress` | A `layout.Meter` of the bar's width and the percent label: the same text in the terminal, a native bar in a window. |
 | `flatui.TextField` | `Layout(id, focused)`: a `layout.Input` showing the value and caret. |
+| `flatui.Textarea` | `Layout(id, focused)`: a multi-line `layout.Input` with the value, cursor, selection, soft-wrap, and scroll — in the terminal the same cells as `ViewWithSelection`. Size it from the node's rect (`LayoutEvent`). In a window it wraps by words in the UI font, while up/down still move by the terminal's rows. |
 
 ### Geometry-based hit-testing
 
@@ -361,15 +365,17 @@ err := window.Run(ctx, app, window.Options{Title: "My App", Width: 80, Height: 2
 
 `Run` must be called from the main goroutine. The window draws `Label`s in
 the system font by role (titles semibold), `Box` borders as rounded strokes
-(an overlay's box as a raised surface), and `Input`s as outlined text fields
-with input-method support; ANSI `Text`, `Chrome`, and string frames show as
+(an overlay's box as a raised surface; a `Title` in the stroke), `Input`s as
+outlined text fields with input-method support (multi-line ones as text
+areas), and `ScrollBar`s as thin thumbs; ANSI `Text`, `Chrome`, and string frames show as
 a monospace cell grid with line-drawing, block, and Powerline characters
 drawn as shapes, so every app runs. Layout runs in points — `Fixed` sizes
 are columns and lines (a line is the UI font's height plus line spacing),
 `Pad`/`Gap` are 8pt steps, and a border takes a 12pt band with its stroke
 down the middle, as a terminal border takes a cell — while `ResizeEvent`, `LayoutEvent`, and `MouseEvent` stay in
 cells (`X - TargetRect.X` is exact inside the target). Ctrl-C goes to
-`Handle`; quit with ⌘Q or by closing the window. `window.Snapshot` renders
+`Handle`; quit with ⌘Q or by closing the window. ⌘←/⌘→ arrive as
+`KeyHome`/`KeyEnd` (Shift kept); other ⌘ chords belong to the menu. `window.Snapshot` renders
 the first frame to an image for visual tests. Backend authors draw the ops
 of `layout.LayoutScene`.
 

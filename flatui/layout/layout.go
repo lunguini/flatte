@@ -225,13 +225,18 @@ const (
 // current selection: a GUI highlights it, while the terminal adds nothing
 // (the app's markers and styles show selection there). Round asks a GUI to
 // round a background's corners (a pill when the box is one line tall); the
-// terminal cannot, and draws it square.
+// terminal cannot, and draws it square. Title labels a border: the terminal
+// writes " Title " in TitleStyle into the top rule after its first rule
+// glyph (cut to fit), and a GUI sets it in the top stroke, which breaks
+// around it.
 type Box struct {
 	Border      BorderKind
 	BorderColor color.Color
 	Background  color.Color
 	Selected    bool
 	Round       bool
+	Title       string
+	TitleStyle  TextStyle
 }
 
 // box resolves the Bordered shorthand into the effective Box.
@@ -364,7 +369,35 @@ func fillBox(content string, r Rect, pad sides, box Box) string {
 		}
 	}
 
-	return style.Render(content)
+	out := style.Render(content)
+	if bordered && box.Title != "" {
+		out = titled(out, r.W, box)
+	}
+	return out
+}
+
+// titled writes box's title into the top rule of a bordered block w cells
+// wide, after the corner and one rule glyph; a block too narrow for a
+// title character keeps its rule.
+func titled(block string, w int, box Box) string {
+	avail := w - 3 // corner, rule glyph, ..., corner
+	if avail < 1 {
+		return block
+	}
+	title := box.TitleStyle.Render(" " + box.Title + " ")
+	if lipgloss.Width(title) > avail {
+		title = ansi.Truncate(title, avail, "")
+	}
+	b := box.lipglossBorder()
+	rule := lipgloss.NewStyle()
+	if box.BorderColor != nil {
+		rule = rule.Foreground(box.BorderColor)
+	}
+	top := rule.Render(b.TopLeft+b.Top) + title + rule.Render(strings.Repeat(b.Top, avail-lipgloss.Width(title))+b.TopRight)
+	if i := strings.IndexByte(block, '\n'); i >= 0 {
+		return top + block[i:]
+	}
+	return top
 }
 
 // clipToBox truncates content to at most h lines of w visible columns.
