@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 const defaultTickInterval = 300 * time.Millisecond
@@ -185,13 +187,21 @@ func tickInterval() time.Duration {
 }
 
 func main() {
-	state := NewState()
-	err := flatte.Run(context.Background(), flatte.App[State]{
-		State:  state,
+	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	flag.Parse()
+	app := flatte.App[State]{
+		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,
 		View:   View,
-	})
+	}
+	// Same app, either host.
+	var err error
+	if *gui {
+		err = window.Run(context.Background(), app, window.Options{Title: "Flat Modal", Width: 72, Height: 24})
+	} else {
+		err = flatte.Run(context.Background(), app)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

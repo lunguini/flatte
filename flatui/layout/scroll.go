@@ -1,9 +1,5 @@
 package layout
 
-import (
-	uv "github.com/charmbracelet/ultraviolet"
-)
-
 // Scroll shows Child through a window: the child is laid out at its natural
 // height and the Scroll's inner box (inside Pad/Bordered) shows the rows
 // starting at OffsetY. Painting and hit-testing are clipped to that window, so
@@ -36,20 +32,8 @@ type Scroll struct {
 // Grow(1): a Scroll exists to be smaller than its content, so measuring the
 // content would defeat it.
 func (s Scroll) Size() (Size, Size) {
-	w, h := s.NodeBase.Size()
-	if w.Kind == SizeAuto && s.Child != nil && !isOverlay(s.Child) {
-		cw, _ := s.Child.Size()
-		switch cw = normalizeSize(cw); cw.Kind {
-		case SizeFixed, SizeContent:
-			w = Size{Kind: SizeContent, Value: satAdd(cw.Value, s.insetSides().horiz())}
-		case SizeGrow:
-			w = Grow(1)
-		}
-	}
-	if h.Kind == SizeAuto {
-		h = Grow(1)
-	}
-	return w, h
+	w, h := intrinsic[int](cells{}, s)
+	return fromSized(w), fromSized(h)
 }
 
 // Render composes the Scroll into a block sized to rect through the shared
@@ -82,41 +66,7 @@ func (s Scroll) scroll() (Node, int) { return s.Child, s.OffsetY }
 // The walk uses it, so an app clamping its own OffsetY with it agrees with
 // what is painted. Negative heights count as zero.
 func ClampScroll(offset, viewport, content int) int {
-	return min(max(offset, 0), nonNegative(satSub(nonNegative(content), nonNegative(viewport))))
-}
-
-// scrollContentHeight is the height the child of a Scroll is laid out at for
-// a window viewport rows tall (see the Scroll doc).
-func scrollContentHeight(h Size, viewport int) int {
-	switch h = normalizeSize(h); h.Kind {
-	case SizeFixed:
-		return h.Value
-	case SizeContent:
-		return max(h.Value, viewport)
-	default:
-		return viewport
-	}
+	return clampScrollOf[int](cells{}, offset, viewport, content)
 }
 
 type scroller interface{ scroll() (Node, int) }
-
-// walkScroll lays a Scroll's child out at its natural height behind the
-// Scroll's inner box and walks it with the clip narrowed to that box.
-func walkScroll(s scroller, r Rect, buf *uv.ScreenBuffer, state *walkState) {
-	n := s.(Node)
-	paintChrome(n, r, buf, state)
-	child, offset := s.scroll()
-	if child == nil || isOverlay(child) {
-		return
-	}
-	inner := r.insetBy(getInsetSides(n))
-	cw, ch := child.Size()
-	contentH := scrollContentHeight(ch, inner.H)
-	offset = ClampScroll(offset, inner.H, contentH)
-	cr := Rect{inner.X, satSub(inner.Y, offset), crossAxis(cw, inner.W), contentH}
-
-	saved := state.clip
-	state.clip = saved.Intersect(inner)
-	walk(child, cr, buf, state)
-	state.clip = saved
-}

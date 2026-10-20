@@ -346,6 +346,26 @@ For app-defined regions (rows, dividers), give nodes IDs and look their rects
 up directly, or feed rects into `flatui.ZoneMap` (`Clear`, then `Set(id, rect)`,
 then `At(x, y)`). `ZoneScanner` remains as deprecated compatibility API.
 
+## Native Window
+
+The `window` module (`github.com/lunguini/flatte/window`, macOS, no cgo) runs
+the same `App[S]` in a desktop window; choose the host at the call site:
+
+```go
+err := window.Run(ctx, app, window.Options{Title: "My App", Width: 80, Height: 24})
+```
+
+`Run` must be called from the main goroutine. The window draws `Label`s in
+the system font by role, `Box`es as rounded or plain rects, and `Input`s as
+text fields with input-method support; ANSI `Text`, `Chrome`, and string
+frames show as a monospace cell grid, so every app runs. Layout runs in
+points — `Fixed` sizes are columns and lines of the UI font, `Pad`/`Gap` are
+8pt steps — while `ResizeEvent`, `LayoutEvent`, and `MouseEvent` stay in
+cells (`X - TargetRect.X` is exact inside the target). Ctrl-C goes to
+`Handle`; quit with ⌘Q or by closing the window. `window.Snapshot` renders
+the first frame to an image for visual tests. Backend authors draw the five
+ops of `layout.LayoutScene`.
+
 ## Async And Effects
 
 Application code should use the helpers below. The deprecated raw-channel

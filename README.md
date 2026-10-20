@@ -135,11 +135,16 @@ $env:FLATTE_WINDOWS_RESIZE_TTY = "1"
   `Textarea`, `Viewport`, `List`, `Table`, `Tree`, `FocusRing`, `Paginator`,
   `Progress`, `Spinner`, `Timer`, and `Stopwatch`.
 - `github.com/lunguini/flatte/flatui/layout` - flexbox-style layout engine
-  (`Row`, `Col`, `Text`, `Spacer`) that solves a frame tree once into composed
-  content plus per-ID rects for geometry-based hit-testing; return the tree as
-  `Frame.Root` and the runtime composes it and fills `MouseEvent.Target`.
+  (`Row`, `Col`, `Scroll`, `Label`, `Input`, `Text`, `Spacer`) that solves a
+  frame tree once into composed content plus per-ID rects for geometry-based
+  hit-testing; return the tree as `Frame.Root` and the runtime composes it
+  and fills `MouseEvent.Target`. The same tree solves in points for GUI
+  backends (`LayoutScene`).
 - `github.com/lunguini/flatte/flatest` - deterministic app driver, golden
   assertions, frame rendering, and replay helpers.
+- `github.com/lunguini/flatte/window` (separate module) - runs the same app in
+  a native window with real text and components; macOS, no cgo. Choose the
+  host at the call site: `window.Run(ctx, app, window.Options{})`.
 
 ## Navigation Patterns
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -10,6 +11,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/cmd/internal/persist"
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 // State is the single mutable state struct. All fields are gob-serializable.
@@ -102,17 +104,25 @@ func main() {
 	}()
 	defer signal.Stop(sigCh)
 
+	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	flag.Parse()
 	state, loadErr := persist.Load(stateFile, State{})
 
 	var saveErr error
-	runErr := flatte.Run(ctx, flatte.App[State]{
+	app := flatte.App[State]{
 		State:  &state,
 		Handle: Handle,
 		View:   View,
 		OnExit: func(s *State) {
 			saveErr = persist.Save(stateFile, *s, loadErr)
 		},
-	}, flatte.WithMouse(flatte.MouseModeNone))
+	}
+	var runErr error
+	if *gui {
+		runErr = window.Run(ctx, app, window.Options{Title: "flat-layout"})
+	} else {
+		runErr = flatte.Run(ctx, app, flatte.WithMouse(flatte.MouseModeNone))
+	}
 	// Run restores the terminal before returning, keeping the diagnostic
 	// visible when this watcher restarts the sample.
 	if runErr != nil {

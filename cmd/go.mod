@@ -12,6 +12,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/ebitengine/purego v0.11.2
 	github.com/lunguini/flatte v0.0.0
+	github.com/lunguini/flatte/window v0.0.0
 	golang.org/x/term v0.45.0
 )
 
@@ -41,3 +42,5 @@ require (
 )
 
 replace github.com/lunguini/flatte => ..
+
+replace github.com/lunguini/flatte/window => ../window

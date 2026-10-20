@@ -97,148 +97,74 @@ func Compose(root Node, width, height int) Composition {
 	if width <= 0 || height <= 0 {
 		return Composition{Rects: map[string]Rect{}}
 	}
-	buf := uv.NewScreenBuffer(width, height)
-	rects := make(map[string]Rect)
-	state := walkState{rects: rects, first: make(map[string]Rect), clip: Rect{0, 0, width, height}}
-	// Overlay roots do not participate in the base pass. They are painted by
-	// the centered overlay pass below; walking one here first would paint it at
-	// the viewport origin and then paint it a second time at its centered rect.
-	if !isOverlay(root) {
-		walk(root, Rect{0, 0, width, height}, &buf, &state)
+	p := &cellPainter{buf: uv.NewScreenBuffer(width, height)}
+	s := solveTree[int](cells{}, root, width, height, p)
+	c := Composition{Rects: cellRects(s), Diagnostics: cellDiagnostics(s), caret: p.caret}
+	c.hits = make([]hit, len(s.hits))
+	for i, h := range s.hits {
+		c.hits[i] = hit{id: h.id, rect: Rect(h.rect), area: Rect(h.area)}
 	}
-
-	// Overlay pass: centered layers composed on top of the resolved base.
-	// Clear the layer's rect first (matching the string compositor's FillArea)
-	// so the base cannot bleed through cells the overlay does not paint, then
-	// recurse through the normal walk so overlay descendants get rects recorded
-	// and container chrome is painted by the compositor rather than the legacy
-	// string path.
-	for _, o := range findOverlays(root) {
-		mr := centerRect(o, width, height)
-		buf.FillArea(&uv.EmptyCell, uv.Rect(mr.X, mr.Y, mr.W, mr.H))
-		walkOverlay(o, mr, &buf, &state)
-	}
-	return Composition{Frame: buf.Render(), Rects: rects, Diagnostics: state.diagnostics, hits: state.hits, caret: state.caret}
+	c.Frame = p.buf.Render()
+	return c
 }
 
-type walkState struct {
-	rects       map[string]Rect
-	first       map[string]Rect
-	diagnostics []DuplicateIDDiagnostic
-	hits        []hit
-	// clip is the visible region: the frame, narrowed by each enclosing
-	// Scroll's window. Painting and hit areas are confined to it.
-	clip Rect
-	// caret is the last visible focused Input caret in paint order.
-	caret *caretPos
+func cellRects(s *solver[int]) map[string]Rect {
+	rects := make(map[string]Rect, len(s.rects))
+	for id, r := range s.rects {
+		rects[id] = Rect(r)
+	}
+	return rects
+}
+
+func cellDiagnostics(s *solver[int]) []DuplicateIDDiagnostic {
+	var out []DuplicateIDDiagnostic
+	for _, d := range s.dups {
+		out = append(out, DuplicateIDDiagnostic{ID: d.id, FirstRect: Rect(d.first), Duplicate: Rect(d.dupe)})
+	}
+	return out
 }
 
 type caretNode interface {
 	caret(r Rect) (x, y int, ok bool)
 }
 
-// walkOverlay walks an overlay layer after recording it as a hit barrier, so
-// the layer's own nodes (recorded during the walk) sit above the barrier and
-// the barrier sits above everything painted before it.
-func walkOverlay(o Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
-	state.hits = append(state.hits, hit{rect: r, area: r.Intersect(state.clip)})
-	walk(o, r, buf, state)
+// cellPainter composes the terminal frame for the cell solver: leaves are
+// rendered and drawn at their solved cells, clipped to the visible region;
+// overlay layers clear their rect first so the base cannot bleed through
+// cells the overlay does not paint.
+type cellPainter struct {
+	buf uv.ScreenBuffer
+	// caret is the last visible focused Input caret in paint order.
+	caret *caretPos
 }
 
-// walk is the single solve+paint traversal shared by Solve and SolveAndCompose.
-// It distributes rects top-down and records every ID'd node's rect. When buf is
-// non-nil it also paints each leaf's Render into the buffer at its solved
-// position (composition); with buf nil it is geometry-only (hit-testing). One
-// distribution computation feeds both, so painted geometry and hit-test
-// geometry cannot drift.
-//
-// Only nodes that are not childContainers (Text, Spacer, widgets) have their
-// Render called here. Containers are distributed structurally and never
-// Render'd by the walk, so Row/Col may delegate their own Render back to
-// SolveAndCompose without risking infinite recursion.
-func walk(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
-	if id := getID(n); id != "" {
-		if first, ok := state.first[id]; ok {
-			state.diagnostics = append(state.diagnostics, DuplicateIDDiagnostic{ID: id, FirstRect: first, Duplicate: r})
-		} else {
-			state.first[id] = r
+func (p *cellPainter) leaf(n Node, rr, cc rect[int]) {
+	r, clip := Rect(rr), Rect(cc)
+	// paintClipped bounds an over-wide or over-tall string to its rect and
+	// skips a leaf scrolled out of view.
+	paintClipped(p.buf, r, clip, n.Render)
+	if cn, ok := n.(caretNode); ok {
+		if x, y, ok := cn.caret(r); ok && clip.Contains(x, y) {
+			p.caret = &caretPos{x, y}
 		}
-		state.rects[id] = r
-		state.hits = append(state.hits, hit{id: id, rect: r, area: r.Intersect(state.clip)})
 	}
+}
 
-	if s, ok := n.(scroller); ok {
-		walkScroll(s, r, buf, state)
-		return
-	}
+func (p *cellPainter) chrome(n Node, r, clip rect[int]) { paintChrome(n, Rect(r), p.buf, Rect(clip)) }
 
-	container, isContainer := n.(childContainer)
-	if !isContainer {
-		// Leaf: paint its render at r. paintClipped clips to r, so an over-wide
-		// or over-tall string is bounded to the rect it was given, and to the
-		// visible region, so a leaf scrolled out of view is not rendered.
-		if buf != nil {
-			paintClipped(*buf, r, state.clip, n.Render)
-		}
-		if cn, ok := n.(caretNode); ok {
-			if x, y, ok := cn.caret(r); ok && state.clip.Contains(x, y) {
-				state.caret = &caretPos{x, y}
-			}
-		}
-		return
-	}
-
-	paintChrome(n, r, buf, state)
-
-	children := nonOverlayChildren(container.GetChildren())
-	if len(children) == 0 {
-		return
-	}
-
-	gap := getGap(n)
-	horizontal := container.IsHorizontal()
-	inner := r.insetBy(getInsetSides(n))
-	mainSizes := distributeMain(children, horizontal, gap, mainAvail(inner, horizontal))
-
-	pos := inner.X
-	mainOrigin := inner.X
-	if !horizontal {
-		pos = inner.Y
-		mainOrigin = inner.Y
-	}
-	innerEnd := rectEnd(mainOrigin, mainAvail(inner, horizontal))
-	for i, c := range children {
-		cw, ch := c.Size()
-		var cr Rect
-		if horizontal {
-			cross := crossAxis(ch, inner.H)
-			cr = Rect{pos, inner.Y, mainSizes[i], cross}
-		} else {
-			cross := crossAxis(cw, inner.W)
-			cr = Rect{inner.X, pos, cross, mainSizes[i]}
-		}
-		// Clamp to the parent's inner box: Fixed/Content children are not shrunk
-		// by distribution, so an overflowing row/col would otherwise place a
-		// child rect past the frame edge.
-		cr = cr.Intersect(inner)
-		walk(c, cr, buf, state)
-		step := satAdd(mainSizes[i], gap)
-		pos = min(innerEnd, satAdd(pos, step))
-	}
+func (p *cellPainter) layer(r rect[int]) {
+	p.buf.FillArea(&uv.EmptyCell, uv.Rect(r.X, r.Y, r.W, r.H))
 }
 
 // paintChrome paints a container's own border/background chrome (if any)
 // before its children are painted on top inside the inset region. A custom
 // Chrome painter replaces the default Pad/Box fill and is painted even with
 // zero inset; the layout inset itself still comes from Pad and the border.
-func paintChrome(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
-	if buf == nil {
-		return
-	}
+func paintChrome(n Node, r Rect, buf uv.ScreenBuffer, clip Rect) {
 	if ch := getChrome(n); ch != nil {
-		paintClipped(*buf, r, state.clip, ch)
+		paintClipped(buf, r, clip, ch)
 	} else if box := getBox(n); getInsetSides(n).any() || box.hasBackground() {
-		paintClipped(*buf, r, state.clip, func(r Rect) string {
+		paintClipped(buf, r, clip, func(r Rect) string {
 			return fillBox("", r, getPadSides(n), box)
 		})
 	}

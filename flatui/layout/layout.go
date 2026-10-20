@@ -63,27 +63,16 @@ func nonNegative(n int) int {
 	return n
 }
 
-func rectEnd(origin, size int) int {
-	return satAdd(origin, nonNegative(size))
-}
-
 func (r Rect) Inset(n int) Rect {
 	return r.insetBy(sides{top: n, right: n, bottom: n, left: n})
 }
 
 // insetBy shrinks r by a per-side inset.
 func (r Rect) insetBy(s sides) Rect {
-	w, h := max(r.W, 0), max(r.H, 0)
-	left := min(nonNegative(s.left), w)
-	right := min(nonNegative(s.right), w-left)
-	top := min(nonNegative(s.top), h)
-	bottom := min(nonNegative(s.bottom), h-top)
-	return Rect{satAdd(r.X, left), satAdd(r.Y, top), w - left - right, h - top - bottom}
+	return Rect(insetOf[int](cells{}, rect[int](r), sidesOf[int]{s.top, s.right, s.bottom, s.left}))
 }
 
-func (r Rect) Contains(x, y int) bool {
-	return x >= r.X && x < rectEnd(r.X, r.W) && y >= r.Y && y < rectEnd(r.Y, r.H)
-}
+func (r Rect) Contains(x, y int) bool { return containsOf[int](cells{}, rect[int](r), x, y) }
 
 // Intersect returns the overlapping region of r and s. If they do not overlap,
 // it returns a zero-area rect anchored at the clamped corner. It is used to
@@ -91,21 +80,7 @@ func (r Rect) Contains(x, y int) bool {
 // overflow (e.g. two Fixed(8) children in a 10-wide row) can never yield a rect
 // that escapes the parent or the frame — hit-testing trusts these rects.
 func (r Rect) Intersect(s Rect) Rect {
-	x0 := max(r.X, s.X)
-	y0 := max(r.Y, s.Y)
-	x1 := min(rectEnd(r.X, r.W), rectEnd(s.X, s.W))
-	y1 := min(rectEnd(r.Y, r.H), rectEnd(s.Y, s.H))
-	// On no overlap, collapse the origin onto the clamped far edge so the empty
-	// rect still sits inside s rather than reporting an out-of-bounds corner.
-	if x0 > x1 {
-		x0 = min(max(x1, s.X), rectEnd(s.X, s.W))
-		x1 = x0
-	}
-	if y0 > y1 {
-		y0 = min(max(y1, s.Y), rectEnd(s.Y, s.H))
-		y1 = y0
-	}
-	return Rect{x0, y0, nonNegative(satSub(x1, x0)), nonNegative(satSub(y1, y0))}
+	return Rect(intersectOf[int](cells{}, rect[int](r), rect[int](s)))
 }
 
 type SizeKind int
@@ -321,124 +296,6 @@ func (n NodeBase) insetSides() sides {
 
 func (n NodeBase) chrome() func(Rect) string { return n.Chrome }
 
-// --- Distribution helpers (shared by Row and Col) ---
-
-// distributeMain computes main-axis sizes for children.
-// horizontal=true for Row, false for Col.
-func distributeMain(children []Node, horizontal bool, gap, avail int) []int {
-	n := len(children)
-	if n == 0 {
-		return nil
-	}
-	gap = max(gap, 0)
-	avail = nonNegative(avail)
-	if n > 1 {
-		gaps := n - 1
-		if gap > avail/gaps {
-			avail = 0
-		} else {
-			avail -= gap * gaps
-		}
-	}
-
-	// Collect sizes, sum fixed, sum grow weights.
-	sizes := make([]Size, n)
-	fixedSum := 0
-	growSum := 0.0
-	maxGrow := 0.0
-	growCount := 0
-	for i, c := range children {
-		cw, ch := c.Size()
-		if horizontal {
-			sizes[i] = normalizeSize(cw)
-		} else {
-			sizes[i] = normalizeSize(ch)
-		}
-		switch sizes[i].Kind {
-		case SizeFixed, SizeContent:
-			fixedSum = satAdd(fixedSum, sizes[i].Value)
-		case SizeGrow:
-			growSum += sizes[i].Weight
-			if sizes[i].Weight > maxGrow {
-				maxGrow = sizes[i].Weight
-			}
-			growCount++
-		}
-	}
-
-	// Degenerate input: grow children exist but their weights sum to zero
-	// (Grow(0) or a zero-value Size{Kind: SizeGrow}). Treat them as equal
-	// weight so the space is shared rather than dropped.
-	equalGrow := growCount > 0 && growSum == 0
-	if equalGrow {
-		growSum = float64(growCount)
-	}
-
-	fixedBudget := min(fixedSum, avail)
-	remaining := avail - fixedBudget
-	// A finite but huge collection of finite weights can overflow growSum.
-	// Normalize by the largest weight in that case; the resulting denominator
-	// is bounded by the number of children and preserves proportions.
-	useScaledGrow := math.IsInf(growSum, 0)
-	if useScaledGrow {
-		growSum = 0
-		for _, s := range sizes {
-			if s.Kind == SizeGrow && maxGrow > 0 {
-				growSum += s.Weight / maxGrow
-			}
-		}
-	}
-
-	result := make([]int, n)
-	growUsed := 0
-	fixedUsed := 0
-	for i, s := range sizes {
-		switch s.Kind {
-		case SizeFixed, SizeContent:
-			claim := s.Value
-			if fixedUsed >= fixedBudget {
-				claim = 0
-			} else {
-				claim = min(claim, fixedBudget-fixedUsed)
-			}
-			result[i] = claim
-			fixedUsed += claim
-		case SizeGrow:
-			w := s.Weight
-			if equalGrow {
-				w = 1
-			}
-			if useScaledGrow && maxGrow > 0 {
-				w /= maxGrow
-			}
-			if growSum > 0 && remaining > 0 {
-				result[i] = fractionOf(remaining, w/growSum)
-			}
-			growUsed = min(remaining, satAdd(growUsed, result[i]))
-		}
-	}
-
-	// Distribute the rounding remainder to Grow children in O(n), rather than
-	// decrementing one cell at a time. The latter can take effectively forever
-	// when a tiny relative weight rounds every initial share to zero while the
-	// available width is MaxInt.
-	rem := remaining - growUsed
-	if rem > 0 && growCount > 0 {
-		per, extra := rem/growCount, rem%growCount
-		for i, s := range sizes {
-			if s.Kind != SizeGrow {
-				continue
-			}
-			result[i] = satAdd(result[i], per)
-			if extra > 0 {
-				result[i] = satAdd(result[i], 1)
-				extra--
-			}
-		}
-	}
-	return result
-}
-
 // fractionOf returns floor(total*ratio), clamped to total. Keeping the
 // conversion behind an explicit cap avoids converting 2^wordsize to a
 // negative int when float64 rounds MaxInt up to the next power of two.
@@ -454,51 +311,6 @@ func fractionOf(total int, ratio float64) int {
 		return total
 	}
 	return int(v)
-}
-
-// crossAxis returns the cross-axis dimension for a child.
-// Fixed pins; everything else stretches to fill.
-func crossAxis(s Size, avail int) int {
-	s = normalizeSize(s)
-	avail = max(avail, 0)
-	if s.Kind == SizeFixed && s.Value < avail {
-		return s.Value
-	}
-	return avail
-}
-
-// measureChildren computes the intrinsic main-axis and cross-axis for a
-// container with Auto sizing. It also reports whether any child is Grow on the
-// main or cross axis, so a container whose only claim on an axis is "grow" can
-// itself report Grow(1) instead of collapsing to zero.
-func measureChildren(children []Node, horizontal bool, gap int) (main, cross int, mainGrow, crossGrow bool) {
-	gap = max(gap, 0)
-	for i, c := range children {
-		cw, ch := c.Size()
-		cw, ch = normalizeSize(cw), normalizeSize(ch)
-		var m, cr Size
-		if horizontal {
-			m, cr = cw, ch
-		} else {
-			m, cr = ch, cw
-		}
-		if m.Kind == SizeFixed || m.Kind == SizeContent {
-			main = satAdd(main, m.Value)
-		}
-		if m.Kind == SizeGrow {
-			mainGrow = true
-		}
-		if i > 0 {
-			main = satAdd(main, gap)
-		}
-		if cr.Kind == SizeGrow {
-			crossGrow = true
-		}
-		if (cr.Kind == SizeFixed || cr.Kind == SizeContent) && cr.Value > cross {
-			cross = cr.Value
-		}
-	}
-	return
 }
 
 // --- Rendering helpers ---
@@ -596,27 +408,8 @@ func SolveWithDiagnostics(root Node, width, height int) (map[string]Rect, []Dupl
 	if width <= 0 || height <= 0 {
 		return map[string]Rect{}, nil
 	}
-	rects := make(map[string]Rect)
-	state := walkState{rects: rects, first: make(map[string]Rect), clip: Rect{0, 0, width, height}}
-	// Match SolveAndCompose: an overlay root is resolved only at its centered
-	// layer rect, never once as a viewport-sized base node.
-	if !isOverlay(root) {
-		walk(root, Rect{0, 0, width, height}, nil, &state)
-	}
-	// Overlay pass: recurse so overlay descendants get rects too, matching
-	// SolveAndCompose's overlay walk for hit-test parity.
-	for _, o := range findOverlays(root) {
-		mr := centerRect(o, width, height)
-		walkOverlay(o, mr, nil, &state)
-	}
-	return rects, state.diagnostics
-}
-
-func mainAvail(inner Rect, horizontal bool) int {
-	if horizontal {
-		return inner.W
-	}
-	return inner.H
+	s := solveTree[int](cells{}, root, width, height, nil)
+	return cellRects(s), cellDiagnostics(s)
 }
 
 // --- Overlay helpers ---
@@ -635,40 +428,6 @@ func findOverlays(n Node) []Node {
 func isOverlay(n Node) bool {
 	o, ok := n.(interface{ IsOverlay() bool })
 	return ok && o.IsOverlay()
-}
-
-func centerRect(n Node, vpW, vpH int) Rect {
-	w, h := n.Size()
-	lw := resolveLayerSize(w, vpW)
-	lh := resolveLayerSize(h, vpH)
-	return Rect{(vpW - lw) / 2, (vpH - lh) / 2, lw, lh}
-}
-
-// resolveLayerSize maps an overlay layer's one-axis Size to a concrete cell
-// count within the viewport. Fixed and Content are exact sizes clamped to the
-// viewport — Content is a measured natural size, so an overlay whose Size()
-// reports Content (e.g. a Col of measurable children) is content-sized, not
-// stretched. Auto means "no measurable content on this axis" and fills the
-// whole viewport. For Grow, Weight carries a meaning specific to overlays:
-// Weight>=1 means the full viewport and Weight<1 means that fraction of the
-// viewport (see the Size doc for why this dual meaning is intentional).
-func resolveLayerSize(s Size, viewport int) int {
-	s = normalizeSize(s)
-	viewport = max(viewport, 0)
-	switch s.Kind {
-	case SizeFixed, SizeContent:
-		if s.Value > viewport {
-			return viewport
-		}
-		return s.Value
-	case SizeGrow:
-		if s.Weight >= 1 {
-			return viewport
-		}
-		return int(float64(viewport) * s.Weight)
-	default: // SizeAuto
-		return viewport
-	}
 }
 
 // --- Small helpers ---

@@ -609,6 +609,7 @@ flatui/layout package layout
   func Compose(root Node, width int, height int) Composition
   func Fixed(n int) Size
   func Grow(w float64) Size
+  func LayoutScene(root Node, width float64, height float64, m Metrics) Scene
   func NewSpacer() *Spacer
   func Overlay(base string, layer string) string
   func OverlayOrigin(base string, layer string)(x int, y int)
@@ -632,6 +633,7 @@ flatui/layout package layout
   method NodeBase.GetID() string
   method NodeBase.IsOverlay() bool
   method NodeBase.Size()(Size, Size)
+  method PointRect.Cells(m Metrics) Rect
   method Rect.Contains(x int, y int) bool
   method Rect.Inset(n int) Rect
   method Rect.Intersect(s Rect) Rect
@@ -640,6 +642,7 @@ flatui/layout package layout
   method Row.IsHorizontal() bool
   method Row.Render(rect Rect) string
   method Row.Size()(Size, Size)
+  method Scene.HitTest(x float64, y float64)(string, PointRect)
   method Scroll.GetChildren()[]Node
   method Scroll.IsHorizontal() bool
   method Scroll.Render(rect Rect) string
@@ -683,6 +686,18 @@ flatui/layout package layout
   field Box.BorderColor color.Color [order=1]
   field Box.Background color.Color [order=2]
   struct Box fields=3 comparable=true
+  type BoxOp struct
+  field BoxOp.Rect PointRect [order=0]
+  field BoxOp.Clip PointRect [order=1]
+  field BoxOp.Box Box [order=2]
+  struct BoxOp fields=3 comparable=true
+  type CellsOp struct
+  field CellsOp.Rect PointRect [order=0]
+  field CellsOp.Clip PointRect [order=1]
+  field CellsOp.Cols int [order=2]
+  field CellsOp.Lines int [order=3]
+  field CellsOp.Content string [order=4]
+  struct CellsOp fields=5 comparable=true
   type Col struct
   field Col.NodeBase NodeBase [order=0]
   field Col.Children []Node [order=1]
@@ -707,11 +722,31 @@ flatui/layout package layout
   field Input.Focused bool [order=4]
   field Input.Style TextStyle [order=5]
   struct Input fields=6 comparable=false
+  type InputOp struct
+  field InputOp.ID string [order=0]
+  field InputOp.Rect PointRect [order=1]
+  field InputOp.Clip PointRect [order=2]
+  field InputOp.Value string [order=3]
+  field InputOp.Caret int [order=4]
+  field InputOp.Placeholder string [order=5]
+  field InputOp.Focused bool [order=6]
+  field InputOp.Style TextStyle [order=7]
+  struct InputOp fields=8 comparable=true
   type Label struct
   field Label.NodeBase NodeBase [order=0]
   field Label.Text string [order=1]
   field Label.Style TextStyle [order=2]
   struct Label fields=3 comparable=false
+  type LayerOp struct
+  field LayerOp.Rect PointRect [order=0]
+  struct LayerOp fields=1 comparable=true
+  type Metrics struct
+  field Metrics.Column float64 [order=0]
+  field Metrics.Line float64 [order=1]
+  field Metrics.Step float64 [order=2]
+  field Metrics.Border float64 [order=3]
+  field Metrics.MeasureText func(text string, style TextStyle)(w float64, h float64) [order=4]
+  struct Metrics fields=5 comparable=false
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)
@@ -730,6 +765,14 @@ flatui/layout package layout
   field NodeBase.Chrome func(r Rect) string [order=11]
   field NodeBase.Box Box [order=12]
   struct NodeBase fields=13 comparable=false
+  type Op interface
+  interface Op method isOp()
+  type PointRect struct
+  field PointRect.X float64 [order=0]
+  field PointRect.Y float64 [order=1]
+  field PointRect.W float64 [order=2]
+  field PointRect.H float64 [order=3]
+  struct PointRect fields=4 comparable=true
   type Rect struct
   field Rect.X int [order=0]
   field Rect.Y int [order=1]
@@ -740,6 +783,11 @@ flatui/layout package layout
   field Row.NodeBase NodeBase [order=0]
   field Row.Children []Node [order=1]
   struct Row fields=2 comparable=false
+  type Scene struct
+  field Scene.Ops []Op [order=0]
+  field Scene.Rects map[string] PointRect [order=1]
+  field Scene.<unexported> []hitOf[float64] [order=2]
+  struct Scene fields=3 comparable=false
   type Scroll struct
   field Scroll.NodeBase NodeBase [order=0]
   field Scroll.OffsetY int [order=1]
@@ -759,6 +807,12 @@ flatui/layout package layout
   field Text.NodeBase NodeBase [order=0]
   field Text.String string [order=1]
   struct Text fields=2 comparable=false
+  type TextOp struct
+  field TextOp.Rect PointRect [order=0]
+  field TextOp.Clip PointRect [order=1]
+  field TextOp.Text string [order=2]
+  field TextOp.Style TextStyle [order=3]
+  struct TextOp fields=4 comparable=true
   type TextRole int
   type TextStyle struct
   field TextStyle.Role TextRole [order=0]

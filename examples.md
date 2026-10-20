@@ -32,7 +32,7 @@ go run ./flat-pages
 | Sample | Demonstrates |
 |---|---|
 | `flat-pages` | Multi-screen navigation with a screen enum |
-| `flat-modal` | Overlay/modal state without a modal manager, as a `Frame.Root` tree of `Label` roles and `Box` cards; the modal's `TextField.Layout` input places the cursor, with no cursor arithmetic |
+| `flat-modal` | Overlay/modal state without a modal manager, as a `Frame.Root` tree of `Label` roles and `Box` cards; the modal's `TextField.Layout` input places the cursor, with no cursor arithmetic; `-gui` runs the same app in a native window (macOS) |
 | `flat-tree` | `flatui.Tree`, search field, focus ring, keymap footer |
 | `flat-workspace` | Capstone: three-pane layout-engine composition (tree, search, table, viewport, progress) with focus ring, grouped help, and a cursor placed from solved rects |
 
@@ -40,7 +40,7 @@ go run ./flat-pages
 
 | Sample | Demonstrates |
 |---|---|
-| `flat-layout` | `flatui/layout` validation harness: returns a `Col`/`Row`/`Text` tree as `Frame.Root` (the runtime composes it at the terminal size and fills `MouseEvent.Target`) and toggles an `Overlay: true` modal |
+| `flat-layout` | `flatui/layout` validation harness: returns a `Col`/`Row`/`Text` tree as `Frame.Root` (the runtime composes it at the terminal size and fills `MouseEvent.Target`) and toggles an `Overlay: true` modal; `-gui` runs it in a native window |
 | `flat-scroll` | `layout.Scroll` panes taller than their window: a 40-row service list that keeps its selection visible and a log scrolled by wheel or PgUp/PgDn; offsets are app state clamped with `layout.ClampScroll`, rows are clicked through `MouseEvent.Target` at any offset |
 | `flat-docker` | Flagship dogfood: returns one frame tree as `Frame.Root`; list heights, pane widths, and row zones are adopted from `LayoutEvent` before each paint, and pane clicks route on `MouseEvent.Target`/`TargetRect`; includes `TabBar.WithID`/`HitTest`, row/divider zones, drag-resizable panes, command bar, and confirm modal |
 

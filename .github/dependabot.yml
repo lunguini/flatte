@@ -21,6 +21,15 @@ updates:
     groups:
       go-deps:
         patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: /window
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+    groups:
+      go-deps:
+        patterns: ["*"]
   # Action bumps change nothing a consumer can observe, so they use `ci`,
   # which is hidden and does not trigger a release. Without this they would
   # default to `build(deps)` and cut a release for a CI-only change.

@@ -24,10 +24,14 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/go.sum
+            window/go.sum
       - name: Test library
         run: go test ./...
       - name: Test samples
         working-directory: cmd
+        run: go test ./...
+      - name: Test window host
+        working-directory: window
         run: go test ./...
       - name: Race (library)
         if: matrix.os == 'ubuntu-latest'
@@ -35,6 +39,10 @@ jobs:
       - name: Race (samples)
         if: matrix.os == 'ubuntu-latest'
         working-directory: cmd
+        run: go test -race ./...
+      - name: Race (window host)
+        if: matrix.os == 'macos-latest'
+        working-directory: window
         run: go test -race ./...
 
   lint:
@@ -47,6 +55,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/go.sum
+            window/go.sum
       - name: gofmt
         run: |
           out="$(gofmt -l .)"
@@ -62,6 +71,10 @@ jobs:
           cd cmd
           go vet ./...
           GOOS=windows go vet ./...
+          cd ../window
+          go vet ./...
+          GOOS=windows go vet ./...
+          GOOS=darwin go vet ./...
 
   govulncheck:
     runs-on: ubuntu-latest
@@ -73,8 +86,12 @@ jobs:
           cache-dependency-path: |
             go.sum
             cmd/go.sum
+            window/go.sum
       - name: govulncheck (library)
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
       - name: govulncheck (samples)
         working-directory: cmd
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+      - name: govulncheck (window host)
+        working-directory: window
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...

@@ -108,6 +108,10 @@ deterministic (no wall-clock, no randomness in `View`).
   no goroutines, no hidden focus policy; apps store them in their own state.
 - `flatest` — deterministic driver, fake-clock async harness, replay, and
   golden-test helpers.
+- `window` (nested module `github.com/lunguini/flatte/window`) — the native
+  GUI host: runs an `App[S]` in a desktop window (macOS via purego, no cgo),
+  drawing `layout.LayoutScene` ops with the OS text and 2D stack. Keeps
+  purego out of the root module's dependency graph.
 - `cmd/flat-*` — dogfood sample apps; each has tests + goldens.
 - `cmd/bubble-modal`, `cmd/bubble-v2-modal`, `cmd/bubble-v2-search` —
   Bubble Tea v1/v2 comparison apps. They are the benchmark; keep them

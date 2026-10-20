@@ -100,11 +100,12 @@ func newEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit 
 	return Effects[S]{ctx: ctx, updates: updates, quit: quit, latest: newLatestRegistry()}
 }
 
-// NewHarnessEffects builds an Effects wired for deterministic testing:
-// dispatch controls how async bodies are spawned (nil = real goroutine)
-// and clock controls time-based effects (nil = real clock). For flatest;
-// it is a test seam, not general application API. It remains exported so
-// external test harnesses can construct an Effects without an import cycle.
+// NewHarnessEffects builds an Effects for a host other than Run: dispatch
+// controls how async bodies are spawned (nil = real goroutine) and clock
+// controls time-based effects (nil = real clock). flatest uses it for
+// deterministic tests and the window host for real ones; it is host
+// plumbing, not application API. Terminal-only effects (Print, Suspend,
+// Exec, clipboard) are no-ops on it.
 func NewHarnessEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S] {
 	fx := newEffects[S](ctx, updates, quit)
 	fx.dispatch = dispatch

@@ -8,30 +8,12 @@ type Row struct {
 	Children []Node
 }
 
+// Size declares the row's claims: explicit W/H as set, and on an Auto axis
+// the measured content of its children (or Grow(1) when the only claim on
+// that axis is a growing child).
 func (r Row) Size() (Size, Size) {
-	w, h := r.NodeBase.Size()
-	if w.Kind == SizeAuto || h.Kind == SizeAuto {
-		mainSize, crossSize, mainGrow, crossGrow := measureChildren(r.Children, true, r.Gap)
-		inset := r.insetSides()
-		// Row: main=width, cross=height. On an Auto axis, prefer measured
-		// content; if there is none but a child grows on that axis, report
-		// Grow(1) so the container does not collapse to zero.
-		if w.Kind == SizeAuto {
-			if mainSize > 0 {
-				w = Size{Kind: SizeContent, Value: satAdd(mainSize, inset.horiz())}
-			} else if mainGrow {
-				w = Grow(1)
-			}
-		}
-		if h.Kind == SizeAuto {
-			if crossSize > 0 {
-				h = Size{Kind: SizeContent, Value: satAdd(crossSize, inset.vert())}
-			} else if crossGrow {
-				h = Grow(1)
-			}
-		}
-	}
-	return w, h
+	w, h := intrinsic[int](cells{}, r)
+	return fromSized(w), fromSized(h)
 }
 
 // Render composes the row into a self-contained block sized to rect. It
@@ -62,30 +44,10 @@ type Col struct {
 	Children []Node
 }
 
+// Size declares the column's claims; see Row.Size.
 func (c Col) Size() (Size, Size) {
-	w, h := c.NodeBase.Size()
-	if w.Kind == SizeAuto || h.Kind == SizeAuto {
-		mainSize, crossSize, mainGrow, crossGrow := measureChildren(c.Children, false, c.Gap)
-		inset := c.insetSides()
-		// Col: main=height, cross=width. On an Auto axis, prefer measured
-		// content; if there is none but a child grows on that axis, report
-		// Grow(1) so the container does not collapse to zero.
-		if h.Kind == SizeAuto {
-			if mainSize > 0 {
-				h = Size{Kind: SizeContent, Value: satAdd(mainSize, inset.vert())}
-			} else if mainGrow {
-				h = Grow(1)
-			}
-		}
-		if w.Kind == SizeAuto {
-			if crossSize > 0 {
-				w = Size{Kind: SizeContent, Value: satAdd(crossSize, inset.horiz())}
-			} else if crossGrow {
-				w = Grow(1)
-			}
-		}
-	}
-	return w, h
+	w, h := intrinsic[int](cells{}, c)
+	return fromSized(w), fromSized(h)
 }
 
 // Render composes the column into a self-contained block sized to rect,
