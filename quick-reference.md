@@ -370,8 +370,22 @@ are columns and lines (a line is the UI font's height plus line spacing),
 down the middle, as a terminal border takes a cell — while `ResizeEvent`, `LayoutEvent`, and `MouseEvent` stay in
 cells (`X - TargetRect.X` is exact inside the target). Ctrl-C goes to
 `Handle`; quit with ⌘Q or by closing the window. `window.Snapshot` renders
-the first frame to an image for visual tests. Backend authors draw the five
-ops of `layout.LayoutScene`.
+the first frame to an image for visual tests. Backend authors draw the ops
+of `layout.LayoutScene`.
+
+`Options.Theme` sets the look: colors for what the app leaves uncolored
+(`Background`, `Surface`, `Text`, `Subtle`, `Title`, `Border`, `Field`,
+`Accent` for focus, carets, and meters, `Selection`, `Track`), `Font` and
+`MonoFont` families, `FontSize`, `TitleSize`, `LineSpacing`, and `Radius`
+(negative: square corners). Start from `window.Dark()` or `window.Light()`
+and change fields; zero fields keep the base's value. Nil follows the
+system's light/dark appearance live; `Snapshot` draws `Dark` when nil.
+
+```go
+th := window.Light()
+th.Accent = color.RGBA{0x2e, 0x7d, 0x32, 0xff}
+err := window.Run(ctx, app, window.Options{Theme: &th})
+```
 
 ## Async And Effects
 

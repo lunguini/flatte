@@ -1,6 +1,7 @@
 package window
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/ebitengine/purego/objc"
@@ -23,11 +24,14 @@ type ui interface {
 // the view's methods with self; there is a single view, so the state is a
 // package value, touched only on the main thread.
 type windowState struct {
-	ui     ui
-	m      layout.Metrics
-	th     theme
-	window objc.ID
-	title  string
+	ui ui
+	m  layout.Metrics
+	th theme
+	// follow re-resolves th from the system appearance (dark) as it
+	// changes; set when Options has no Theme.
+	follow, dark bool
+	window       objc.ID
+	title        string
 	// marked is the input method's uncommitted text; caret is where the
 	// focused input's caret was last drawn, in view coordinates.
 	marked  string
@@ -37,6 +41,12 @@ type windowState struct {
 }
 
 var current *windowState
+
+// isDark reports whether view's effective appearance is a dark one.
+func isDark(view objc.ID) bool {
+	name := plainString(view.Send(sel("effectiveAppearance")).Send(sel("name")))
+	return strings.Contains(name, "Dark")
+}
 
 func (st *windowState) setTitle(t string) {
 	if t != "" && t != st.title {
@@ -111,11 +121,19 @@ func viewMethods() []objc.MethodDef {
 	return []objc.MethodDef{
 		{Cmd: sel("isFlipped"), Fn: func(objc.ID, objc.SEL) bool { return true }},
 		{Cmd: sel("acceptsFirstResponder"), Fn: func(objc.ID, objc.SEL) bool { return true }},
+		{Cmd: sel("viewDidChangeEffectiveAppearance"), Fn: func(self objc.ID, _ objc.SEL) {
+			self.Send(sel("setNeedsDisplay:"), true)
+		}},
 		{Cmd: sel("acceptsFirstMouse:"), Fn: func(objc.ID, objc.SEL, objc.ID) bool { return true }},
 		{Cmd: sel("drawRect:"), Fn: func(self objc.ID, _ objc.SEL, _ CGRect) {
 			st := current
 			if st == nil {
 				return
+			}
+			if st.follow {
+				if dark := isDark(self); dark != st.dark {
+					st.dark, st.th = dark, newTheme(themeFor(nil, dark))
+				}
 			}
 			b := objc.Send[CGRect](self, sel("bounds"))
 			st.ui.resize(b.Size.Width, b.Size.Height)
@@ -125,7 +143,7 @@ func viewMethods() []objc.MethodDef {
 			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale}
 			p.draw(scene, b.Size.Width, b.Size.Height)
 			if c := st.ui.frameCursor(); c != nil {
-				p.caretAt(float64(c.X)*st.m.Column, float64(c.Y)*st.m.Line, st.m.Line, fontFor(fontKey{mono: true}))
+				p.caretAt(float64(c.X)*st.m.Column, float64(c.Y)*st.m.Line, st.m.Line, st.th.font(fontKey{mono: true}))
 			}
 			st.caret, st.caretOK = p.caret, p.caretOK
 			st.setTitle(st.ui.frameTitle())

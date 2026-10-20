@@ -19,6 +19,9 @@ type Options struct {
 	// Width and Height are the initial content size in columns and lines of
 	// the UI font. Zero means 100×32.
 	Width, Height int
+	// Theme is the window's look. Nil follows the system's appearance,
+	// switching between Dark and Light as it changes; Snapshot draws Dark.
+	Theme *Theme
 }
 
 func (o Options) size() (cols, lines int) {

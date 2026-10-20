@@ -78,16 +78,19 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	if current != nil {
 		return errors.New("window: a window is already running")
 	}
-	m := metrics()
 	cols, lines := opts.size()
-	width, height := float64(cols)*m.Column, float64(lines)*m.Line
-
 	nsApp := class("NSApplication").Send(sel("sharedApplication"))
 	nsApp.Send(sel("setActivationPolicy:"), nsActivationPolicyRegular)
 	cls, err := registerViewClass()
 	if err != nil {
 		return err
 	}
+	// Dark and Light share their type, so following the system changes
+	// colors only, never the metrics.
+	dark := isDark(nsApp)
+	th := newTheme(themeFor(opts.Theme, dark))
+	m := th.metrics()
+	width, height := float64(cols)*m.Column, float64(lines)*m.Line
 	view := objc.ID(cls).Send(sel("alloc")).Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
 	defer view.Send(sel("release"))
 	win := alloc("NSWindow").Send(sel("initWithContentRect:styleMask:backing:defer:"),
@@ -112,7 +115,7 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 		wake(nsApp)
 	}
 	h := newHost(ctx, app, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
-	current = &windowState{ui: h, m: m, th: darkTheme, window: win, title: title}
+	current = &windowState{ui: h, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, title: title}
 	defer func() { current = nil }()
 
 	delegate, err := newDelegate(stop)
@@ -224,7 +227,8 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	if err := loadFrameworks(); err != nil {
 		return nil, err
 	}
-	m := metrics()
+	th := newTheme(themeFor(opts.Theme, true))
+	m := th.metrics()
 	cols, lines := opts.size()
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line
 	// The first frame only: async results are dropped, quitting is moot.
@@ -232,12 +236,12 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	defer h.cancel()
 	h.start(width, height)
 	scene := h.render()
-	return renderImage(scene, m, width, height, scale, h.frameCursor()), nil
+	return renderImage(scene, th, m, width, height, scale, h.frameCursor()), nil
 }
 
 // renderImage draws scene offscreen into an RGBA image of width×height
 // points at scale pixels per point.
-func renderImage(scene layout.Scene, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor) *image.RGBA {
+func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor) *image.RGBA {
 	pw, ph := int(math.Ceil(width*scale)), int(math.Ceil(height*scale))
 	cs := cgColorSpaceCreateDeviceRGB()
 	defer cgColorSpaceRelease(cs)
@@ -246,13 +250,13 @@ func renderImage(scene layout.Scene, m layout.Metrics, width, height, scale floa
 	// Top-left origin points, as in the flipped view.
 	cgContextTranslateCTM(ctx, 0, float64(ph))
 	cgContextScaleCTM(ctx, scale, -scale)
-	p := &painter{ctx: ctx, m: m, th: darkTheme, scale: scale}
+	p := &painter{ctx: ctx, m: m, th: th, scale: scale}
 	withPool(func() {
 		// Fill the whole bitmap, including the partial pixel the point size
 		// rounds up to.
 		p.draw(scene, float64(pw)/scale, float64(ph)/scale)
 		if cursor != nil {
-			p.caretAt(float64(cursor.X)*m.Column, float64(cursor.Y)*m.Line, m.Line, fontFor(fontKey{mono: true}))
+			p.caretAt(float64(cursor.X)*m.Column, float64(cursor.Y)*m.Line, m.Line, th.font(fontKey{mono: true}))
 		}
 	})
 	img := image.NewRGBA(image.Rect(0, 0, pw, ph))

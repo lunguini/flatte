@@ -6,7 +6,7 @@
 //	window.Run(ctx, app, window.Options{}) // native window
 //
 // The window draws the app's Frame.Root as real components: Labels in the
-// system font by text role, Boxes as rounded strokes (an overlay's box as a
+// theme's font by text role, Boxes as rounded strokes (an overlay's box as a
 // raised surface), Inputs as outlined text fields with input-method support.
 // Layout runs in points (see layout.LayoutScene): sizes are columns and
 // lines of the UI font, padding is spacing steps, and a border takes a band
@@ -16,6 +16,16 @@
 // container's Chrome, a frame with no Root — show as a monospace cell grid
 // (line-drawing, block, and Powerline characters drawn as shapes that fill
 // their cells), so every existing app runs.
+//
+// The look is a Theme: colors for what the app does not color itself, the
+// UI and fixed-pitch font families and sizes, line spacing, and corner
+// radius. With no Options.Theme the window follows the system's light or
+// dark appearance as it changes; set one (Dark or Light with fields
+// changed) to fix the look:
+//
+//	th := window.Dark()
+//	th.Accent, th.Radius = color.RGBA{0xff, 0x80, 0x00, 0xff}, -1 // square
+//	window.Run(ctx, app, window.Options{Theme: &th})
 //
 // Geometry reaches the app in cells, as in a terminal: ResizeEvent and
 // LayoutEvent sizes are whole columns and lines, and MouseEvent coordinates

@@ -90,6 +90,7 @@ var (
 	cgContextRelease            func(ctx uintptr)
 
 	ctFontCreateUIFontForLanguage    func(kind uint32, size float64, lang uintptr) uintptr
+	ctFontCreateWithName             func(name uintptr, size float64, m *CGAffineTransform) uintptr
 	ctFontCreateCopyWithSymbolicTr   func(font uintptr, size float64, m *CGAffineTransform, value, mask uint32) uintptr
 	ctFontGetAscent                  func(font uintptr) float64
 	ctFontGetDescent                 func(font uintptr) float64
@@ -180,6 +181,7 @@ func bindFrameworks() error {
 		{&cgBitmapContextGetBytesPer, cg, "CGBitmapContextGetBytesPerRow"},
 		{&cgContextRelease, cg, "CGContextRelease"},
 		{&ctFontCreateUIFontForLanguage, ct, "CTFontCreateUIFontForLanguage"},
+		{&ctFontCreateWithName, ct, "CTFontCreateWithName"},
 		{&ctFontCreateCopyWithSymbolicTr, ct, "CTFontCreateCopyWithSymbolicTraits"},
 		{&ctFontGetAscent, ct, "CTFontGetAscent"},
 		{&ctFontGetDescent, ct, "CTFontGetDescent"},

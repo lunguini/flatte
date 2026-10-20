@@ -16,43 +16,50 @@ import (
 
 type rgba struct{ R, G, B, A float64 }
 
+// rgbaOf is c with straight alpha, as Core Graphics colors take it
+// (color.Color's RGBA is premultiplied).
 func rgbaOf(c color.Color) rgba {
 	r, g, b, a := c.RGBA()
-	return rgba{float64(r) / 0xffff, float64(g) / 0xffff, float64(b) / 0xffff, float64(a) / 0xffff}
+	if a == 0 {
+		return rgba{}
+	}
+	return rgba{float64(r) / float64(a), float64(g) / float64(a), float64(b) / float64(a), float64(a) / 0xffff}
 }
 
-// theme is the window's look. Roles and Boxes map onto it; explicit colors
-// in a TextStyle or Box override it.
+// theme is a Theme in drawing terms. Roles and Boxes map onto it; explicit
+// colors in a TextStyle or Box override it.
 type theme struct {
 	// surface is the raised fill of an overlay's box; selection highlights
 	// a Selected box; track is a Meter's unfilled bar (its fill defaults to
 	// the caret's accent).
 	bg, surface, text, subtle, title, border, field, caret, marked, selection, track rgba
+	// family and mono are font families ("": the system's); body and
+	// titleSize are point sizes; spacing is a line's height over its font's
+	// (a CSS line-height: text is centered in the line); radius is a plain
+	// border's corner radius (negative: square).
+	family, mono                     string
+	body, titleSize, spacing, radius float64
 }
 
-var darkTheme = theme{
-	bg:        rgba{0.118, 0.122, 0.133, 1},
-	surface:   rgba{0.161, 0.165, 0.180, 1},
-	selection: rgba{0.400, 0.655, 1.000, 0.22},
-	track:     rgba{0.247, 0.255, 0.278, 1},
-	text:      rgba{0.871, 0.878, 0.898, 1},
-	subtle:    rgba{0.553, 0.569, 0.608, 1},
-	title:     rgba{0.949, 0.953, 0.961, 1},
-	border:    rgba{0.298, 0.306, 0.333, 1},
-	field:     rgba{0.090, 0.094, 0.106, 1},
-	caret:     rgba{0.400, 0.655, 1.000, 1},
-	marked:    rgba{0.400, 0.655, 1.000, 1},
+func newTheme(t Theme) theme {
+	t = t.over(Dark())
+	return theme{
+		bg: rgbaOf(t.Background), surface: rgbaOf(t.Surface),
+		text: rgbaOf(t.Text), subtle: rgbaOf(t.Subtle), title: rgbaOf(t.Title),
+		border: rgbaOf(t.Border), field: rgbaOf(t.Field),
+		caret: rgbaOf(t.Accent), marked: rgbaOf(t.Accent), selection: rgbaOf(t.Selection),
+		track:  rgbaOf(t.Track),
+		family: t.Font, mono: t.MonoFont,
+		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
+	}
 }
 
-// Type sizes and spacing in points. Body text sets the line metric; the
-// cell grid uses the user's fixed-pitch font at the same size.
+// darkTheme is the default theme, and the one tests draw with.
+var darkTheme = newTheme(Dark())
+
+// Spacing and stroke sizes in points.
 const (
-	bodySize  = 13.0
-	titleSize = 15.0
-	// lineSpacing is a line's height over its font's, the room text needs
-	// between lines (a CSS line-height); text is centered in the line.
-	lineSpacing = 1.25
-	stepPoints  = 8.0
+	stepPoints = 8.0
 	// borderBand is the space a border takes on each side, as a border
 	// takes a cell in the terminal; its stroke runs down the middle.
 	borderBand  = 12.0
@@ -63,13 +70,16 @@ const (
 	nsFontWeightBold     = 0.4
 )
 
-// radii of the border kinds: Normal is a slightly rounded hairline,
-// Rounded is visibly round.
-func radiusOf(k layout.BorderKind) float64 {
-	if k == layout.BorderNormal {
-		return 4
+// radiusOf is a border kind's corner radius: Normal is slightly rounded,
+// Rounded twice as round.
+func (th theme) radiusOf(k layout.BorderKind) float64 {
+	switch {
+	case th.radius < 0:
+		return 0
+	case k == layout.BorderNormal:
+		return th.radius
 	}
-	return 8
+	return 2 * th.radius
 }
 
 type fontKey struct {
@@ -78,14 +88,14 @@ type fontKey struct {
 }
 
 type font struct {
-	ref                      uintptr
-	ascent, descent, leading float64
+	ref                               uintptr
+	ascent, descent, leading, spacing float64
 }
 
 func (f font) lineHeight() float64 { return f.ascent + f.descent + f.leading }
 
 // pitch is the height of one line of f's text, on whole points.
-func (f font) pitch() float64 { return math.Round(f.lineHeight() * lineSpacing) }
+func (f font) pitch() float64 { return math.Round(f.lineHeight() * f.spacing) }
 
 // width is the advance width of s set in f.
 func (f font) width(s string) float64 {
@@ -94,26 +104,46 @@ func (f font) width(s string) float64 {
 	return l.width
 }
 
+// fontID is a font as a theme asks for it.
+type fontID struct {
+	fontKey
+	family        string
+	size, spacing float64
+}
+
 var (
 	fontsMu sync.Mutex
-	fonts   = map[fontKey]font{}
+	fonts   = map[fontID]font{}
 )
 
-// fontFor returns the CoreText font for a role and emphasis; fonts are
-// created once and live for the process.
-func fontFor(k fontKey) font {
+// fontFor is darkTheme's font for a role and emphasis.
+func fontFor(k fontKey) font { return darkTheme.font(k) }
+
+// font returns the CoreText font for a role and emphasis in th's type;
+// fonts are created once and live for the process.
+func (th theme) font(k fontKey) font {
+	id := fontID{fontKey: k, family: th.family, size: th.body, spacing: th.spacing}
+	if k.mono {
+		id.family = th.mono
+	} else if k.role == layout.TextTitle {
+		id.size = th.titleSize
+	}
 	fontsMu.Lock()
 	defer fontsMu.Unlock()
-	if f, ok := fonts[k]; ok {
+	if f, ok := fonts[id]; ok {
 		return f
 	}
 	var ref uintptr
 	bold := k.bold // the bold trait, unless the weight already is bold
 	switch {
+	case id.family != "":
+		// A named family; titles are its bold face.
+		bold = bold || (!k.mono && k.role == layout.TextTitle)
+		withPool(func() { ref = ctFontCreateWithName(uintptr(nsString(id.family)), id.size, nil) })
 	case k.mono:
-		ref = ctFontCreateUIFontForLanguage(ctFontUserFixedPitch, bodySize, 0)
+		ref = ctFontCreateUIFontForLanguage(ctFontUserFixedPitch, id.size, 0)
 	case k.role == layout.TextTitle:
-		// Titles are semibold, bold ones bold. Neither weight is a
+		// System titles are semibold, bold ones bold. Neither weight is a
 		// CTFontUIFontType (and the bold trait does not apply over
 		// semibold), so they come from NSFont, which is toll-free bridged.
 		weight := nsFontWeightSemibold
@@ -121,11 +151,11 @@ func fontFor(k fontKey) font {
 			weight, bold = nsFontWeightBold, false
 		}
 		withPool(func() {
-			f := objc.Send[objc.ID](class("NSFont"), sel("systemFontOfSize:weight:"), titleSize, weight)
+			f := objc.Send[objc.ID](class("NSFont"), sel("systemFontOfSize:weight:"), id.size, weight)
 			ref = uintptr(f.Send(sel("retain")))
 		})
 	default:
-		ref = ctFontCreateUIFontForLanguage(ctFontSystem, bodySize, 0)
+		ref = ctFontCreateUIFontForLanguage(ctFontSystem, id.size, 0)
 	}
 	var traits uint32
 	if bold {
@@ -140,13 +170,13 @@ func fontFor(k fontKey) font {
 			ref = styled
 		}
 	}
-	f := font{ref: ref, ascent: ctFontGetAscent(ref), descent: ctFontGetDescent(ref), leading: ctFontGetLeading(ref)}
-	fonts[k] = f
+	f := font{ref: ref, ascent: ctFontGetAscent(ref), descent: ctFontGetDescent(ref), leading: ctFontGetLeading(ref), spacing: id.spacing}
+	fonts[id] = f
 	return f
 }
 
-func styleFont(s layout.TextStyle) font {
-	return fontFor(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic})
+func (th theme) styleFont(s layout.TextStyle) font {
+	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic})
 }
 
 // textLine is a shaped CoreText line. Call release.
@@ -186,20 +216,22 @@ func utf16Len(s string) int {
 	return n
 }
 
-// metrics is the layout metric for this machine's fonts: columns are the
-// fixed-pitch advance, lines the body font's pitch, a step 8pt, a border a
-// band of borderBand.
-func metrics() layout.Metrics {
-	mono := fontFor(fontKey{mono: true})
-	zero := shape("0", mono)
+// metrics is the layout metric for darkTheme's type.
+func metrics() layout.Metrics { return darkTheme.metrics() }
+
+// metrics is the layout metric for th's fonts on this machine: columns are
+// the fixed-pitch advance, lines the body font's pitch, a step 8pt, a border
+// a band of borderBand.
+func (th theme) metrics() layout.Metrics {
+	zero := shape("0", th.font(fontKey{mono: true}))
 	defer zero.release()
 	return layout.Metrics{
 		Column: zero.width,
-		Line:   fontFor(fontKey{}).pitch(),
+		Line:   th.font(fontKey{}).pitch(),
 		Step:   stepPoints,
 		Border: borderBand,
 		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
-			f := styleFont(style)
+			f := th.styleFont(style)
 			lines := wrapWords(text, maxWidth, f.width)
 			w := 0.0
 			for _, s := range lines {
@@ -320,7 +352,7 @@ func (p *painter) box(op layout.BoxOp) {
 		return
 	}
 	in := strokeRect(op.Rect, p.m.Border)
-	rad := min(radiusOf(op.Box.Border), in.Size.Width/2, in.Size.Height/2)
+	rad := min(p.th.radiusOf(op.Box.Border), in.Size.Width/2, in.Size.Height/2)
 	if hasBg {
 		p.fill(bg)
 		p.roundedPath(in, rad, func() { cgContextFillPath(p.ctx) })
@@ -383,7 +415,7 @@ func (p *painter) line(text string, f font, x, y, h float64, fg rgba, bg color.C
 }
 
 func (p *painter) text(op layout.TextOp) {
-	f := styleFont(op.Style)
+	f := p.th.styleFont(op.Style)
 	h := f.pitch()
 	lines := strings.Split(op.Text, "\n")
 	if op.Wrap {
@@ -411,7 +443,7 @@ func (p *painter) input(op layout.InputOp) {
 	p.stroke(outline)
 	cgContextSetLineWidth(p.ctx, strokeWidth)
 	p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
-	f := styleFont(op.Style)
+	f := p.th.styleFont(op.Style)
 	y := r.Y + (r.H-f.lineHeight())/2
 	x0 := r.X + fieldInset
 	avail := max(r.W-2*fieldInset, 1)
@@ -563,7 +595,7 @@ func (p *painter) cellRun(text string, st uv.Style, x, y, w float64) {
 	if strings.TrimSpace(text) == "" || st.Attrs&uv.AttrConceal != 0 {
 		return
 	}
-	f := fontFor(fontKey{mono: true, bold: st.Attrs&uv.AttrBold != 0, italic: st.Attrs&uv.AttrItalic != 0})
+	f := p.th.font(fontKey{mono: true, bold: st.Attrs&uv.AttrBold != 0, italic: st.Attrs&uv.AttrItalic != 0})
 	p.line(text, f, x, y, p.m.Line, fg, nil, st.Underline != uv.UnderlineNone, st.Attrs&uv.AttrStrikethrough != 0)
 }
 
@@ -620,7 +652,7 @@ func (p *painter) icon(op layout.IconOp) {
 		p.shape(g, p.roleColor(op.Style))
 		return
 	}
-	f := styleFont(op.Style)
+	f := p.th.styleFont(op.Style)
 	p.line(op.Text, f, op.Rect.X, op.Rect.Y, f.pitch(), p.roleColor(op.Style), op.Style.Bg, op.Style.Underline, op.Style.Strikethrough)
 }
 
