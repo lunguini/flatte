@@ -207,7 +207,22 @@ type NodeBase struct {
 	// exactly like Bordered (which is shorthand for Box{Border:
 	// BorderRounded}; Box.Border wins when both are set).
 	Box Box
+
+	// Tooltip is help text a GUI shows while the pointer rests on the node
+	// (the innermost node with one); the terminal ignores it.
+	Tooltip string
+
+	// Anchor places an Overlay next to the node with this ID instead of
+	// centered on the frame: just below it and left-aligned to it, above
+	// it when there is no room below, kept inside the frame — for a
+	// dropdown or a context menu. An anchor that is not laid out (or an
+	// empty one) centers the overlay as usual.
+	Anchor string
 }
+
+func (n NodeBase) tooltip() string { return n.Tooltip }
+
+type tooltipNode interface{ tooltip() string }
 
 // BorderKind is the line style of a Box border.
 type BorderKind int
@@ -471,6 +486,15 @@ func isOverlay(n Node) bool {
 }
 
 // --- Small helpers ---
+
+func getAnchor(n Node) string {
+	if a, ok := n.(interface{ anchor() string }); ok {
+		return a.anchor()
+	}
+	return ""
+}
+
+func (n NodeBase) anchor() string { return n.Anchor }
 
 func getID(n Node) string {
 	if ider, ok := n.(interface{ GetID() string }); ok {

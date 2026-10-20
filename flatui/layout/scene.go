@@ -47,7 +47,7 @@ func cellsOf(v, unit float64) int {
 }
 
 // Op is one drawing operation of a Scene, in paint order. The set is closed:
-// a backend draws these eight and nothing else. Every op's Clip is the visible
+// a backend draws these nine and nothing else. Every op's Clip is the visible
 // region (the frame narrowed by enclosing Scrolls); draw only inside it.
 type Op interface{ isOp() }
 
@@ -118,6 +118,32 @@ type ScrollBarOp struct {
 	Color         color.Color
 }
 
+// ControlKind is the control a ControlOp draws.
+type ControlKind int
+
+const (
+	ControlButton ControlKind = iota
+	ControlCheckbox
+	ControlSwitch
+	ControlRadio
+	ControlSlider
+)
+
+// ControlOp draws a control in Rect (its content box): a Button, a Toggle
+// (checkbox, switch, or radio, with its Label), or a Slider at Value. A
+// backend draws hover and press itself, for controls with an ID.
+type ControlOp struct {
+	ID                         string
+	Kind                       ControlKind
+	Rect, Clip                 PointRect
+	Label                      string
+	Style                      TextStyle
+	Checked                    bool
+	Value                      float64
+	Fill                       color.Color
+	Default, Disabled, Focused bool
+}
+
 // CellsOp draws terminal content — a Text leaf's ANSI string, a container's
 // Chrome, or any node the scene does not know — as a grid of Cols×Lines
 // monospace cells from the top-left of Rect. It is how every existing node
@@ -138,6 +164,7 @@ func (InputOp) isOp()     {}
 func (IconOp) isOp()      {}
 func (MeterOp) isOp()     {}
 func (ScrollBarOp) isOp() {}
+func (ControlOp) isOp()   {}
 func (CellsOp) isOp()     {}
 func (LayerOp) isOp()     {}
 
@@ -147,6 +174,25 @@ type Scene struct {
 	Ops   []Op
 	Rects map[string]PointRect
 	hits  []hitOf[float64]
+	tips  []tip
+}
+
+// tip is a node's tooltip over its visible area, in paint order; an empty
+// text is an overlay layer, which hides the tips under it.
+type tip struct {
+	area PointRect
+	text string
+}
+
+// TooltipAt is the tooltip of the innermost (last painted) node at (x, y)
+// that has one, or "" — also under an overlay that has none of its own.
+func (s Scene) TooltipAt(x, y float64) string {
+	for i := len(s.tips) - 1; i >= 0; i-- {
+		if a := s.tips[i].area; x >= a.X && x < a.X+a.W && y >= a.Y && y < a.Y+a.H {
+			return s.tips[i].text
+		}
+	}
+	return ""
 }
 
 // HitTest returns the ID and rect of the topmost ID'd node at (x, y), with
@@ -178,7 +224,7 @@ func LayoutScene(root Node, width, height float64, m Metrics) Scene {
 	for id, r := range s.rects {
 		rects[id] = PointRect(r)
 	}
-	return Scene{Ops: p.ops, Rects: rects, hits: s.hits}
+	return Scene{Ops: p.ops, Rects: rects, hits: s.hits, tips: p.tips}
 }
 
 // pointMetric is the metric for Metrics.
@@ -278,8 +324,16 @@ func (p pointMetric) text(text string, style TextStyle, maxWidth float64) (float
 // scenePainter records a Scene's ops. Nodes wholly outside the visible
 // region produce none.
 type scenePainter struct {
-	m   pointMetric
-	ops []Op
+	m    pointMetric
+	ops  []Op
+	tips []tip
+}
+
+// tooltip records n's tooltip over its visible area.
+func (p *scenePainter) tooltip(n Node, r, clip rect[float64]) {
+	if t, ok := n.(tooltipNode); ok && t.tooltip() != "" {
+		p.tips = append(p.tips, tip{area: PointRect(intersectOf[float64](p.m, r, clip)), text: t.tooltip()})
+	}
 }
 
 func (p *scenePainter) visible(r, clip rect[float64]) bool {
@@ -309,7 +363,26 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	if !p.visible(r, clip) {
 		return
 	}
+	p.tooltip(n, r, clip)
+	control := func(op ControlOp, b Box) {
+		p.box(r, clip, b)
+		op.Rect, op.Clip = p.content(n, r), PointRect(clip)
+		p.ops = append(p.ops, op)
+	}
 	switch l := n.(type) {
+	case Button:
+		control(ControlOp{ID: l.ID, Kind: ControlButton, Label: l.Label, Style: l.Style, Default: l.Default, Disabled: l.Disabled, Focused: l.Focused}, l.box())
+	case Toggle:
+		kind := ControlCheckbox
+		switch l.Kind {
+		case ToggleSwitch:
+			kind = ControlSwitch
+		case ToggleRadio:
+			kind = ControlRadio
+		}
+		control(ControlOp{ID: l.ID, Kind: kind, Label: l.Label, Style: l.Style, Checked: l.Checked, Disabled: l.Disabled, Focused: l.Focused}, l.box())
+	case Slider:
+		control(ControlOp{ID: l.ID, Kind: ControlSlider, Value: l.value(), Fill: l.Fill, Disabled: l.Disabled, Focused: l.Focused}, l.box())
 	case Label:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap})
@@ -345,6 +418,7 @@ func (p *scenePainter) chrome(n Node, r, clip rect[float64]) {
 	if !p.visible(r, clip) {
 		return
 	}
+	p.tooltip(n, r, clip)
 	if ch := getChrome(n); ch != nil {
 		p.cells(r, clip, ch)
 		return
@@ -354,4 +428,5 @@ func (p *scenePainter) chrome(n Node, r, clip rect[float64]) {
 
 func (p *scenePainter) layer(r rect[float64]) {
 	p.ops = append(p.ops, LayerOp{Rect: PointRect(r)})
+	p.tips = append(p.tips, tip{area: PointRect(r)})
 }

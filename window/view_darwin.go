@@ -16,6 +16,8 @@ type ui interface {
 	resize(width, height float64)
 	key(flatte.KeyEvent)
 	paste()
+	hover(x, y float64) (pointer, string)
+	controlState() (hovered, pressed string)
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
 	render() layout.Scene
 	frameTitle() string
@@ -44,6 +46,28 @@ type windowState struct {
 	// blink phase.
 	caretMoved time.Time
 	blink      *time.Timer
+	// tooltip is the view's tooltip now.
+	tooltip string
+}
+
+// showPointer sets the pointer shape and the view's tooltip.
+func (st *windowState) showPointer(view objc.ID, shape pointer, tooltip string) {
+	name := "arrowCursor"
+	switch shape {
+	case pointerHand:
+		name = "pointingHandCursor"
+	case pointerText:
+		name = "IBeamCursor"
+	}
+	class("NSCursor").Send(sel(name)).Send(sel("set"))
+	if tooltip != st.tooltip {
+		st.tooltip = tooltip
+		var tip objc.ID
+		if tooltip != "" {
+			tip = nsString(tooltip)
+		}
+		view.Send(sel("setToolTip:"), tip)
+	}
 }
 
 // caretBlink is a caret blink phase, as macOS fields blink.
@@ -170,6 +194,7 @@ func viewMethods() []objc.MethodDef {
 			ctx := uintptr(class("NSGraphicsContext").Send(sel("currentContext")).Send(sel("CGContext")))
 			scale := objc.Send[float64](st.window, sel("backingScaleFactor"))
 			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale}
+			p.hovered, p.pressed = st.ui.controlState()
 			p.draw(scene, b.Size.Width, b.Size.Height)
 			if c := st.ui.frameCursor(); c != nil {
 				p.clip = layout.PointRect{W: b.Size.Width, H: b.Size.Height}
@@ -210,6 +235,19 @@ func viewMethods() []objc.MethodDef {
 			}
 			// Text, through the input context so input methods see it.
 			self.Send(sel("interpretKeyEvents:"), class("NSArray").Send(sel("arrayWithObject:"), event))
+		}},
+		{Cmd: sel("mouseMoved:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
+			if st := current; st != nil {
+				p := location(self, event)
+				shape, tip := st.ui.hover(p.X, p.Y)
+				st.showPointer(self, shape, tip)
+			}
+		}},
+		{Cmd: sel("mouseExited:"), Fn: func(self objc.ID, _ objc.SEL, _ objc.ID) {
+			if st := current; st != nil {
+				shape, tip := st.ui.hover(-1, -1)
+				st.showPointer(self, shape, tip)
+			}
 		}},
 		{Cmd: sel("mouseDown:"), Fn: mouseHandler(flatte.MouseLeft, flatte.MousePress)},
 		{Cmd: sel("mouseUp:"), Fn: mouseHandler(flatte.MouseLeft, flatte.MouseRelease)},

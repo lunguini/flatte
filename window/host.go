@@ -54,7 +54,20 @@ type host[S any] struct {
 	goal      float64
 	goalID    string
 	goalCaret int
+	// hovered and pressed are the IDs of the control under the pointer and
+	// the one the left button went down on: presentation only, drawn by the
+	// backend and never told to the app.
+	hovered, pressed string
 }
+
+// pointer is the pointer shape a backend shows.
+type pointer int
+
+const (
+	pointerArrow pointer = iota
+	pointerHand          // over a control
+	pointerText          // over a text field
+)
 
 // textLayout is where a backend puts carets in the text fields it draws.
 type textLayout interface {
@@ -186,6 +199,48 @@ func (h *host[S]) key(ev flatte.KeyEvent) {
 	h.handle(ev)
 }
 
+// control is the control with id in the scene; ok is false when there is
+// none or it is disabled.
+func (h *host[S]) control(id string) (layout.ControlOp, bool) {
+	if id == "" {
+		return layout.ControlOp{}, false
+	}
+	for i := len(h.scene.Ops) - 1; i >= 0; i-- {
+		if c, ok := h.scene.Ops[i].(layout.ControlOp); ok && c.ID == id {
+			return c, !c.Disabled
+		}
+	}
+	return layout.ControlOp{}, false
+}
+
+// hover tracks the pointer at (x, y) points (outside the view: x < 0):
+// it records the control under it, redrawing when that changes, and
+// reports the pointer shape and tooltip to show there.
+func (h *host[S]) hover(x, y float64) (pointer, string) {
+	scene := h.fresh()
+	id, tooltip, shape := "", "", pointerArrow
+	if x >= 0 && y >= 0 {
+		id, _ = scene.HitTest(x, y)
+		tooltip = scene.TooltipAt(x, y)
+		if _, ok := h.input(id); ok {
+			shape = pointerText
+		}
+	}
+	if _, ok := h.control(id); ok {
+		shape = pointerHand
+	} else {
+		id = ""
+	}
+	if id != h.hovered {
+		h.hovered = id
+		h.invalidate()
+	}
+	return shape, tooltip
+}
+
+// controlState is the hovered and pressed controls, for drawing.
+func (h *host[S]) controlState() (hovered, pressed string) { return h.hovered, h.pressed }
+
 // paste delivers text as a PasteEvent, as a terminal delivers a paste.
 func (h *host[S]) paste() {
 	if h.clip != nil {
@@ -255,6 +310,22 @@ func (h *host[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.M
 	}
 	if button == flatte.MouseLeft && action == flatte.MouseRelease {
 		h.drag = ""
+	}
+	// A control shows pressed while the left button is down on it.
+	if button == flatte.MouseLeft {
+		pressed := h.pressed
+		switch action {
+		case flatte.MousePress:
+			if _, ok := h.control(id); ok {
+				pressed = id
+			}
+		case flatte.MouseRelease:
+			pressed = ""
+		}
+		if pressed != h.pressed {
+			h.pressed = pressed
+			h.invalidate()
+		}
 	}
 	h.handle(ev)
 }

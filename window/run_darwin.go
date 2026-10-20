@@ -93,6 +93,12 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line
 	view := objc.ID(cls).Send(sel("alloc")).Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
 	defer view.Send(sel("release"))
+	// Pointer motion without a button, for hover, pointer shapes, and
+	// tooltips: entered/exited and moved, while key, over the visible rect.
+	tracking := alloc("NSTrackingArea").Send(sel("initWithRect:options:owner:userInfo:"),
+		cgRect(0, 0, 0, 0), uint(nsTrackingMouseEnteredAndExited|nsTrackingMouseMoved|nsTrackingActiveInKeyWindow|nsTrackingInVisibleRect), view, objc.ID(0))
+	view.Send(sel("addTrackingArea:"), tracking)
+	tracking.Send(sel("release"))
 	win := alloc("NSWindow").Send(sel("initWithContentRect:styleMask:backing:defer:"),
 		cgRect(0, 0, width, height), uint(nsWindowStyleMask), uint(nsBackingStoreBuffered), false)
 	win.Send(sel("setReleasedWhenClosed:"), false)
@@ -244,12 +250,13 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	defer h.cancel()
 	h.start(width, height)
 	scene := h.render()
-	return renderImage(scene, th, m, width, height, scale, h.frameCursor()), nil
+	return renderImage(scene, th, m, width, height, scale, h.frameCursor(), "", ""), nil
 }
 
 // renderImage draws scene offscreen into an RGBA image of width×height
-// points at scale pixels per point.
-func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor) *image.RGBA {
+// points at scale pixels per point, with the controls hovered and pressed
+// as given.
+func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, hovered, pressed string) *image.RGBA {
 	pw, ph := int(math.Ceil(width*scale)), int(math.Ceil(height*scale))
 	cs := cgColorSpaceCreateDeviceRGB()
 	defer cgColorSpaceRelease(cs)
@@ -258,7 +265,7 @@ func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, 
 	// Top-left origin points, as in the flipped view.
 	cgContextTranslateCTM(ctx, 0, float64(ph))
 	cgContextScaleCTM(ctx, scale, -scale)
-	p := &painter{ctx: ctx, m: m, th: th, scale: scale}
+	p := &painter{ctx: ctx, m: m, th: th, scale: scale, hovered: hovered, pressed: pressed}
 	withPool(func() {
 		// Fill the whole bitmap, including the partial pixel the point size
 		// rounds up to.
@@ -307,3 +314,11 @@ func (b pasteboard) set(text string) {
 		pb.Send(sel("setString:forType:"), nsString(text), nsString(nsPasteboardTypeString))
 	})
 }
+
+// NSTrackingAreaOptions.
+const (
+	nsTrackingMouseEnteredAndExited = 0x01
+	nsTrackingMouseMoved            = 0x02
+	nsTrackingActiveInKeyWindow     = 0x20
+	nsTrackingInVisibleRect         = 0x200
+)

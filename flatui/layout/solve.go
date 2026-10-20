@@ -299,6 +299,9 @@ func measureContainer[T unit](m metric[T], nb NodeBase, children []Node, horizon
 // a known inner width, heights are measured at the width each child gets:
 // a Col's children get its width, a Row's the widths it distributes.
 func measureChildrenOf[T unit](m metric[T], children []Node, horizontal bool, gap, width T) (main, cross T, mainGrow, crossGrow bool) {
+	// Overlays are laid out on their own layer: they do not size their
+	// parent (as distribution leaves them out too).
+	children = nonOverlayChildren(children)
 	gap = max(gap, 0)
 	var rowWidths []T
 	if horizontal && width >= 0 && anyWraps(children) {
@@ -499,6 +502,18 @@ func centeredOf[T unit](m metric[T], n Node, vpW, vpH T) rect[T] {
 	return rect[T]{m.half(vpW - lw), m.half(vpH - lh), lw, lh}
 }
 
+// anchoredOf places a layer of r's size just below anchor, left-aligned to
+// it — above it when there is no room below — and inside the frame.
+func anchoredOf[T unit](r, anchor rect[T], vpW, vpH T) rect[T] {
+	r.X = min(max(anchor.X, 0), max(vpW-r.W, 0))
+	r.Y = anchor.Y + anchor.H
+	if r.Y+r.H > vpH && anchor.Y-r.H >= 0 {
+		r.Y = anchor.Y - r.H
+	}
+	r.Y = min(max(r.Y, 0), max(vpH-r.H, 0))
+	return r
+}
+
 // clampScrollOf is ClampScroll in solver units.
 func clampScrollOf[T unit](m metric[T], offset, viewport, content T) T {
 	return min(max(offset, 0), max(m.sub(max(content, 0), max(viewport, 0)), 0))
@@ -562,6 +577,9 @@ func solveTree[T unit](m metric[T], root Node, w, h T, p painter[T]) *solver[T] 
 	}
 	for _, o := range findOverlays(root) {
 		r := centeredOf(m, o, w, h)
+		if a, ok := s.rects[getAnchor(o)]; ok {
+			r = anchoredOf(r, a, w, h)
+		}
 		if p != nil {
 			p.layer(r)
 		}

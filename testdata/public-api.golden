@@ -279,6 +279,15 @@ flatui package flatui
   method *Paginator.SetTotal(n int)
   method *Progress.SetPercent(percent float64)
   method *Progress.SetWidth(width int)
+  method *Select.Click(target string, id string) bool
+  method *Select.Close()
+  method *Select.Confirm()
+  method *Select.MoveDown()
+  method *Select.MoveUp()
+  method *Select.Open()
+  method *Select.Select(i int)
+  method *Select.SetOptions(options[]string)
+  method *Select.Toggle()
   method *Spinner.Tick()
   method *Stopwatch.Reset()
   method *Stopwatch.Start()
@@ -396,6 +405,12 @@ flatui package flatui
   method Progress.View() string
   method Progress.ViewWithStyle(style ProgressStyle) string
   method Progress.Width() int
+  method Select.Highlighted() int
+  method Select.IsOpen() bool
+  method Select.Layout(id string, focused bool) layout.Node
+  method Select.Options()[]string
+  method Select.Selected() int
+  method Select.Value() string
   method Spinner.Frame() int
   method Spinner.View() string
   method Stopwatch.Elapsed() time.Duration
@@ -499,6 +514,12 @@ flatui package flatui
   field ProgressStyle.Label lipgloss.Style [order=2]
   struct ProgressStyle fields=3 comparable=false
   type Rect = layout.Rect
+  type Select struct
+  field Select.<unexported> []string [order=0]
+  field Select.<unexported> int [order=1]
+  field Select.<unexported> bool [order=2]
+  field Select.<unexported> List [order=3]
+  struct Select fields=4 comparable=false
   type Spinner struct
   field Spinner.<unexported> []string [order=0]
   field Spinner.<unexported> int [order=1]
@@ -622,6 +643,11 @@ flatui/layout package layout
   const BorderNone BorderKind = 0
   const BorderNormal BorderKind = 2
   const BorderRounded BorderKind = 1
+  const ControlButton ControlKind = 0
+  const ControlCheckbox ControlKind = 1
+  const ControlRadio ControlKind = 3
+  const ControlSlider ControlKind = 4
+  const ControlSwitch ControlKind = 2
   const IconBlank IconName = 6
   const IconChevronRight IconName = 1
   const IconCircle IconName = 5
@@ -636,6 +662,9 @@ flatui/layout package layout
   const TextBody TextRole = 0
   const TextSubtle TextRole = 2
   const TextTitle TextRole = 1
+  const ToggleCheckbox ToggleKind = 0
+  const ToggleRadio ToggleKind = 2
+  const ToggleSwitch ToggleKind = 1
   func Auto() Size
   func ClampScroll(offset int, viewport int, content int) int
   func Compose(root Node, width int, height int) Composition
@@ -651,6 +680,8 @@ flatui/layout package layout
   func SolveWithDiagnostics(root Node, width int, height int)(map[string] Rect, []DuplicateIDDiagnostic)
   method *Spacer.Render(r Rect) string
   method *Spacer.WithBackground(c color.Color) *Spacer
+  method Button.Render(r Rect) string
+  method Button.Size()(Size, Size)
   method Col.GetChildren()[]Node
   method Col.GetGap() int
   method Col.IsHorizontal() bool
@@ -680,6 +711,7 @@ flatui/layout package layout
   method Row.Render(rect Rect) string
   method Row.Size()(Size, Size)
   method Scene.HitTest(x float64, y float64)(string, PointRect)
+  method Scene.TooltipAt(x float64, y float64) string
   method Scroll.GetChildren()[]Node
   method Scroll.IsHorizontal() bool
   method Scroll.Render(rect Rect) string
@@ -687,9 +719,16 @@ flatui/layout package layout
   method ScrollBar.OffsetAt(y int, height int) int
   method ScrollBar.Render(r Rect) string
   method ScrollBar.Size()(Size, Size)
+  method Slider.Render(r Rect) string
+  method Slider.Size()(Size, Size)
+  method Slider.ValueAt(x int, width int) float64
   method Text.Render(r Rect) string
   method Text.Size()(Size, Size)
   method TextStyle.Render(text string) string
+  method Toggle.Render(r Rect) string
+  method Toggle.Size()(Size, Size)
+  methodset *Button.GetID() string
+  methodset *Button.IsOverlay() bool
   methodset *Col.GetID() string
   methodset *Col.IsOverlay() bool
   methodset *Icon.GetID() string
@@ -706,11 +745,17 @@ flatui/layout package layout
   methodset *Scroll.IsOverlay() bool
   methodset *ScrollBar.GetID() string
   methodset *ScrollBar.IsOverlay() bool
+  methodset *Slider.GetID() string
+  methodset *Slider.IsOverlay() bool
   methodset *Spacer.GetID() string
   methodset *Spacer.IsOverlay() bool
   methodset *Spacer.Size()(Size, Size)
   methodset *Text.GetID() string
   methodset *Text.IsOverlay() bool
+  methodset *Toggle.GetID() string
+  methodset *Toggle.IsOverlay() bool
+  methodset Button.GetID() string
+  methodset Button.IsOverlay() bool
   methodset Col.GetID() string
   methodset Col.IsOverlay() bool
   methodset Icon.GetID() string
@@ -727,11 +772,15 @@ flatui/layout package layout
   methodset Scroll.IsOverlay() bool
   methodset ScrollBar.GetID() string
   methodset ScrollBar.IsOverlay() bool
+  methodset Slider.GetID() string
+  methodset Slider.IsOverlay() bool
   methodset Spacer.GetID() string
   methodset Spacer.IsOverlay() bool
   methodset Spacer.Size()(Size, Size)
   methodset Text.GetID() string
   methodset Text.IsOverlay() bool
+  methodset Toggle.GetID() string
+  methodset Toggle.IsOverlay() bool
   type BorderKind int
   type Box struct
   field Box.Border BorderKind [order=0]
@@ -747,6 +796,14 @@ flatui/layout package layout
   field BoxOp.Clip PointRect [order=1]
   field BoxOp.Box Box [order=2]
   struct BoxOp fields=3 comparable=true
+  type Button struct
+  field Button.NodeBase NodeBase [order=0]
+  field Button.Label string [order=1]
+  field Button.Style TextStyle [order=2]
+  field Button.Default bool [order=3]
+  field Button.Disabled bool [order=4]
+  field Button.Focused bool [order=5]
+  struct Button fields=6 comparable=false
   type CellsOp struct
   field CellsOp.Rect PointRect [order=0]
   field CellsOp.Clip PointRect [order=1]
@@ -766,6 +823,21 @@ flatui/layout package layout
   field Composition.<unexported> *caretPos [order=4]
   field Composition.<unexported> map[string] placedInput [order=5]
   struct Composition fields=6 comparable=false
+  type ControlKind int
+  type ControlOp struct
+  field ControlOp.ID string [order=0]
+  field ControlOp.Kind ControlKind [order=1]
+  field ControlOp.Rect PointRect [order=2]
+  field ControlOp.Clip PointRect [order=3]
+  field ControlOp.Label string [order=4]
+  field ControlOp.Style TextStyle [order=5]
+  field ControlOp.Checked bool [order=6]
+  field ControlOp.Value float64 [order=7]
+  field ControlOp.Fill color.Color [order=8]
+  field ControlOp.Default bool [order=9]
+  field ControlOp.Disabled bool [order=10]
+  field ControlOp.Focused bool [order=11]
+  struct ControlOp fields=12 comparable=true
   type DuplicateIDDiagnostic struct
   field DuplicateIDDiagnostic.ID string [order=0]
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
@@ -861,7 +933,9 @@ flatui/layout package layout
   field NodeBase.PadLeft int [order=10]
   field NodeBase.Chrome func(r Rect) string [order=11]
   field NodeBase.Box Box [order=12]
-  struct NodeBase fields=13 comparable=false
+  field NodeBase.Tooltip string [order=13]
+  field NodeBase.Anchor string [order=14]
+  struct NodeBase fields=15 comparable=false
   type Op interface
   interface Op method isOp()
   type PointRect struct
@@ -884,7 +958,8 @@ flatui/layout package layout
   field Scene.Ops []Op [order=0]
   field Scene.Rects map[string] PointRect [order=1]
   field Scene.<unexported> []hitOf[float64] [order=2]
-  struct Scene fields=3 comparable=false
+  field Scene.<unexported> []tip [order=3]
+  struct Scene fields=4 comparable=false
   type Scroll struct
   field Scroll.NodeBase NodeBase [order=0]
   field Scroll.OffsetY int [order=1]
@@ -911,6 +986,13 @@ flatui/layout package layout
   field Size.Weight float64 [order=2]
   struct Size fields=3 comparable=true
   type SizeKind int
+  type Slider struct
+  field Slider.NodeBase NodeBase [order=0]
+  field Slider.Value float64 [order=1]
+  field Slider.Fill color.Color [order=2]
+  field Slider.Disabled bool [order=3]
+  field Slider.Focused bool [order=4]
+  struct Slider fields=5 comparable=false
   type Spacer struct
   field Spacer.NodeBase NodeBase [order=0]
   field Spacer.<unexported> color.Color [order=1]
@@ -936,3 +1018,13 @@ flatui/layout package layout
   field TextStyle.Underline bool [order=5]
   field TextStyle.Strikethrough bool [order=6]
   struct TextStyle fields=7 comparable=true
+  type Toggle struct
+  field Toggle.NodeBase NodeBase [order=0]
+  field Toggle.Kind ToggleKind [order=1]
+  field Toggle.Label string [order=2]
+  field Toggle.Style TextStyle [order=3]
+  field Toggle.Checked bool [order=4]
+  field Toggle.Disabled bool [order=5]
+  field Toggle.Focused bool [order=6]
+  struct Toggle fields=7 comparable=false
+  type ToggleKind int

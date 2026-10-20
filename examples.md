@@ -24,6 +24,7 @@ go run ./flat-pages
 | Sample | Demonstrates |
 |---|---|
 | `flat-form` | Multiple `flatui.TextField` values as `Input` nodes, focus; the focused field's caret places the cursor |
+| `flat-settings` | A settings form of controls — `TextField.Layout`, a switch and a checkbox (`Toggle`, one disabled by the other), radio buttons, a `Slider` (click and drag via `ValueAt`), a `flatui.Select` dropdown (an overlay anchored under its button), and `Button`s with tooltips — driven by a focus ring and the mouse; `-gui` shows native controls with hover, press, and pointer shapes |
 | `flat-editor` | `flatui.Textarea`, multiline editing, soft-wrap, selection, Home/End line movement; `Textarea.Layout` sized from `LayoutEvent`, a blinking block cursor (a bar while selecting) via `Frame.CursorStyle`; click/drag via `MouseEvent.Caret`, paste, ⌘C/⌘X/⌘A and ⌘ arrows (Super, in terminals that report it), ctrl+c copy (quits with nothing selected); `-gui` runs it as a native text area (window-aware ↑/↓) |
 | `flat-keys` | Raw terminal key diagnostics for terminal-specific chords |
 

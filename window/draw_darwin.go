@@ -261,6 +261,8 @@ type painter struct {
 	caretClip layout.PointRect
 	// clip is the clip of the op being drawn.
 	clip layout.PointRect
+	// hovered and pressed are the host's hovered and pressed control IDs.
+	hovered, pressed string
 	// layer is the rect of the overlay layer just started: its box, the
 	// next op, is a raised surface.
 	layer   layout.PointRect
@@ -314,6 +316,10 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.icon(op) })
 		case layout.MeterOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.meter(op) })
+		case layout.ControlOp:
+			// Not clipped to its rect: a focus ring draws just outside it.
+			p.clip = op.Clip
+			p.clipped(op.Clip, func() { p.control(op) })
 		case layout.ScrollBarOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.scrollBar(op) })
 		case layout.CellsOp:

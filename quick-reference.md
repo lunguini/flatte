@@ -114,7 +114,9 @@ shared geometry and add their own fields.
 | `PadTop`/`PadRight`/`PadBottom`/`PadLeft` | `int` | Per-side padding added on top of `Pad` (inside the border) — for asymmetric insets like "header rows + left pad only". |
 | `Gap` | `int` | Space between children (containers). |
 | `Bordered` | `bool` | Draw a rounded border; adds one inset cell per side. Shorthand for `Box{Border: BorderRounded}`. |
-| `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). |
+| `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). An overlay does not size its parent. |
+| `Anchor` | `string` | For an `Overlay`: place it just below the node with this ID, left-aligned, above it when there is no room, inside the frame (dropdowns, context menus). An anchor not laid out centers it. |
+| `Tooltip` | `string` | Help text a window shows while the pointer rests on the node (the innermost one with a tooltip); the terminal ignores it. |
 | `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
 | `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Box` fill; layout inset still comes from `Pad` and the border. Terminal-only: prefer `Box` when it can say what you need. |
 | `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`, `Round`, `Title`, `TitleStyle`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). `Round` asks a window to round a background's corners (a pill when one line tall); the terminal draws it square. `Title` labels a border: the terminal writes ` Title ` in `TitleStyle` into the top rule, a window sets it in the stroke. |
@@ -144,6 +146,9 @@ whole viewport.
 | `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
 | `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. `Wrap: true` wraps it by words at its width (cells in the terminal, the font in a window): it fills an Auto width, and its Auto height is the wrapped line count at the width it gets. |
 | `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`; `IconBlank` draws nothing — terminal-only decoration) in the same columns. Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
+| `layout.Button{Label: ..., Default: ..., Disabled: ..., Focused: ...}` | A push button: `[ Label ]` in the terminal (bold when `Default`, label reversed when `Focused`, subtle when `Disabled`), a native bezel in a window (the accent when `Default`). |
+| `layout.Toggle{Kind: ..., Label: ..., Checked: ...}` | A checkbox (`[x]`), switch (`[ ●]`/`[○ ]`), or radio button (`(•)`), with its label; native indicators in a window. One-of-many for radios is the app's. |
+| `layout.Slider{Value: ..., Fill: ...}` | A 0..1 value on a track: `━━━●───` in the terminal, a native slider in a window; fills the width on Auto. `ValueAt(x, width)` maps a press or drag. |
 | `layout.Meter{Value: ..., Fill: ..., Track: ...}` | A horizontal gauge filled to `Value` (0..1): `█`/`░` cells in the terminal, a native bar in a window; fills the width on Auto, one line tall. |
 | `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. `Multiline: true` makes it a text area (usually from `Textarea.Layout`): `Wrap` soft-wraps, `SelStart`/`SelEnd` select bytes (shown in `SelectionStyle`, reverse video when zero), `OffsetX`/`OffsetY` are the widget's scroll, and its Auto height grows. |
 | `layout.ScrollBar{Offset: ..., Visible: ..., Total: ..., Color: ...}` | Where a scrolled window is: `█` thumb on `░` track in the terminal (blank when everything fits), a thin native thumb in a window. One column wide, fills the height. |
@@ -244,6 +249,26 @@ it looks. Roles are `TextBody` (default), `TextTitle`, and `TextSubtle`;
 role. `TextStyle.Render(s)` is the terminal look, and `flatui.Title` /
 `flatui.Subtle` are those roles for string frames, so both paths match.
 
+### Controls
+
+Give controls IDs: clicks arrive as `MouseEvent`s targeting them, and keys
+are the app's (Enter or Space on the focused control, a focus ring for Tab).
+Controls hold no interaction state: `Checked`, `Value`, `Focused`, and
+`Disabled` come from app state. In a window the host shows hover, press,
+the pointer shape (a hand over controls, an I-beam over inputs), and
+tooltips itself — no events, no app state. `cmd/flat-settings` uses every
+control.
+
+```go
+layout.Toggle{NodeBase: layout.NodeBase{ID: "notify"}, Kind: layout.ToggleSwitch,
+	Label: "Notifications", Checked: s.notify, Focused: s.focus.Focused(fNotify)}
+...
+case flatte.MouseEvent:
+	if ev.Target == "notify" && ev.Action == flatte.MousePress {
+		s.notify = !s.notify
+	}
+```
+
 ### Inputs and the cursor
 
 Put a field in the tree with `TextField.Layout(id, focused)`. With
@@ -278,6 +303,7 @@ frame tree instead of being rendered and positioned by hand:
 | `flatui.Viewport` | A `layout.Scroll` over its lines at the current offset, as tall as the visible slice: a `Label` when plain (for `SetWrappedContent`, a wrapping `Label` of the raw text, so a window wraps it in its font), a `Text` when styled. Wrapped content breaks at words. Call `Adopt(rects, id)` with each `LayoutEvent` (id: the node holding `Layout()`) instead of `SetSize`: it sizes the viewport from that node and scrolls over the lines the host laid the text out in, so a window's scroll range, `AtBottom`, and `ScrollPercent` are its own; a viewport sent to the bottom stays there. |
 | `flatui.Progress` | A `layout.Meter` of the bar's width and the percent label: the same text in the terminal, a native bar in a window. |
 | `flatui.TextField` | `Layout(id, focused)`: a `layout.Input` showing the value and caret. |
+| `flatui.Select` | A dropdown: `Layout(id, focused)` is a `Button` showing the value and ▾ plus, while open, its options as an overlay anchored under it (rows `id:option:i`); `Click(target, id)` opens/closes or chooses; `Open`/`MoveUp`/`MoveDown`/`Confirm`/`Close` for keys. |
 | `flatui.Textarea` | `Layout(id, focused)`: a multi-line `layout.Input` with the value, cursor, selection, soft-wrap, and scroll — in the terminal the same cells as `ViewWithSelection`. Size it from the node's rect (`LayoutEvent`). In a window it wraps by words in the UI font; use the events' carets for clicks and ↑/↓ (`MoveTo`, `MoveToSelecting`), `InsertText` for pastes, `SelectAll`. |
 
 ### Geometry-based hit-testing
