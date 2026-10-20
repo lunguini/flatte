@@ -17,6 +17,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type State struct {
@@ -190,21 +191,25 @@ func listSelectableFiles(root string) ([]string, error) {
 	return files, nil
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	path := s.path
 	if path == "" {
 		path = "(none)"
 	}
-	lines := []string{
-		flatui.Title("Flat File Select"),
-		flatui.Subtle("terminal-delegated selector"),
-		"",
-		"  status: " + s.status,
-		"  selected: " + path,
-		"",
-		flatui.Subtle("o open selector | q quit"),
-	}
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat File Select", Style: title},
+		layout.Label{Text: "terminal-delegated selector", Style: subtle},
+		layout.Label{},
+		layout.Label{NodeBase: indent, Text: "status: " + s.status + "\nselected: " + path},
+		layout.Label{},
+		layout.Label{Text: "o open selector | q quit", Style: subtle},
+	)}
 }
 
 func main() {

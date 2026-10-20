@@ -9,6 +9,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const (
@@ -89,27 +90,33 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	status := "streaming"
 	if s.done {
 		status = "complete"
 	}
-	lines := []string{
-		flatui.Title("Flat Stream"),
-		flatui.Subtle("flatte.Stream dogfood"),
-		"",
-		"  status: " + status,
-		"",
+	children := []layout.Node{
+		layout.Label{Text: "Flat Stream", Style: title},
+		layout.Label{Text: "flatte.Stream dogfood", Style: subtle},
+		layout.Label{},
+		layout.Label{NodeBase: indent, Text: "status: " + status},
+		layout.Label{},
 	}
 	if len(s.events) == 0 {
-		lines = append(lines, "  (waiting for events)")
+		children = append(children, layout.Label{NodeBase: indent, Text: "(waiting for events)"})
 	} else {
 		for _, ev := range s.events {
-			lines = append(lines, fmt.Sprintf("  [%s] %s", ev.Level, ev.Message))
+			children = append(children, layout.Label{NodeBase: indent, Text: fmt.Sprintf("[%s] %s", ev.Level, ev.Message)})
 		}
 	}
-	lines = append(lines, "", flatui.Subtle("c clear | q quit"))
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+	children = append(children, layout.Label{}, layout.Label{Text: "c clear | q quit", Style: subtle})
+	return flatte.Frame{Root: flatui.CardLayout(children...)}
 }
 
 func streamInterval() time.Duration {

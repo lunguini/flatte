@@ -2,6 +2,7 @@ package layout
 
 import (
 	uv "github.com/charmbracelet/ultraviolet"
+	"image/color"
 )
 
 // SolveAndCompose walks the tree exactly once. It distributes rects top-down
@@ -140,12 +141,61 @@ type cellPainter struct {
 
 func (p *cellPainter) leaf(n Node, rr, cc rect[int]) {
 	r, clip := Rect(rr), Rect(cc)
+	// A Box's background is behind its content: leaf cells with no
+	// background of their own keep the one painted underneath.
+	vis := r.Intersect(clip)
+	under := backgrounds(p.buf, vis)
 	// paintClipped bounds an over-wide or over-tall string to its rect and
 	// skips a leaf scrolled out of view.
 	paintClipped(p.buf, r, clip, n.Render)
+	if under != nil {
+		keepBackgrounds(p.buf, vis, under)
+	}
 	if cn, ok := n.(caretNode); ok {
 		if x, y, ok := cn.caret(r); ok && clip.Contains(x, y) {
 			p.caret = &caretPos{x, y}
+		}
+	}
+}
+
+// backgrounds returns the background of each cell of r in row order, or nil
+// when none has one (the common case, which then costs one scan).
+func backgrounds(buf uv.ScreenBuffer, r Rect) []color.Color {
+	if r.W <= 0 || r.H <= 0 {
+		return nil
+	}
+	var bgs []color.Color
+	for y := range r.H {
+		for x := range r.W {
+			c := buf.CellAt(r.X+x, r.Y+y)
+			if c == nil || c.Style.Bg == nil {
+				continue
+			}
+			if bgs == nil {
+				bgs = make([]color.Color, r.W*r.H)
+			}
+			bgs[y*r.W+x] = c.Style.Bg
+		}
+	}
+	return bgs
+}
+
+// keepBackgrounds gives each cell of r that has no background the one it
+// had before (see backgrounds).
+func keepBackgrounds(buf uv.ScreenBuffer, r Rect, under []color.Color) {
+	for y := range r.H {
+		for x := 0; x < r.W; {
+			c := buf.CellAt(r.X+x, r.Y+y)
+			if c == nil {
+				x++
+				continue
+			}
+			if bg := under[y*r.W+x]; c.Style.Bg == nil && bg != nil && c.Width > 0 {
+				kept := *c
+				kept.Style.Bg = bg
+				buf.SetCell(r.X+x, r.Y+y, &kept)
+			}
+			x += max(c.Width, 1)
 		}
 	}
 }

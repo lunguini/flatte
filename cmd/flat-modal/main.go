@@ -7,8 +7,6 @@ import (
 	"os"
 	"time"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
@@ -108,10 +106,6 @@ func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-// cardBox is the look flatui.Card gives string frames: a plain border in a
-// muted grey.
-var cardBox = layout.Box{Border: layout.BorderNormal, BorderColor: lipgloss.Color("240")}
-
 var (
 	title  = layout.TextStyle{Role: layout.TextTitle}
 	subtle = layout.TextStyle{Role: layout.TextSubtle}
@@ -148,30 +142,27 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 			modal(s),
 		)
 	}
-	return flatte.Frame{Root: layout.Col{
-		NodeBase: layout.NodeBase{PadLeft: 2, PadRight: 2, Box: cardBox},
-		Children: children,
-	}}
+	return flatte.Frame{Root: flatui.CardLayout(children...)}
 }
 
+// modal is a card too, as a fixed-width overlay.
 func modal(s *State) layout.Node {
-	return layout.Col{
-		NodeBase: layout.NodeBase{Overlay: true, W: layout.Fixed(32), PadLeft: 2, PadRight: 2, Box: cardBox},
-		Children: []layout.Node{
-			layout.Label{Text: "Confirm Work", Style: title},
-			layout.Label{Text: "modal captures input", Style: subtle},
-			layout.Label{},
-			layout.Row{
-				NodeBase: layout.NodeBase{PadLeft: 2, Gap: 1},
-				Children: []layout.Node{
-					layout.Label{Text: "name:"},
-					s.modalInput.Layout("modal.name", true),
-				},
+	card := flatui.CardLayout(
+		layout.Label{Text: "Confirm Work", Style: title},
+		layout.Label{Text: "modal captures input", Style: subtle},
+		layout.Label{},
+		layout.Row{
+			NodeBase: layout.NodeBase{PadLeft: 2, Gap: 1},
+			Children: []layout.Node{
+				layout.Label{Text: "name:"},
+				s.modalInput.Layout("modal.name", true),
 			},
-			layout.Label{},
-			layout.Label{Text: "enter confirm | esc cancel", Style: subtle},
 		},
-	}
+		layout.Label{},
+		layout.Label{Text: "enter confirm | esc cancel", Style: subtle},
+	)
+	card.Overlay, card.W = true, layout.Fixed(32)
+	return card
 }
 
 func tickInterval() time.Duration {

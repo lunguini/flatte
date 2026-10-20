@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type screen int
@@ -140,19 +139,19 @@ func handleSettings(s *State, key flatte.KeyEvent) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	frame := flatte.Frame{
-		Content: viewContent(s, ctx),
-		Title:   "Flatte \u2014 " + screenName(s.screen),
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+// View shows the current screen. On the settings screen the name Input
+// places the cursor, so there is no cursor arithmetic here.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	return flatte.Frame{
+		Root:  flatui.CardLayout(screenContent(s)...),
+		Title: "Flatte \u2014 " + screenName(s.screen),
 	}
-	if s.screen == screenSettings {
-		originX, originY := flatui.CardOrigin()
-		frame.Cursor = &flatte.Cursor{
-			X: originX + lipgloss.Width("  name: ") + s.settingsName.CursorColumn(),
-			Y: originY + 3, // title, subtle, blank precede the name row
-		}
-	}
-	return frame
 }
 
 func screenName(sc screen) string {
@@ -166,60 +165,59 @@ func screenName(sc screen) string {
 	}
 }
 
-func viewContent(s *State, ctx flatte.RenderContext) string {
+func screenContent(s *State) []layout.Node {
 	switch s.screen {
 	case screenHome:
-		return viewHome(s, ctx)
+		return viewHome(s)
 	case screenDetails:
-		return viewDetails(s, ctx)
+		return viewDetails(s)
 	case screenSettings:
-		return viewSettings(s, ctx)
+		return viewSettings(s)
 	default:
-		return flatui.Card([]string{"unknown screen"}, ctx.Width)
+		return []layout.Node{layout.Label{Text: "unknown screen"}}
 	}
 }
 
-func viewHome(s *State, ctx flatte.RenderContext) string {
-	lines := []string{
-		flatui.Title("Flat Pages"),
-		flatui.Subtle("multi-screen navigation sample"),
-		"",
+func viewHome(s *State) []layout.Node {
+	children := []layout.Node{
+		layout.Label{Text: "Flat Pages", Style: title},
+		layout.Label{Text: "multi-screen navigation sample", Style: subtle},
+		layout.Label{},
 	}
 	for i, item := range homeItems {
 		prefix := "  "
 		if i == s.homeCursor {
 			prefix = "> "
 		}
-		lines = append(lines, prefix+item)
+		children = append(children, layout.Label{Text: prefix + item})
 	}
-	lines = append(lines, "", flatui.Subtle("j/k move | enter open | q quit"))
-	return flatui.Card(lines, ctx.Width)
+	return append(children, layout.Label{}, layout.Label{Text: "j/k move | enter open | q quit", Style: subtle})
 }
 
-func viewDetails(s *State, ctx flatte.RenderContext) string {
+func viewDetails(s *State) []layout.Node {
 	item := details[s.selected]
-	lines := []string{
-		flatui.Title("Details"),
-		flatui.Subtle("screen-specific state without a router"),
-		"",
-		"  item: " + item,
-		"  index: " + fmt.Sprint(s.selected),
-		"",
-		flatui.Subtle("j/k change item | esc back"),
+	return []layout.Node{
+		layout.Label{Text: "Details", Style: title},
+		layout.Label{Text: "screen-specific state without a router", Style: subtle},
+		layout.Label{},
+		layout.Label{NodeBase: indent, Text: "item: " + item + "\nindex: " + fmt.Sprint(s.selected)},
+		layout.Label{},
+		layout.Label{Text: "j/k change item | esc back", Style: subtle},
 	}
-	return flatui.Card(lines, ctx.Width)
 }
 
-func viewSettings(s *State, ctx flatte.RenderContext) string {
-	lines := []string{
-		flatui.Title("Settings"),
-		flatui.Subtle("settings input is app-owned state"),
-		"",
-		"  name: " + s.settingsName.Value,
-		"",
-		flatui.Subtle("type edit | arrows move | enter/esc back"),
+func viewSettings(s *State) []layout.Node {
+	return []layout.Node{
+		layout.Label{Text: "Settings", Style: title},
+		layout.Label{Text: "settings input is app-owned state", Style: subtle},
+		layout.Label{},
+		layout.Row{NodeBase: indent, Children: []layout.Node{
+			layout.Label{Text: "name: "},
+			s.settingsName.Layout("settings.name", true),
+		}},
+		layout.Label{},
+		layout.Label{Text: "type edit | arrows move | enter/esc back", Style: subtle},
 	}
-	return flatui.Card(lines, ctx.Width)
 }
 
 func main() {

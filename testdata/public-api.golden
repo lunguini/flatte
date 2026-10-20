@@ -235,6 +235,7 @@ flatui package flatui
   func Card(lines[]string, maxWidth int) string
   func CardBodyHeight(totalHeight int, pinnedRows int) int
   func CardBodyWidth(totalWidth int) int
+  func CardLayout(children ... layout.Node) layout.Col
   func CardOrigin()(x int, y int)
   func CardWithStyle(lines[]string, maxWidth int, style CardStyle) string
   func ContentWidth(totalWidth int) int

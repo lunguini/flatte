@@ -78,7 +78,7 @@ or piped Windows tests do not verify live console resizing.
 | Click regions | `flatui.ZoneMap` | `cmd/flat-zones`, `cmd/flat-spike` |
 | Modal overlay | `layout.NodeBase{Overlay: true}` | `cmd/flat-docker` |
 | Clickable tab strip | `flatui.TabBar` | `cmd/flat-docker` |
-| Basic card layout | `flatui.Card`, `flatui.CardBodyWidth`, `flatui.CardBodyHeight` | most samples |
+| Basic card layout | `flatui.CardLayout(children...)` as `Frame.Root` (a plain `layout.Col` with Card's look; fills the frame); string frames: `flatui.Card`, `flatui.CardBodyWidth`, `flatui.CardBodyHeight` | most samples |
 | Styled local composition | Lip Gloss v2 + `flatui` styled methods | `cmd/flat-style`, `cmd/flat-workspace` |
 | Flexbox-style frame tree | `flatui/layout` (`Row`, `Col`, `Text`, `Spacer`) | `cmd/flat-layout`, `cmd/flat-docker` |
 
@@ -117,7 +117,7 @@ shared geometry and add their own fields.
 | `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). |
 | `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
 | `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Box` fill; layout inset still comes from `Pad` and the border. Terminal-only: prefer `Box` when it can say what you need. |
-| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. |
+| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. |
 
 ### Size kinds
 

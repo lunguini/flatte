@@ -8,6 +8,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const defaultProgressInterval = 120 * time.Millisecond
@@ -36,15 +37,14 @@ func applyTick(s *State, _ time.Time) {
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(ev.Width)
+	case flatte.LayoutEvent:
+		// The bar fills the rect the frame solved for it, in either host.
+		if r, ok := ev.Rects[barID]; ok {
+			s.progress.SetWidth(max(r.W-percentLabelWidth, 0))
+		}
 	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	}
-}
-
-func (s *State) layout(width int) {
-	s.progress.SetWidth(max(flatui.CardBodyWidth(width)-8, 0))
 }
 
 func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
@@ -61,21 +61,38 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+// barID names the node the progress bar fills.
+const barID = "progress.bar"
+
+// percentLabelWidth is the "  100%" Progress.View puts after the bar.
+const percentLabelWidth = 6
+
+// View shows the bar as a Text leaf: its block characters are cells (a
+// window draws them as a cell grid).
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	status := "running"
 	if s.paused {
 		status = "paused"
 	}
-	lines := []string{
-		flatui.Title("Flat Progress"),
-		flatui.Subtle("horizontal loader sample"),
-		"",
-		"  " + s.progress.View(),
-		"  state: " + status,
-		"",
-		flatui.Subtle("space pause | r reset | q quit"),
-	}
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Progress", Style: title},
+		layout.Label{Text: "horizontal loader sample", Style: subtle},
+		layout.Label{},
+		layout.Row{NodeBase: indent, Children: []layout.Node{
+			layout.Col{NodeBase: layout.NodeBase{ID: barID, W: layout.Grow(1)}, Children: []layout.Node{
+				layout.Text{String: s.progress.View()},
+			}},
+		}},
+		layout.Label{NodeBase: indent, Text: "state: " + status},
+		layout.Label{},
+		layout.Label{Text: "space pause | r reset | q quit", Style: subtle},
+	)}
 }
 
 func progressInterval() time.Duration {

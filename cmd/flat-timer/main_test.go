@@ -66,7 +66,7 @@ func TestTimerControlsResetAndRestart(t *testing.T) {
 }
 
 func TestTimerViewShowsState(t *testing.T) {
-	frame := View(NewState(), flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(NewState(), flatte.RenderContext{Width: 72})).Content
 	for _, want := range []string{"Flat Timer", "timer:", "stopwatch:", "space start/stop"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -91,4 +91,10 @@ func TestTimerQuit(t *testing.T) {
 func TestTimerSnapshot(t *testing.T) {
 	d := driver()
 	flatest.AssertGoldenFrame(t, "testdata/timer.golden", d.Frame())
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

@@ -269,7 +269,7 @@ func TestOpenSelectorCapturesSelectedPathThroughRun(t *testing.T) {
 }
 
 func TestInitialFrame(t *testing.T) {
-	frame := View(NewState(), flatte.RenderContext{Width: 72})
+	frame := composed(View(NewState(), flatte.RenderContext{Width: 72}))
 	clean := flatest.CleanFrame(frame.Content)
 	for _, want := range []string{"Flat File Select", "status: ready", "selected: (none)", "o open selector"} {
 		if !strings.Contains(clean, want) {
@@ -294,4 +294,10 @@ func stubGOOS(value string) func() {
 	previous := goos
 	goos = value
 	return func() { goos = previous }
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

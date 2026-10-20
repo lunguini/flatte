@@ -165,7 +165,7 @@ func TestEscQuits(t *testing.T) {
 func TestViewPlacesCursorAfterPrompt(t *testing.T) {
 	s := NewState()
 	typeRunes(s, "ab")
-	frame := View(s, flatte.RenderContext{Width: 50})
+	frame := composed(View(s, flatte.RenderContext{Width: 50}))
 	if frame.Cursor == nil {
 		t.Fatal("no cursor")
 	}
@@ -178,7 +178,7 @@ func TestViewPlacesCursorAfterPrompt(t *testing.T) {
 func TestViewSnapshot(t *testing.T) {
 	s := NewState()
 	typeRunes(s, "hello")
-	flatest.AssertGoldenFrame(t, "testdata/chat.golden", View(s, flatte.RenderContext{Width: 50}))
+	flatest.AssertGoldenFrame(t, "testdata/chat.golden", composed(View(s, flatte.RenderContext{Width: 50})))
 }
 
 // TestSentMessageReachesScrollback drives the real Run inline over a pipe:
@@ -216,4 +216,12 @@ func TestSentMessageReachesScrollback(t *testing.T) {
 	if !strings.Contains(out.String(), "you: hi") {
 		t.Fatalf("sent message did not reach scrollback:\n%q", out.String())
 	}
+}
+
+// composed is View's frame as inline Run paints it on a 72-column
+// terminal: at the root's measured height.
+func composed(f flatte.Frame) flatte.Frame {
+	_, h := f.Root.Size()
+	f, _ = flatte.ComposeFrame(f, 72, h.Value)
+	return f
 }

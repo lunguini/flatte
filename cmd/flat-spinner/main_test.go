@@ -29,7 +29,7 @@ func TestSpinnerFrameChangesOnTick(t *testing.T) {
 }
 
 func TestViewShowsLabel(t *testing.T) {
-	frame := View(NewState(), flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(NewState(), flatte.RenderContext{Width: 72})).Content
 	for _, want := range []string{"Flat Spinner", "working...", "q quit"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -55,4 +55,10 @@ func TestSpinnerSequenceSnapshot(t *testing.T) {
 		func(d *flatest.Driver[State]) { d.Advance(2 * interval) }, // +2 ticks
 	)
 	flatest.AssertFrames(t, "testdata/spinner-sequence.golden", frames)
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

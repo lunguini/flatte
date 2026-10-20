@@ -12,54 +12,36 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const (
 	logsZone    = "logs"
 	metricsZone = "metrics"
 	panelGap    = 2
-	panelRows   = 3
-	panelTop    = 3
 )
 
 type State struct {
-	width    int
 	selected string
 	last     string
 	zones    flatui.ZoneMap
 }
 
 func NewState() *State {
-	s := &State{selected: "none", last: "no clicks yet"}
-	s.layout(72)
-	return s
-}
-
-func (s *State) layout(width int) {
-	s.width = width
-	bodyWidth := flatui.CardBodyWidth(width)
-	panelWidth := max((bodyWidth-panelGap)/2, 8)
-	originX, originY := flatui.CardOrigin()
-
-	s.zones.Clear()
-	s.zones.Set(logsZone, flatui.Rect{
-		X: originX,
-		Y: originY + panelTop,
-		W: panelWidth,
-		H: panelRows,
-	})
-	s.zones.Set(metricsZone, flatui.Rect{
-		X: originX + panelWidth + panelGap,
-		Y: originY + panelTop,
-		W: panelWidth,
-		H: panelRows,
-	})
+	return &State{selected: "none", last: "no clicks yet"}
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(e.Width)
+	case flatte.LayoutEvent:
+		// The panels are ID'd nodes: the solved frame reports their rects,
+		// and those are the hit regions.
+		s.zones.Clear()
+		for _, id := range []string{logsZone, metricsZone} {
+			if r, ok := e.Rects[id]; ok {
+				s.zones.Set(id, r)
+			}
+		}
 	case flatte.KeyEvent:
 		if e.Key == flatte.KeyEscape || (e.Key == flatte.KeyCharacter && (e.Rune == 'q' || e.Rune == 'Q')) {
 			fx.Quit()
@@ -83,62 +65,44 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 	s.last = fmt.Sprintf("%s local %d,%d", id, localX, localY)
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	left, _ := s.zones.Rect(logsZone)
-	right, _ := s.zones.Rect(metricsZone)
-	leftRows := panel(logsZone, "event stream", left.W, s.selected == logsZone)
-	rightRows := panel(metricsZone, "dashboards", right.W, s.selected == metricsZone)
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+)
 
-	lines := []string{
-		flatui.Title("Flat Zones"),
-		flatui.Subtle("explicit hit regions"),
-		"",
-	}
-	for i := range leftRows {
-		lines = append(lines, leftRows[i]+strings.Repeat(" ", panelGap)+rightRows[i])
-	}
-	lines = append(lines,
-		"",
-		"selected: "+s.selected,
-		flatui.Subtle("last: "+s.last),
-		flatui.Subtle("click a panel | q/esc quit"),
-	)
-
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Zones", Style: title},
+		layout.Label{Text: "explicit hit regions", Style: subtle},
+		layout.Label{},
+		layout.Row{NodeBase: layout.NodeBase{Gap: panelGap}, Children: []layout.Node{
+			panel(logsZone, "event stream", s.selected == logsZone),
+			panel(metricsZone, "dashboards", s.selected == metricsZone),
+		}},
+		layout.Label{},
+		layout.Label{Text: "selected: " + s.selected},
+		layout.Label{Text: "last: " + s.last, Style: subtle},
+		layout.Label{Text: "click a panel | q/esc quit", Style: subtle},
+	)}
 }
 
-func panel(title, body string, width int, active bool) []string {
-	style := panelStyle(active)
-	return []string{
-		style.Render(fit(" "+strings.ToUpper(title), width)),
-		style.Render(fit(" "+body, width)),
-		style.Render(fit(" "+selectionLabel(active), width)),
-	}
-}
-
-func selectionLabel(active bool) string {
+// panel is a filled three-line panel with the zone's ID; it takes half the
+// row.
+func panel(id, body string, active bool) layout.Node {
+	text, bg := layout.TextStyle{Fg: lipgloss.Color("252")}, lipgloss.Color("235")
 	if active {
-		return "selected"
+		text, bg = layout.TextStyle{Fg: brand.Teal, Bold: true}, lipgloss.Color("57")
 	}
-	return "idle"
-}
-
-func fit(s string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	if lipgloss.Width(s) > width {
-		return s[:max(width, 0)]
-	}
-	return s + strings.Repeat(" ", max(width-lipgloss.Width(s), 0))
-}
-
-func panelStyle(active bool) lipgloss.Style {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	state := "idle"
 	if active {
-		return style.Bold(true).Foreground(brand.Teal).Background(lipgloss.Color("57"))
+		state = "selected"
 	}
-	return style.Background(lipgloss.Color("235"))
+	return layout.Col{
+		NodeBase: layout.NodeBase{ID: id, W: layout.Grow(1), PadLeft: 1, Box: layout.Box{Background: bg}},
+		Children: []layout.Node{
+			layout.Label{Text: strings.ToUpper(id) + "\n" + body + "\n" + state, Style: text},
+		},
+	}
 }
 
 func main() {

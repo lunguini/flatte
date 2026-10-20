@@ -23,7 +23,7 @@ go run ./flat-pages
 
 | Sample | Demonstrates |
 |---|---|
-| `flat-form` | Multiple `flatui.TextField` values, focus, real cursor placement |
+| `flat-form` | Multiple `flatui.TextField` values as `Input` nodes, focus; the focused field's caret places the cursor |
 | `flat-editor` | `flatui.Textarea`, multiline editing, soft-wrap, selection, Home/End line movement |
 | `flat-keys` | Raw terminal key diagnostics for terminal-specific chords |
 
@@ -48,14 +48,14 @@ go run ./flat-pages
 
 | Sample | Demonstrates |
 |---|---|
-| `flat-reader` | `flatui.Viewport`, scrollable body, pinned chrome, mouse wheel |
+| `flat-reader` | `flatui.Viewport` sized from its solved rect (`LayoutEvent`), scrollable body, pinned chrome, mouse wheel |
 | `flat-list` | `flatui.List`, keyboard/mouse selection, keep-visible scroll |
 | `flat-spinner` | `flatui.Spinner` driven by `Every` |
-| `flat-progress` | `flatui.Progress`, resize-owned width, pause/reset |
+| `flat-progress` | `flatui.Progress` sized from its solved rect (`LayoutEvent`), pause/reset |
 | `flat-table` | `flatui.Table`, aligned columns, selected row |
 | `flat-timer` | `flatui.Timer` and `flatui.Stopwatch` |
 | `flat-filter` | Filtered list composition with `TextField`, `List`, `Paginator`, and `KeyMap` |
-| `flat-zones` | `flatui.ZoneMap`, explicit hit regions, local mouse coordinates |
+| `flat-zones` | `flatui.ZoneMap` fed from ID'd panel rects (`LayoutEvent`), explicit hit regions, local mouse coordinates |
 | `flat-style` | Lip Gloss v2 styling, local palette, styled progress/table/card composition |
 
 ## Terminal Capabilities

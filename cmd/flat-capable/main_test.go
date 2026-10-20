@@ -101,5 +101,11 @@ func TestViewMatchesSnapshot(t *testing.T) {
 		editorText: "edited line",
 	}
 
-	flatest.AssertGolden(t, "testdata/capable.golden", View(state, flatte.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/capable.golden", composed(View(state, flatte.RenderContext{Width: 72})).Content)
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

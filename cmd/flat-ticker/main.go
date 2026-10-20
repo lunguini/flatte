@@ -8,6 +8,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const defaultTickInterval = time.Second
@@ -44,22 +45,25 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	status := "running"
 	if s.paused {
 		status = "paused"
 	}
-
-	lines := []string{
-		flatui.Title("Flat Ticker"),
-		flatui.Subtle("streaming update sample"),
-		"",
-		fmt.Sprintf("  ticks: %d", s.ticks),
-		"  state: " + status,
-		"",
-		flatui.Subtle("space/p pause | r reset | q quit"),
-	}
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Ticker", Style: title},
+		layout.Label{Text: "streaming update sample", Style: subtle},
+		layout.Label{},
+		layout.Label{NodeBase: indent, Text: fmt.Sprintf("ticks: %d\nstate: %s", s.ticks, status)},
+		layout.Label{},
+		layout.Label{Text: "space/p pause | r reset | q quit", Style: subtle},
+	)}
 }
 
 func tickInterval() time.Duration {

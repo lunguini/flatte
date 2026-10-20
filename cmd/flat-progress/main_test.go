@@ -7,7 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
-	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 func TestProgressTickAdvancesUntilComplete(t *testing.T) {
@@ -55,13 +55,22 @@ func TestHandleTogglesPauseResetsAndQuits(t *testing.T) {
 	}
 }
 
-func TestResizeSetsProgressWidth(t *testing.T) {
+func TestLayoutSizesProgressToItsRect(t *testing.T) {
 	state := NewState()
 
-	Handle(state, flatte.ResizeEvent{Width: 72, Height: 24}, flatte.Effects[State]{})
+	Handle(state, flatte.LayoutEvent{Rects: map[string]layout.Rect{barID: {X: 3, Y: 4, W: 40, H: 1}}}, flatte.Effects[State]{})
 
-	if got, want := state.progress.Width(), flatui.CardBodyWidth(72)-8; got != want {
-		t.Fatalf("progress width = %d, want %d", got, want)
+	if got := state.progress.Width(); got != 40-percentLabelWidth {
+		t.Fatalf("progress width = %d, want %d", got, 40-percentLabelWidth)
+	}
+}
+
+func TestBarFillsTheCardAt72Columns(t *testing.T) {
+	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View}, 72)
+	// 72 columns less the card's border and padding (6) and the indent (2),
+	// less the percent label: the same bar as before the frame tree.
+	if got := d.State().progress.Width(); got != 72-6-2-percentLabelWidth {
+		t.Fatalf("progress width = %d, want %d", got, 72-6-2-percentLabelWidth)
 	}
 }
 
@@ -69,7 +78,7 @@ func TestViewRendersProgressState(t *testing.T) {
 	state := NewState()
 	state.progress.SetPercent(30)
 
-	frame := View(state, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(state, flatte.RenderContext{Width: 72})).Content
 
 	for _, want := range []string{"Flat Progress", "30%", "space pause", "r reset"} {
 		if !strings.Contains(frame, want) {
@@ -102,4 +111,10 @@ func TestProgressSequenceSnapshot(t *testing.T) {
 	)
 
 	flatest.AssertFrames(t, "testdata/progress-sequence.golden", frames)
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

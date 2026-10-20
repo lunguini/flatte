@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -145,6 +146,39 @@ func TestBoxBackgroundPaintsContainerWithoutInset(t *testing.T) {
 	if !strings.Contains(strings.Split(c.Frame, "\n")[1], "\x1b[") {
 		t.Fatalf("container background not painted under empty rows: %q", c.Frame)
 	}
+}
+
+// TestBoxBackgroundShowsBehindLeaves: a Box's background is behind its
+// content, so a leaf cell without a background of its own keeps the box's
+// (a window draws text over the fill; the terminal must match). A leaf's own
+// background still wins.
+func TestBoxBackgroundShowsBehindLeaves(t *testing.T) {
+	bg, own := lipgloss.Color("57"), lipgloss.Color("196")
+	root := Col{NodeBase: NodeBase{PadLeft: 1, Box: Box{Background: bg}}, Children: []Node{
+		Label{Text: "plain", Style: TextStyle{Fg: lipgloss.Color("252")}},
+		Text{String: "ansi " + lipgloss.NewStyle().Bold(true).Render("bold")},
+		Label{Text: "own", Style: TextStyle{Bg: own}},
+	}}
+	buf := uv.NewScreenBuffer(12, 4)
+	uv.NewStyledString(Compose(root, 12, 4).Frame).Draw(buf, buf.Bounds())
+	want := func(x, y int, c color.Color) {
+		t.Helper()
+		cell := buf.CellAt(x, y)
+		if cell == nil || !reflect.DeepEqual(cell.Style.Bg, c) {
+			var got color.Color
+			if cell != nil {
+				got = cell.Style.Bg
+			}
+			t.Errorf("cell %d,%d (%q) background %v, want %v", x, y, cell.Content, got, c)
+		}
+	}
+	for y := range 2 {
+		for x := range 12 {
+			want(x, y, bg) // text and its padding both keep the box's fill
+		}
+	}
+	want(1, 2, own)
+	want(11, 3, bg) // below the leaves: the fill itself
 }
 
 func TestSpacerBackgroundSources(t *testing.T) {

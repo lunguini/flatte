@@ -150,7 +150,7 @@ func TestViewRendersSearchState(t *testing.T) {
 	state := State{searching: true}
 	state.query.Value = "o"
 
-	frame := View(&state, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(&state, flatte.RenderContext{Width: 72})).Content
 
 	for _, want := range []string{"Flat Search", "query: o", "searching..."} {
 		if !strings.Contains(frame, want) {
@@ -164,7 +164,7 @@ func TestViewPlacesCursorOnlyWhenFocused(t *testing.T) {
 	state.query.Value = "ok"
 	state.query.Cursor = 2
 
-	frame := View(&state, flatte.RenderContext{Width: 72})
+	frame := composed(View(&state, flatte.RenderContext{Width: 72}))
 	if frame.Cursor == nil {
 		t.Fatal("focused view has no cursor")
 	}
@@ -178,7 +178,7 @@ func TestViewPlacesCursorOnlyWhenFocused(t *testing.T) {
 	}
 
 	state.focused = false
-	if blurred := View(&state, flatte.RenderContext{Width: 72}); blurred.Cursor != nil {
+	if blurred := composed(View(&state, flatte.RenderContext{Width: 72})); blurred.Cursor != nil {
 		t.Fatalf("blurred view still has a cursor: %+v", *blurred.Cursor)
 	}
 }
@@ -188,7 +188,7 @@ func TestViewMatchesFocusedSearchingSnapshot(t *testing.T) {
 	state.query.Value = "o"
 	state.query.Cursor = 1
 
-	flatest.AssertGoldenFrame(t, "testdata/focused-searching.golden", View(&state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/focused-searching.golden", composed(View(&state, flatte.RenderContext{Width: 72})))
 }
 
 func TestViewMatchesResultsSnapshot(t *testing.T) {
@@ -197,7 +197,7 @@ func TestViewMatchesResultsSnapshot(t *testing.T) {
 		results: []string{"sonnet", "opus", "freeform"},
 	}
 
-	flatest.AssertGoldenFrame(t, "testdata/results.golden", View(&state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/results.golden", composed(View(&state, flatte.RenderContext{Width: 72})))
 }
 
 func TestSearchDelayEnvironmentOverride(t *testing.T) {
@@ -222,4 +222,10 @@ func receiveSearchUpdate(t *testing.T, updates <-chan flatte.StateUpdate[State])
 		t.Fatal("timed out waiting for search update")
 		return nil
 	}
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

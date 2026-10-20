@@ -12,6 +12,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const clipboardLine = "flatte: copied from the capability demo"
@@ -98,7 +99,13 @@ func openEditor(s *State, fx flatte.Effects[State]) {
 	})
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	clip := s.clipboard
 	if clip == "" {
 		clip = "(none read yet)"
@@ -107,18 +114,14 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	if edited == "" {
 		edited = "(no editor session yet)"
 	}
-
-	lines := []string{
-		flatui.Title("Flat Capable"),
-		flatui.Subtle("clipboard · suspend · exec"),
-		"",
-		"  status: " + s.status,
-		"  last clipboard read: " + clip,
-		"  last editor text: " + edited,
-		"",
-		flatui.Subtle("y copy | p paste | z/Ctrl-Z suspend | e edit | q quit"),
-	}
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Capable", Style: title},
+		layout.Label{Text: "clipboard · suspend · exec", Style: subtle},
+		layout.Label{},
+		layout.Label{NodeBase: indent, Text: "status: " + s.status + "\nlast clipboard read: " + clip + "\nlast editor text: " + edited},
+		layout.Label{},
+		layout.Label{Text: "y copy | p paste | z/Ctrl-Z suspend | e edit | q quit", Style: subtle},
+	)}
 }
 
 func runOptions() []flatte.Option {

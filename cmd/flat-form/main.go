@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-
-	"charm.land/lipgloss/v2"
+	"strconv"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type Field struct {
@@ -105,43 +105,39 @@ func handleBlurred(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	lines := []string{
-		flatui.Title("Flat Form"),
-		flatui.Subtle("multi-input retained state sample"),
-		"",
-	}
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
 
+// View lays out one row per field. The focused field's Input places the
+// cursor, so there is no cursor arithmetic here.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	children := []layout.Node{
+		layout.Label{Text: "Flat Form", Style: title},
+		layout.Label{Text: "multi-input retained state sample", Style: subtle},
+		layout.Label{},
+	}
 	for i, field := range s.fields {
+		focused := s.editing && i == s.focused
 		prefix := "  "
-		if s.editing && i == s.focused {
+		if focused {
 			prefix = "> "
 		}
-		lines = append(lines, prefix+field.Label+": "+renderField(s, i))
+		children = append(children, layout.Row{Children: []layout.Node{
+			layout.Label{Text: prefix + field.Label + ": "},
+			field.Input.Layout("form.field."+strconv.Itoa(i), focused),
+		}})
 	}
-
-	lines = append(lines, "")
+	children = append(children, layout.Label{})
 	if s.submitted == "" {
-		lines = append(lines, flatui.Subtle("  not submitted"))
+		children = append(children, layout.Label{NodeBase: indent, Text: "not submitted", Style: subtle})
 	} else {
-		lines = append(lines, "  "+s.submitted)
+		children = append(children, layout.Label{NodeBase: indent, Text: s.submitted})
 	}
-	lines = append(lines, "", flatui.Subtle("tab focus | arrows move | esc blur | q quits blurred"))
-
-	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
-	if s.editing {
-		originX, originY := flatui.CardOrigin()
-		field := s.fields[s.focused]
-		frame.Cursor = &flatte.Cursor{
-			X: originX + lipgloss.Width("> "+field.Label+": ") + field.Input.CursorColumn(),
-			Y: originY + 3 + s.focused, // title, subtle, blank precede the fields
-		}
-	}
-	return frame
-}
-
-func renderField(s *State, index int) string {
-	return s.fields[index].Input.Value
+	children = append(children, layout.Label{}, layout.Label{Text: "tab focus | arrows move | esc blur | q quits blurred", Style: subtle})
+	return flatte.Frame{Root: flatui.CardLayout(children...)}
 }
 
 func main() {

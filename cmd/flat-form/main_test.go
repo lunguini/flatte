@@ -130,7 +130,7 @@ func TestViewRendersFocusedCursorAndSubmittedState(t *testing.T) {
 	state.fields[1].Input.Value = "op"
 	state.submitted = "name=Ada filter=op"
 
-	frame := View(state, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(state, flatte.RenderContext{Width: 72})).Content
 
 	for _, want := range []string{"Flat Form", "Ada", "filter", "name=Ada filter=op"} {
 		if !strings.Contains(frame, want) {
@@ -147,7 +147,7 @@ func TestViewPlacesCursorInFocusedField(t *testing.T) {
 	state.fields[0].Input.Insert('a')
 	state.fields[0].Input.Insert('b')
 
-	frame := View(state, flatte.RenderContext{Width: 72})
+	frame := composed(View(state, flatte.RenderContext{Width: 72}))
 	if frame.Cursor == nil {
 		t.Fatal("editing view has no cursor")
 	}
@@ -158,12 +158,12 @@ func TestViewPlacesCursorInFocusedField(t *testing.T) {
 	}
 
 	state.focused = 1
-	if second := View(state, flatte.RenderContext{Width: 72}); second.Cursor == nil || second.Cursor.Y != 5 {
+	if second := composed(View(state, flatte.RenderContext{Width: 72})); second.Cursor == nil || second.Cursor.Y != 5 {
 		t.Fatalf("cursor on second field = %+v, want row 5", second.Cursor)
 	}
 
 	state.editing = false
-	if blurred := View(state, flatte.RenderContext{Width: 72}); blurred.Cursor != nil {
+	if blurred := composed(View(state, flatte.RenderContext{Width: 72})); blurred.Cursor != nil {
 		t.Fatalf("blurred view still has a cursor: %+v", *blurred.Cursor)
 	}
 }
@@ -176,5 +176,11 @@ func TestViewMatchesSubmittedSnapshot(t *testing.T) {
 	state.fields[1].Input.Cursor = 2
 	state.submitted = "name=Ada filter=op"
 
-	flatest.AssertGoldenFrame(t, "testdata/submitted.golden", View(state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/submitted.golden", composed(View(state, flatte.RenderContext{Width: 72})))
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

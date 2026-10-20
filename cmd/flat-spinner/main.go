@@ -8,6 +8,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const interval = 100 * time.Millisecond
@@ -37,16 +38,21 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	lines := []string{
-		flatui.Title("Flat Spinner"),
-		flatui.Subtle("activity indicator sample"),
-		"",
-		"  " + s.spinner.View() + "  " + s.label,
-		"",
-		flatui.Subtle("q quit"),
-	}
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Spinner", Style: title},
+		layout.Label{Text: "activity indicator sample", Style: subtle},
+		layout.Label{},
+		layout.Label{NodeBase: indent, Text: s.spinner.View() + "  " + s.label},
+		layout.Label{},
+		layout.Label{Text: "q quit", Style: subtle},
+	)}
 }
 
 func main() {

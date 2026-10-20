@@ -93,14 +93,14 @@ func TestQQuitsOnlyFromHome(t *testing.T) {
 func TestViewDispatchesByScreen(t *testing.T) {
 	state := NewState()
 
-	home := View(state, flatte.RenderContext{Width: 72}).Content
+	home := composed(View(state, flatte.RenderContext{Width: 72})).Content
 	if !strings.Contains(home, "Flat Pages") || !strings.Contains(home, "Open details") {
 		t.Fatalf("home view missing expected content:\n%s", home)
 	}
 
 	state.screen = screenSettings
 	state.settingsName.Value = "Ada"
-	settings := View(state, flatte.RenderContext{Width: 72}).Content
+	settings := composed(View(state, flatte.RenderContext{Width: 72})).Content
 	if !strings.Contains(settings, "Settings") || !strings.Contains(settings, "Ada") {
 		t.Fatalf("settings view missing expected content:\n%s", settings)
 	}
@@ -109,7 +109,7 @@ func TestViewDispatchesByScreen(t *testing.T) {
 func TestViewSetsTitlePerScreenAndCursorOnSettings(t *testing.T) {
 	state := NewState()
 
-	home := View(state, flatte.RenderContext{Width: 72})
+	home := composed(View(state, flatte.RenderContext{Width: 72}))
 	if home.Title != "Flatte \u2014 home" {
 		t.Fatalf("home title = %q, want Flatte \u2014 home", home.Title)
 	}
@@ -120,7 +120,7 @@ func TestViewSetsTitlePerScreenAndCursorOnSettings(t *testing.T) {
 	state.screen = screenSettings
 	state.settingsName.Value = "Ada"
 	state.settingsName.Cursor = 1
-	settings := View(state, flatte.RenderContext{Width: 72})
+	settings := composed(View(state, flatte.RenderContext{Width: 72}))
 	if settings.Title != "Flatte \u2014 settings" {
 		t.Fatalf("settings title = %q, want Flatte \u2014 settings", settings.Title)
 	}
@@ -138,7 +138,7 @@ func TestViewMatchesHomeSnapshot(t *testing.T) {
 	state := NewState()
 	state.homeCursor = 1
 
-	flatest.AssertGoldenFrame(t, "testdata/home.golden", View(state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/home.golden", composed(View(state, flatte.RenderContext{Width: 72})))
 }
 
 func TestViewMatchesDetailsSnapshot(t *testing.T) {
@@ -146,7 +146,7 @@ func TestViewMatchesDetailsSnapshot(t *testing.T) {
 	state.screen = screenDetails
 	state.selected = 2
 
-	flatest.AssertGoldenFrame(t, "testdata/details.golden", View(state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/details.golden", composed(View(state, flatte.RenderContext{Width: 72})))
 }
 
 func TestViewMatchesSettingsSnapshot(t *testing.T) {
@@ -155,5 +155,11 @@ func TestViewMatchesSettingsSnapshot(t *testing.T) {
 	state.settingsName.Value = "Ada"
 	state.settingsName.Cursor = 1
 
-	flatest.AssertGoldenFrame(t, "testdata/settings.golden", View(state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/settings.golden", composed(View(state, flatte.RenderContext{Width: 72})))
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

@@ -1,10 +1,24 @@
-┌──────────────────────────────────────────────────────────┐
-│   Flat Capable                                           │
-│  clipboard · suspend · exec                              │
-│                                                          │
-│    status: clipboard read                                │
-│    last clipboard read: hello from the system clipboard  │
-│    last editor text: edited line                         │
-│                                                          │
-│  y copy | p paste | z/Ctrl-Z suspend | e edit | q quit   │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│   Flat Capable                                                       │
+│  clipboard · suspend · exec                                          │
+│                                                                      │
+│    status: clipboard read                                            │
+│    last clipboard read: hello from the system clipboard              │
+│    last editor text: edited line                                     │
+│                                                                      │
+│  y copy | p paste | z/Ctrl-Z suspend | e edit | q quit               │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘

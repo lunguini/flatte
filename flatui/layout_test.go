@@ -227,3 +227,45 @@ func TestTitleAndSubtleAreTheLayoutRoles(t *testing.T) {
 		t.Errorf("Subtle = %q, want the TextSubtle role %q", got, want)
 	}
 }
+
+// TestCardLayoutLooksLikeCard: a card built as nodes and composed at the
+// string card's size draws the same frame, so migrating a sample from Card
+// to CardLayout changes only the card's width (it fills the frame).
+func TestCardLayoutLooksLikeCard(t *testing.T) {
+	lines := []string{Title("Flat"), Subtle("sample"), "", "  body"}
+	want := Card(lines, 72)
+	w, h := lipgloss.Width(want), lipgloss.Height(want)
+	got, _ := layout.SolveAndCompose(CardLayout(
+		layout.Label{Text: "Flat", Style: layout.TextStyle{Role: layout.TextTitle}},
+		layout.Label{Text: "sample", Style: layout.TextStyle{Role: layout.TextSubtle}},
+		layout.Label{},
+		layout.Label{Text: "  body"},
+	), w, h)
+	// Compare cells (content and style), not escape-sequence encoding:
+	// composing re-encodes through a cell buffer.
+	gb, wb := uv.NewScreenBuffer(w, h), uv.NewScreenBuffer(w, h)
+	uv.NewStyledString(got).Draw(gb, gb.Bounds())
+	uv.NewStyledString(want).Draw(wb, wb.Bounds())
+	for y := range h {
+		for x := range w {
+			g, c := gb.CellAt(x, y), wb.CellAt(x, y)
+			if g.Content != c.Content || !g.Style.Equal(&c.Style) {
+				t.Fatalf("cell %d,%d = %q %+v, want %q %+v\ngot:\n%s\nwant:\n%s", x, y, g.Content, g.Style, c.Content, c.Style, got, want)
+			}
+		}
+	}
+}
+
+// TestCardLayoutIsAPlainCol: the card is an ordinary Col the app can adjust
+// (ID, sizes, border colour), not a fixed shape.
+func TestCardLayoutIsAPlainCol(t *testing.T) {
+	c := CardLayout(layout.Label{Text: "x"})
+	if c.Box.Border != layout.BorderNormal || c.PadLeft != 2 || c.PadRight != 2 || len(c.Children) != 1 {
+		t.Fatalf("CardLayout = %+v", c)
+	}
+	c.ID, c.Box.BorderColor = "card", lipgloss.Color("5")
+	_, rects := layout.SolveAndCompose(c, 20, 3)
+	if rects["card"] != (layout.Rect{W: 20, H: 3}) {
+		t.Fatalf("adjusted card rect = %+v", rects["card"])
+	}
+}

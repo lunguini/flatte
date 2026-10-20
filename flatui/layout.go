@@ -32,6 +32,21 @@ func CardWithStyle(lines []string, maxWidth int, style CardStyle) string {
 	return container.Render(strings.Join(lines, "\n"))
 }
 
+// CardLayout returns Card's look as a layout node: a Col with a plain border
+// in a muted grey and two columns of padding each side, holding children.
+// As a Frame.Root it fills the frame. It is an ordinary Col, so the app can
+// set its ID, sizes, or border colour.
+func CardLayout(children ...layout.Node) layout.Col {
+	return layout.Col{
+		NodeBase: layout.NodeBase{
+			PadLeft:  cardHorizontalPadding / 2,
+			PadRight: cardHorizontalPadding / 2,
+			Box:      layout.Box{Border: layout.BorderNormal, BorderColor: lipgloss.Color("240")},
+		},
+		Children: children,
+	}
+}
+
 // Title renders text in the layout.TextTitle role's terminal look.
 func Title(text string) string {
 	return layout.TextStyle{Role: layout.TextTitle}.Render(text)

@@ -220,7 +220,8 @@ const (
 
 // Box is a node's decoration. Nil colors mean the backend's default (no
 // background; the terminal's default border color). Unknown border kinds
-// draw as BorderRounded.
+// draw as BorderRounded. Background is behind the node's content: leaf cells
+// without a background of their own show it.
 type Box struct {
 	Border      BorderKind
 	BorderColor color.Color
