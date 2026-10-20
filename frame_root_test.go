@@ -125,3 +125,49 @@ func TestRunFillsMouseTargetFromRoot(t *testing.T) {
 		t.Fatalf("composed root not drawn:\n%q", out.String())
 	}
 }
+
+func TestComposeFrameCursorFollowsFocusedInput(t *testing.T) {
+	tree := func(focused bool) layout.Node {
+		return layout.Row{Children: []layout.Node{
+			layout.Label{Text: "name:"},
+			layout.Input{Value: "Ada", Caret: 2, Focused: focused},
+		}}
+	}
+	frame, _ := ComposeFrame(Frame{Root: tree(true)}, 20, 1)
+	if frame.Cursor == nil || frame.Cursor.X != 7 || frame.Cursor.Y != 0 {
+		t.Fatalf("Cursor = %+v, want {7 0} (label 5 + caret 2)", frame.Cursor)
+	}
+	if frame, _ := ComposeFrame(Frame{Root: tree(false)}, 20, 1); frame.Cursor != nil {
+		t.Fatalf("no focused input, Cursor = %+v, want nil", *frame.Cursor)
+	}
+	// An explicit cursor is the app's call and wins.
+	explicit := &Cursor{X: 1, Y: 0, Style: &CursorStyle{Shape: CursorShapeBar}}
+	if frame, _ := ComposeFrame(Frame{Root: tree(true), Cursor: explicit}, 20, 1); frame.Cursor != explicit {
+		t.Fatalf("explicit cursor replaced: %+v", frame.Cursor)
+	}
+}
+
+// D1: the root runtime and the layout vocabulary are backend-neutral, so
+// no terminal-library type may appear in their exported API. (flatui is the
+// terminal widget kit and may expose lipgloss styles.)
+func TestNeutralPackagesExposeNoTerminalTypes(t *testing.T) {
+	neutral := map[string]bool{"flatte": true, "flatui/layout": true}
+	current := ""
+	for _, line := range collectPublicAPI(t) {
+		if !strings.HasPrefix(line, " ") {
+			current = strings.Fields(line)[0]
+			continue
+		}
+		if !neutral[current] {
+			continue
+		}
+		for _, banned := range []string{"lipgloss.", "uv.", "ultraviolet.", "ansi."} {
+			if strings.Contains(line, banned) {
+				t.Errorf("%s exports a terminal type: %s", current, strings.TrimSpace(line))
+			}
+		}
+	}
+	if current == "" {
+		t.Fatal("API listing was empty")
+	}
+}

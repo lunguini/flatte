@@ -8,7 +8,6 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
-	"github.com/lunguini/flatte/flatui"
 )
 
 func TestEnterOpensModalAndStartsWaiting(t *testing.T) {
@@ -128,7 +127,9 @@ func TestQQuitsOnlyWhenModalIsClosed(t *testing.T) {
 	}
 }
 
-func TestViewRendersMainAndModalState(t *testing.T) {
+// openModal returns a driver at 72×24 with the modal open on "Ada", the
+// caret after "A", and four background ticks applied.
+func openModal() *flatest.Driver[State] {
 	state := NewState()
 	state.ticks = 4
 	state.spinner = 1
@@ -136,9 +137,11 @@ func TestViewRendersMainAndModalState(t *testing.T) {
 	state.modalOpen = true
 	state.modalInput.Value = "Ada"
 	state.modalInput.Cursor = 1
+	return flatest.Start(flatte.App[State]{State: state, Handle: Handle, View: View}, 72)
+}
 
-	frame := View(state, flatte.RenderContext{Width: 72}).Content
-
+func TestViewRendersMainAndModalState(t *testing.T) {
+	frame := flatest.CleanFrame(openModal().Frame().Content)
 	for _, want := range []string{"Flat Modal", "background ticks: 4", "waiting \\", "Confirm Work", "Ada"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("View() missing %q:\n%s", want, frame)
@@ -147,44 +150,46 @@ func TestViewRendersMainAndModalState(t *testing.T) {
 }
 
 func TestViewMatchesModalSnapshot(t *testing.T) {
-	state := NewState()
-	state.ticks = 4
-	state.spinner = 1
-	state.waiting = true
-	state.modalOpen = true
-	state.modalInput.Value = "Ada"
-	state.modalInput.Cursor = 1
-
-	flatest.AssertGoldenFrame(t, "testdata/modal-open.golden", View(state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/modal-open.golden", openModal().Frame())
+	closed := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View}, 72)
+	flatest.AssertGoldenFrame(t, "testdata/modal-closed.golden", closed.Frame())
 }
 
+// TestViewPlacesCursorInsideModal reads the painted frame: the cursor must
+// sit on the name field, between the typed "A" and "da".
 func TestViewPlacesCursorInsideModal(t *testing.T) {
-	state := NewState()
-	if closed := View(state, flatte.RenderContext{Width: 72}); closed.Cursor != nil {
-		t.Fatalf("closed-modal view has a cursor: %+v", *closed.Cursor)
+	closed := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View}, 72)
+	if c := closed.Frame().Cursor; c != nil {
+		t.Fatalf("closed-modal view has a cursor: %+v", *c)
 	}
-
-	state.modalOpen = true
-	state.modalInput.Value = "Ada"
-	state.modalInput.Cursor = 1
-	ctx := flatte.RenderContext{Width: 72}
-	frame := View(state, ctx)
+	frame := openModal().Frame()
 	if frame.Cursor == nil {
 		t.Fatal("open-modal view has no cursor")
 	}
-	// The expected position derives from the same helpers the app uses:
-	// overlay placement + card origin + label width + typed cells.
-	base := viewMain(state, ctx)
-	modal := viewModal(state, ctx)
-	overlayX, overlayY := flatui.OverlayOrigin(base, modal)
-	cardX, cardY := flatui.CardOrigin()
-	wantX := overlayX + cardX + len("  name: ") + 1
-	wantY := overlayY + cardY + 3
-	if frame.Cursor.X != wantX || frame.Cursor.Y != wantY {
-		t.Fatalf("cursor = %+v, want (%d,%d)", *frame.Cursor, wantX, wantY)
+	lines := strings.Split(flatest.CleanFrame(frame.Content), "\n")
+	row := []rune(lines[frame.Cursor.Y])
+	if got := string(row[frame.Cursor.X-len("name: A") : frame.Cursor.X+2]); got != "name: Ada" {
+		t.Fatalf("cursor (%d,%d) is not after \"name: A\": row %q", frame.Cursor.X, frame.Cursor.Y, string(row))
 	}
-	if overlayX == 0 || overlayY == 0 {
-		t.Fatalf("modal not centered (overlay origin %d,%d) - expected offsets inside a 72-col frame", overlayX, overlayY)
+	if frame.Cursor.X < 20 || frame.Cursor.Y < 5 {
+		t.Fatalf("cursor (%d,%d) not inside a centered modal", frame.Cursor.X, frame.Cursor.Y)
+	}
+}
+
+// TestTypingMovesCursor: the cursor follows the field as the user types,
+// through the runtime path (no View-side arithmetic to keep in sync).
+func TestTypingMovesCursor(t *testing.T) {
+	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View}, 72)
+	start := d.Send(flatte.KeyEvent{Key: flatte.KeyEnter}).Cursor
+	if start == nil {
+		t.Fatal("no cursor after opening the modal")
+	}
+	after := d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '日'}).Cursor
+	if after == nil || after.X != start.X+2 || after.Y != start.Y {
+		t.Fatalf("cursor after a wide rune = %+v, want two cells right of %+v", after, *start)
+	}
+	if c := d.Send(flatte.KeyEvent{Key: flatte.KeyEscape}).Cursor; c != nil {
+		t.Fatalf("cursor after closing the modal = %+v", *c)
 	}
 }
 

@@ -38,14 +38,14 @@ func (r Row) Size() (Size, Size) {
 // delegates to the single walk via SolveAndCompose (using rect's dimensions at
 // a local origin) so container distribution, chrome, clipping, and overlay
 // compositing all follow one code path. Only the childless case takes the
-// direct fillRect path — which also prevents the walk (whose leaf branch would
+// direct fillBox path — which also prevents the walk (whose leaf branch would
 // otherwise Render a container) from recursing.
 func (r Row) Render(rect Rect) string {
 	if len(r.Children) == 0 {
 		if r.Chrome != nil {
 			return r.Chrome(rect)
 		}
-		return fillRect("", rect, r.padSides(), r.Bordered)
+		return fillBox("", rect, r.padSides(), r.box())
 	}
 	frame, _ := SolveAndCompose(r, rect.W, rect.H)
 	return frame
@@ -96,7 +96,7 @@ func (c Col) Render(rect Rect) string {
 		if c.Chrome != nil {
 			return c.Chrome(rect)
 		}
-		return fillRect("", rect, c.padSides(), c.Bordered)
+		return fillBox("", rect, c.padSides(), c.box())
 	}
 	frame, _ := SolveAndCompose(c, rect.W, rect.H)
 	return frame

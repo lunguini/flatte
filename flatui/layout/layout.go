@@ -217,13 +217,59 @@ type NodeBase struct {
 	PadTop, PadRight, PadBottom, PadLeft int
 
 	// Chrome, when set on a container, paints the node's own decoration
-	// (styled border, background, title) instead of the default Pad/Bordered
+	// (styled border, background, title) instead of the default Pad/Box
 	// fill. It receives the node's full solved rect and is painted before
 	// (under) the children. It does not change the layout inset: Pad and
-	// Bordered still declare the space the chrome occupies, so children are
-	// placed inside that inset regardless of what Chrome draws. Leaves ignore
-	// it — a leaf's Render owns all of its pixels already.
+	// the border still declare the space the chrome occupies, so children
+	// are placed inside that inset regardless of what Chrome draws. Leaves
+	// ignore it — a leaf's Render owns all of its pixels already. Chrome is
+	// terminal-only; prefer Box where it can say what is needed.
 	Chrome func(r Rect) string
+
+	// Box is the node's semantic decoration: border kind and color, and
+	// background. A terminal draws it with box-drawing cells, a GUI as a
+	// stroked and filled rect. A border takes one cell of inset per side,
+	// exactly like Bordered (which is shorthand for Box{Border:
+	// BorderRounded}; Box.Border wins when both are set).
+	Box Box
+}
+
+// BorderKind is the line style of a Box border.
+type BorderKind int
+
+const (
+	BorderNone BorderKind = iota
+	BorderRounded
+	BorderNormal
+)
+
+// Box is a node's decoration. Nil colors mean the backend's default (no
+// background; the terminal's default border color). Unknown border kinds
+// draw as BorderRounded.
+type Box struct {
+	Border      BorderKind
+	BorderColor color.Color
+	Background  color.Color
+}
+
+// box resolves the Bordered shorthand into the effective Box.
+func (n NodeBase) box() Box {
+	b := n.Box
+	if b.Border == BorderNone && n.Bordered {
+		b.Border = BorderRounded
+	}
+	return b
+}
+
+func (b Box) hasBorder() bool { return b.Border != BorderNone }
+
+func (b Box) hasBackground() bool { return b.Background != nil && b.Background != color.Transparent }
+
+func (b Box) lipglossBorder() lipgloss.Border {
+	if b.Border == BorderNormal {
+		return lipgloss.NormalBorder()
+	}
+	return lipgloss.RoundedBorder()
 }
 
 func (n NodeBase) Size() (Size, Size) { return n.W, n.H }
@@ -264,7 +310,7 @@ func (n NodeBase) padSides() sides {
 // insetSides is the full per-side layout inset: padding plus the border cell.
 func (n NodeBase) insetSides() sides {
 	s := n.padSides()
-	if n.Bordered {
+	if n.box().hasBorder() {
 		s.top = satAdd(s.top, 1)
 		s.right = satAdd(s.right, 1)
 		s.bottom = satAdd(s.bottom, 1)
@@ -273,7 +319,6 @@ func (n NodeBase) insetSides() sides {
 	return s
 }
 
-func (n NodeBase) bordered() bool            { return n.Bordered }
 func (n NodeBase) chrome() func(Rect) string { return n.Chrome }
 
 // --- Distribution helpers (shared by Row and Col) ---
@@ -458,14 +503,13 @@ func measureChildren(children []Node, horizontal bool, gap int) (main, cross int
 
 // --- Rendering helpers ---
 
-func fillRect(content string, r Rect, pad sides, bordered bool) string {
-	return fillRectWithBg(content, r, pad, color.Transparent, bordered)
-}
-
-func fillRectWithBg(content string, r Rect, pad sides, c color.Color, bordered bool) string {
+// fillBox renders content into r inside pad and box: the terminal painting
+// of a node's Box, padding, and content.
+func fillBox(content string, r Rect, pad sides, box Box) string {
 	if r.W <= 0 || r.H <= 0 {
 		return ""
 	}
+	bordered := box.hasBorder()
 
 	// Lip Gloss Width/Height are *minimum* total-frame sizes; when
 	// content+padding+border exceed them, MaxWidth/MaxHeight hard-truncate —
@@ -488,14 +532,17 @@ func fillRectWithBg(content string, r Rect, pad sides, c color.Color, bordered b
 	content = clipToBox(content, r.W-inset.horiz(), r.H-inset.vert())
 
 	style := lipgloss.NewStyle().Width(r.W).Height(r.H).MaxWidth(r.W).MaxHeight(r.H)
-	if c != color.Transparent {
-		style = style.Background(c)
+	if box.hasBackground() {
+		style = style.Background(box.Background)
 	}
 	if pad.any() {
 		style = style.Padding(pad.top, pad.right, pad.bottom, pad.left)
 	}
 	if bordered {
-		style = style.Border(lipgloss.RoundedBorder())
+		style = style.Border(box.lipglossBorder())
+		if box.BorderColor != nil {
+			style = style.BorderForeground(box.BorderColor)
+		}
 	}
 
 	return style.Render(content)

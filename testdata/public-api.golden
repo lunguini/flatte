@@ -390,6 +390,7 @@ flatui package flatui
   method Table.View(renderRow func(text string, selected bool) string) string
   method Table.ViewWithStyle(style TableStyle) string
   method TextField.CursorColumn() int
+  method TextField.Layout(id string, focused bool) layout.Input
   method TextField.SelectedText() string
   method TextField.Selection()(start int, end int, ok bool)
   method Textarea.Col() int
@@ -593,10 +594,16 @@ flatui package flatui
   var TabGlyphsPowerline TabGlyphs
   var TabGlyphsSafe TabGlyphs
 flatui/layout package layout
+  const BorderNone BorderKind = 0
+  const BorderNormal BorderKind = 2
+  const BorderRounded BorderKind = 1
   const SizeAuto SizeKind = 0
   const SizeContent SizeKind = 3
   const SizeFixed SizeKind = 1
   const SizeGrow SizeKind = 2
+  const TextBody TextRole = 0
+  const TextSubtle TextRole = 2
+  const TextTitle TextRole = 1
   func Auto() Size
   func ClampScroll(offset int, viewport int, content int) int
   func Compose(root Node, width int, height int) Composition
@@ -616,7 +623,12 @@ flatui/layout package layout
   method Col.IsHorizontal() bool
   method Col.Render(rect Rect) string
   method Col.Size()(Size, Size)
+  method Composition.Cursor()(x int, y int, ok bool)
   method Composition.HitTest(x int, y int)(string, Rect)
+  method Input.Render(r Rect) string
+  method Input.Size()(Size, Size)
+  method Label.Render(r Rect) string
+  method Label.Size()(Size, Size)
   method NodeBase.GetID() string
   method NodeBase.IsOverlay() bool
   method NodeBase.Size()(Size, Size)
@@ -634,8 +646,13 @@ flatui/layout package layout
   method Scroll.Size()(Size, Size)
   method Text.Render(r Rect) string
   method Text.Size()(Size, Size)
+  method TextStyle.Render(text string) string
   methodset *Col.GetID() string
   methodset *Col.IsOverlay() bool
+  methodset *Input.GetID() string
+  methodset *Input.IsOverlay() bool
+  methodset *Label.GetID() string
+  methodset *Label.IsOverlay() bool
   methodset *Row.GetID() string
   methodset *Row.IsOverlay() bool
   methodset *Scroll.GetID() string
@@ -647,6 +664,10 @@ flatui/layout package layout
   methodset *Text.IsOverlay() bool
   methodset Col.GetID() string
   methodset Col.IsOverlay() bool
+  methodset Input.GetID() string
+  methodset Input.IsOverlay() bool
+  methodset Label.GetID() string
+  methodset Label.IsOverlay() bool
   methodset Row.GetID() string
   methodset Row.IsOverlay() bool
   methodset Scroll.GetID() string
@@ -656,6 +677,12 @@ flatui/layout package layout
   methodset Spacer.Size()(Size, Size)
   methodset Text.GetID() string
   methodset Text.IsOverlay() bool
+  type BorderKind int
+  type Box struct
+  field Box.Border BorderKind [order=0]
+  field Box.BorderColor color.Color [order=1]
+  field Box.Background color.Color [order=2]
+  struct Box fields=3 comparable=true
   type Col struct
   field Col.NodeBase NodeBase [order=0]
   field Col.Children []Node [order=1]
@@ -665,12 +692,26 @@ flatui/layout package layout
   field Composition.Rects map[string] Rect [order=1]
   field Composition.Diagnostics []DuplicateIDDiagnostic [order=2]
   field Composition.<unexported> []hit [order=3]
-  struct Composition fields=4 comparable=false
+  field Composition.<unexported> *caretPos [order=4]
+  struct Composition fields=5 comparable=false
   type DuplicateIDDiagnostic struct
   field DuplicateIDDiagnostic.ID string [order=0]
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
   field DuplicateIDDiagnostic.Duplicate Rect [order=2]
   struct DuplicateIDDiagnostic fields=3 comparable=true
+  type Input struct
+  field Input.NodeBase NodeBase [order=0]
+  field Input.Value string [order=1]
+  field Input.Caret int [order=2]
+  field Input.Placeholder string [order=3]
+  field Input.Focused bool [order=4]
+  field Input.Style TextStyle [order=5]
+  struct Input fields=6 comparable=false
+  type Label struct
+  field Label.NodeBase NodeBase [order=0]
+  field Label.Text string [order=1]
+  field Label.Style TextStyle [order=2]
+  struct Label fields=3 comparable=false
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)
@@ -687,7 +728,8 @@ flatui/layout package layout
   field NodeBase.PadBottom int [order=9]
   field NodeBase.PadLeft int [order=10]
   field NodeBase.Chrome func(r Rect) string [order=11]
-  struct NodeBase fields=12 comparable=false
+  field NodeBase.Box Box [order=12]
+  struct NodeBase fields=13 comparable=false
   type Rect struct
   field Rect.X int [order=0]
   field Rect.Y int [order=1]
@@ -717,3 +759,13 @@ flatui/layout package layout
   field Text.NodeBase NodeBase [order=0]
   field Text.String string [order=1]
   struct Text fields=2 comparable=false
+  type TextRole int
+  type TextStyle struct
+  field TextStyle.Role TextRole [order=0]
+  field TextStyle.Fg color.Color [order=1]
+  field TextStyle.Bg color.Color [order=2]
+  field TextStyle.Bold bool [order=3]
+  field TextStyle.Italic bool [order=4]
+  field TextStyle.Underline bool [order=5]
+  field TextStyle.Strikethrough bool [order=6]
+  struct TextStyle fields=7 comparable=true

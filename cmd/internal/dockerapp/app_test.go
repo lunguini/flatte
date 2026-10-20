@@ -1425,7 +1425,7 @@ func TestContainerDetailPaneRendersFromAllocatedRect(t *testing.T) {
 	c.detailPaneWidth = 10
 	c.bodyContentHeight = 4
 
-	rendered := c.renderDetailPane(layout.Rect{W: 42, H: 12})
+	rendered := c.renderDetailChrome(layout.Rect{W: 42, H: 12})
 	lines := strings.Split(rendered, "\n")
 	if got, want := len(lines), 12; got != want {
 		t.Fatalf("rendered height = %d, want %d:\n%s", got, want, rendered)
@@ -1435,9 +1435,18 @@ func TestContainerDetailPaneRendersFromAllocatedRect(t *testing.T) {
 			t.Fatalf("line %d width = %d, want %d: %q", i, got, want, line)
 		}
 	}
-	stripped := ansi.Strip(rendered)
+	composed, rects := layout.SolveAndCompose(c.detailNode(), 42, 12)
+	stripped := ansi.Strip(composed)
 	if !strings.Contains(stripped, "status:") || !strings.Contains(stripped, "image:") {
 		t.Fatalf("expected stats body to fit allocated rect:\n%s", stripped)
+	}
+	// The header child paints the name and tabs on the row the chrome left
+	// blank, and the tabs' rects come from that same walk.
+	if first := strings.Split(stripped, "\n")[0]; !strings.Contains(first, "stats") || !strings.Contains(first, "inspect") {
+		t.Fatalf("header row = %q", first)
+	}
+	if r := rects[detailTabsID+":logs"]; r.Y != 0 || r.W == 0 {
+		t.Fatalf("logs tab rect = %+v", r)
 	}
 }
 
@@ -1457,8 +1466,10 @@ func TestContainersBodyTreeUsesConceptNodes(t *testing.T) {
 	if d, ok := row.Children[1].(containerDivider); !ok || d.index != 0 {
 		t.Fatalf("first divider = %#v, want containerDivider index 0", row.Children[1])
 	}
-	if _, ok := row.Children[2].(containerDetailPane); !ok {
-		t.Fatalf("detail child = %T, want containerDetailPane", row.Children[2])
+	// The detail pane carries its header in the frame tree, so the tab
+	// strip's rects are solved with the frame.
+	if d, ok := row.Children[2].(layout.Col); !ok || d.ID != "detail" || len(d.Children) != 1 {
+		t.Fatalf("detail child = %#v, want layout.Col \"detail\" with a header child", row.Children[2])
 	}
 	if d, ok := row.Children[3].(containerDivider); !ok || d.index != 1 {
 		t.Fatalf("second divider = %#v, want containerDivider index 1", row.Children[3])

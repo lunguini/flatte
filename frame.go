@@ -13,7 +13,8 @@ type Frame struct {
 	// Content is the styled frame text. It is ignored when Root is set.
 	Content string
 	// Cursor places the hardware cursor, in frame cell coordinates
-	// ((0,0) is the frame's top-left). nil hides the cursor.
+	// ((0,0) is the frame's top-left). nil hides the cursor — unless Root
+	// holds a focused layout.Input, whose caret then places it.
 	Cursor *Cursor
 	// Title sets the terminal window title when non-empty. It is emitted
 	// only when it changes, and reset on exit if it was ever set.
@@ -49,15 +50,22 @@ type CursorStyle struct {
 }
 
 // ComposeFrame resolves frame.Root, when set, into frame.Content at
-// width×height and returns the composition for hit-testing. A frame without
-// Root is returned unchanged with an empty composition. Run calls it before
-// every draw; test harnesses call it to render exactly as Run does.
+// width×height and returns the composition for hit-testing. A nil Cursor
+// is placed at the caret of the topmost focused layout.Input, if any. A
+// frame without Root is returned unchanged with an empty composition. Run
+// calls it before every draw; test harnesses call it to render exactly as
+// Run does.
 func ComposeFrame(frame Frame, width, height int) (Frame, layout.Composition) {
 	if frame.Root == nil {
 		return frame, layout.Composition{}
 	}
 	c := layout.Compose(frame.Root, width, height)
 	frame.Content = c.Frame
+	if frame.Cursor == nil {
+		if x, y, ok := c.Cursor(); ok {
+			frame.Cursor = &Cursor{X: x, Y: y}
+		}
+	}
 	return frame, c
 }
 

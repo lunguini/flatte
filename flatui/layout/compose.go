@@ -46,6 +46,20 @@ type Composition struct {
 	Rects       map[string]Rect
 	Diagnostics []DuplicateIDDiagnostic
 	hits        []hit
+	caret       *caretPos
+}
+
+// caretPos is a hardware-cursor cell.
+type caretPos struct{ x, y int }
+
+// Cursor reports where the hardware cursor belongs: at the caret of the
+// topmost focused Input whose caret cell is visible. ok is false when no
+// focused Input is painted.
+func (c Composition) Cursor() (x, y int, ok bool) {
+	if c.caret == nil {
+		return 0, 0, false
+	}
+	return c.caret.x, c.caret.y, true
 }
 
 // hit is one hit-testable region in paint order. An empty id marks an
@@ -104,7 +118,7 @@ func Compose(root Node, width, height int) Composition {
 		buf.FillArea(&uv.EmptyCell, uv.Rect(mr.X, mr.Y, mr.W, mr.H))
 		walkOverlay(o, mr, &buf, &state)
 	}
-	return Composition{Frame: buf.Render(), Rects: rects, Diagnostics: state.diagnostics, hits: state.hits}
+	return Composition{Frame: buf.Render(), Rects: rects, Diagnostics: state.diagnostics, hits: state.hits, caret: state.caret}
 }
 
 type walkState struct {
@@ -115,6 +129,12 @@ type walkState struct {
 	// clip is the visible region: the frame, narrowed by each enclosing
 	// Scroll's window. Painting and hit areas are confined to it.
 	clip Rect
+	// caret is the last visible focused Input caret in paint order.
+	caret *caretPos
+}
+
+type caretNode interface {
+	caret(r Rect) (x, y int, ok bool)
 }
 
 // walkOverlay walks an overlay layer after recording it as a hit barrier, so
@@ -160,6 +180,11 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
 		if buf != nil {
 			paintClipped(*buf, r, state.clip, n.Render)
 		}
+		if cn, ok := n.(caretNode); ok {
+			if x, y, ok := cn.caret(r); ok && state.clip.Contains(x, y) {
+				state.caret = &caretPos{x, y}
+			}
+		}
 		return
 	}
 
@@ -204,17 +229,17 @@ func walk(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
 
 // paintChrome paints a container's own border/background chrome (if any)
 // before its children are painted on top inside the inset region. A custom
-// Chrome painter replaces the default Pad/Bordered fill and is painted even
-// with zero inset; the layout inset itself still comes from Pad/Bordered only.
+// Chrome painter replaces the default Pad/Box fill and is painted even with
+// zero inset; the layout inset itself still comes from Pad and the border.
 func paintChrome(n Node, r Rect, buf *uv.ScreenBuffer, state *walkState) {
 	if buf == nil {
 		return
 	}
 	if ch := getChrome(n); ch != nil {
 		paintClipped(*buf, r, state.clip, ch)
-	} else if getInsetSides(n).any() {
+	} else if box := getBox(n); getInsetSides(n).any() || box.hasBackground() {
 		paintClipped(*buf, r, state.clip, func(r Rect) string {
-			return fillRect("", r, getPadSides(n), isBordered(n))
+			return fillBox("", r, getPadSides(n), box)
 		})
 	}
 }
@@ -268,7 +293,7 @@ func drawInto(buf uv.ScreenBuffer, s string, r Rect) {
 	uv.NewStyledString(s).Draw(buf, uv.Rect(r.X, r.Y, r.W, r.H))
 }
 
-// getPadSides / isBordered read chrome fields off a node's NodeBase for the
+// getPadSides / getBox read chrome fields off a node's NodeBase for the
 // container chrome paint. They mirror the insetSides accounting.
 func getPadSides(n Node) sides {
 	type padder interface{ padSides() sides }
@@ -278,12 +303,12 @@ func getPadSides(n Node) sides {
 	return sides{}
 }
 
-func isBordered(n Node) bool {
-	type borderer interface{ bordered() bool }
-	if b, ok := n.(borderer); ok {
-		return b.bordered()
+func getBox(n Node) Box {
+	type boxer interface{ box() Box }
+	if b, ok := n.(boxer); ok {
+		return b.box()
 	}
-	return false
+	return Box{}
 }
 
 func getChrome(n Node) func(Rect) string {

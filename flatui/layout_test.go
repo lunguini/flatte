@@ -8,6 +8,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 func TestCardUsesCompactWidthAndBorders(t *testing.T) {
@@ -213,5 +214,16 @@ func TestCardBodyDimensionsClampToZero(t *testing.T) {
 	}
 	if got := CardBodyWidth(2); got != 0 {
 		t.Fatalf("CardBodyWidth(2) = %d, want 0", got)
+	}
+}
+
+func TestTitleAndSubtleAreTheLayoutRoles(t *testing.T) {
+	// One definition of each role's terminal look: string helpers and
+	// layout Labels cannot drift.
+	if got, want := Title("x"), (layout.TextStyle{Role: layout.TextTitle}).Render("x"); got != want {
+		t.Errorf("Title = %q, want the TextTitle role %q", got, want)
+	}
+	if got, want := Subtle("x"), (layout.TextStyle{Role: layout.TextSubtle}).Render("x"); got != want {
+		t.Errorf("Subtle = %q, want the TextSubtle role %q", got, want)
 	}
 }

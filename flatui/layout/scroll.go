@@ -59,7 +59,7 @@ func (s Scroll) Render(rect Rect) string {
 		if s.Chrome != nil {
 			return s.Chrome(rect)
 		}
-		return fillRect("", rect, s.padSides(), s.Bordered)
+		return fillBox("", rect, s.padSides(), s.box())
 	}
 	frame, _ := SolveAndCompose(s, rect.W, rect.H)
 	return frame

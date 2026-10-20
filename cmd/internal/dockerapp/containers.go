@@ -272,23 +272,23 @@ func (c *containersScreen) listNode() layout.Node {
 	}
 }
 
-type containerDetailPane struct {
-	layout.NodeBase
-	screen *containersScreen
-}
-
-func newContainerDetailPane(c *containersScreen) containerDetailPane {
-	return containerDetailPane{
-		NodeBase: layout.NodeBase{ID: "detail", W: layout.Grow(1), H: layout.Auto()},
-		screen:   c,
+// detailNode is the detail pane: Chrome paints the pane (padding, body,
+// scrollbar, follow indicator) with its header row left blank, and the header
+// is a child in the frame tree, so its tabs are solved, painted, and
+// hit-tested by the frame walk itself.
+func (c *containersScreen) detailNode() layout.Node {
+	pane := layout.Col{NodeBase: layout.NodeBase{
+		ID:       "detail",
+		W:        layout.Grow(1),
+		H:        layout.Auto(),
+		Chrome:   c.renderDetailChrome,
+		PadLeft:  panePadding,
+		PadRight: panePadding + 1, // right pad + scrollbar column
+	}}
+	if selected := c.selected(); selected != nil {
+		pane.Children = []layout.Node{c.detailHeader(selected)}
 	}
-}
-
-func (p containerDetailPane) Render(r layout.Rect) string {
-	if p.screen == nil {
-		return ""
-	}
-	return p.screen.renderDetailPane(r)
+	return pane
 }
 
 type containerActivityPane struct {
@@ -359,7 +359,7 @@ func containersBodyTree(c *containersScreen, status func(layout.Rect) string) la
 				Children: []layout.Node{
 					c.listNode(),
 					newContainerDivider(c, 0),
-					newContainerDetailPane(c),
+					c.detailNode(),
 					newContainerDivider(c, 1),
 					newContainerActivityPane(c),
 				},
@@ -421,9 +421,7 @@ func (c *containersScreen) registerListZones() {
 }
 
 // detailHeader builds the detail pane's header row: the container name, then
-// the tab strip flush right.
-// renderDetailPane paints it and detailTabStripRects solves it, both at
-// detailContentWidth, so hit rects are the painted rects.
+// the tab strip flush right. It is the detail pane's child in the frame tree.
 //
 // The name takes the remaining width and truncates first. A strip wider than
 // the pane is clipped at the pane edge rather than wrapped onto a second row:
@@ -431,7 +429,7 @@ func (c *containersScreen) registerListZones() {
 // shows), where a wrap would move them away from their solved positions.
 func (c *containersScreen) detailHeader(selected *Container) layout.Node {
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
-	return layout.Row{Children: []layout.Node{
+	return layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Children: []layout.Node{
 		layout.Text{NodeBase: layout.NodeBase{W: layout.Grow(1)}, String: title},
 		c.detailTabs.Layout(),
 	}}
@@ -440,25 +438,6 @@ func (c *containersScreen) detailHeader(selected *Container) layout.Node {
 // detailContentWidth is the detail pane's content width: the pane minus its
 // side padding and the scrollbar column.
 func detailContentWidth(paneW int) int { return max(paneW-paneBorderCols-1, 1) }
-
-// detailTabStripRects solves the detail header exactly as renderDetailPane
-// paints it and returns the tab strip's and each tab's rect, offset to the
-// header's position on screen: the pane's content origin (left padding, no
-// top padding).
-func (c *containersScreen) detailTabStripRects() map[string]layout.Rect {
-	detailRect := c.rects["detail"]
-	selected := c.selected()
-	if detailRect.W == 0 || selected == nil {
-		return nil
-	}
-	rects := layout.Solve(c.detailHeader(selected), detailContentWidth(detailRect.W), 1)
-	for id, r := range rects {
-		r.X += detailRect.X + panePadding
-		r.Y += detailRect.Y
-		rects[id] = r
-	}
-	return rects
-}
 
 // clampPaneWidths enforces minimums on list and activity widths given the
 // total body width. Detail is derived after this runs; its minimum is
@@ -502,8 +481,8 @@ func (c *containersScreen) applyDrag(root *State, currentX int) {
 	c.detailTabs.SetActive(int(c.tab))
 }
 
-// Detail tab hit-testing goes through detailTabStripRects + TabBar.HitTest —
-// solved geometry, not manual ZoneMap rectangles. See handleMouse for routing.
+// Detail tab hit-testing goes through the frame's solved tab rects +
+// TabBar.HitTest, not manual ZoneMap rectangles. See handleMouse for routing.
 
 // dividerAt reports which divider (0 or 1) is at the given frame
 // coordinates, using the absolute solved rects for hit-testing.
@@ -591,12 +570,9 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		return
 	}
 
-	// Detail tab clicks. The detail pane composes its own header row internally
-	// (it is a leaf), so per-tab rects aren't in the frame geometry; instead we
-	// hand HitTest the tab strip's absolute rect and let it map the click via
-	// its private label-width math. The strip is right-aligned in the pane's
-	// content, matching renderDetailPane.
-	if idx, ok := c.detailTabs.HitTest(c.detailTabStripRects(), m.X, m.Y); ok {
+	// Detail tab clicks: the header is in the frame tree, so each tab's rect
+	// is the one the frame painted.
+	if idx, ok := c.detailTabs.HitTest(c.rects, m.X, m.Y); ok {
 		c.setTab(detailTab(idx))
 		return
 	}
@@ -1207,7 +1183,9 @@ func (c *containersScreen) renderListChrome(r layout.Rect) string {
 	return paneStyle(r.W, r.H, c.focus.Focused(focusList) || c.focus.Focused(focusFilter), false).Render(combined)
 }
 
-func (c *containersScreen) renderDetailPane(r layout.Rect) string {
+// renderDetailChrome paints the detail pane around its header row, which is
+// left blank for the header child (see detailNode) to paint.
+func (c *containersScreen) renderDetailChrome(r layout.Rect) string {
 	detailInnerWidth := detailContentWidth(r.W)
 	detailInnerHeight := max(r.H-paneBorderRows, 0)
 	contentStyle := lipgloss.NewStyle().Width(detailInnerWidth).Height(detailInnerHeight)
@@ -1218,10 +1196,8 @@ func (c *containersScreen) renderDetailPane(r layout.Rect) string {
 		return paneStyle(r.W, r.H, c.focus.Focused(focusDetail), false).Render(empty)
 	}
 
-	headerRow, _ := layout.SolveAndCompose(c.detailHeader(selected), detailInnerWidth, 1)
-
 	body := c.renderActiveTab(selected)
-	inner := contentStyle.Render(strings.Join([]string{headerRow, "", body}, "\n"))
+	inner := contentStyle.Render(strings.Join([]string{"", "", body}, "\n"))
 	bar := c.detailScrollbar(detailInnerHeight)
 	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
 	combined := withScrollbar(inner, barStyled)

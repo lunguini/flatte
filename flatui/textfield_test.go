@@ -1,6 +1,10 @@
 package flatui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lunguini/flatte/flatui/layout"
+)
 
 func TestTextFieldInsertBackspaceDeleteAndCursorMovement(t *testing.T) {
 	field := TextField{Value: "abcd", Cursor: 2}
@@ -218,5 +222,23 @@ func TestCursorColumnCountsDisplayCells(t *testing.T) {
 				t.Fatalf("CursorColumn() = %d, want %d", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestTextFieldLayoutShowsValueAndCaret(t *testing.T) {
+	f := TextField{Value: "héllo", Cursor: len("hé")}
+	in := f.Layout("name", true)
+	if in.ID != "name" || in.Value != "héllo" || in.Caret != len("hé") || !in.Focused {
+		t.Fatalf("Layout = %+v", in)
+	}
+	// The composed caret lands on the same column CursorColumn reports.
+	x, _, ok := layout.Compose(in, 20, 1).Cursor()
+	if !ok || x != f.CursorColumn() {
+		t.Fatalf("composed caret x = %d (%v), want CursorColumn %d", x, ok, f.CursorColumn())
+	}
+	// An out-of-range cursor is clamped the way the field itself clamps it.
+	f.Cursor = 99
+	if got := f.Layout("name", false); got.Caret != len(f.Value) || got.Focused {
+		t.Fatalf("clamped Layout = %+v", got)
 	}
 }

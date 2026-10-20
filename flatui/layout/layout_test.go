@@ -355,7 +355,7 @@ func (w testWidget) Size() (Size, Size) {
 }
 
 func (w testWidget) Render(r Rect) string {
-	return fillRect(w.content, r, w.padSides(), w.Bordered)
+	return fillBox(w.content, r, w.padSides(), w.box())
 }
 
 func TestCustomWidgetInTree(t *testing.T) {

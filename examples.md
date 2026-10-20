@@ -32,7 +32,7 @@ go run ./flat-pages
 | Sample | Demonstrates |
 |---|---|
 | `flat-pages` | Multi-screen navigation with a screen enum |
-| `flat-modal` | Overlay/modal state without a modal manager |
+| `flat-modal` | Overlay/modal state without a modal manager, as a `Frame.Root` tree of `Label` roles and `Box` cards; the modal's `TextField.Layout` input places the cursor, with no cursor arithmetic |
 | `flat-tree` | `flatui.Tree`, search field, focus ring, keymap footer |
 | `flat-workspace` | Capstone: three-pane layout-engine composition (tree, search, table, viewport, progress) with focus ring, grouped help, and a cursor placed from solved rects |
 

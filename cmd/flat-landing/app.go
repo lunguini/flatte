@@ -90,14 +90,12 @@ type State struct {
 	// coX/coY are the absolute top-left of the content pane's inner area (inside
 	// the border+padding). Mouse events are translated by this offset before
 	// being forwarded to a hosted app, whose own rects are frame-local.
-	coX int
-	coY int
-	// uiList is the absolute rect of the UI-tab component list rows.
-	uiList layout.Rect
-	gameW  int
-	gameH  int
-	appW   int
-	appH   int
+	coX   int
+	coY   int
+	gameW int
+	gameH int
+	appW  int
+	appH  int
 	// lastTick is the wall time of the previous host Tick, used to feed hosted
 	// apps the real elapsed duration (the browser's setInterval can fire slower
 	// than requested, which would otherwise slow the snake down).
@@ -181,12 +179,12 @@ func (s *State) adopt() {
 		}
 		s.settleDocker()
 	case tabUI:
-		listW := max(min(contentWidth/3, 20), 12)
-		listHeight := max(contentHeight-1, 1)
-		s.catalog.SetHeight(listHeight)
-		s.uiList = layout.Rect{X: s.coX, Y: s.coY + 1, W: listW, H: listHeight}
-		previewW := max(contentWidth-listW-3, 8)
-		s.prog.SetWidth(clampInt(previewW-6, 8, 32))
+		if r, ok := s.rects["ui.list"]; ok {
+			s.catalog.SetHeight(max(r.H, 1))
+		}
+		if r, ok := s.rects["ui.preview"]; ok {
+			s.prog.SetWidth(clampInt(previewWrapWidth(r.W)-6, 8, 32))
+		}
 	}
 }
 
@@ -342,7 +340,7 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 	if m.Button == flatte.MouseWheelUp || m.Button == flatte.MouseWheelDown {
 		// The docker app and the UI catalog scroll themselves; everywhere else
 		// the wheel scrolls the page.
-		if m.Target == "content" && (s.active == tabApp || s.active == tabUI) {
+		if (s.active == tabApp && m.Target == "content") || (s.active == tabUI && m.Target == "ui.list") {
 			s.forwardMouse(m)
 			return
 		}
@@ -390,10 +388,10 @@ func (s *State) forwardMouse(m flatte.MouseEvent) {
 		local.Target, local.TargetRect = s.dockerComp.HitTest(local.X, local.Y)
 		dockerapp.Handle(s.docker, local, s.dockerFx)
 	case tabUI:
-		r := s.uiList
-		if !r.Contains(m.X, m.Y) {
+		if m.Target != "ui.list" {
 			return
 		}
+		r := m.TargetRect
 		switch m.Button {
 		case flatte.MouseWheelDown:
 			s.catalog.MoveDown()
@@ -450,10 +448,7 @@ func shellTree(s *State, st styles) layout.Node {
 		NodeBase: layout.NodeBase{ID: "shell", H: layout.Fixed(max(s.height, minRowsFor(s.active))), Gap: 1, PadLeft: 1, PadRight: 1},
 		Children: []layout.Node{
 			tabBarRow(s, st),
-			landingBlock{
-				NodeBase:      contentNodeBase(),
-				RenderContent: func(r layout.Rect, width int) string { return contentView(s, st, r, width) },
-			},
+			contentNode(s, st),
 			landingBlock{
 				NodeBase:      layout.NodeBase{ID: "footer", H: layout.Fixed(1)},
 				RenderContent: func(_ layout.Rect, width int) string { return footerView(s, st, width) },
@@ -505,6 +500,19 @@ func tabTarget(target string) (landingTab, bool) {
 	return landingTab(i), true
 }
 
+// contentNode is the bordered content pane. The UI tab's split is part of
+// the frame tree, so its list rows are hit-tested and sized by the frame
+// walk; the other tabs render as one leaf.
+func contentNode(s *State, st styles) layout.Node {
+	if s.active == tabUI {
+		return layout.Col{NodeBase: contentNodeBase(), Children: []layout.Node{uiTabNode(s, st)}}
+	}
+	return landingBlock{
+		NodeBase:      contentNodeBase(),
+		RenderContent: func(r layout.Rect, width int) string { return contentView(s, st, r, width) },
+	}
+}
+
 func contentView(s *State, st styles, r layout.Rect, width int) string {
 	height := max(r.H-2, 1)
 	switch s.active {
@@ -515,8 +523,6 @@ func contentView(s *State, st styles, r layout.Rect, width int) string {
 		return frame.Content
 	case tabLayout:
 		return layoutTabView(st, width, height)
-	case tabUI:
-		return uiTabView(s, st, r, width, height)
 	default:
 		return whatTabView(st, width)
 	}
@@ -565,9 +571,18 @@ func layoutTabView(st styles, width, height int) string {
 	return strings.Join(rows, "\n")
 }
 
-func uiTabView(s *State, st styles, r layout.Rect, width, height int) string {
-	listW := max(min(width/3, 20), 12)
-	item := s.selectedItem()
+// uiListWidth is the component list's width for a content pane r wide.
+func uiListWidth(r layout.Rect) int {
+	return max(min(innerWidth(contentNodeBase(), r.W)/3, 20), 12)
+}
+
+// previewWrapWidth is the text width inside a preview column w wide.
+func previewWrapWidth(w int) int { return max(w-2, 8) }
+
+// uiTabNode is the component picker: a fixed-width list ("ui.list", whose
+// rect sizes the catalog and maps clicks to rows) beside the live preview.
+func uiTabNode(s *State, st styles) layout.Node {
+	listW := uiListWidth(s.rects["content"])
 	list := s.catalog.View(func(i int, selected bool) string {
 		prefix, style := "  ", st.body
 		if selected {
@@ -575,24 +590,28 @@ func uiTabView(s *State, st styles, r layout.Rect, width, height int) string {
 		}
 		return style.Render(truncate(prefix+showcase[i].Name, listW))
 	})
-	_ = r
-
-	previewW := max(width-listW-3, 8)
-	preview := strings.Join([]string{
-		st.section.Render(item.Name) + " " + st.subtle.Render("· "+item.Kind),
-		st.subtle.Render(wrapText(item.Summary, previewW)),
-		"",
-		previewBody(s, st, item.Name, previewW, max(height-4, 1)),
-	}, "\n")
-
-	col, _ := layout.SolveAndCompose(layout.Row{
-		NodeBase: layout.NodeBase{Gap: 1, H: layout.Fixed(max(height, 1))},
+	return layout.Row{
+		NodeBase: layout.NodeBase{Gap: 1, H: layout.Grow(1)},
 		Children: []layout.Node{
-			layout.Text{NodeBase: layout.NodeBase{W: layout.Fixed(listW), H: layout.Grow(1)}, String: st.section.Render("Components") + "\n" + list},
-			layout.Text{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1)}, String: preview},
+			layout.Col{NodeBase: layout.NodeBase{W: layout.Fixed(listW)}, Children: []layout.Node{
+				layout.Text{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, String: st.section.Render("Components")},
+				layout.Text{NodeBase: layout.NodeBase{ID: "ui.list", H: layout.Grow(1)}, String: list},
+			}},
+			landingBlock{
+				NodeBase: layout.NodeBase{ID: "ui.preview", W: layout.Grow(1), H: layout.Grow(1)},
+				RenderContent: func(r layout.Rect, _ int) string {
+					item := s.selectedItem()
+					w := previewWrapWidth(r.W)
+					return strings.Join([]string{
+						st.section.Render(item.Name) + " " + st.subtle.Render("· "+item.Kind),
+						st.subtle.Render(wrapText(item.Summary, w)),
+						"",
+						previewBody(s, st, item.Name, w, max(r.H-4, 1)),
+					}, "\n")
+				},
+			},
 		},
-	}, max(width, 1), max(height, 1))
-	return col
+	}
 }
 
 // previewBody renders the selected widget in one or more live forms.

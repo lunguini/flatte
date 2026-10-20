@@ -10,6 +10,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const defaultTickInterval = 300 * time.Millisecond
@@ -105,73 +106,70 @@ func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
 	return false
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	base := viewMain(s, ctx)
-	if !s.modalOpen {
-		return flatte.Frame{Content: base}
-	}
-	modal := viewModal(s, ctx)
-	frame := flatte.Frame{Content: flatui.Overlay(base, modal)}
-	overlayX, overlayY := flatui.OverlayOrigin(base, modal)
-	cardX, cardY := flatui.CardOrigin()
-	frame.Cursor = &flatte.Cursor{
-		X: overlayX + cardX + lipgloss.Width("  name: ") + s.modalInput.CursorColumn(),
-		Y: overlayY + cardY + 3, // title, subtle, blank precede the name row
-	}
-	return frame
-}
+// cardBox is the look flatui.Card gives string frames: a plain border in a
+// muted grey.
+var cardBox = layout.Box{Border: layout.BorderNormal, BorderColor: lipgloss.Color("240")}
 
-func viewMain(s *State, ctx flatte.RenderContext) string {
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+// View returns the frame as a layout tree. The runtime composes it at the
+// window size and places the cursor at the focused Input's caret, so there
+// is no cursor arithmetic here.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	loader := "idle"
 	if s.waiting {
 		loader = "waiting " + spinnerFrames[s.spinner%len(spinnerFrames)]
 	}
-
 	result := "none"
 	if s.modalResult != "" {
 		result = s.modalResult
 	}
 
-	lines := []string{
-		flatui.Title("Flat Modal"),
-		fmt.Sprintf("  background ticks: %d | loader: %s", s.ticks, loader),
-		flatui.Subtle("modal focus with background updates"),
-		"  background workspace:",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"  modal result: " + result,
-		"  recent events:",
-		"    - async tick applied",
-		"    - modal owns keyboard focus",
-		"",
-		flatui.Subtle("enter open modal | q quit"),
+	children := []layout.Node{
+		layout.Label{Text: "Flat Modal", Style: title},
+		layout.Label{NodeBase: indent, Text: fmt.Sprintf("background ticks: %d | loader: %s", s.ticks, loader)},
+		layout.Label{Text: "modal focus with background updates", Style: subtle},
+		layout.Label{NodeBase: indent, Text: "background workspace:"},
+		layout.NewSpacer(),
+		layout.Label{NodeBase: indent, Text: "modal result: " + result},
+		layout.Label{NodeBase: indent, Text: "recent events:\n  - async tick applied\n  - modal owns keyboard focus"},
+		layout.Label{},
+		layout.Label{Text: "enter open modal | q quit", Style: subtle},
 	}
 	if s.modalOpen {
-		lines = append(lines, flatui.Subtle("main view is waiting for modal input"))
+		children = append(children,
+			layout.Label{Text: "main view is waiting for modal input", Style: subtle},
+			modal(s),
+		)
 	}
-	return flatui.Card(lines, ctx.Width)
+	return flatte.Frame{Root: layout.Col{
+		NodeBase: layout.NodeBase{PadLeft: 2, PadRight: 2, Box: cardBox},
+		Children: children,
+	}}
 }
 
-func viewModal(s *State, ctx flatte.RenderContext) string {
-	lines := []string{
-		flatui.Title("Confirm Work"),
-		flatui.Subtle("modal captures input"),
-		"",
-		"  name: " + s.modalInput.Value,
-		"",
-		flatui.Subtle("enter confirm | esc cancel"),
+func modal(s *State) layout.Node {
+	return layout.Col{
+		NodeBase: layout.NodeBase{Overlay: true, W: layout.Fixed(32), PadLeft: 2, PadRight: 2, Box: cardBox},
+		Children: []layout.Node{
+			layout.Label{Text: "Confirm Work", Style: title},
+			layout.Label{Text: "modal captures input", Style: subtle},
+			layout.Label{},
+			layout.Row{
+				NodeBase: layout.NodeBase{PadLeft: 2, Gap: 1},
+				Children: []layout.Node{
+					layout.Label{Text: "name:"},
+					s.modalInput.Layout("modal.name", true),
+				},
+			},
+			layout.Label{},
+			layout.Label{Text: "enter confirm | esc cancel", Style: subtle},
+		},
 	}
-	return flatui.Card(lines, min(ctx.Width, 32))
 }
 
 func tickInterval() time.Duration {

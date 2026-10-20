@@ -32,20 +32,18 @@ func CardWithStyle(lines []string, maxWidth int, style CardStyle) string {
 	return container.Render(strings.Join(lines, "\n"))
 }
 
+// Title renders text in the layout.TextTitle role's terminal look.
 func Title(text string) string {
-	return TitleWithStyle(text, lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("235")).
-		Padding(0, 1))
+	return layout.TextStyle{Role: layout.TextTitle}.Render(text)
 }
 
 func TitleWithStyle(text string, style lipgloss.Style) string {
 	return style.Render(text)
 }
 
+// Subtle renders text in the layout.TextSubtle role's terminal look.
 func Subtle(text string) string {
-	return SubtleWithStyle(text, lipgloss.NewStyle().Foreground(lipgloss.Color("244")))
+	return layout.TextStyle{Role: layout.TextSubtle}.Render(text)
 }
 
 func SubtleWithStyle(text string, style lipgloss.Style) string {

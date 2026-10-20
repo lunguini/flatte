@@ -113,10 +113,11 @@ shared geometry and add their own fields.
 | `Pad` | `int` | Inner padding on all sides. |
 | `PadTop`/`PadRight`/`PadBottom`/`PadLeft` | `int` | Per-side padding added on top of `Pad` (inside the border) — for asymmetric insets like "header rows + left pad only". |
 | `Gap` | `int` | Space between children (containers). |
-| `Bordered` | `bool` | Draw a rounded border; adds one inset cell per side. |
+| `Bordered` | `bool` | Draw a rounded border; adds one inset cell per side. Shorthand for `Box{Border: BorderRounded}`. |
 | `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). |
 | `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
-| `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Bordered` fill; layout inset still comes from `Pad`/`Bordered`. |
+| `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Box` fill; layout inset still comes from `Pad` and the border. Terminal-only: prefer `Box` when it can say what you need. |
+| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. |
 
 ### Size kinds
 
@@ -141,7 +142,9 @@ whole viewport.
 |---|---|
 | `layout.Row{Children: ...}` | Distribute children horizontally (main axis = width). |
 | `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
-| `layout.Text{String: ...}` | Leaf carrying a pre-rendered string; auto-sizes to it. |
+| `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. |
+| `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. |
+| `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
 | `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY`. See [Scrolling](#scrolling). |
 
@@ -230,6 +233,32 @@ content-relative position (`row.Y - content.Y`, the same at every offset) with
 the offset and window height. A whole page scrolls the same way, with a Scroll
 as the root. `cmd/flat-scroll` shows panes; `cmd/flat-landing` shows a page.
 
+### Text roles
+
+`layout.TextStyle{Role: ...}` says what text is for; the backend decides how
+it looks. Roles are `TextBody` (default), `TextTitle`, and `TextSubtle`;
+`Fg`, `Bg`, `Bold`, `Italic`, `Underline`, and `Strikethrough` override the
+role. `TextStyle.Render(s)` is the terminal look, and `flatui.Title` /
+`flatui.Subtle` are those roles for string frames, so both paths match.
+
+### Inputs and the cursor
+
+Put a field in the tree with `TextField.Layout(id, focused)`. With
+`Frame.Root` set and `Frame.Cursor` nil, the runtime places the cursor at the
+caret of the topmost focused `layout.Input` that is visible — no origin or
+label-width arithmetic in `View`:
+
+```go
+layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+	layout.Label{Text: "name:"},
+	s.name.Layout("name", s.focus.Focused(0)),
+}}
+```
+
+A focused Input scrolls horizontally to keep its caret visible. Set
+`Frame.Cursor` yourself when you need a cursor somewhere else; it wins.
+`cmd/flat-modal` shows the shape.
+
 ### Widgets in a layout tree
 
 Several widgets expose `Layout() layout.Node`, so they slot straight into a
@@ -241,6 +270,7 @@ frame tree instead of being rendered and positioned by hand:
 | `flatui.List` | A `Text` leaf of the visible rows via `RenderRow`. |
 | `flatui.Viewport` | A `Text` leaf of the visible slice. |
 | `flatui.Progress` | A `Text` leaf of the bar. |
+| `flatui.TextField` | `Layout(id, focused)`: a `layout.Input` showing the value and caret. |
 
 ### Geometry-based hit-testing
 

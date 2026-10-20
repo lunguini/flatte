@@ -135,7 +135,7 @@ func TestMouseSwitchesTab(t *testing.T) {
 func TestUITabMouseSelectsRow(t *testing.T) {
 	s, host := shellState(tabUI)
 
-	r := s.uiList
+	r := s.rects["ui.list"]
 	if r.H < 3 {
 		t.Fatalf("ui-list rect missing/too small: %+v", r)
 	}
@@ -173,8 +173,8 @@ func TestTabSwitchAdoptsUnchangedGeometry(t *testing.T) {
 	if s.active != tabUI || s.rects["content"] != before {
 		t.Fatalf("setup: active %d, content %+v (was %+v)", s.active, s.rects["content"], before)
 	}
-	if s.catalog.Height() <= 1 || s.uiList.H != s.catalog.Height() {
-		t.Fatalf("UI tab not sized from delivered geometry: list height %d, uiList %+v", s.catalog.Height(), s.uiList)
+	if s.catalog.Height() <= 1 || s.rects["ui.list"].H != s.catalog.Height() {
+		t.Fatalf("UI tab not sized from delivered geometry: list height %d, ui.list %+v", s.catalog.Height(), s.rects["ui.list"])
 	}
 }
 
@@ -184,13 +184,13 @@ func TestViewDoesNotMutateLayoutState(t *testing.T) {
 	for id, r := range s.rects {
 		rects[id] = r
 	}
-	coX, coY, uiList := s.coX, s.coY, s.uiList
+	coX, coY := s.coX, s.coY
 	listHeight, progressWidth := s.catalog.Height(), s.prog.Width()
 	gameW, gameH, appW, appH := s.gameW, s.gameH, s.appW, s.appH
 
 	_ = View(s, flatte.RenderContext{Width: 92})
 
-	if !reflect.DeepEqual(s.rects, rects) || s.coX != coX || s.coY != coY || s.uiList != uiList {
+	if !reflect.DeepEqual(s.rects, rects) || s.coX != coX || s.coY != coY {
 		t.Fatalf("View mutated retained geometry")
 	}
 	if s.catalog.Height() != listHeight || s.prog.Width() != progressWidth {
@@ -407,4 +407,26 @@ func mustRead(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// TestUITabWheelOwnership: the wheel over the component list moves the
+// catalog; over the preview it scrolls the page instead.
+func TestUITabWheelOwnership(t *testing.T) {
+	s, host := shellAt(tabUI, 92, 16) // the shell needs 22 rows: the page scrolls
+	list := s.rects["ui.list"]
+	send(s, host, flatte.MouseEvent{X: list.X + 1, Y: list.Y + 1, Button: flatte.MouseWheelDown, Action: flatte.MousePress})
+	if s.catalog.Cursor() != 1 || s.pageY != 0 {
+		t.Fatalf("wheel over the list: cursor %d, pageY %d, want 1, 0", s.catalog.Cursor(), s.pageY)
+	}
+	preview := s.rects["ui.preview"]
+	send(s, host, flatte.MouseEvent{X: preview.X + 2, Y: preview.Y + 2, Button: flatte.MouseWheelDown, Action: flatte.MousePress})
+	if s.catalog.Cursor() != 1 || s.pageY != wheelStep {
+		t.Fatalf("wheel over the preview: cursor %d, pageY %d, want 1, %d", s.catalog.Cursor(), s.pageY, wheelStep)
+	}
+	// After the page scrolled, a click still selects the row painted there.
+	list = s.rects["ui.list"]
+	send(s, host, press(list.X+1, list.Y+3))
+	if s.catalog.Cursor() != 3 {
+		t.Fatalf("click on the fourth row of the scrolled page selected %d", s.catalog.Cursor())
+	}
 }

@@ -30,7 +30,7 @@ func (t Text) Size() (Size, Size) {
 }
 
 func (t Text) Render(r Rect) string {
-	return fillRect(t.String, r, t.padSides(), t.Bordered)
+	return fillBox(t.String, r, t.padSides(), t.box())
 }
 
 // Spacer fills remaining space. Grows on both axes.
@@ -53,8 +53,14 @@ func (s *Spacer) WithBackground(c color.Color) *Spacer {
 	return s
 }
 
+// Render fills r with the spacer's background: the WithBackground color, or
+// else Box.Background. A spacer has no border or padding of its own.
 func (s *Spacer) Render(r Rect) string {
-	return fillRectWithBg("", r, sides{}, s.bg, false)
+	bg := s.bg
+	if bg == nil {
+		bg = s.Box.Background
+	}
+	return fillBox("", r, sides{}, Box{Background: bg})
 }
 
 // --- helpers ---

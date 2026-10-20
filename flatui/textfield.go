@@ -6,6 +6,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/rivo/uniseg"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // TextField is a single-line editable string. Cursor is a byte offset into
@@ -170,6 +172,14 @@ func (f *TextField) ClearSelection() {
 func (f TextField) CursorColumn() int {
 	f.clampCursor()
 	return lipgloss.Width(f.Value[:f.Cursor])
+}
+
+// Layout returns the field as a layout.Input node with the given ID, showing
+// the value and caret. focused is the app's focus decision: the focused
+// Input's caret places the frame cursor. Selection is not shown yet.
+func (f TextField) Layout(id string, focused bool) layout.Input {
+	f.clampCursor()
+	return layout.Input{NodeBase: layout.NodeBase{ID: id}, Value: f.Value, Caret: f.Cursor, Focused: focused}
 }
 
 func (f *TextField) startSelection() {
