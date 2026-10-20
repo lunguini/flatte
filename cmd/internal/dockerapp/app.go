@@ -178,18 +178,16 @@ func (s *State) resize(width, height int) {
 // Root, and the host's solve of it is what LayoutEvent and mouse targets
 // report, so geometry and pixels cannot drift.
 func (s *State) frameTree() layout.Node {
-	status := func(r layout.Rect) string {
-		if s.commandModal != nil {
-			return s.commandModal.View(r.W)
-		}
-		return s.containers.renderStatusLine(r.W)
+	status := s.containers.statusNode()
+	if s.commandModal != nil {
+		status = s.commandModal.node()
 	}
 
 	children := []layout.Node{
 		headerNode(s),
 		s.activeBody(status),
-		Separator{},
-		Footer{State: s},
+		separatorNode(),
+		footerNode(s),
 	}
 	if s.confirmModal != nil {
 		children = append(children, modalNode(s.confirmModal))
@@ -199,7 +197,7 @@ func (s *State) frameTree() layout.Node {
 
 // activeBody returns the active screen's body subtree, ready to slot into the
 // frame tree as real children (so the single frame solve owns its geometry).
-func (s *State) activeBody(status func(layout.Rect) string) layout.Node {
+func (s *State) activeBody(status layout.Node) layout.Node {
 	switch s.screen {
 	case screenImages:
 		return s.images.bodyNode()
@@ -224,17 +222,9 @@ func (s *State) adoptScreenRects(sc screen, rects map[string]layout.Rect) {
 func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	// The host solves and paints the whole frame — header, panes, dividers,
 	// status, footer — in one pass at the terminal size.
-	frame := flatte.Frame{
+	// The command bar's Input places the cursor while it is open.
+	return flatte.Frame{
 		Root:  s.frameTree(),
 		Title: "flat-docker — " + s.screen.Name(),
 	}
-	if s.commandModal != nil {
-		if r, ok := s.rects["status"]; ok {
-			frame.Cursor = &flatte.Cursor{
-				X: r.X + s.commandModal.cursorFrameX(),
-				Y: r.Y,
-			}
-		}
-	}
-	return frame
 }

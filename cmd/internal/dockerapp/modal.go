@@ -158,27 +158,20 @@ func (m *commandModel) execute(s *State, _ flatte.Effects[State], line string) {
 	}
 }
 
-func (m *commandModel) View(width int) string {
-	prompt := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(":")
-	input := m.input.Value
-	if input == "" {
-		placeholder := lipgloss.NewStyle().Foreground(pal.muted).Render("type a command (try :help)")
-		return lipgloss.NewStyle().
-			Width(width).
-			Background(pal.bg).
-			Foreground(pal.text).
-			Render(prompt + " " + placeholder)
+// node is the command bar in the status row: the ":" prompt and the
+// command Input, which places the cursor.
+func (m *commandModel) node() layout.Node {
+	input := m.input.Layout("command", true)
+	input.Placeholder = "type a command (try :help)"
+	input.Style = layout.TextStyle{Fg: pal.text}
+	return layout.Row{
+		NodeBase: layout.NodeBase{ID: "status", H: layout.Fixed(statusLineRows), Box: layout.Box{Background: pal.bg}},
+		Children: []layout.Node{
+			layout.Label{Text: ":", Style: layout.TextStyle{Bold: true, Fg: pal.accent}},
+			layout.Label{Text: " "},
+			input,
+		},
 	}
-	return lipgloss.NewStyle().
-		Width(width).
-		Background(pal.bg).
-		Foreground(pal.text).
-		Render(prompt + " " + input)
-}
-
-func (m *commandModel) cursorFrameX() int {
-	// ": " prompt = 2 cells, plus the input's cursor column
-	return 2 + m.input.CursorColumn()
 }
 
 func (m *commandModel) keyHints() string {
@@ -243,17 +236,14 @@ const modalWidth = 40
 // declares the 1-cell inset for the styled frame; Chrome paints that frame (a
 // rounded red border with a title bar) under the body Text children.
 func modalNode(m *confirmModel) layout.Node {
-	body := lipgloss.NewStyle().Foreground(pal.text).
-		Render("  " + m.action + " " + m.targetName + "?")
-	yKey := lipgloss.NewStyle().Bold(true).Foreground(pal.good).Render("y")
-	nKey := lipgloss.NewStyle().Bold(true).Foreground(pal.bad).Render("n/esc")
-	hints := lipgloss.NewStyle().Foreground(pal.muted).Render("  ") +
-		yKey + lipgloss.NewStyle().Foreground(pal.muted).Render(" confirm    ") +
-		nKey + lipgloss.NewStyle().Foreground(pal.muted).Render(" cancel")
-
-	blank := func() layout.Node {
-		return layout.Text{NodeBase: layout.NodeBase{H: layout.Fixed(1)}}
-	}
+	muted := layout.TextStyle{Fg: pal.muted}
+	hints := layout.Row{NodeBase: layout.NodeBase{ID: "modal:hints", H: layout.Fixed(1), PadLeft: 2}, Children: []layout.Node{
+		layout.Label{Text: "y", Style: layout.TextStyle{Bold: true, Fg: pal.good}},
+		layout.Label{Text: " confirm    ", Style: muted},
+		layout.Label{Text: "n/esc", Style: layout.TextStyle{Bold: true, Fg: pal.bad}},
+		layout.Label{Text: " cancel", Style: muted},
+	}}
+	blank := func() layout.Node { return layout.Label{NodeBase: layout.NodeBase{H: layout.Fixed(1)}} }
 	return layout.Col{
 		NodeBase: layout.NodeBase{
 			ID:       "modal",
@@ -264,9 +254,9 @@ func modalNode(m *confirmModel) layout.Node {
 		},
 		Children: []layout.Node{
 			blank(),
-			layout.Text{NodeBase: layout.NodeBase{ID: "modal:body", H: layout.Fixed(1)}, String: body},
+			layout.Label{NodeBase: layout.NodeBase{ID: "modal:body", H: layout.Fixed(1), PadLeft: 2}, Text: m.action + " " + m.targetName + "?", Style: layout.TextStyle{Fg: pal.text}},
 			blank(),
-			layout.Text{NodeBase: layout.NodeBase{ID: "modal:hints", H: layout.Fixed(1)}, String: hints},
+			hints,
 			blank(),
 		},
 	}

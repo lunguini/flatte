@@ -4,8 +4,6 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
@@ -51,43 +49,20 @@ func newImagesScreen() *imagesScreen {
 	return s
 }
 
-// --- Layout nodes: the images body is a list | divider | detail row. ---
-
-type imageListPane struct {
-	layout.NodeBase
-	s *imagesScreen
-}
-
-func (p imageListPane) Render(r layout.Rect) string {
-	return p.s.renderImageListContent(r.W, r.H)
-}
-
-type imageDivider struct {
-	layout.NodeBase
-	s *imagesScreen
-}
-
-func (p imageDivider) Render(r layout.Rect) string {
-	return renderDragDivider(r.H, p.s.drag != nil)
-}
-
-type imageDetailPane struct {
-	layout.NodeBase
-	s *imagesScreen
-}
-
-func (p imageDetailPane) Render(r layout.Rect) string {
-	return p.s.renderImageDetailContent(r.W, r.H)
-}
-
-// bodyNode returns the images body subtree as a frame child that fills the body.
+// bodyNode returns the images body subtree — list | divider | detail — as
+// a frame child that fills the body.
 func (i *imagesScreen) bodyNode() layout.Node {
+	sel := i.selected()
+	title, fields := "", [][2]string(nil)
+	if sel != nil {
+		title, fields = sel.RepoTag, [][2]string{{"id", sel.ID}, {"size", sel.Size}, {"created", sel.Created}, {"containers", strconv.Itoa(sel.Containers)}}
+	}
 	return layout.Row{
 		NodeBase: layout.NodeBase{H: layout.Grow(1)},
 		Children: []layout.Node{
-			imageListPane{NodeBase: layout.NodeBase{ID: "list", W: layout.Fixed(i.listPaneWidth)}, s: i},
-			imageDivider{NodeBase: layout.NodeBase{ID: "div0", W: layout.Fixed(dividerWidth)}, s: i},
-			imageDetailPane{NodeBase: layout.NodeBase{ID: "detail", W: layout.Grow(1)}, s: i},
+			namedListPane(i.listPaneWidth, "images", i.list, func(idx int) string { return i.images[idx].RepoTag }),
+			dragDivider("div0", i.drag != nil),
+			fieldsPane(title, fields, "(no image selected)"),
 		},
 	}
 }
@@ -165,8 +140,8 @@ func (i *imagesScreen) handleMouse(m flatte.MouseEvent) {
 		return
 	}
 
-	if m.Target == "list" {
-		i.handleImageListMouse(m, m.X-m.TargetRect.X, m.Y-m.TargetRect.Y)
+	if m.Target == "list" || strings.HasPrefix(m.Target, "list:") {
+		i.handleImageListMouse(m)
 	}
 }
 
@@ -184,57 +159,12 @@ func (i *imagesScreen) selected() *Image {
 	return &i.images[i.list.Cursor()]
 }
 
-func (i *imagesScreen) renderImageListContent(paneWidth, paneHeight int) string {
-	contentWidth := max(paneWidth-paneBorderCols-1, 1)
-	contentHeight := max(paneHeight-paneBorderRows, 0)
-	style := lipgloss.NewStyle().Width(contentWidth).Height(contentHeight)
-	scrollStyle := lipgloss.NewStyle().Height(contentHeight)
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render("images")
-	content := i.list.View(func(idx int, selected bool) string {
-		marker := "  "
-		if selected {
-			marker = "> "
-		}
-		name := i.images[idx].RepoTag
-		if selected {
-			name = lipgloss.NewStyle().Bold(true).Render(name)
-		}
-		return marker + name
-	})
-	inner := style.Render(title + "\n\n" + content)
-	visible := contentHeight - 2
-	bar := strings.Repeat(" ", contentHeight)
-	if i.list.Count() > visible {
-		bar = scrollbarLines(i.list.Offset(), visible, i.list.Count(), contentHeight)
-	}
-	combined := withScrollbar(inner, scrollStyle.Foreground(pal.panel).Render(bar))
-	return paneStyle(paneWidth, paneHeight, i.focus.Focused(imgFocusList), false).Render(combined)
-}
-
-func (i *imagesScreen) renderImageDetailContent(paneWidth, paneHeight int) string {
-	contentWidth := max(paneWidth-paneBorderCols, 1)
-	contentHeight := max(paneHeight-paneBorderRows, 0)
-	style := lipgloss.NewStyle().Width(contentWidth).Height(contentHeight)
-	sel := i.selected()
-	if sel == nil {
-		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no image selected)")
-		return paneStyle(paneWidth, paneHeight, false, false).Render(empty)
-	}
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(sel.RepoTag)
-	rows := []string{title, "",
-		"  id:         " + sel.ID,
-		"  size:       " + sel.Size,
-		"  created:    " + sel.Created,
-		"  containers: " + strconv.Itoa(sel.Containers)}
-	inner := style.Render(strings.Join(rows, "\n"))
-	return paneStyle(paneWidth, paneHeight, i.focus.Focused(imgFocusDetail), false).Render(inner)
-}
-
-func (i *imagesScreen) handleImageListMouse(m flatte.MouseEvent, localX, localY int) {
+// handleImageListMouse selects the clicked row (its ID names the item)
+// and scrolls on the wheel.
+func (i *imagesScreen) handleImageListMouse(m flatte.MouseEvent) {
 	switch {
 	case m.Action == flatte.MousePress && m.Button == flatte.MouseLeft:
-		row := localY - 2
-		if row >= 0 && row < i.list.Count() {
+		if row, ok := listRowTarget(m.Target); ok {
 			i.list.Select(row)
 		}
 	case m.Button == flatte.MouseWheelDown:

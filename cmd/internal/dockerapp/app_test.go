@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -254,7 +255,7 @@ func TestBodyYOffsetMatchesRenderedBodyStart(t *testing.T) {
 }
 
 func TestSeparatorClaimsRenderedHeight(t *testing.T) {
-	_, h := (Separator{}).Size()
+	_, h := separatorNode().Size()
 	if h.Kind != layout.SizeFixed || h.Value != 1 {
 		t.Fatalf("separator height = %+v, want fixed 1", h)
 	}
@@ -291,10 +292,7 @@ func TestViewRendersSharedChromeAndActiveScreenBody(t *testing.T) {
 }
 
 func TestFooterClaimsRenderedHeight(t *testing.T) {
-	w, h := (Footer{State: resizedState(80, 24)}).Size()
-	if w.Kind != layout.SizeAuto {
-		t.Fatalf("footer width = %+v, want auto", w)
-	}
+	_, h := footerNode(resizedState(80, 24)).Size()
 	if h.Kind != layout.SizeFixed || h.Value != 1 {
 		t.Fatalf("footer height = %+v, want fixed 1", h)
 	}
@@ -1425,17 +1423,10 @@ func TestContainerDetailPaneRendersFromAllocatedRect(t *testing.T) {
 	c.detailPaneWidth = 10
 	c.bodyContentHeight = 4
 
-	rendered := c.renderDetailChrome(layout.Rect{W: 42, H: 12})
-	lines := strings.Split(rendered, "\n")
-	if got, want := len(lines), 12; got != want {
-		t.Fatalf("rendered height = %d, want %d:\n%s", got, want, rendered)
-	}
-	for i, line := range lines {
-		if got, want := ansi.StringWidth(line), 42; got != want {
-			t.Fatalf("line %d width = %d, want %d: %q", i, got, want, line)
-		}
-	}
 	composed, rects := layout.SolveAndCompose(c.detailNode(), 42, 12)
+	if lines := strings.Split(composed, "\n"); len(lines) != 12 {
+		t.Fatalf("composed height = %d, want 12:\n%s", len(lines), composed)
+	}
 	stripped := ansi.Strip(composed)
 	if !strings.Contains(stripped, "status:") || !strings.Contains(stripped, "image:") {
 		t.Fatalf("expected stats body to fit allocated rect:\n%s", stripped)
@@ -1453,7 +1444,7 @@ func TestContainerDetailPaneRendersFromAllocatedRect(t *testing.T) {
 func TestContainersBodyTreeUsesConceptNodes(t *testing.T) {
 	s := resizedState(100, 28)
 	c := &s.containers
-	tree := containersBodyTree(c, func(layout.Rect) string { return "" })
+	tree := containersBodyTree(c, c.statusNode())
 
 	row, ok := tree.Children[0].(layout.Row)
 	if !ok {
@@ -1463,22 +1454,22 @@ func TestContainersBodyTreeUsesConceptNodes(t *testing.T) {
 	if !ok || listCol.ID != "list" {
 		t.Fatalf("list child = %#v, want layout.Col with ID \"list\"", row.Children[0])
 	}
-	if d, ok := row.Children[1].(containerDivider); !ok || d.index != 0 {
-		t.Fatalf("first divider = %#v, want containerDivider index 0", row.Children[1])
+	if d, ok := row.Children[1].(layout.Col); !ok || d.ID != "div0" {
+		t.Fatalf("first divider = %#v, want layout.Col \"div0\"", row.Children[1])
 	}
 	// The detail pane carries its header in the frame tree, so the tab
 	// strip's rects are solved with the frame.
 	if d, ok := row.Children[2].(layout.Col); !ok || d.ID != "detail" || len(d.Children) != 1 {
-		t.Fatalf("detail child = %#v, want layout.Col \"detail\" with a header child", row.Children[2])
+		t.Fatalf("detail child = %#v, want layout.Col \"detail\" with its body row", row.Children[2])
 	}
-	if d, ok := row.Children[3].(containerDivider); !ok || d.index != 1 {
-		t.Fatalf("second divider = %#v, want containerDivider index 1", row.Children[3])
+	if d, ok := row.Children[3].(layout.Col); !ok || d.ID != "div1" {
+		t.Fatalf("second divider = %#v, want layout.Col \"div1\"", row.Children[3])
 	}
-	if _, ok := row.Children[4].(containerActivityPane); !ok {
-		t.Fatalf("activity child = %T, want containerActivityPane", row.Children[4])
+	if a, ok := row.Children[4].(layout.Col); !ok || a.ID != "activity" {
+		t.Fatalf("activity child = %#v, want layout.Col \"activity\"", row.Children[4])
 	}
-	if _, ok := tree.Children[1].(containerStatusRow); !ok {
-		t.Fatalf("status child = %T, want containerStatusRow", tree.Children[1])
+	if st, ok := tree.Children[1].(layout.Row); !ok || st.ID != "status" {
+		t.Fatalf("status child = %#v, want layout.Row \"status\"", tree.Children[1])
 	}
 }
 
@@ -2375,5 +2366,32 @@ func TestDetailTabClicksHitPaintedLabelsWithFollowIndicator(t *testing.T) {
 		if s.containers.tab != tc.want {
 			t.Fatalf("click on painted %q at (%d,%d): tab = %v, want %v", tc.label, x, y, s.containers.tab, tc.want)
 		}
+	}
+}
+
+// TestImageAndVolumeRowClicksSelectTheirItem: list rows are ID'd nodes, so
+// a click selects the item it names wherever the list is scrolled (the old
+// local-row arithmetic ignored the scroll offset).
+func TestImageAndVolumeRowClicksSelectTheirItem(t *testing.T) {
+	s := resizedState(100, 28)
+	press := flatte.MouseEvent{Button: flatte.MouseLeft, Action: flatte.MousePress}
+	img := s.images.list.Count() - 1
+	press.Target = "list:" + strconv.Itoa(img)
+	s.images.handleMouse(press)
+	if got := s.images.list.Cursor(); got != img {
+		t.Fatalf("image click selected %d, want %d", got, img)
+	}
+	vol := s.volumes.list.Count() - 1
+	press.Target = "list:" + strconv.Itoa(vol)
+	s.volumes.handleMouse(press)
+	if got := s.volumes.list.Cursor(); got != vol {
+		t.Fatalf("volume click selected %d, want %d", got, vol)
+	}
+	// The pane outside the rows (its title) selects nothing.
+	press.Target = "list"
+	s.images.list.Select(0)
+	s.images.handleMouse(press)
+	if got := s.images.list.Cursor(); got != 0 {
+		t.Fatalf("title click selected %d", got)
 	}
 }

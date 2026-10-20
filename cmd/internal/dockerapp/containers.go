@@ -304,107 +304,146 @@ func (c *containersScreen) listRow(idx int, selected bool) layout.Node {
 	return layout.Row{Children: []layout.Node{status, marker, name}}
 }
 
-// detailNode is the detail pane: Chrome paints the pane (padding, body,
-// scrollbar, follow indicator) with its header row left blank, and the header
-// is a child in the frame tree, so its tabs are solved, painted, and
-// hit-tested by the frame walk itself.
+// detailNode is the detail pane as a frame subtree: the header (name and
+// tab strip), a blank row, and the active tab's body beside the scrollbar
+// column, inside the pane's padding. On the logs tab the follow indicator
+// takes the bottom padding row, right-aligned.
 func (c *containersScreen) detailNode() layout.Node {
 	pane := layout.Col{NodeBase: layout.NodeBase{
-		ID:       "detail",
-		W:        layout.Grow(1),
-		H:        layout.Auto(),
-		Chrome:   c.renderDetailChrome,
-		PadLeft:  panePadding,
-		PadRight: panePadding + 1, // right pad + scrollbar column
+		ID:        "detail",
+		W:         layout.Grow(1),
+		H:         layout.Auto(),
+		PadLeft:   panePadding,
+		PadRight:  panePadding,
+		PadBottom: panePadding,
 	}}
-	if selected := c.selected(); selected != nil {
-		pane.Children = []layout.Node{c.detailHeader(selected)}
+	selected := c.selected()
+	if selected == nil {
+		pane.Children = []layout.Node{layout.Label{Text: "(no container selected)", Style: layout.TextStyle{Fg: pal.muted}}}
+		return pane
+	}
+	body := append([]layout.Node{c.detailHeader(selected), layout.Label{}}, c.tabBody(selected)...)
+	bar := c.detailScrollbar(max(c.bodyContentHeight-paneBorderRows, 0))
+	if strings.TrimSpace(bar) != "" { // style the track only when there is one
+		bar = lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
+	}
+	pane.Children = []layout.Node{layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1)}, Children: []layout.Node{
+		layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Children: body},
+		layout.Text{NodeBase: layout.NodeBase{W: layout.Fixed(1)}, String: bar},
+	}}}
+	if indicator := c.followIndicator(); indicator != nil {
+		pane.PadBottom = 0
+		pane.Children = append(pane.Children, layout.Row{Children: []layout.Node{layout.NewSpacer(), indicator}})
 	}
 	return pane
 }
 
-type containerActivityPane struct {
-	layout.NodeBase
-	screen *containersScreen
+// tabBody is the active tab's content: stats as labelled rows and meters,
+// logs and inspect as their viewports.
+func (c *containersScreen) tabBody(selected *Container) []layout.Node {
+	indent := layout.NodeBase{PadLeft: 2}
+	switch c.tab {
+	case tabStats:
+		status := layout.TextStyle{Fg: lipgloss.Color("203")}
+		if selected.Status == "running" {
+			status = layout.TextStyle{Fg: lipgloss.Color("114")}
+		}
+		// Names sit in a fixed column per group, so values (and the CPU and
+		// MEM bars) line up in a proportional font too.
+		field := func(name string, width int, value layout.Node) layout.Node {
+			return layout.Row{NodeBase: indent, Children: []layout.Node{
+				layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(width)}, Text: name},
+				value,
+			}}
+		}
+		return []layout.Node{
+			field("status:", 8, layout.Label{Text: selected.Status, Style: status}),
+			field("image:", 8, layout.Label{Text: selected.Image}),
+			layout.Label{},
+			field("CPU", 4, c.cpu.Layout()),
+			field("hist", 5, layout.Text{String: sparkline(c.cpuHistory[selected.ID], lipgloss.Color("117"))}),
+			layout.Label{},
+			field("MEM", 4, c.mem.Layout()),
+			field("hist", 5, layout.Text{String: sparkline(c.memHistory[selected.ID], lipgloss.Color("114"))}),
+		}
+	case tabLogs:
+		if c.logs.VisibleLines() == 0 {
+			return []layout.Node{layout.Label{Text: "(no logs)", Style: layout.TextStyle{Fg: pal.muted}}}
+		}
+		return []layout.Node{c.logs.Layout()}
+	case tabInspect:
+		if c.inspect.VisibleLines() == 0 {
+			return []layout.Node{layout.Label{Text: "(no inspect data)", Style: layout.TextStyle{Fg: pal.muted}}}
+		}
+		return []layout.Node{c.inspect.Layout()}
+	}
+	return nil
 }
 
-func newContainerActivityPane(c *containersScreen) containerActivityPane {
-	return containerActivityPane{
-		NodeBase: layout.NodeBase{ID: "activity", W: layout.Fixed(c.activityPaneWidth), H: layout.Auto()},
-		screen:   c,
+// activityNode is the activity pane: a filled title row, a blank row, and
+// the newest events that fit, each truncated to the pane.
+func (c *containersScreen) activityNode() layout.Node {
+	width := max(c.activityPaneWidth-paneBorderCols, 1)
+	bodyHeight := max(c.bodyContentHeight-paneBorderRows-2, 0)
+	visible := c.activity[max(len(c.activity)-bodyHeight, 0):]
+	children := []layout.Node{
+		layout.Row{NodeBase: layout.NodeBase{Box: layout.Box{Background: pal.accent}}, Children: []layout.Node{
+			layout.Label{Text: "activity", Style: layout.TextStyle{Bold: true, Fg: pal.dark}},
+		}},
+		layout.Label{},
+	}
+	if len(visible) == 0 {
+		children = append(children, layout.Label{Text: "(no events yet)", Style: layout.TextStyle{Fg: pal.muted}})
+	}
+	for _, line := range visible {
+		children = append(children, layout.Label{Text: truncateToWidth(line, width)})
+	}
+	return layout.Col{
+		NodeBase: layout.NodeBase{
+			ID: "activity", W: layout.Fixed(c.activityPaneWidth), H: layout.Auto(),
+			PadLeft: panePadding, PadRight: panePadding, PadBottom: panePadding,
+		},
+		Children: children,
 	}
 }
 
-func (p containerActivityPane) Render(r layout.Rect) string {
-	if p.screen == nil {
-		return ""
+// dividerNode is the containers body's divider index (0: list|detail,
+// 1: detail|activity), in the accent while it is dragged.
+func (c *containersScreen) dividerNode(index int) layout.Node {
+	return dragDivider("div"+strconv.Itoa(index), c.drag != nil && c.drag.divider == index)
+}
+
+// statusNode is the status row: the containers summary on a filled line.
+func (c *containersScreen) statusNode() layout.Node {
+	return layout.Row{
+		NodeBase: layout.NodeBase{ID: "status", H: layout.Fixed(statusLineRows), Box: layout.Box{Background: lipgloss.Color("236")}},
+		Children: []layout.Node{layout.Label{Text: c.statusLine, Style: layout.TextStyle{Fg: lipgloss.Color("252")}}},
 	}
-	return p.screen.renderActivityPane(r)
-}
-
-type containerDivider struct {
-	layout.NodeBase
-	screen *containersScreen
-	index  int
-}
-
-func newContainerDivider(c *containersScreen, index int) containerDivider {
-	return containerDivider{
-		NodeBase: layout.NodeBase{ID: "div" + strconv.Itoa(index), W: layout.Fixed(dividerWidth), H: layout.Auto()},
-		screen:   c,
-		index:    index,
-	}
-}
-
-func (d containerDivider) Render(r layout.Rect) string {
-	if d.screen == nil {
-		return ""
-	}
-	return d.screen.renderDivider(d.index, r)
-}
-
-type containerStatusRow struct {
-	layout.NodeBase
-	render func(layout.Rect) string
-}
-
-func newContainerStatusRow(render func(layout.Rect) string) containerStatusRow {
-	return containerStatusRow{
-		NodeBase: layout.NodeBase{ID: "status", W: layout.Auto(), H: layout.Fixed(statusLineRows)},
-		render:   render,
-	}
-}
-
-func (s containerStatusRow) Render(r layout.Rect) string {
-	if s.render == nil {
-		return ""
-	}
-	return s.render(r)
 }
 
 // containersBodyTree builds the 3-pane containers body layout tree for Solve.
-func containersBodyTree(c *containersScreen, status func(layout.Rect) string) layout.Col {
+func containersBodyTree(c *containersScreen, status layout.Node) layout.Col {
 	return layout.Col{
 		Children: []layout.Node{
 			layout.Row{
 				NodeBase: layout.NodeBase{H: layout.Grow(1)},
 				Children: []layout.Node{
 					c.listNode(),
-					newContainerDivider(c, 0),
+					c.dividerNode(0),
 					c.detailNode(),
-					newContainerDivider(c, 1),
-					newContainerActivityPane(c),
+					c.dividerNode(1),
+					c.activityNode(),
 				},
 			},
-			newContainerStatusRow(status),
+			status,
 		},
 	}
 }
 
 // bodyNode returns the containers body subtree (3 panes + dividers over a
-// status row) as a frame child that grows to fill the body. status renders the
-// bottom status/command line; pass nil when only solving for geometry.
-func (c *containersScreen) bodyNode(status func(layout.Rect) string) layout.Node {
+// status row) as a frame child that grows to fill the body. status is the
+// bottom status/command line (the statusNode, or the command bar).
+func (c *containersScreen) bodyNode(status layout.Node) layout.Node {
 	t := containersBodyTree(c, status)
 	t.H = layout.Grow(1)
 	return t
@@ -460,9 +499,8 @@ func (c *containersScreen) registerListZones() {
 // clipped tabs stay where they are painted (and clickable while any of them
 // shows), where a wrap would move them away from their solved positions.
 func (c *containersScreen) detailHeader(selected *Container) layout.Node {
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
 	return layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Children: []layout.Node{
-		layout.Text{NodeBase: layout.NodeBase{W: layout.Grow(1)}, String: title},
+		layout.Label{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Text: selected.Name, Style: layout.TextStyle{Bold: true, Fg: pal.dark}},
 		c.detailTabs.Layout(),
 	}}
 }
@@ -529,10 +567,6 @@ func (c *containersScreen) dividerAt(x, y int) int {
 		return 1
 	}
 	return -1
-}
-
-func (c *containersScreen) renderDivider(idx int, r layout.Rect) string {
-	return renderDragDivider(r.H, c.drag != nil && c.drag.divider == idx)
 }
 
 func (c *containersScreen) recomputeStatusLine() {
@@ -1105,39 +1139,6 @@ func (c *containersScreen) resumeFollow() {
 	c.logs.GotoBottom()
 }
 
-func (c *containersScreen) renderStatusLine(width int) string {
-	return lipgloss.NewStyle().
-		Width(width).
-		Background(lipgloss.Color("236")).
-		Foreground(lipgloss.Color("252")).
-		Render(c.statusLine)
-}
-
-func (c *containersScreen) renderActivityPane(r layout.Rect) string {
-	activityInnerWidth := max(r.W-paneBorderCols, 1)
-	activityInnerHeight := max(r.H-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(activityInnerWidth).Height(activityInnerHeight)
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render("activity")
-
-	bodyHeight := max(activityInnerHeight-2, 0)
-	start := len(c.activity) - bodyHeight
-	if start < 0 {
-		start = 0
-	}
-	visible := c.activity[start:]
-	if len(visible) == 0 {
-		visible = []string{lipgloss.NewStyle().Foreground(pal.muted).Render("(no events yet)")}
-	}
-	truncated := make([]string, len(visible))
-	for i, line := range visible {
-		truncated[i] = truncateToWidth(line, activityInnerWidth)
-	}
-	headerRow := lipgloss.NewStyle().Width(activityInnerWidth).Background(pal.accent).Render(title)
-	content := headerRow + "\n\n" + strings.Join(truncated, "\n")
-	inner := contentStyle.Render(content)
-	return paneStyle(r.W, r.H, false, false).Render(inner)
-}
-
 func (c *containersScreen) keyHints() string {
 	switch c.focus.Index() {
 	case focusFilter:
@@ -1157,35 +1158,6 @@ func (c *containersScreen) keyHints() string {
 	return "1/2/3 switch  q quit"
 }
 
-// renderDetailChrome paints the detail pane around its header row, which is
-// left blank for the header child (see detailNode) to paint.
-func (c *containersScreen) renderDetailChrome(r layout.Rect) string {
-	detailInnerWidth := detailContentWidth(r.W)
-	detailInnerHeight := max(r.H-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(detailInnerWidth).Height(detailInnerHeight)
-
-	selected := c.selected()
-	if selected == nil {
-		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no container selected)")
-		return paneStyle(r.W, r.H, c.focus.Focused(focusDetail), false).Render(empty)
-	}
-
-	body := c.renderActiveTab(selected)
-	inner := contentStyle.Render(strings.Join([]string{"", "", body}, "\n"))
-	bar := c.detailScrollbar(detailInnerHeight)
-	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
-	combined := withScrollbar(inner, barStyled)
-	style := paneStyle(r.W, r.H, c.focus.Focused(focusDetail), false)
-	if indicator := c.renderFollowIndicator(); indicator != "" {
-		// The follow indicator takes the pane's bottom padding row, right-aligned:
-		// the header's width belongs to the tabs, and the pane height is unchanged.
-		footer := lipgloss.NewStyle().Width(detailInnerWidth + 1).Align(lipgloss.Right).Render(indicator)
-		combined += "\n" + footer
-		style = style.PaddingBottom(0)
-	}
-	return style.Render(combined)
-}
-
 func (c *containersScreen) detailScrollbar(detailInnerHeight int) string {
 	switch c.tab {
 	case tabLogs:
@@ -1197,54 +1169,16 @@ func (c *containersScreen) detailScrollbar(detailInnerHeight int) string {
 	}
 }
 
-func (c *containersScreen) renderActiveTab(selected *Container) string {
-	switch c.tab {
-	case tabStats:
-		statusLine := selected.Status
-		if selected.Status == "running" {
-			statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render(selected.Status)
-		} else {
-			statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render(selected.Status)
-		}
-		cpuSpark := sparkline(c.cpuHistory[selected.ID], lipgloss.Color("117"))
-		memSpark := sparkline(c.memHistory[selected.ID], lipgloss.Color("114"))
-		return strings.Join([]string{
-			"  status: " + statusLine,
-			"  image:  " + selected.Image,
-			"",
-			"  CPU " + c.cpu.View(),
-			"  hist " + cpuSpark,
-			"",
-			"  MEM " + c.mem.View(),
-			"  hist " + memSpark,
-		}, "\n")
-	case tabLogs:
-		view := c.logs.View()
-		if view == "" {
-			view = lipgloss.NewStyle().Foreground(pal.muted).Render("(no logs)")
-		}
-		return view
-	case tabInspect:
-		view := c.inspect.View()
-		if view == "" {
-			view = lipgloss.NewStyle().Foreground(pal.muted).Render("(no inspect data)")
-		}
-		return view
-	}
-	return ""
-}
-
-// renderFollowIndicator returns the follow/paused indicator for the logs
-// tab. Rendered in the detail pane's bottom padding row (NOT as an extra body
-// line, which would overflow the pane's Height and corrupt the frame — see
-// TTY-found bug 2026-06-25; and not in the header row, where it pushed the
-// tab strip out of place).
-func (c *containersScreen) renderFollowIndicator() string {
+// followIndicator is the logs' follow/paused indicator, or nil while the
+// logs fit. It takes the detail pane's bottom padding row (not an extra body
+// line, which would overflow the pane — see TTY-found bug 2026-06-25; and not
+// the header row, where it pushed the tab strip out of place).
+func (c *containersScreen) followIndicator() layout.Node {
 	if c.logs.TotalLines() == 0 || c.logs.TotalLines() <= c.logs.VisibleLines() {
-		return ""
+		return nil
 	}
 	if c.followTail {
-		return lipgloss.NewStyle().Foreground(pal.good).Render("↓ tail")
+		return layout.Label{Text: "↓ tail", Style: layout.TextStyle{Fg: pal.good}}
 	}
-	return lipgloss.NewStyle().Foreground(pal.muted).Render("↑ paused (G)")
+	return layout.Label{Text: "↑ paused (G)", Style: layout.TextStyle{Fg: pal.muted}}
 }
