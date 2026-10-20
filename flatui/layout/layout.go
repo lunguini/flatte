@@ -223,12 +223,15 @@ const (
 // draw as BorderRounded. Background is behind the node's content: leaf cells
 // without a background of their own show it. Selected marks the node as the
 // current selection: a GUI highlights it, while the terminal adds nothing
-// (the app's markers and styles show selection there).
+// (the app's markers and styles show selection there). Round asks a GUI to
+// round a background's corners (a pill when the box is one line tall); the
+// terminal cannot, and draws it square.
 type Box struct {
 	Border      BorderKind
 	BorderColor color.Color
 	Background  color.Color
 	Selected    bool
+	Round       bool
 }
 
 // box resolves the Bordered shorthand into the effective Box.

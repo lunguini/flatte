@@ -117,7 +117,7 @@ shared geometry and add their own fields.
 | `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). |
 | `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
 | `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Box` fill; layout inset still comes from `Pad` and the border. Terminal-only: prefer `Box` when it can say what you need. |
-| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). |
+| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). `Round` asks a window to round a background's corners (a pill when one line tall); the terminal draws it square. |
 
 ### Size kinds
 
@@ -268,7 +268,7 @@ frame tree instead of being rendered and positioned by hand:
 
 | Widget | `Layout()` produces |
 |---|---|
-| `flatui.TabBar` | A `Row` of tabs, each a `Row` of blank-in-a-window cap `Icon`s around a filled, padded `Label` (the same cells in the terminal; flat segments in a window), or one bordered `Text`; tags rects when `WithID` is set. |
+| `flatui.TabBar` | A `Row` of tabs, each a `Row` of blank-in-a-window cap `Icon`s around a filled, padded `Label` on a `Round` box (the same cells in the terminal; spaced pills in a window), or one bordered `Text`; tags rects when `WithID` is set. |
 | `flatui.List` | `Rows(id, row)`: the visible rows as nodes — each wrapped in a `Row` with ID `id:index` (click `Target`) and `Box.Selected` on the selected one; the returned Col is the app's: give it an ID and `H: layout.Grow(1)` to size the list from its solved height. `Layout()`: a `Text` leaf of the visible rows via `RenderRow`. |
 | `flatui.Table` | `HeaderLayout(style)` and `Cells(cells, style)`: Rows of column-width Labels one column apart (they line up in a window too); `Rows(id, row)`: body rows like `List.Rows`. |
 | `flatui.Tree` | `Rows(id, row)`: the visible rows like `List.Rows`, each ID'd `id:<node ID>` (stable as the tree expands). |

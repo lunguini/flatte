@@ -335,11 +335,11 @@ func TestTabBarLayoutIsSemanticAndTerminalIdentical(t *testing.T) {
 			t.Fatalf("tab b rect = %+v", r)
 		}
 		row := bar.Layout().(layout.Row).Children[1].(layout.Row)
-		if left, ok := row.Children[0].(layout.Icon); !ok || left.Name != layout.IconBlank || left.Text != glyphs.Left || len(row.Children) != 4 {
+		if left, ok := row.Children[0].(layout.Icon); !ok || left.Name != layout.IconBlank || left.Text != glyphs.Left || len(row.Children) != 3 {
 			t.Fatalf("left cap = %#v, want a blank Icon spelled %q", row.Children[0], glyphs.Left)
 		}
-		if l, ok := row.Children[1].(layout.Label); !ok || l.Text != "beta" || l.Box.Background == nil {
-			t.Fatalf("label = %#v, want a filled Label", row.Children[1])
+		if pill, ok := row.Children[1].(layout.Row); !ok || !pill.Box.Round || pill.Box.Background == nil || pill.Children[0].(layout.Label).Text != "beta" {
+			t.Fatalf("tab body = %#v, want a filled, round Row holding the label", row.Children[1])
 		}
 	}
 }

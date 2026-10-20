@@ -61,3 +61,13 @@ func TestSceneIconAndSelection(t *testing.T) {
 		t.Fatalf("icon rect = %+v, want %+v", s.Rects["icon"], want)
 	}
 }
+
+func TestBoxRoundIsInvisibleInTheTerminal(t *testing.T) {
+	// The terminal cannot round corners; Round only asks a GUI to.
+	row := func(round bool) Node {
+		return Row{NodeBase: NodeBase{Box: Box{Background: lipgloss.Color("6"), Round: round}}, Children: []Node{Label{Text: "tab"}}}
+	}
+	if on, off := Compose(row(true), 6, 1).Frame, Compose(row(false), 6, 1).Frame; on != off {
+		t.Fatalf("Round changed the terminal frame: %q vs %q", on, off)
+	}
+}

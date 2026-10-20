@@ -711,7 +711,8 @@ flatui/layout package layout
   field Box.BorderColor color.Color [order=1]
   field Box.Background color.Color [order=2]
   field Box.Selected bool [order=3]
-  struct Box fields=4 comparable=true
+  field Box.Round bool [order=4]
+  struct Box fields=5 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]

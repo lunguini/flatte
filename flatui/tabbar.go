@@ -104,14 +104,15 @@ func (t *TabBar) Layout() layout.Node {
 		capStyle := layout.TextStyle{Fg: fill, Bg: t.barBg}
 		tabs[i] = layout.Row{NodeBase: layout.NodeBase{ID: t.tabID(item.ID)}, Children: []layout.Node{
 			layout.Icon{Name: layout.IconBlank, Text: t.glyphs.Left, Style: capStyle},
-			layout.Label{
-				NodeBase: layout.NodeBase{PadLeft: 2, Box: layout.Box{Background: fill}},
-				Text:     item.Label,
-				Style:    layout.TextStyle{Fg: text},
-			},
-			// The trailing padding is its own node so that a clipped strip
-			// loses padding before label text, as the string render does.
-			layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(2), Box: layout.Box{Background: fill}}},
+			// The fill is a pill in a window; the blank caps around it space
+			// the pills apart.
+			layout.Row{NodeBase: layout.NodeBase{Box: layout.Box{Background: fill, Round: true}}, Children: []layout.Node{
+				layout.Label{NodeBase: layout.NodeBase{PadLeft: 2}, Text: item.Label, Style: layout.TextStyle{Fg: text}},
+				// The trailing padding is its own node so that a clipped
+				// strip loses padding before label text, as the string
+				// render does.
+				layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(2)}},
+			}},
 			layout.Icon{Name: layout.IconBlank, Text: t.glyphs.Right, Style: capStyle},
 		}}
 	}

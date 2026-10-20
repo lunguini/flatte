@@ -307,7 +307,12 @@ func (p *painter) box(op layout.BoxOp) {
 		bg, hasBg = p.th.surface, true
 	}
 	if op.Box.Border == layout.BorderNone {
-		if hasBg {
+		switch {
+		case hasBg && op.Box.Round:
+			r := rectOf(op.Rect)
+			p.fill(bg)
+			p.roundedPath(r, min(r.Size.Height/2, r.Size.Width/2, 10), func() { cgContextFillPath(p.ctx) })
+		case hasBg:
 			// Snapped like cell fills: adjacent filled boxes meet on whole
 			// pixels, with no seam at fractional edges.
 			p.cellFill(bg, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H)

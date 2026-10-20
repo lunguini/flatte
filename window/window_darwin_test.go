@@ -556,3 +556,32 @@ func TestSnapshotAdjacentBoxesHaveNoSeam(t *testing.T) {
 		}
 	}
 }
+
+// TestSnapshotRoundBox: a Round box is a pill: filled in the middle, the
+// window background at its corners.
+func TestSnapshotRoundBox(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	fill := lipgloss.Color("#ffffff")
+	root := func() layout.Node {
+		return layout.Col{Children: []layout.Node{layout.Row{Children: []layout.Node{
+			layout.Row{NodeBase: layout.NodeBase{ID: "pill", Box: layout.Box{Background: fill, Round: true}}, Children: []layout.Node{
+				layout.Label{NodeBase: layout.NodeBase{PadLeft: 2, PadRight: 2}, Text: "tab"},
+			}},
+			layout.NewSpacer(),
+		}}}}
+	}
+	m := metrics()
+	img, err := Snapshot(snapApp(root), Options{Width: 20, Height: 2}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := layout.LayoutScene(root(), 20*m.Column, 2*m.Line, m).Rects["pill"]
+	if c := img.At(int((r.X+1)*2), int((r.Y+1)*2)); !near(c, toColor(darkTheme.bg), 8) {
+		t.Errorf("pill corner %v, want the background", c)
+	}
+	if c := img.At(int((r.X+r.W/2)*2), int((r.Y+2)*2)); !near(c, color.RGBA{255, 255, 255, 255}, 8) {
+		t.Errorf("pill top middle %v, want the fill", c)
+	}
+}
