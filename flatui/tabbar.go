@@ -87,21 +87,43 @@ func (t *TabBar) Prev() {
 	t.active = (t.active - 1 + len(t.Items)) % len(t.Items)
 }
 
-// Layout builds the tab strip as a Row of styled Text leaves. The engine
-// positions and sizes it; the widget computes no coordinates. When WithID was
-// set, the strip and each tab carry IDs so a solve records their rects.
+// Layout builds the tab strip as a Row of tabs. Each tab is a Row of its
+// glyph caps — blank Icons, so the terminal draws them and a GUI leaves them
+// out — around its label on the tab's fill with two columns of padding: the
+// string render's cells in the terminal, flat filled segments in a window.
+// The engine positions and sizes it; the widget computes no coordinates.
+// When WithID was set, the strip and each tab carry IDs so a solve records
+// their rects. A bordered strip is one Text leaf.
 func (t *TabBar) Layout() layout.Node {
 	if t.border.enabled() {
 		return layout.Text{NodeBase: layout.NodeBase{ID: t.id}, String: t.renderTabsWithBorder()}
 	}
 	tabs := make([]layout.Node, len(t.Items))
 	for i, item := range t.Items {
-		tabs[i] = layout.Text{
-			NodeBase: layout.NodeBase{ID: t.tabID(item.ID)},
-			String:   t.renderTab(item, i == t.active),
-		}
+		fill, text := t.tabColors(i == t.active)
+		capStyle := layout.TextStyle{Fg: fill, Bg: t.barBg}
+		tabs[i] = layout.Row{NodeBase: layout.NodeBase{ID: t.tabID(item.ID)}, Children: []layout.Node{
+			layout.Icon{Name: layout.IconBlank, Text: t.glyphs.Left, Style: capStyle},
+			layout.Label{
+				NodeBase: layout.NodeBase{PadLeft: 2, Box: layout.Box{Background: fill}},
+				Text:     item.Label,
+				Style:    layout.TextStyle{Fg: text},
+			},
+			// The trailing padding is its own node so that a clipped strip
+			// loses padding before label text, as the string render does.
+			layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(2), Box: layout.Box{Background: fill}}},
+			layout.Icon{Name: layout.IconBlank, Text: t.glyphs.Right, Style: capStyle},
+		}}
 	}
 	return layout.Row{NodeBase: layout.NodeBase{ID: t.id}, Children: tabs}
+}
+
+// tabColors is a tab's fill and label color.
+func (t *TabBar) tabColors(active bool) (fill, text color.Color) {
+	if active {
+		return t.fill, activeTabText
+	}
+	return t.inactiveFill, lipgloss.Color("245")
 }
 
 // tabID is the per-tab layout ID, or "" when the strip has no ID (so tabs stay
@@ -135,12 +157,7 @@ func (t *TabBar) renderTabsWithBorder() string {
 }
 
 func (t *TabBar) renderTab(item TabItem, active bool) string {
-	var f, text color.Color
-	if active {
-		f, text = t.fill, activeTabText
-	} else {
-		f, text = t.inactiveFill, lipgloss.Color("245")
-	}
+	f, text := t.tabColors(active)
 	l := lipgloss.NewStyle().Foreground(f).Background(t.barBg).Render(t.glyphs.Left)
 	c := lipgloss.NewStyle().Foreground(text).Background(f).Padding(0, 2).Render(item.Label)
 	r := lipgloss.NewStyle().Foreground(f).Background(t.barBg).Render(t.glyphs.Right)

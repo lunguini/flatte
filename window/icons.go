@@ -21,6 +21,8 @@ func iconShape(name layout.IconName, x, y, w, h, column float64) (cellShape, boo
 		return cellShape{circles: []circle{{c: point{cx, cy}, r: s * 0.35, fill: true}}}, true
 	case layout.IconCircle:
 		return cellShape{circles: []circle{{c: point{cx, cy}, r: s*0.35 - 0.5}}}, true
+	case layout.IconBlank:
+		return cellShape{}, true
 	}
 	return cellShape{}, false
 }

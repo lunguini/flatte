@@ -519,3 +519,40 @@ func TestSnapshotWrappedText(t *testing.T) {
 		}
 	}
 }
+
+// TestSnapshotAdjacentBoxesHaveNoSeam: filled boxes side by side at
+// fractional positions (a tab's label and its padding) meet without a
+// lighter seam.
+func TestSnapshotAdjacentBoxesHaveNoSeam(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	fill := lipgloss.Color("#ffffff")
+	root := func() layout.Node {
+		return layout.Col{Children: []layout.Node{layout.Row{Children: []layout.Node{
+			layout.Label{NodeBase: layout.NodeBase{PadLeft: 2, Box: layout.Box{Background: fill}}, Text: "tab"},
+			layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(2), Box: layout.Box{Background: fill}}},
+			layout.NewSpacer(),
+		}}}}
+	}
+	m := metrics()
+	for _, scale := range []float64{1, 2} {
+		img, err := Snapshot(snapApp(root), Options{Width: 20, Height: 2}, scale)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := layout.LayoutScene(root(), 20*m.Column, 2*m.Line, m)
+		var end float64
+		for _, op := range s.Ops {
+			if b, ok := op.(layout.BoxOp); ok {
+				end = max(end, b.Rect.X+b.Rect.W)
+			}
+		}
+		y := int(1 * scale) // the top row of the fill, above the text
+		for x := 0; x < int(end*scale)-1; x++ {
+			if c := img.At(x, y); !near(c, color.RGBA{255, 255, 255, 255}, 3) {
+				t.Fatalf("scale %v: seam at pixel %d (%v)", scale, x, c)
+			}
+		}
+	}
+}

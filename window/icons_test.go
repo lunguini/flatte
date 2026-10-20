@@ -31,6 +31,10 @@ func TestIconShapesStayInTheirColumns(t *testing.T) {
 			}
 		}
 	}
+	// A blank icon is a shape with nothing in it: it draws nothing.
+	if blank, ok := iconShape(layout.IconBlank, ix, iy, iw, ih, icol); !ok || len(blank.rects)+len(blank.arcs)+len(blank.polys)+len(blank.circles) != 0 {
+		t.Errorf("IconBlank = %+v, %v; want an empty shape", blank, ok)
+	}
 	if _, ok := iconShape(layout.IconNone, ix, iy, iw, ih, icol); ok {
 		t.Error("IconNone has a shape; it should draw its text")
 	}

@@ -308,8 +308,9 @@ func (p *painter) box(op layout.BoxOp) {
 	}
 	if op.Box.Border == layout.BorderNone {
 		if hasBg {
-			p.fill(bg)
-			cgContextFillRect(p.ctx, rectOf(op.Rect))
+			// Snapped like cell fills: adjacent filled boxes meet on whole
+			// pixels, with no seam at fractional edges.
+			p.cellFill(bg, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H)
 		}
 		return
 	}

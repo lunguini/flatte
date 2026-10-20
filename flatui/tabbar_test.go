@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lunguini/flatte/flatui/layout"
@@ -306,6 +307,53 @@ func TestTabBarHitTestFallbackUsesThickTopAndBottomBorders(t *testing.T) {
 		y := strip.Y + top + 1 + row
 		if _, ok := tb.HitTest(rects, strip.X+left, y); ok {
 			t.Fatalf("bottom border row %d was treated as a tab hit", row)
+		}
+	}
+}
+
+// TestTabBarLayoutIsSemanticAndTerminalIdentical: each tab is an ID'd Row
+// of blank-in-a-window caps around a filled, padded Label — composing to the
+// very cells the string render draws (content and style).
+func TestTabBarLayoutIsSemanticAndTerminalIdentical(t *testing.T) {
+	for _, glyphs := range []TabGlyphs{TabGlyphsPowerline, TabGlyphsSafe} {
+		bar := NewTabBar(TabItem{ID: "a", Label: "alpha"}, TabItem{ID: "b", Label: "beta"}).
+			WithGlyphs(glyphs).WithColors(lipgloss.Color("6"), lipgloss.Color("238"), lipgloss.Color("236")).WithID("tabs")
+		bar.SetActive(1)
+		want := bar.renderTabs()
+		w := lipgloss.Width(want)
+		got, rects := layout.SolveAndCompose(bar.Layout(), w, 1)
+		gb, wb := uv.NewScreenBuffer(w, 1), uv.NewScreenBuffer(w, 1)
+		uv.NewStyledString(got).Draw(gb, gb.Bounds())
+		uv.NewStyledString(want).Draw(wb, wb.Bounds())
+		for x := range w {
+			g, c := gb.CellAt(x, 0), wb.CellAt(x, 0)
+			if g.Content != c.Content || !g.Style.Equal(&c.Style) {
+				t.Fatalf("%v: cell %d = %q %+v, want %q %+v", glyphs, x, g.Content, g.Style, c.Content, c.Style)
+			}
+		}
+		if r := rects["tabs:b"]; r.X != bar.tabWidth(bar.Items[0]) || r.W != bar.tabWidth(bar.Items[1]) {
+			t.Fatalf("tab b rect = %+v", r)
+		}
+		row := bar.Layout().(layout.Row).Children[1].(layout.Row)
+		if left, ok := row.Children[0].(layout.Icon); !ok || left.Name != layout.IconBlank || left.Text != glyphs.Left || len(row.Children) != 4 {
+			t.Fatalf("left cap = %#v, want a blank Icon spelled %q", row.Children[0], glyphs.Left)
+		}
+		if l, ok := row.Children[1].(layout.Label); !ok || l.Text != "beta" || l.Box.Background == nil {
+			t.Fatalf("label = %#v, want a filled Label", row.Children[1])
+		}
+	}
+}
+
+// TestTabBarLayoutClipsLikeTheString: a strip wider than its space is cut
+// at the end, losing padding before label text — as the string render is.
+func TestTabBarLayoutClipsLikeTheString(t *testing.T) {
+	bar := NewTabBar(TabItem{ID: "a", Label: "stats"}, TabItem{ID: "b", Label: "inspect"}).
+		WithColors(lipgloss.Color("6"), lipgloss.Color("238"), lipgloss.Color("236"))
+	full := ansi.Strip(bar.renderTabs())
+	for cut := 1; cut < lipgloss.Width(full); cut++ {
+		got, _ := layout.SolveAndCompose(bar.Layout(), cut, 1)
+		if want := strings.TrimRight(ansi.Cut(full, 0, cut), " "); strings.TrimRight(ansi.Strip(got), " ") != want {
+			t.Fatalf("width %d: %q, want %q", cut, ansi.Strip(got), want)
 		}
 	}
 }

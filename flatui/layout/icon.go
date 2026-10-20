@@ -16,6 +16,9 @@ const (
 	// IconDot is a filled circle (●), IconCircle an outlined one (○).
 	IconDot
 	IconCircle
+	// IconBlank draws nothing in a GUI, keeping its columns: for terminal-only
+	// decoration, such as the Powerline caps of a tab.
+	IconBlank
 )
 
 // Icon is a small symbol with a terminal spelling: the terminal shows Text

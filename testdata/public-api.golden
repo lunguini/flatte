@@ -603,6 +603,7 @@ flatui/layout package layout
   const BorderNone BorderKind = 0
   const BorderNormal BorderKind = 2
   const BorderRounded BorderKind = 1
+  const IconBlank IconName = 6
   const IconChevronRight IconName = 1
   const IconCircle IconName = 5
   const IconDisclosureClosed IconName = 2
