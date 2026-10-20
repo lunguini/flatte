@@ -177,7 +177,7 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	}}
 	if s.list.Count() > 0 {
 		rows := s.list.Rows(listID, s.renderRow)
-		rows.H = layout.Grow(1)
+		rows.ID, rows.H = listID, layout.Grow(1)
 		results = rows
 	}
 	return flatte.Frame{Root: flatui.CardLayout(

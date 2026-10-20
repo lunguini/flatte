@@ -117,7 +117,7 @@ func (s *State) renderRow(i int, selected bool) layout.Node {
 
 func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	rows := s.list.Rows(listID, s.renderRow)
-	rows.H = layout.Grow(1)
+	rows.ID, rows.H = listID, layout.Grow(1)
 	return flatte.Frame{Root: flatui.CardLayout(
 		layout.Label{Text: "Flat List", Style: layout.TextStyle{Role: layout.TextTitle}},
 		layout.Label{Text: "scrollable selectable list", Style: layout.TextStyle{Role: layout.TextSubtle}},

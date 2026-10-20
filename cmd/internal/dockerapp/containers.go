@@ -241,35 +241,67 @@ func (c *containersScreen) injectStreamDemo(id string) {
 // list row: the filter line plus a blank separator row.
 const listHeaderLines = 2
 
-// listNode builds the list pane as a real subtree: a Chrome-painted frame
-// (filter line, separator, scrollbar, padding — reproducing renderListPane's
-// non-row cells) with one ID'd Text per visible row composed on top. The row
-// nodes give the frame solve authoritative per-row rects, so hit-testing reads
-// rects["list:i"] instead of a parallel rowRects computation. Per-side padding
-// keeps the rows out of the regions the Chrome paints: the filter/separator
-// header rows on top, the left pad, and the right pad + scrollbar column.
+// listNode builds the list pane as a frame subtree: the filter line, a blank
+// row, and the visible rows from List.Rows ("list:i", so hit-testing reads
+// the solved row rects), beside the scrollbar column, inside the pane's
+// padding (none on top, so the filter line is flush with the other panes'
+// headers).
 func (c *containersScreen) listNode() layout.Node {
-	offset := c.list.Offset()
-	end := min(offset+c.listHeight, c.list.Count())
-	rows := make([]layout.Node, 0, max(end-offset, 0))
-	for i := offset; i < end; i++ {
-		rows = append(rows, layout.Text{
-			NodeBase: layout.NodeBase{ID: "list:" + strconv.Itoa(i), H: layout.Fixed(1)},
-			String:   c.renderListRow(i, i == c.list.Cursor()),
-		})
+	filterLine := "filter: " + c.filter.Value
+	if c.filter.Value == "" {
+		filterLine = "filter: (all)"
+	}
+	filterStyle := layout.TextStyle{}
+	if c.focus.Focused(focusFilter) {
+		filterStyle = layout.TextStyle{Bold: true, Fg: pal.accent}
+	}
+	var rows layout.Node = layout.Label{Text: "  (no matches)", Style: layout.TextStyle{Fg: pal.muted}}
+	if c.list.Count() > 0 {
+		rows = c.list.Rows("list", c.listRow)
+	}
+	innerHeight := c.listHeight + listHeaderLines
+	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), innerHeight)
+	if strings.TrimSpace(bar) != "" { // style the track only when there is one
+		bar = lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
 	}
 	return layout.Col{
 		NodeBase: layout.NodeBase{
-			ID:       "list",
-			W:        layout.Fixed(c.listPaneWidth),
-			H:        layout.Auto(),
-			Chrome:   c.renderListChrome,
-			PadTop:   listHeaderLines,
-			PadLeft:  panePadding,
-			PadRight: panePadding + 1, // right pad + scrollbar column
+			ID:        "list",
+			W:         layout.Fixed(c.listPaneWidth),
+			H:         layout.Auto(),
+			PadLeft:   panePadding,
+			PadRight:  panePadding,
+			PadBottom: panePadding,
 		},
-		Children: rows,
+		Children: []layout.Node{layout.Row{Children: []layout.Node{
+			layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Children: []layout.Node{
+				layout.Label{Text: filterLine, Style: filterStyle},
+				layout.Label{},
+				rows,
+			}},
+			layout.Text{NodeBase: layout.NodeBase{W: layout.Fixed(1)}, String: bar},
+		}}},
 	}
+}
+
+// listRow is one container: its status (a dot or ring in a window, ● or ○
+// in the terminal), the selection marker (a chevron, or "> "), and its name,
+// bold when selected.
+func (c *containersScreen) listRow(idx int, selected bool) layout.Node {
+	if idx < 0 || idx >= len(c.filtered) {
+		return layout.Label{}
+	}
+	ct := c.containers[c.filtered[idx]]
+	status := layout.Icon{Name: layout.IconDot, Text: "●", Style: layout.TextStyle{Fg: pal.good}}
+	if ct.Status != "running" {
+		status = layout.Icon{Name: layout.IconCircle, Text: "○", Style: layout.TextStyle{Fg: pal.muted}}
+	}
+	marker, name := layout.Icon{Text: "  "}, layout.Label{Text: ct.Name}
+	if selected {
+		marker = layout.Icon{Name: layout.IconChevronRight, Text: "> "}
+		name.Style = layout.TextStyle{Bold: true, Fg: pal.text}
+	}
+	return layout.Row{Children: []layout.Node{status, marker, name}}
 }
 
 // detailNode is the detail pane: Chrome paints the pane (padding, body,
@@ -1123,64 +1155,6 @@ func (c *containersScreen) keyHints() string {
 		}
 	}
 	return "1/2/3 switch  q quit"
-}
-
-// renderListRow renders one list row exactly as the pane always has (status
-// glyph, selection marker, name). It is the per-row node's paint, called from
-// listNode with the absolute item index.
-func (c *containersScreen) renderListRow(idx int, selected bool) string {
-	if idx < 0 || idx >= len(c.filtered) {
-		return ""
-	}
-	ct := c.containers[c.filtered[idx]]
-	marker := "  "
-	if selected {
-		marker = "> "
-	}
-	statusColor := pal.good
-	if ct.Status != "running" {
-		statusColor = pal.bad
-	}
-	statusIcon := lipgloss.NewStyle().Foreground(statusColor).Render("●")
-	if ct.Status != "running" {
-		statusIcon = lipgloss.NewStyle().Foreground(pal.muted).Render("○")
-	}
-	name := ct.Name
-	if selected {
-		name = lipgloss.NewStyle().Bold(true).Foreground(pal.text).Render(name)
-	}
-	return statusIcon + marker + name
-}
-
-// renderListChrome paints the pane frame — filter line, blank separator,
-// scrollbar column, and padding — with a blank row area. The per-row Text
-// children (see listNode) compose the rows on top of that blank area, so the
-// non-row cells come from the same lipgloss pipeline the pane always used and
-// stay byte-identical. When nothing matches, the frame carries the placeholder
-// itself (there are no row children to draw it).
-func (c *containersScreen) renderListChrome(r layout.Rect) string {
-	rows := ""
-	if c.list.Count() == 0 {
-		rows = lipgloss.NewStyle().Foreground(pal.muted).Render("  (no matches)")
-	}
-
-	listInnerWidth := max(r.W-paneBorderCols-1, 1) // -1 for scrollbar
-	listInnerHeight := max(r.H-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(listInnerWidth).Height(listInnerHeight)
-
-	filterLine := "filter: " + c.filter.Value
-	if c.filter.Value == "" {
-		filterLine = "filter: (all)"
-	}
-	if c.focus.Focused(focusFilter) {
-		filterLine = lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(filterLine)
-	}
-
-	inner := contentStyle.Render(filterLine + "\n\n" + rows)
-	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), listInnerHeight)
-	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
-	combined := withScrollbar(inner, barStyled)
-	return paneStyle(r.W, r.H, c.focus.Focused(focusList) || c.focus.Focused(focusFilter), false).Render(combined)
 }
 
 // renderDetailChrome paints the detail pane around its header row, which is

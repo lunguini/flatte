@@ -268,7 +268,7 @@ frame tree instead of being rendered and positioned by hand:
 | Widget | `Layout()` produces |
 |---|---|
 | `flatui.TabBar` | A `Row` of tab leaves (or one bordered `Text`); tags rects when `WithID` is set. |
-| `flatui.List` | `Rows(id, row)`: the visible rows as nodes — each wrapped in a `Row` with ID `id:index` (click `Target`) and `Box.Selected` on the selected one; set `H: layout.Grow(1)` on the returned Col and size the list from its solved height. `Layout()`: a `Text` leaf of the visible rows via `RenderRow`. |
+| `flatui.List` | `Rows(id, row)`: the visible rows as nodes — each wrapped in a `Row` with ID `id:index` (click `Target`) and `Box.Selected` on the selected one; the returned Col is the app's: give it an ID and `H: layout.Grow(1)` to size the list from its solved height. `Layout()`: a `Text` leaf of the visible rows via `RenderRow`. |
 | `flatui.Viewport` | A `Text` leaf of the visible slice. |
 | `flatui.Progress` | A `Text` leaf of the bar. |
 | `flatui.TextField` | `Layout(id, focused)`: a `layout.Input` showing the value and caret. |

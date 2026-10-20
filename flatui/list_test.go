@@ -131,8 +131,8 @@ func TestListRowsAreTheVisibleWindowAsNodes(t *testing.T) {
 	rows := l.Rows("items", func(i int, selected bool) layout.Node {
 		return layout.Label{Text: marker(i, selected)}
 	})
-	if rows.ID != "items" || len(rows.Children) != 3 {
-		t.Fatalf("Rows = %+v, want 3 rows in a Col with ID items", rows)
+	if rows.ID != "" || len(rows.Children) != 3 {
+		t.Fatalf("Rows = %+v, want 3 rows in an unnamed Col (the app names it)", rows)
 	}
 	for k, child := range rows.Children {
 		row, ok := child.(layout.Row)

@@ -37,9 +37,11 @@ func (l List) Layout() layout.Node {
 // for each visible item index with whether it is the selected row, and each
 // result is wrapped in a Row with ID "id:index" (so MouseEvent.Target names
 // the clicked row) whose Box is marked Selected for the selected one (a GUI
-// highlights it; the terminal shows only what row draws). The Col has ID id.
+// highlights it; the terminal shows only what row draws). The Col is the
+// app's: give it an ID or a size (usually H: layout.Grow(1), sizing the list
+// from its solved height) as needed.
 func (l List) Rows(id string, row func(index int, selected bool) layout.Node) layout.Col {
-	col := layout.Col{NodeBase: layout.NodeBase{ID: id}}
+	var col layout.Col
 	if l.height <= 0 || l.count == 0 {
 		return col
 	}
