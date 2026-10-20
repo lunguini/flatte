@@ -644,6 +644,8 @@ flatui/layout package layout
   method Input.Size()(Size, Size)
   method Label.Render(r Rect) string
   method Label.Size()(Size, Size)
+  method Meter.Render(r Rect) string
+  method Meter.Size()(Size, Size)
   method NodeBase.GetID() string
   method NodeBase.IsOverlay() bool
   method NodeBase.Size()(Size, Size)
@@ -672,6 +674,8 @@ flatui/layout package layout
   methodset *Input.IsOverlay() bool
   methodset *Label.GetID() string
   methodset *Label.IsOverlay() bool
+  methodset *Meter.GetID() string
+  methodset *Meter.IsOverlay() bool
   methodset *Row.GetID() string
   methodset *Row.IsOverlay() bool
   methodset *Scroll.GetID() string
@@ -689,6 +693,8 @@ flatui/layout package layout
   methodset Input.IsOverlay() bool
   methodset Label.GetID() string
   methodset Label.IsOverlay() bool
+  methodset Meter.GetID() string
+  methodset Meter.IsOverlay() bool
   methodset Row.GetID() string
   methodset Row.IsOverlay() bool
   methodset Scroll.GetID() string
@@ -773,6 +779,19 @@ flatui/layout package layout
   type LayerOp struct
   field LayerOp.Rect PointRect [order=0]
   struct LayerOp fields=1 comparable=true
+  type Meter struct
+  field Meter.NodeBase NodeBase [order=0]
+  field Meter.Value float64 [order=1]
+  field Meter.Fill color.Color [order=2]
+  field Meter.Track color.Color [order=3]
+  struct Meter fields=4 comparable=false
+  type MeterOp struct
+  field MeterOp.Rect PointRect [order=0]
+  field MeterOp.Clip PointRect [order=1]
+  field MeterOp.Value float64 [order=2]
+  field MeterOp.Fill color.Color [order=3]
+  field MeterOp.Track color.Color [order=4]
+  struct MeterOp fields=5 comparable=true
   type Metrics struct
   field Metrics.Column float64 [order=0]
   field Metrics.Line float64 [order=1]

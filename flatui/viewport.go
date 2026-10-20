@@ -71,9 +71,29 @@ func (v *Viewport) relayout() {
 	v.clamp()
 }
 
-// Layout renders the visible slice as a single Text leaf for composition.
+// Layout returns the viewport as a layout.Scroll over all its lines, offset
+// to the current top line and as tall as the visible slice (and as wide as
+// the viewport's width, when set): View's text in the terminal, scrolled in
+// points in a window. Plain lines are a Label, drawn natively in a window;
+// lines with escape sequences are a Text of cells.
 func (v Viewport) Layout() layout.Node {
-	return layout.Text{String: v.View()}
+	if v.VisibleLines() == 0 {
+		return layout.Text{}
+	}
+	content := strings.Join(v.lines, "\n")
+	var child layout.Node = layout.Label{Text: content}
+	if strings.Contains(content, "\x1b") {
+		child = layout.Text{String: content}
+	}
+	w := layout.Auto()
+	if v.width > 0 {
+		w = layout.Fixed(v.width)
+	}
+	return layout.Scroll{
+		NodeBase: layout.NodeBase{W: w, H: layout.Fixed(v.VisibleLines())},
+		OffsetY:  v.offset,
+		Child:    child,
+	}
 }
 
 // View returns the visible slice joined by newlines. Lines wider than the

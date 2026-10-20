@@ -1,6 +1,9 @@
 package layout
 
-import "math"
+import (
+	"image/color"
+	"math"
+)
 
 // Metrics sizes the layout vocabulary for a backend that lays out in points,
 // such as a GUI: Fixed sizes are columns and lines, Pad and Gap are spacing
@@ -43,7 +46,7 @@ func cellsOf(v, unit float64) int {
 }
 
 // Op is one drawing operation of a Scene, in paint order. The set is closed:
-// a backend draws these six and nothing else. Every op's Clip is the visible
+// a backend draws these seven and nothing else. Every op's Clip is the visible
 // region (the frame narrowed by enclosing Scrolls); draw only inside it.
 type Op interface{ isOp() }
 
@@ -85,6 +88,14 @@ type IconOp struct {
 	Style      TextStyle
 }
 
+// MeterOp draws a Meter's gauge in Rect (its content box) filled to Value
+// (0..1); nil colors are the backend's default.
+type MeterOp struct {
+	Rect, Clip  PointRect
+	Value       float64
+	Fill, Track color.Color
+}
+
 // CellsOp draws terminal content — a Text leaf's ANSI string, a container's
 // Chrome, or any node the scene does not know — as a grid of Cols×Lines
 // monospace cells from the top-left of Rect. It is how every existing node
@@ -103,6 +114,7 @@ func (BoxOp) isOp()   {}
 func (TextOp) isOp()  {}
 func (InputOp) isOp() {}
 func (IconOp) isOp()  {}
+func (MeterOp) isOp() {}
 func (CellsOp) isOp() {}
 func (LayerOp) isOp() {}
 
@@ -183,6 +195,12 @@ func (p pointMetric) leaf(n Node) (w, h sized[float64]) {
 		// Columns, not the GUI font: an icon lines up with the terminal.
 		cw, ch := measureString(l.Style.Render(l.Text))
 		return p.content(l.NodeBase, p.cols(cw), p.lines(ch))
+	case Meter:
+		w, h = p.content(l.NodeBase, 0, p.Line)
+		if l.W.Kind == SizeAuto {
+			w = growSized[float64]()
+		}
+		return w, h
 	case Input:
 		w, h = p.content(l.NodeBase, 0, p.Line)
 		if l.W.Kind == SizeAuto {
@@ -253,6 +271,9 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	case Label:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style})
+	case Meter:
+		p.box(r, clip, l.box())
+		p.ops = append(p.ops, MeterOp{Rect: p.content(n, r), Clip: PointRect(clip), Value: l.value(), Fill: l.Fill, Track: l.Track})
 	case Icon:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, IconOp{Rect: p.content(n, r), Clip: PointRect(clip), Name: l.Name, Text: l.Text, Style: l.Style})

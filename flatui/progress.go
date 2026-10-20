@@ -43,9 +43,19 @@ func (p Progress) Percent() float64 { return p.percent }
 // Width returns the bar width in cells.
 func (p Progress) Width() int { return p.width }
 
-// Layout renders the bar as a single Text leaf for composition.
+// Layout returns the bar as a layout.Meter of the bar's width followed by
+// the percentage label: View's text in the terminal, a native bar in a
+// window. A zero-width bar is only the label, as in View.
 func (p Progress) Layout() layout.Node {
-	return layout.Text{String: p.View()}
+	label := layout.Label{Text: fmt.Sprintf("%3d%%", int(math.Round(p.percent)))}
+	if p.width <= 0 {
+		return label
+	}
+	label.Text = "  " + label.Text
+	return layout.Row{Children: []layout.Node{
+		layout.Meter{NodeBase: layout.NodeBase{W: layout.Fixed(p.width)}, Value: p.percent / 100},
+		label,
+	}}
 }
 
 // View renders the progress bar and a rounded percentage label. A zero-width

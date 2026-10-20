@@ -437,3 +437,40 @@ func TestSnapshotIconsAndSelection(t *testing.T) {
 		t.Errorf("unselected row end %v, want the background", c)
 	}
 }
+
+// TestSnapshotMeter: a Meter is a native bar — a thin rounded track with the
+// filled part in the fill color (the accent by default), not cell blocks.
+func TestSnapshotMeter(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	green := lipgloss.Color("#00ff00")
+	root := func() layout.Node {
+		return layout.Col{Children: []layout.Node{
+			layout.Meter{NodeBase: layout.NodeBase{ID: "custom"}, Value: 0.25, Fill: green},
+			layout.Meter{NodeBase: layout.NodeBase{ID: "default"}, Value: 0.5},
+		}}
+	}
+	m := metrics()
+	img, err := Snapshot(snapApp(root), Options{Width: 40, Height: 3}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := layout.LayoutScene(root(), 40*m.Column, 3*m.Line, m)
+	at := func(x, y float64) color.Color { return img.At(int(x*2), int(y*2)) }
+	c, d := s.Rects["custom"], s.Rects["default"]
+	mid := c.Y + c.H/2
+	if got := at(c.X+c.W*0.1, mid); !near(got, color.RGBA{0, 255, 0, 255}, 30) {
+		t.Errorf("filled part %v, want the fill color", got)
+	}
+	if got := at(c.X+c.W*0.6, mid); near(got, color.RGBA{0, 255, 0, 255}, 60) || near(got, toColor(darkTheme.bg), 4) {
+		t.Errorf("unfilled part %v, want the track", got)
+	}
+	// Thin: the row's top edge is background, not bar.
+	if got := at(c.X+c.W*0.1, c.Y+1); !near(got, toColor(darkTheme.bg), 4) {
+		t.Errorf("bar fills its whole line at the top edge: %v", got)
+	}
+	if got := at(d.X+d.W*0.25, d.Y+d.H/2); !near(got, toColor(darkTheme.caret), 30) {
+		t.Errorf("default fill %v, want the accent", got)
+	}
+}

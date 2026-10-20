@@ -73,8 +73,8 @@ const barID = "progress.bar"
 // percentLabelWidth is the "  100%" Progress.View puts after the bar.
 const percentLabelWidth = 6
 
-// View shows the bar as a Text leaf: its block characters are cells (a
-// window draws them as a cell grid).
+// View shows the bar as Progress.Layout: block characters in the terminal,
+// a native bar in a window.
 func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	status := "running"
 	if s.paused {
@@ -86,7 +86,7 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 		layout.Label{},
 		layout.Row{NodeBase: indent, Children: []layout.Node{
 			layout.Col{NodeBase: layout.NodeBase{ID: barID, W: layout.Grow(1)}, Children: []layout.Node{
-				layout.Text{String: s.progress.View()},
+				s.progress.Layout(),
 			}},
 		}},
 		layout.Label{NodeBase: indent, Text: "state: " + status},

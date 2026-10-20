@@ -325,7 +325,7 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 			panel(2, sectionTitle("tree", s.focus.Focused(int(focusTree))), rows),
 			panel(3, sectionTitle("details", s.focus.Focused(int(focusDetails))),
 				layout.Col{NodeBase: layout.NodeBase{ID: detailsBodyID, H: layout.Grow(1)}, Children: []layout.Node{
-					layout.Text{String: s.details.View()},
+					s.details.Layout(),
 				}}),
 		}},
 		layout.Label{},

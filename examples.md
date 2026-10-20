@@ -48,12 +48,12 @@ go run ./flat-pages
 
 | Sample | Demonstrates |
 |---|---|
-| `flat-reader` | `flatui.Viewport` sized from its solved rect (`LayoutEvent`), scrollable body, pinned chrome, mouse wheel |
+| `flat-reader` | `flatui.Viewport` (`Layout`: a `Scroll` of native text in a window) sized from its solved rect (`LayoutEvent`), scrollable body, pinned chrome, mouse wheel; `-gui` runs it in a native window |
 | `flat-list` | `flatui.List.Rows` sized from its solved height, `layout.Icon` selection marker (chevron in a window), keyboard/mouse selection by row `Target`, keep-visible scroll |
 | `flat-spinner` | `flatui.Spinner` driven by `Every` |
 | `flat-progress` | `flatui.Progress` sized from its solved rect (`LayoutEvent`), pause/reset |
 | `flat-table` | `flatui.Table` as nodes (`HeaderLayout`, `Rows`, `Cells`: column-width Labels), selected row, click to select |
-| `flat-timer` | `flatui.Timer` and `flatui.Stopwatch` |
+| `flat-timer` | `flatui.Timer` and `flatui.Stopwatch`, `Progress.Layout` (a native bar in a window); `-gui` runs it in a native window |
 | `flat-filter` | Filtered list composition with `TextField` (an `Input` with a placeholder), `List.Rows`, `Paginator` sized from the list's solved height, and `KeyMap` |
 | `flat-zones` | `flatui.ZoneMap` fed from ID'd panel rects (`LayoutEvent`), explicit hit regions, local mouse coordinates |
 | `flat-style` | Lip Gloss v2 styling, local palette, styled progress/table/card composition |

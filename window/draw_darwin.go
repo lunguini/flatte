@@ -25,14 +25,16 @@ func rgbaOf(c color.Color) rgba {
 // in a TextStyle or Box override it.
 type theme struct {
 	// surface is the raised fill of an overlay's box; selection highlights
-	// a Selected box.
-	bg, surface, text, subtle, title, border, field, caret, marked, selection rgba
+	// a Selected box; track is a Meter's unfilled bar (its fill defaults to
+	// the caret's accent).
+	bg, surface, text, subtle, title, border, field, caret, marked, selection, track rgba
 }
 
 var darkTheme = theme{
 	bg:        rgba{0.118, 0.122, 0.133, 1},
 	surface:   rgba{0.161, 0.165, 0.180, 1},
 	selection: rgba{0.400, 0.655, 1.000, 0.22},
+	track:     rgba{0.247, 0.255, 0.278, 1},
 	text:      rgba{0.871, 0.878, 0.898, 1},
 	subtle:    rgba{0.553, 0.569, 0.608, 1},
 	title:     rgba{0.949, 0.953, 0.961, 1},
@@ -267,6 +269,8 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.input(op) })
 		case layout.IconOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.icon(op) })
+		case layout.MeterOp:
+			p.clipped(intersect(op.Rect, op.Clip), func() { p.meter(op) })
 		case layout.CellsOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.cells(op) })
 		}
@@ -567,6 +571,31 @@ func (p *painter) cellShape(g cellShape, st uv.Style, x, y, w float64) {
 		return
 	}
 	p.shape(g, fg)
+}
+
+// meterThickness is a Meter bar's height in points.
+const meterThickness = 6.0
+
+// meter draws a Meter: a thin rounded track across the rect, centered on the
+// line, with the filled part over it.
+func (p *painter) meter(op layout.MeterOp) {
+	r := op.Rect
+	h := min(meterThickness, r.H)
+	bar := cgRect(r.X, r.Y+(r.H-h)/2, r.W, h)
+	track, fill := p.th.track, p.th.caret
+	if op.Track != nil {
+		track = rgbaOf(op.Track)
+	}
+	if op.Fill != nil {
+		fill = rgbaOf(op.Fill)
+	}
+	p.fill(track)
+	p.roundedPath(bar, h/2, func() { cgContextFillPath(p.ctx) })
+	if w := r.W * min(max(op.Value, 0), 1); w > 0 {
+		filled := cgRect(bar.Origin.X, bar.Origin.Y, w, h)
+		p.fill(fill)
+		p.roundedPath(filled, min(h/2, w/2), func() { cgContextFillPath(p.ctx) })
+	}
 }
 
 // icon draws an Icon's shape in its style's color, or its text when the

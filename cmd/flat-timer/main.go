@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 const (
@@ -97,8 +99,8 @@ func field(name string, value layout.Node) layout.Node {
 	}}
 }
 
-// View shows the progress bar as a Text leaf: its block characters are
-// cells (a window draws them as a cell grid).
+// View shows the progress bar as Progress.Layout: block characters in the
+// terminal, a native bar in a window.
 func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	stopState := "stopped"
 	if s.stopwatch.Running() {
@@ -114,7 +116,7 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 		layout.Label{},
 		field("timer:", layout.Label{Text: fmt.Sprintf("%s remaining (%s)", formatDuration(s.timer.Remaining()), timerState)}),
 		field("progress:", layout.Col{NodeBase: layout.NodeBase{ID: barID, W: layout.Grow(1)}, Children: []layout.Node{
-			layout.Text{String: s.progress.View()},
+			s.progress.Layout(),
 		}}),
 		field("stopwatch:", layout.Label{Text: fmt.Sprintf("%s (%s)", formatDuration(s.stopwatch.Elapsed()), stopState)}),
 		layout.Label{},
@@ -133,12 +135,21 @@ func formatDuration(d time.Duration) string {
 }
 
 func main() {
-	if err := flatte.Run(context.Background(), flatte.App[State]{
+	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	flag.Parse()
+	app := flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,
 		View:   View,
-	}); err != nil {
+	}
+	var err error
+	if *gui {
+		err = window.Run(context.Background(), app, window.Options{Title: "Flat Timer", Width: 72, Height: 20})
+	} else {
+		err = flatte.Run(context.Background(), app)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

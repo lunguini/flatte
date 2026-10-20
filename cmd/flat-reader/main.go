@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 // document is fixed so goldens stay deterministic. The long line near the top
@@ -103,8 +105,8 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
-// View shows the viewport's visible lines as a Text leaf: Viewport wraps
-// and scrolls in cells.
+// View shows the viewport as Viewport.Layout: a Scroll over its lines, so a
+// window draws the text natively. Viewport wraps in cells.
 func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	footer := fmt.Sprintf("j/k line  d/u half  f/b page  g/G ends  q quit   %3.0f%%", s.vp.ScrollPercent()*100)
 	return flatte.Frame{Root: flatui.CardLayout(
@@ -112,7 +114,7 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 		layout.Label{Text: "scrollable viewport sample", Style: layout.TextStyle{Role: layout.TextSubtle}},
 		layout.Label{},
 		layout.Col{NodeBase: layout.NodeBase{ID: bodyID, H: layout.Grow(1)}, Children: []layout.Node{
-			layout.Text{String: s.vp.View()},
+			s.vp.Layout(),
 		}},
 		layout.Label{},
 		layout.Label{Text: footer, Style: layout.TextStyle{Role: layout.TextSubtle}},
@@ -120,11 +122,20 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 }
 
 func main() {
-	if err := flatte.Run(context.Background(), flatte.App[State]{
+	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	flag.Parse()
+	app := flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flatte.WithMouse(flatte.MouseModeCellMotion)); err != nil {
+	}
+	var err error
+	if *gui {
+		err = window.Run(context.Background(), app, window.Options{Title: "Flat Reader", Width: 72, Height: 20})
+	} else {
+		err = flatte.Run(context.Background(), app, flatte.WithMouse(flatte.MouseModeCellMotion))
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
