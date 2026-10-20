@@ -376,3 +376,64 @@ func TestSnapshotGridHasNoSeams(t *testing.T) {
 		}
 	}
 }
+
+// TestSnapshotIconsAndSelection: icons draw as shapes in their style's
+// color, and a selected row is highlighted behind its content.
+func TestSnapshotIconsAndSelection(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	green := lipgloss.Color("#00ff00")
+	root := func() layout.Node {
+		return layout.Col{Children: []layout.Node{
+			layout.Row{NodeBase: layout.NodeBase{ID: "sel", Box: layout.Box{Selected: true}}, Children: []layout.Node{
+				// The text is an underscore so a shape cannot be mistaken for
+				// the font's glyph: an underscore has nothing at the center.
+				layout.Icon{NodeBase: layout.NodeBase{ID: "dot"}, Name: layout.IconDot, Text: "_ ", Style: layout.TextStyle{Fg: green}},
+				layout.Label{Text: "running"},
+			}},
+			layout.Row{NodeBase: layout.NodeBase{ID: "plain"}, Children: []layout.Node{
+				layout.Icon{NodeBase: layout.NodeBase{ID: "ring"}, Name: layout.IconCircle, Text: "_ ", Style: layout.TextStyle{Fg: green}},
+				layout.Label{Text: "stopped"},
+			}},
+			layout.Row{Children: []layout.Node{
+				layout.Icon{NodeBase: layout.NodeBase{ID: "none"}, Text: "_ ", Style: layout.TextStyle{Fg: green}},
+			}},
+		}}
+	}
+	m := metrics()
+	img, err := Snapshot(snapApp(root), Options{Width: 30, Height: 5}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := layout.LayoutScene(root(), 30*m.Column, 5*m.Line, m)
+	at := func(x, y float64) color.Color { return img.At(int(x*2), int(y*2)) }
+	dot, ring := s.Rects["dot"], s.Rects["ring"]
+	if c := at(dot.X+m.Column/2, dot.Y+dot.H/2); !near(c, color.RGBA{0, 255, 0, 255}, 40) {
+		t.Errorf("dot center %v, want the icon's green", c)
+	}
+	// A ring is hollow: its center is the row's background, its edge green.
+	if c := at(ring.X+m.Column/2, ring.Y+ring.H/2); !near(c, toColor(darkTheme.bg), 8) {
+		t.Errorf("ring center %v, want the background", c)
+	}
+	if !region(img, layout.PointRect{X: ring.X, Y: ring.Y + ring.H/2 - 1, W: m.Column, H: 2}, 2, color.RGBA{0, 255, 0, 255}, 90) {
+		t.Error("ring draws no green across its middle")
+	}
+	// IconNone draws its text: the underscore, nothing at the center.
+	none := s.Rects["none"]
+	if c := at(none.X+m.Column/2, none.Y+none.H/2); !near(c, toColor(darkTheme.bg), 8) {
+		t.Errorf("IconNone center %v, want its text (an underscore) to leave it empty", c)
+	}
+	if !differs(img, none, 2) {
+		t.Error("IconNone draws nothing; it should draw its text")
+	}
+	// The selected row is highlighted where it has no content; the other
+	// row is the plain background there.
+	sel, plain := s.Rects["sel"], s.Rects["plain"]
+	if c := at(sel.X+sel.W-4, sel.Y+sel.H/2); near(c, toColor(darkTheme.bg), 8) {
+		t.Errorf("selected row end %v is the plain background, want the highlight", c)
+	}
+	if c := at(plain.X+plain.W-4, plain.Y+plain.H/2); !near(c, toColor(darkTheme.bg), 2) {
+		t.Errorf("unselected row end %v, want the background", c)
+	}
+}

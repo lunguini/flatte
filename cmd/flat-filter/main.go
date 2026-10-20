@@ -12,6 +12,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type Item struct {
@@ -54,9 +55,12 @@ func NewState() *State {
 	return s
 }
 
-func (s *State) layout(height int) {
-	const pinnedRows = 7 // title, query, summary, blanks, page line, footer
-	rows := max(flatui.CardBodyHeight(height, pinnedRows), 1)
+// listID names the result list; its solved height is the page size.
+const listID = "results"
+
+// layout sizes a page to the rows the frame gave the list.
+func (s *State) layout(rows int) {
+	rows = max(rows, 1)
 	s.pages.SetPageSize(rows)
 	s.list.SetHeight(rows)
 	s.syncFiltered()
@@ -64,8 +68,10 @@ func (s *State) layout(height int) {
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(e.Height)
+	case flatte.LayoutEvent:
+		if r, ok := e.Rects[listID]; ok && r.H != s.list.Height() {
+			s.layout(r.H)
+		}
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	}
@@ -134,50 +140,56 @@ func (s *State) currentPageIndexes() []int {
 	return s.filteredIndexes[first:last]
 }
 
-func (s *State) renderRow(i int, selected bool) string {
+// renderRow is one result: the selection marker (a chevron in a window,
+// "> " in the terminal), the title in an 18-column field, and the kind.
+func (s *State) renderRow(i int, selected bool) layout.Node {
 	page := s.currentPageIndexes()
 	if i < 0 || i >= len(page) {
-		return ""
+		return layout.Label{}
 	}
 	item := s.items[page[i]]
-	marker := "  "
-	style := itemStyle()
+	marker, style := layout.Icon{Text: "  ", Style: itemStyle}, itemStyle
 	if selected {
-		marker = "> "
-		style = activeStyle()
+		marker, style = layout.Icon{Name: layout.IconChevronRight, Text: "> ", Style: activeStyle}, activeStyle
 	}
-	return style.Render(fmt.Sprintf("%s%-18s %s", marker, item.Title, subtleStyle().Render(item.Kind)))
+	return layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+		layout.Row{Children: []layout.Node{marker, layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(18)}, Text: item.Title, Style: style}}},
+		layout.Label{Text: item.Kind, Style: subtleStyle},
+	}}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	query := s.query.Value
-	if query == "" {
-		query = "(empty)"
-	}
+var (
+	indent      = layout.NodeBase{PadLeft: 2}
+	subtle      = layout.TextStyle{Role: layout.TextSubtle}
+	itemStyle   = layout.TextStyle{Fg: lipgloss.Color("252")}
+	activeStyle = layout.TextStyle{Fg: brand.Teal, Bold: true}
+	subtleStyle = layout.TextStyle{Fg: lipgloss.Color("244")}
+)
+
+// View shows the query field, the current page of results, and the pager.
+// The query Input places the cursor.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	summary := fmt.Sprintf("%d of %d results", len(s.filteredIndexes), len(s.items))
-	pageLine := s.pages.View()
-
-	lines := []string{
-		flatui.Title("Flat Filter"),
-		"  query: " + query,
-		flatui.Subtle("  " + summary),
-		"",
+	query := s.query.Layout("filter.query", true)
+	query.Placeholder = "(empty)"
+	var results layout.Node = layout.Col{NodeBase: layout.NodeBase{ID: listID, H: layout.Grow(1)}, Children: []layout.Node{
+		layout.Label{NodeBase: indent, Text: "no matches", Style: subtle},
+	}}
+	if s.list.Count() > 0 {
+		rows := s.list.Rows(listID, s.renderRow)
+		rows.H = layout.Grow(1)
+		results = rows
 	}
-	view := s.list.View(s.renderRow)
-	if view == "" {
-		lines = append(lines, flatui.Subtle("  no matches"))
-	} else {
-		lines = append(lines, strings.Split(view, "\n")...)
-	}
-	lines = append(lines, "", flatui.Subtle("  "+pageLine), flatui.Subtle(keyMap(s).View()))
-
-	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
-	originX, originY := flatui.CardOrigin()
-	frame.Cursor = &flatte.Cursor{
-		X: originX + lipgloss.Width("  query: ") + s.query.CursorColumn(),
-		Y: originY + 1,
-	}
-	return frame
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Filter", Style: layout.TextStyle{Role: layout.TextTitle}},
+		layout.Row{NodeBase: indent, Children: []layout.Node{layout.Label{Text: "query: "}, query}},
+		layout.Label{NodeBase: indent, Text: summary, Style: subtle},
+		layout.Label{},
+		results,
+		layout.Label{},
+		layout.Label{NodeBase: indent, Text: s.pages.View(), Style: subtle},
+		layout.Label{Text: keyMap(s).View(), Style: subtle},
+	)}
 }
 
 func keyMap(s *State) flatui.KeyMap {
@@ -188,18 +200,6 @@ func keyMap(s *State) flatui.KeyMap {
 		{Keys: []string{"backspace"}, Help: "clear", Disabled: s.query.Value == ""},
 		{Keys: []string{"esc"}, Help: "quit"},
 	}
-}
-
-func itemStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-}
-
-func activeStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(brand.Teal)
-}
-
-func subtleStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 }
 
 func main() {

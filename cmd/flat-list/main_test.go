@@ -9,11 +9,24 @@ import (
 	"github.com/lunguini/flatte/flatest"
 )
 
-// ready builds a state sized to a 24-row terminal (list height 17).
+// ready builds a state laid out on a 72x24 terminal (list height 17).
 func ready() *State {
 	s := NewState()
-	s.layout(24)
+	settle(s, 72, 24)
 	return s
+}
+
+// settle composes the view at width×height and delivers the solved rects as
+// the runtime does before painting.
+func settle(s *State, width, height int) {
+	_, comp := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, height)
+	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }
 
 func key(r rune) flatte.KeyEvent {
@@ -49,10 +62,24 @@ func TestClickSelectsRowAccountingForScroll(t *testing.T) {
 	if s.list.Offset() != 4 {
 		t.Fatalf("setup Offset() = %d, want 4", s.list.Offset())
 	}
-	// Click the top visible row: cardTop(1) + listTopLine(3) = y 4.
-	Handle(s, flatte.MouseEvent{Button: flatte.MouseLeft, Action: flatte.MousePress, Y: 4}, flatte.Effects[State]{})
+	// The top visible row is item 4's node.
+	Handle(s, flatte.MouseEvent{Button: flatte.MouseLeft, Action: flatte.MousePress, Target: "items:4"}, flatte.Effects[State]{})
 	if s.list.Cursor() != 4 {
 		t.Fatalf("click top visible row selected %d, want 4 (offset+0)", s.list.Cursor())
+	}
+}
+
+func TestClickHitsTheRowUnderThePointer(t *testing.T) {
+	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View}, 72)
+	// Row 6 of the card: border, title, subtitle, blank, then items 0, 1, 2.
+	d.Send(flatte.MouseEvent{X: 10, Y: 6, Button: flatte.MouseLeft, Action: flatte.MousePress})
+	if got := d.State().list.Cursor(); got != 2 {
+		t.Fatalf("click at row 6 selected %d, want 2", got)
+	}
+	// Outside the list: no change.
+	d.Send(flatte.MouseEvent{X: 10, Y: 1, Button: flatte.MouseLeft, Action: flatte.MousePress})
+	if got := d.State().list.Cursor(); got != 2 {
+		t.Fatalf("click on the title moved the selection to %d", got)
 	}
 }
 
@@ -73,7 +100,7 @@ func TestGotoEndAndQuit(t *testing.T) {
 func TestViewKeepsChromePinned(t *testing.T) {
 	s := ready()
 	Handle(s, key('G'), flatte.Effects[State]{}) // scroll to bottom
-	frame := View(s, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(s, flatte.RenderContext{Width: 72})).Content
 	for _, want := range []string{"Flat List", "scrollable selectable list", "q quit", "[30/30]"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing pinned %q:\n%s", want, frame)
@@ -82,9 +109,8 @@ func TestViewKeepsChromePinned(t *testing.T) {
 }
 
 func TestViewInitialSnapshot(t *testing.T) {
-	s := NewState()
-	s.layout(24)
-	flatest.AssertGoldenFrame(t, "testdata/list.golden", View(s, flatte.RenderContext{Width: 72}))
+	s := ready()
+	flatest.AssertGoldenFrame(t, "testdata/list.golden", composed(View(s, flatte.RenderContext{Width: 72})))
 }
 
 func TestScrollSequenceSnapshot(t *testing.T) {
@@ -92,7 +118,7 @@ func TestScrollSequenceSnapshot(t *testing.T) {
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, 72) // ResizeEvent{72,24} -> list height 17
+	}, 72) // laid out at 72x24 -> list height 17
 
 	frames := flatest.Frames(d,
 		func(d *flatest.Driver[State]) {}, // top: items 1-17

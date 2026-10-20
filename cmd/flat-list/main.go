@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // items is fixed so goldens stay deterministic; long enough that the list
@@ -24,9 +26,9 @@ func items() []string {
 	return out
 }
 
-// listTopLine is the content-line index of the first list row inside the card:
-// title, subtitle, and a blank line precede it.
-const listTopLine = 3
+// listID names the list: its rows are "items:<index>", and its solved
+// height is the number of rows it shows.
+const listID = "items"
 
 type State struct {
 	items  []string
@@ -40,17 +42,13 @@ func NewState() *State {
 	return s
 }
 
-// layout sizes the list to the rows left after the pinned chrome (title,
-// subtitle, blank, blank, footer = 5) and the card's top+bottom border (2).
-func (s *State) layout(height int) {
-	const pinnedRows = 5 // title, subtitle, blank, blank, footer
-	s.list.SetHeight(max(flatui.CardBodyHeight(height, pinnedRows), 1))
-}
-
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(e.Height)
+	case flatte.LayoutEvent:
+		// The list grows into the card's free rows; show as many items.
+		if r, ok := e.Rects[listID]; ok {
+			s.list.SetHeight(max(r.H, 1))
+		}
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	case flatte.MouseEvent:
@@ -92,57 +90,49 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 		if m.Action != flatte.MousePress {
 			return
 		}
-		// Click row -> item index: the visible row plus the scroll offset,
-		// mapped back through the card's top border + the pinned lines.
-		_, cardTop := flatui.CardOrigin()
-		row := m.Y - cardTop - listTopLine
-		if row >= 0 {
-			s.list.Select(s.list.Offset() + row)
+		// Each row is an ID'd node: the click names the item it hit.
+		if i, ok := strings.CutPrefix(m.Target, listID+":"); ok {
+			if n, err := strconv.Atoi(i); err == nil {
+				s.list.Select(n)
+			}
 		}
 	}
 }
 
-func (s *State) renderRow(i int, selected bool) string {
-	marker := "  "
-	style := itemStyle()
+// renderRow is one item: the selection marker (a chevron in a window, "> "
+// in the terminal), the label, and the chosen mark.
+func (s *State) renderRow(i int, selected bool) layout.Node {
+	marker := layout.Icon{Text: "  ", Style: itemStyle}
+	style := itemStyle
 	if selected {
-		marker = "> "
-		style = activeStyle()
+		marker = layout.Icon{Name: layout.IconChevronRight, Text: "> ", Style: activeStyle}
+		style = activeStyle
 	}
-	label := s.items[i]
+	row := layout.Row{Children: []layout.Node{marker, layout.Label{Text: s.items[i], Style: style}}}
 	if i == s.chosen {
-		label += " " + chosenStyle().Render("(selected)")
+		row.Children = append(row.Children, layout.Label{Text: " (selected)", Style: chosenStyle})
 	}
-	return style.Render(marker + label)
+	return row
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	footer := flatui.Subtle(fmt.Sprintf(
-		"j/k move  g/G ends  enter select  q quit    [%d/%d]",
-		s.list.Cursor()+1, s.list.Count()))
-
-	lines := []string{
-		flatui.Title("Flat List"),
-		flatui.Subtle("scrollable selectable list"),
-		"",
-	}
-	lines = append(lines, strings.Split(s.list.View(s.renderRow), "\n")...)
-	lines = append(lines, "", footer)
-
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	rows := s.list.Rows(listID, s.renderRow)
+	rows.H = layout.Grow(1)
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat List", Style: layout.TextStyle{Role: layout.TextTitle}},
+		layout.Label{Text: "scrollable selectable list", Style: layout.TextStyle{Role: layout.TextSubtle}},
+		layout.Label{},
+		rows,
+		layout.Label{},
+		layout.Label{Text: fmt.Sprintf("j/k move  g/G ends  enter select  q quit    [%d/%d]", s.list.Cursor()+1, s.list.Count()), Style: layout.TextStyle{Role: layout.TextSubtle}},
+	)}
 }
 
-func itemStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-}
-
-func activeStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Bold(true).Foreground(brand.Teal)
-}
-
-func chosenStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("108"))
-}
+var (
+	itemStyle   = layout.TextStyle{Fg: lipgloss.Color("252")}
+	activeStyle = layout.TextStyle{Fg: brand.Teal, Bold: true}
+	chosenStyle = layout.TextStyle{Fg: lipgloss.Color("108")}
+)
 
 func main() {
 	if err := flatte.Run(context.Background(), flatte.App[State]{

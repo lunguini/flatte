@@ -74,6 +74,7 @@ var (
 	cgContextAddLineToPoint     func(ctx uintptr, x, y float64)
 	cgContextAddArcToPoint      func(ctx uintptr, x1, y1, x2, y2, r float64)
 	cgContextClosePath          func(ctx uintptr)
+	cgContextAddEllipseInRect   func(ctx uintptr, r CGRect)
 	cgContextStrokePath         func(ctx uintptr)
 	cgPathCreateWithRoundedRect func(r CGRect, cw, ch float64, t *CGAffineTransform) uintptr
 	cgPathRelease               func(path uintptr)
@@ -164,6 +165,7 @@ func bindFrameworks() error {
 		{&cgContextAddLineToPoint, cg, "CGContextAddLineToPoint"},
 		{&cgContextAddArcToPoint, cg, "CGContextAddArcToPoint"},
 		{&cgContextClosePath, cg, "CGContextClosePath"},
+		{&cgContextAddEllipseInRect, cg, "CGContextAddEllipseInRect"},
 		{&cgContextStrokePath, cg, "CGContextStrokePath"},
 		{&cgPathCreateWithRoundedRect, cg, "CGPathCreateWithRoundedRect"},
 		{&cgPathRelease, cg, "CGPathRelease"},

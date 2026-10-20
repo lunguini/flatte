@@ -368,6 +368,7 @@ flatui package flatui
   method List.Height() int
   method List.Layout() layout.Node
   method List.Offset() int
+  method List.Rows(id string, row func(index int, selected bool) layout.Node) layout.Col
   method List.View(render func(index int, selected bool) string) string
   method Paginator.Page() int
   method Paginator.PageSize() int
@@ -598,6 +599,12 @@ flatui/layout package layout
   const BorderNone BorderKind = 0
   const BorderNormal BorderKind = 2
   const BorderRounded BorderKind = 1
+  const IconChevronRight IconName = 1
+  const IconCircle IconName = 5
+  const IconDisclosureClosed IconName = 2
+  const IconDisclosureOpen IconName = 3
+  const IconDot IconName = 4
+  const IconNone IconName = 0
   const SizeAuto SizeKind = 0
   const SizeContent SizeKind = 3
   const SizeFixed SizeKind = 1
@@ -627,6 +634,8 @@ flatui/layout package layout
   method Col.Size()(Size, Size)
   method Composition.Cursor()(x int, y int, ok bool)
   method Composition.HitTest(x int, y int)(string, Rect)
+  method Icon.Render(r Rect) string
+  method Icon.Size()(Size, Size)
   method Input.Render(r Rect) string
   method Input.Size()(Size, Size)
   method Label.Render(r Rect) string
@@ -653,6 +662,8 @@ flatui/layout package layout
   method TextStyle.Render(text string) string
   methodset *Col.GetID() string
   methodset *Col.IsOverlay() bool
+  methodset *Icon.GetID() string
+  methodset *Icon.IsOverlay() bool
   methodset *Input.GetID() string
   methodset *Input.IsOverlay() bool
   methodset *Label.GetID() string
@@ -668,6 +679,8 @@ flatui/layout package layout
   methodset *Text.IsOverlay() bool
   methodset Col.GetID() string
   methodset Col.IsOverlay() bool
+  methodset Icon.GetID() string
+  methodset Icon.IsOverlay() bool
   methodset Input.GetID() string
   methodset Input.IsOverlay() bool
   methodset Label.GetID() string
@@ -686,7 +699,8 @@ flatui/layout package layout
   field Box.Border BorderKind [order=0]
   field Box.BorderColor color.Color [order=1]
   field Box.Background color.Color [order=2]
-  struct Box fields=3 comparable=true
+  field Box.Selected bool [order=3]
+  struct Box fields=4 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
@@ -715,6 +729,20 @@ flatui/layout package layout
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
   field DuplicateIDDiagnostic.Duplicate Rect [order=2]
   struct DuplicateIDDiagnostic fields=3 comparable=true
+  type Icon struct
+  field Icon.NodeBase NodeBase [order=0]
+  field Icon.Name IconName [order=1]
+  field Icon.Text string [order=2]
+  field Icon.Style TextStyle [order=3]
+  struct Icon fields=4 comparable=false
+  type IconName int
+  type IconOp struct
+  field IconOp.Rect PointRect [order=0]
+  field IconOp.Clip PointRect [order=1]
+  field IconOp.Name IconName [order=2]
+  field IconOp.Text string [order=3]
+  field IconOp.Style TextStyle [order=4]
+  struct IconOp fields=5 comparable=true
   type Input struct
   field Input.NodeBase NodeBase [order=0]
   field Input.Value string [order=1]

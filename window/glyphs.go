@@ -20,16 +20,26 @@ type arc struct {
 	r                float64
 }
 
-// poly is a closed filled polygon, or an open 1pt stroked polyline.
+// poly is a closed filled polygon, or an open stroked polyline width points
+// wide (0 means 1pt).
 type poly struct {
-	pts  []point
+	pts   []point
+	fill  bool
+	width float64
+}
+
+// circle is a filled disc, or a 1pt ring, centered on c.
+type circle struct {
+	c    point
+	r    float64
 	fill bool
 }
 
 type cellShape struct {
-	rects []shapeRect
-	arcs  []arc
-	polys []poly
+	rects   []shapeRect
+	arcs    []arc
+	polys   []poly
+	circles []circle
 }
 
 // Arm weights of a line-drawing character, clockwise from up.

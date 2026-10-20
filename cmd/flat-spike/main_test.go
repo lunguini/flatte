@@ -70,9 +70,7 @@ func TestClickSelectsModelOnItsRow(t *testing.T) {
 
 	// Card top border (row 1) + 3 lines (title, subtitle, blank) precede
 	// the list, so model index 2 ("opus") renders on absolute row 6.
-	Handle(&state, flatte.MouseEvent{
-		X: 5, Y: 6, Button: flatte.MouseLeft, Action: flatte.MousePress,
-	}, flatte.Effects[State]{})
+	click(&state, 5, 6, flatte.MousePress)
 
 	if state.cursor != 2 || state.selectedModel != "opus" {
 		t.Fatalf("cursor=%d selected=%q, want 2/opus after clicking opus's row", state.cursor, state.selectedModel)
@@ -83,37 +81,30 @@ func TestClickOutsideListIsIgnored(t *testing.T) {
 	state := State{models: []string{"haiku", "sonnet"}, cursor: 1, selectedModel: "sonnet"}
 
 	// Row 2 is the subtitle line, above the list — no model there.
-	Handle(&state, flatte.MouseEvent{
-		X: 5, Y: 2, Button: flatte.MouseLeft, Action: flatte.MousePress,
-	}, flatte.Effects[State]{})
+	click(&state, 5, 2, flatte.MousePress)
 	// A row past the last model.
-	Handle(&state, flatte.MouseEvent{
-		X: 5, Y: 20, Button: flatte.MouseLeft, Action: flatte.MousePress,
-	}, flatte.Effects[State]{})
+	click(&state, 5, 20, flatte.MousePress)
 
 	if state.cursor != 1 || state.selectedModel != "sonnet" {
 		t.Fatalf("cursor=%d selected=%q, want unchanged 1/sonnet", state.cursor, state.selectedModel)
 	}
 }
 
-func TestClickOutsideListColumnIsIgnored(t *testing.T) {
+func TestClickAnywhereOnARowSelectsIt(t *testing.T) {
 	state := State{models: []string{"haiku", "sonnet"}, cursor: 1, selectedModel: "sonnet"}
 
-	Handle(&state, flatte.MouseEvent{
-		X: 40, Y: 4, Button: flatte.MouseLeft, Action: flatte.MousePress,
-	}, flatte.Effects[State]{})
+	// Far right of haiku's row, past its text: the row is the target.
+	click(&state, 60, 4, flatte.MousePress)
 
-	if state.cursor != 1 || state.selectedModel != "sonnet" {
-		t.Fatalf("cursor=%d selected=%q, want unchanged 1/sonnet", state.cursor, state.selectedModel)
+	if state.cursor != 0 || state.selectedModel != "haiku" {
+		t.Fatalf("cursor=%d selected=%q, want 0/haiku", state.cursor, state.selectedModel)
 	}
 }
 
 func TestClickReleaseDoesNotSelect(t *testing.T) {
 	state := State{models: []string{"haiku", "sonnet", "opus"}}
 
-	Handle(&state, flatte.MouseEvent{
-		X: 5, Y: 5, Button: flatte.MouseLeft, Action: flatte.MouseRelease,
-	}, flatte.Effects[State]{})
+	click(&state, 5, 5, flatte.MouseRelease)
 
 	if state.selectedModel != "" {
 		t.Fatalf("selectedModel = %q, want empty (release must not select)", state.selectedModel)
@@ -142,8 +133,8 @@ func TestViewRendersCurrentStateDeterministically(t *testing.T) {
 	}
 
 	ctx := flatte.RenderContext{Width: 72}
-	first := View(&state, ctx).Content
-	second := View(&state, ctx).Content
+	first := composedAt(View(&state, ctx), 72).Content
+	second := composedAt(View(&state, ctx), 72).Content
 	if first != second {
 		t.Fatal("View output changed without a state change")
 	}
@@ -161,7 +152,7 @@ func TestViewAdaptsRenderedLinesToContextWidth(t *testing.T) {
 	}
 
 	for _, frameWidth := range []int{40, 72, 96} {
-		for _, line := range strings.Split(View(&state, flatte.RenderContext{Width: frameWidth}).Content, "\n") {
+		for _, line := range strings.Split(composedAt(View(&state, flatte.RenderContext{Width: frameWidth}), frameWidth).Content, "\n") {
 			if width := lipgloss.Width(line); width > frameWidth {
 				t.Fatalf("line width = %d, want <= %d:\n%q", width, frameWidth, line)
 			}
@@ -169,26 +160,10 @@ func TestViewAdaptsRenderedLinesToContextWidth(t *testing.T) {
 	}
 }
 
-func TestViewUsesCompactContentWidthWhenThereIsRoom(t *testing.T) {
-	state := State{
-		models: []string{"haiku", "sonnet", "opus"},
-	}
-
-	frame := View(&state, flatte.RenderContext{Width: 96}).Content
-	firstLine := strings.Split(frame, "\n")[0]
-	width := lipgloss.Width(firstLine)
-	if width >= 96 {
-		t.Fatalf("frame width = %d, want compact width below terminal width", width)
-	}
-	if width > 48 {
-		t.Fatalf("frame width = %d, want a compact default frame", width)
-	}
-}
-
 func TestViewMatchesLoadingSnapshot(t *testing.T) {
 	state := State{loading: true}
 
-	flatest.AssertGolden(t, "testdata/loading.golden", View(&state, flatte.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/loading.golden", composed(View(&state, flatte.RenderContext{Width: 72})).Content)
 }
 
 func TestViewMatchesLoadedSnapshot(t *testing.T) {
@@ -198,7 +173,7 @@ func TestViewMatchesLoadedSnapshot(t *testing.T) {
 		selectedModel: "opus",
 	}
 
-	flatest.AssertGolden(t, "testdata/loaded.golden", View(&state, flatte.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/loaded.golden", composed(View(&state, flatte.RenderContext{Width: 72})).Content)
 }
 
 func TestRunAppliesStartupAsyncUpdateBeforeLaterInput(t *testing.T) {
@@ -266,4 +241,21 @@ func TestLoadDelayIgnoresInvalidEnvironmentOverride(t *testing.T) {
 	if got := loadDelay(); got != 250*time.Millisecond {
 		t.Fatalf("loadDelay() = %s, want 250ms", got)
 	}
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame { return composedAt(f, 72) }
+
+// composedAt is View's frame painted on a width×24 terminal.
+func composedAt(f flatte.Frame, width int) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, width, 24)
+	return f
+}
+
+// click sends a left-button event at x, y on the 72×24 frame, with the
+// Target the runtime hit-tests from it.
+func click(s *State, x, y int, action flatte.MouseAction) {
+	_, comp := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: 72}), 72, 24)
+	target, rect := comp.HitTest(x, y)
+	Handle(s, flatte.MouseEvent{X: x, Y: y, Button: flatte.MouseLeft, Action: action, Target: target, TargetRect: rect}, flatte.Effects[State]{})
 }

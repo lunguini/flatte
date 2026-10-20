@@ -117,7 +117,7 @@ shared geometry and add their own fields.
 | `Overlay` | `bool` | Treat this node as a centered overlay layer (see below). |
 | `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
 | `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Box` fill; layout inset still comes from `Pad` and the border. Terminal-only: prefer `Box` when it can say what you need. |
-| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. |
+| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). |
 
 ### Size kinds
 
@@ -143,6 +143,7 @@ whole viewport.
 | `layout.Row{Children: ...}` | Distribute children horizontally (main axis = width). |
 | `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
 | `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. |
+| `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`) in the same columns. Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
 | `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. |
 | `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
@@ -267,7 +268,7 @@ frame tree instead of being rendered and positioned by hand:
 | Widget | `Layout()` produces |
 |---|---|
 | `flatui.TabBar` | A `Row` of tab leaves (or one bordered `Text`); tags rects when `WithID` is set. |
-| `flatui.List` | A `Text` leaf of the visible rows via `RenderRow`. |
+| `flatui.List` | `Rows(id, row)`: the visible rows as nodes — each wrapped in a `Row` with ID `id:index` (click `Target`) and `Box.Selected` on the selected one; set `H: layout.Grow(1)` on the returned Col and size the list from its solved height. `Layout()`: a `Text` leaf of the visible rows via `RenderRow`. |
 | `flatui.Viewport` | A `Text` leaf of the visible slice. |
 | `flatui.Progress` | A `Text` leaf of the bar. |
 | `flatui.TextField` | `Layout(id, focused)`: a `layout.Input` showing the value and caret. |

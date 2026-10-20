@@ -3,6 +3,9 @@ package flatui
 import (
 	"fmt"
 	"testing"
+
+	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // marker renders an item as "> i" when selected, "  i" otherwise — a stand-in
@@ -114,5 +117,45 @@ func TestListEmptyView(t *testing.T) {
 	l.SetHeight(3) // no items
 	if got := l.View(marker); got != "" {
 		t.Fatalf("empty View() = %q, want empty", got)
+	}
+}
+
+// TestListRowsAreTheVisibleWindowAsNodes: Rows is View as nodes — the same
+// window of items, each row ID'd for hit-testing and the selected one marked
+// for a GUI's highlight — and composes to View's text.
+func TestListRowsAreTheVisibleWindowAsNodes(t *testing.T) {
+	var l List
+	l.SetCount(10)
+	l.SetHeight(3)
+	l.Select(4) // window 2..4
+	rows := l.Rows("items", func(i int, selected bool) layout.Node {
+		return layout.Label{Text: marker(i, selected)}
+	})
+	if rows.ID != "items" || len(rows.Children) != 3 {
+		t.Fatalf("Rows = %+v, want 3 rows in a Col with ID items", rows)
+	}
+	for k, child := range rows.Children {
+		row, ok := child.(layout.Row)
+		i := l.Offset() + k
+		if !ok || row.ID != fmt.Sprintf("items:%d", i) || row.Box.Selected != (i == l.Cursor()) {
+			t.Fatalf("row %d = %+v, want ID items:%d selected=%v", k, child, i, i == l.Cursor())
+		}
+	}
+	got, rects := layout.SolveAndCompose(rows, 5, 3)
+	if want := l.View(marker); flatest.CleanFrame(got) != want {
+		t.Fatalf("Rows composed %q, want View's %q", got, want)
+	}
+	if r := rects["items:3"]; r != (layout.Rect{Y: 1, W: 5, H: 1}) {
+		t.Fatalf("items:3 rect = %+v", r)
+	}
+}
+
+func TestListRowsEmpty(t *testing.T) {
+	var l List
+	l.SetHeight(3)
+	called := false
+	rows := l.Rows("x", func(int, bool) layout.Node { called = true; return layout.Label{} })
+	if len(rows.Children) != 0 || called {
+		t.Fatalf("empty list rows = %+v (row func called: %v)", rows, called)
 	}
 }

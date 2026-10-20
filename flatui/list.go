@@ -1,6 +1,7 @@
 package flatui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/lunguini/flatte/flatui/layout"
@@ -30,6 +31,28 @@ func (l List) Layout() layout.Node {
 		return layout.Text{}
 	}
 	return layout.Text{String: l.View(l.RenderRow)}
+}
+
+// Rows returns the visible rows as nodes, for a Frame.Root: row is called
+// for each visible item index with whether it is the selected row, and each
+// result is wrapped in a Row with ID "id:index" (so MouseEvent.Target names
+// the clicked row) whose Box is marked Selected for the selected one (a GUI
+// highlights it; the terminal shows only what row draws). The Col has ID id.
+func (l List) Rows(id string, row func(index int, selected bool) layout.Node) layout.Col {
+	col := layout.Col{NodeBase: layout.NodeBase{ID: id}}
+	if l.height <= 0 || l.count == 0 {
+		return col
+	}
+	end := min(l.offset+l.height, l.count)
+	col.Children = make([]layout.Node, 0, end-l.offset)
+	for i := l.offset; i < end; i++ {
+		selected := i == l.cursor
+		col.Children = append(col.Children, layout.Row{
+			NodeBase: layout.NodeBase{ID: id + ":" + strconv.Itoa(i), Box: layout.Box{Selected: selected}},
+			Children: []layout.Node{row(i, selected)},
+		})
+	}
+	return col
 }
 
 // SetCount sets the number of selectable items, clamping the cursor and scroll.

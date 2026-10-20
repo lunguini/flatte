@@ -43,12 +43,13 @@ func cellsOf(v, unit float64) int {
 }
 
 // Op is one drawing operation of a Scene, in paint order. The set is closed:
-// a backend draws these five and nothing else. Every op's Clip is the visible
+// a backend draws these six and nothing else. Every op's Clip is the visible
 // region (the frame narrowed by enclosing Scrolls); draw only inside it.
 type Op interface{ isOp() }
 
 // BoxOp draws a node's Box: its border within the Metrics.Border band
-// around the inside of Rect, and Box.Background behind the content.
+// around the inside of Rect, Box.Background behind the content, and a
+// selection highlight when Box.Selected.
 type BoxOp struct {
 	Rect, Clip PointRect
 	Box        Box
@@ -75,6 +76,15 @@ type InputOp struct {
 	Style       TextStyle
 }
 
+// IconOp draws an Icon's named shape in Rect (the icon's content box), in
+// Style's color; IconNone or an unknown name draws Text instead.
+type IconOp struct {
+	Rect, Clip PointRect
+	Name       IconName
+	Text       string
+	Style      TextStyle
+}
+
 // CellsOp draws terminal content — a Text leaf's ANSI string, a container's
 // Chrome, or any node the scene does not know — as a grid of Cols×Lines
 // monospace cells from the top-left of Rect. It is how every existing node
@@ -92,6 +102,7 @@ type LayerOp struct{ Rect PointRect }
 func (BoxOp) isOp()   {}
 func (TextOp) isOp()  {}
 func (InputOp) isOp() {}
+func (IconOp) isOp()  {}
 func (CellsOp) isOp() {}
 func (LayerOp) isOp() {}
 
@@ -168,6 +179,10 @@ func (p pointMetric) leaf(n Node) (w, h sized[float64]) {
 	case Text:
 		cw, ch := measureString(l.String)
 		return p.content(l.NodeBase, p.cols(cw), p.lines(ch))
+	case Icon:
+		// Columns, not the GUI font: an icon lines up with the terminal.
+		cw, ch := measureString(l.Style.Render(l.Text))
+		return p.content(l.NodeBase, p.cols(cw), p.lines(ch))
 	case Input:
 		w, h = p.content(l.NodeBase, 0, p.Line)
 		if l.W.Kind == SizeAuto {
@@ -217,7 +232,7 @@ func (p *scenePainter) content(n Node, r rect[float64]) PointRect {
 }
 
 func (p *scenePainter) box(r, clip rect[float64], b Box) {
-	if b.hasBorder() || b.hasBackground() {
+	if b.hasBorder() || b.hasBackground() || b.Selected {
 		p.ops = append(p.ops, BoxOp{Rect: PointRect(r), Clip: PointRect(clip), Box: b})
 	}
 }
@@ -238,6 +253,9 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	case Label:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style})
+	case Icon:
+		p.box(r, clip, l.box())
+		p.ops = append(p.ops, IconOp{Rect: p.content(n, r), Clip: PointRect(clip), Name: l.Name, Text: l.Text, Style: l.Style})
 	case Input:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, InputOp{

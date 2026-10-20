@@ -11,7 +11,7 @@ go run ./flat-pages
 
 | Sample | Demonstrates |
 |---|---|
-| `flat-spike` | `flatte.Go`, async load, app-owned list selection, mouse selection through zones |
+| `flat-spike` | `flatte.Go`, async load, app-owned list selection as ID'd, `Box.Selected` rows; clicks route on `MouseEvent.Target` |
 | `flat-ticker` | `flatte.Every`, periodic updates, pause/reset |
 | `flat-stream` | `flatte.Stream`, cancellation-aware stream source, deterministic stream tests |
 | `flat-search` | `flatte.Latest`, stale result suppression, cancellable search |
@@ -49,12 +49,12 @@ go run ./flat-pages
 | Sample | Demonstrates |
 |---|---|
 | `flat-reader` | `flatui.Viewport` sized from its solved rect (`LayoutEvent`), scrollable body, pinned chrome, mouse wheel |
-| `flat-list` | `flatui.List`, keyboard/mouse selection, keep-visible scroll |
+| `flat-list` | `flatui.List.Rows` sized from its solved height, `layout.Icon` selection marker (chevron in a window), keyboard/mouse selection by row `Target`, keep-visible scroll |
 | `flat-spinner` | `flatui.Spinner` driven by `Every` |
 | `flat-progress` | `flatui.Progress` sized from its solved rect (`LayoutEvent`), pause/reset |
 | `flat-table` | `flatui.Table`, aligned columns, selected row |
 | `flat-timer` | `flatui.Timer` and `flatui.Stopwatch` |
-| `flat-filter` | Filtered list composition with `TextField`, `List`, `Paginator`, and `KeyMap` |
+| `flat-filter` | Filtered list composition with `TextField` (an `Input` with a placeholder), `List.Rows`, `Paginator` sized from the list's solved height, and `KeyMap` |
 | `flat-zones` | `flatui.ZoneMap` fed from ID'd panel rects (`LayoutEvent`), explicit hit regions, local mouse coordinates |
 | `flat-style` | Lip Gloss v2 styling, local palette, styled progress/table/card composition |
 

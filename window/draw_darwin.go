@@ -24,20 +24,22 @@ func rgbaOf(c color.Color) rgba {
 // theme is the window's look. Roles and Boxes map onto it; explicit colors
 // in a TextStyle or Box override it.
 type theme struct {
-	// surface is the raised fill of an overlay's box.
-	bg, surface, text, subtle, title, border, field, caret, marked rgba
+	// surface is the raised fill of an overlay's box; selection highlights
+	// a Selected box.
+	bg, surface, text, subtle, title, border, field, caret, marked, selection rgba
 }
 
 var darkTheme = theme{
-	bg:      rgba{0.118, 0.122, 0.133, 1},
-	surface: rgba{0.161, 0.165, 0.180, 1},
-	text:    rgba{0.871, 0.878, 0.898, 1},
-	subtle:  rgba{0.553, 0.569, 0.608, 1},
-	title:   rgba{0.949, 0.953, 0.961, 1},
-	border:  rgba{0.298, 0.306, 0.333, 1},
-	field:   rgba{0.090, 0.094, 0.106, 1},
-	caret:   rgba{0.400, 0.655, 1.000, 1},
-	marked:  rgba{0.400, 0.655, 1.000, 1},
+	bg:        rgba{0.118, 0.122, 0.133, 1},
+	surface:   rgba{0.161, 0.165, 0.180, 1},
+	selection: rgba{0.400, 0.655, 1.000, 0.22},
+	text:      rgba{0.871, 0.878, 0.898, 1},
+	subtle:    rgba{0.553, 0.569, 0.608, 1},
+	title:     rgba{0.949, 0.953, 0.961, 1},
+	border:    rgba{0.298, 0.306, 0.333, 1},
+	field:     rgba{0.090, 0.094, 0.106, 1},
+	caret:     rgba{0.400, 0.655, 1.000, 1},
+	marked:    rgba{0.400, 0.655, 1.000, 1},
 }
 
 // Type sizes and spacing in points. Body text sets the line metric; the
@@ -263,6 +265,8 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.text(op) })
 		case layout.InputOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.input(op) })
+		case layout.IconOp:
+			p.clipped(intersect(op.Rect, op.Clip), func() { p.icon(op) })
 		case layout.CellsOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.cells(op) })
 		}
@@ -278,10 +282,15 @@ func (p *painter) roundedPath(r CGRect, rad float64, f func()) {
 
 // box draws a Box. A border is a rounded stroke down the middle of its
 // band, with the background filling inside it; the first box of an overlay
-// layer is a raised surface.
+// layer is a raised surface; a selected box is highlighted first.
 func (p *painter) box(op layout.BoxOp) {
 	raised := p.inLayer && op.Rect == p.layer
 	p.inLayer = false
+	if op.Box.Selected {
+		r := rectOf(op.Rect)
+		p.fill(p.th.selection)
+		p.roundedPath(r, min(4, r.Size.Width/2, r.Size.Height/2), func() { cgContextFillPath(p.ctx) })
+	}
 	bg, hasBg := rgba{}, false
 	if op.Box.Background != nil && op.Box.Background != color.Transparent {
 		bg, hasBg = rgbaOf(op.Box.Background), true
@@ -557,6 +566,22 @@ func (p *painter) cellShape(g cellShape, st uv.Style, x, y, w float64) {
 	if st.Attrs&uv.AttrConceal != 0 {
 		return
 	}
+	p.shape(g, fg)
+}
+
+// icon draws an Icon's shape in its style's color, or its text when the
+// name has no shape.
+func (p *painter) icon(op layout.IconOp) {
+	if g, ok := iconShape(op.Name, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H, p.m.Column); ok {
+		p.shape(g, p.roleColor(op.Style))
+		return
+	}
+	f := styleFont(op.Style)
+	p.line(op.Text, f, op.Rect.X, op.Rect.Y, f.pitch(), p.roleColor(op.Style), op.Style.Bg, op.Style.Underline, op.Style.Strikethrough)
+}
+
+// shape fills and strokes g in fg.
+func (p *painter) shape(g cellShape, fg rgba) {
 	for _, r := range g.rects {
 		c := fg
 		c.A *= r.Alpha
@@ -565,6 +590,14 @@ func (p *painter) cellShape(g cellShape, st uv.Style, x, y, w float64) {
 	p.fill(fg)
 	p.stroke(fg)
 	cgContextSetLineWidth(p.ctx, strokeWidth)
+	for _, c := range g.circles {
+		cgContextAddEllipseInRect(p.ctx, cgRect(c.c.X-c.r, c.c.Y-c.r, 2*c.r, 2*c.r))
+		if c.fill {
+			cgContextFillPath(p.ctx)
+		} else {
+			cgContextStrokePath(p.ctx)
+		}
+	}
 	for _, a := range g.arcs {
 		cgContextMoveToPoint(p.ctx, a.from.X, a.from.Y)
 		cgContextAddArcToPoint(p.ctx, a.corner.X, a.corner.Y, a.to.X, a.to.Y, a.r)
@@ -580,7 +613,9 @@ func (p *painter) cellShape(g cellShape, st uv.Style, x, y, w float64) {
 			cgContextClosePath(p.ctx)
 			cgContextFillPath(p.ctx)
 		} else {
+			cgContextSetLineWidth(p.ctx, max(pl.width, strokeWidth))
 			cgContextStrokePath(p.ctx)
+			cgContextSetLineWidth(p.ctx, strokeWidth)
 		}
 	}
 }

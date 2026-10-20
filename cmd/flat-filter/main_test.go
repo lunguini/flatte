@@ -11,7 +11,7 @@ import (
 
 func ready() *State {
 	s := NewState()
-	s.layout(14)
+	settle(s, 72, 14)
 	return s
 }
 
@@ -117,7 +117,7 @@ func TestViewSnapshot(t *testing.T) {
 	s := ready()
 	typeQuery(s, "api")
 
-	flatest.AssertGoldenFrame(t, "testdata/filter.golden", View(s, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/filter.golden", composedAt(composed(View(s, flatte.RenderContext{Width: 72})), 14))
 }
 
 func labels(indexes []int) []string {
@@ -126,4 +126,24 @@ func labels(indexes []int) []string {
 		out = append(out, items()[i].Title)
 	}
 	return out
+}
+
+// settle composes the view at width×height and delivers the solved rects as
+// the runtime does before painting.
+func settle(s *State, width, height int) {
+	_, comp := flatte.ComposeFrame(composed(View(s, flatte.RenderContext{Width: width})), width, height)
+	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
+}
+
+// composedAt is View's frame painted on a 72-column terminal height rows
+// tall.
+func composedAt(f flatte.Frame, height int) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, height)
+	return f
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }
