@@ -145,6 +145,8 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	menus := nativeMenus{title: title, view: view}
 	menus.setBar(nil)
 	h.menus = menus
+	h.dialogs = nativeDialogs{}
+	view.Send(sel("registerForDraggedTypes:"), dragTypes())
 	barChosen = h.menuChosen
 	defer func() { barChosen = nil }()
 

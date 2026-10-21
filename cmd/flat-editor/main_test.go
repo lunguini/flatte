@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -319,13 +320,13 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 
 func TestViewSoftWrapsLongLineAndKeepsCursorInsideTextareaBody(t *testing.T) {
 	s := emptyState()
-	settle(s, 18, 10)
+	settle(s, 18, 11)
 	typeRunes(s, "abcdefghijklmnopqrstuvwxyz")
 
 	if got := s.ta.View(); got != "abcdefghijkl\nmnopqrstuvwx\nyz" {
 		t.Fatalf("textarea view = %q, want wrapped rows", got)
 	}
-	frame := composed(s, 18, 10)
+	frame := composed(s, 18, 11)
 	if frame.Cursor == nil {
 		t.Fatal("editor view has no cursor")
 	}
@@ -468,13 +469,13 @@ func TestMenus(t *testing.T) {
 	if items := ContextMenu(s, editorID); items[0].Disabled || items[1].Disabled {
 		t.Fatal("cut/copy disabled with a selection")
 	}
-	view := Menus(s)[1].Items
+	view := Menus(s)[2].Items
 	if !view[0].Checked || view[1].Checked {
 		t.Fatalf("view toggles %+v", view)
 	}
 	Handle(s, flatte.MenuEvent{ID: cmdWrap}, flatte.Effects[State]{})
 	Handle(s, flatte.MenuEvent{ID: cmdKeys}, flatte.Effects[State]{})
-	if s.ta.SoftWrap() || !s.debugKeys || Menus(s)[1].Items[0].Checked || !Menus(s)[1].Items[1].Checked {
+	if s.ta.SoftWrap() || !s.debugKeys || Menus(s)[2].Items[0].Checked || !Menus(s)[2].Items[1].Checked {
 		t.Fatal("view toggles did not toggle")
 	}
 }
@@ -592,5 +593,104 @@ func TestCursorIsABarWhileSelecting(t *testing.T) {
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModShift}, flatte.Effects[State]{})
 	if c := composed(s, 72, 24).Cursor; c == nil || c.Style.Shape != flatte.CursorShapeBar || !c.Style.Blink {
 		t.Fatalf("cursor while selecting = %+v, want a blinking bar", c)
+	}
+}
+
+func editorDriver() *flatest.Driver[State] {
+	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View, Menus: Menus, ContextMenu: ContextMenu}, 72)
+	d.Send(flatte.ResizeEvent{Width: 72, Height: 20})
+	return d
+}
+
+func TestFileOpenSaveAndNew(t *testing.T) {
+	dir := t.TempDir()
+	note := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(note, []byte("from disk"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := editorDriver()
+	s := d.State()
+	// ⌘O shows the open dialog; the answer reads the file off the loop.
+	d.Send(super('o'))
+	dlg, ok := d.Dialog()
+	if !ok || dlg.Open == nil {
+		t.Fatalf("no open dialog: %+v", dlg)
+	}
+	d.Answer(flatte.DialogResult{Paths: []string{note}})
+	d.Settle()
+	if s.ta.Value() != "from disk" || s.path != note || s.dirty() {
+		t.Fatalf("open: %q path %q dirty %v", s.ta.Value(), s.path, s.dirty())
+	}
+	if f := d.Frame(); !strings.Contains(flatest.CleanFrame(f.Content), "note.txt — Opened note.txt.") {
+		t.Errorf("file line:\n%s", flatest.CleanFrame(f.Content))
+	}
+	// Edit, then Ctrl+S saves to the same file.
+	d.Send(flatte.KeyEvent{Key: flatte.KeyEnd})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '!'})
+	if !s.dirty() {
+		t.Fatal("an edit is not dirty")
+	}
+	d.Send(ctrl('s'))
+	if _, ok := d.Dialog(); ok {
+		t.Fatal("save of a named file asked where")
+	}
+	d.Settle()
+	if b, _ := os.ReadFile(note); string(b) != "from disk!" || s.dirty() {
+		t.Fatalf("saved %q dirty %v", b, s.dirty())
+	}
+	// Save As writes elsewhere and switches to it.
+	other := filepath.Join(dir, "copy.txt")
+	d.Send(flatte.MenuEvent{ID: cmdSaveAs})
+	dlg, _ = d.Dialog()
+	if dlg.Save == nil || dlg.Save.Name != "note.txt" || dlg.Save.Directory != dir {
+		t.Fatalf("save dialog %+v", dlg.Save)
+	}
+	d.Answer(flatte.DialogResult{Paths: []string{other}})
+	d.Settle()
+	if b, _ := os.ReadFile(other); string(b) != "from disk!" || s.path != other {
+		t.Fatalf("save as: %q path %q", b, s.path)
+	}
+	// New with unsaved changes asks; Cancel keeps the text, Discard clears.
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '?'})
+	d.Send(super('n'))
+	dlg, _ = d.Dialog()
+	if dlg.Alert == nil || dlg.Alert.Buttons[0] != "Discard" || !strings.Contains(dlg.Alert.Message, "copy.txt") {
+		t.Fatalf("alert %+v", dlg.Alert)
+	}
+	d.Answer(flatte.DialogResult{Button: 1})
+	if s.ta.Value() != "from disk!?" {
+		t.Fatalf("cancel changed the text: %q", s.ta.Value())
+	}
+	d.Send(super('n'))
+	d.Answer(flatte.DialogResult{Button: 0})
+	if s.ta.Value() != "" || s.path != "" || s.dirty() {
+		t.Fatalf("new: %q path %q", s.ta.Value(), s.path)
+	}
+}
+
+func TestFileDropAndErrors(t *testing.T) {
+	dir := t.TempDir()
+	note := filepath.Join(dir, "dropped.md")
+	if err := os.WriteFile(note, []byte("dropped"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := editorDriver()
+	s := d.State()
+	d.Send(flatte.DropEvent{Paths: []string{note}})
+	d.Settle()
+	if s.ta.Value() != "dropped" || s.path != note {
+		t.Fatalf("drop: %q %q", s.ta.Value(), s.path)
+	}
+	// A cancelled open changes nothing; a missing file reports the error.
+	d.Send(flatte.MenuEvent{ID: cmdOpen})
+	d.Answer(flatte.DialogResult{})
+	d.Settle()
+	if s.path != note {
+		t.Fatal("cancel changed the file")
+	}
+	d.Send(flatte.DropEvent{Paths: []string{filepath.Join(dir, "missing.txt")}})
+	d.Settle()
+	if s.path != note || !strings.Contains(s.status, "no such file") {
+		t.Fatalf("missing: path %q status %q", s.path, s.status)
 	}
 }

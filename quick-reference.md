@@ -443,6 +443,33 @@ func ContextMenu(s *State, target string) []flatte.MenuItem {
   right-clicks and assert the `MenuEvent`, and goldens show the popup.
   `cmd/flat-editor` has Edit and View menus and an edit context menu.
 
+## Dialogs And Drops
+
+Dialogs are effects whose answers fold into state, like `Go`:
+
+```go
+case cmdOpen:
+	flatte.OpenFile(fx, "open", flatte.OpenDialog{Title: "Open", Types: []string{"txt", "md"}},
+		func(s *State, paths []string, err error) {
+			if len(paths) > 0 { // none: cancelled; err: ErrNoDialogs on a host without dialogs
+				load(s, fx, paths[0]) // capture fx to chain the next effect
+			}
+		})
+```
+
+`SaveFile(fx, name, SaveDialog{Name: "untitled.txt"}, fold(s, path, err))`
+answers "" when cancelled. `Alert(fx, name, AlertDialog{Title, Message,
+Buttons}, fold(s, button))` answers the button index (the first is the
+default; Esc picks a button labelled "Cancel"; -1 when dismissed). A window
+shows the system panels and alerts; a terminal draws them over the frame (a
+path prompt with a directory listing and Tab completion; an alert with
+buttons). In tests, `flatest.Driver.Dialog()` shows what the app asked for
+and `d.Answer(flatte.DialogResult{Paths: ...})` / `{Button: i}` answers it.
+
+A window delivers files or text dropped on it as `DropEvent{Paths, Text}`,
+located (`X`, `Y`, `Target`, `TargetRect`) like a mouse event. A terminal
+pastes a dropped file's path instead (`PasteEvent`).
+
 ## Native Window
 
 The `window` module (`github.com/lunguini/flatte/window`, macOS, no cgo) runs

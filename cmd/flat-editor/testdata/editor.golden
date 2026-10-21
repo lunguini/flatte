@@ -1,6 +1,6 @@
 ┌──────────────────────────────────────────────────────────────────────┐
 │   Flat Editor                                                        │
-│  multi-line textarea sample                                          │
+│  untitled                                                            │
 │                                                                      │
 │  Edit me.                                                            │
 │  Multiple lines.                                                     │
@@ -19,7 +19,7 @@
 │                                                                      │
 │                                                                      │
 │                                                                      │
-│                                                                      │
+│  ctrl+n new  ctrl+o open  ctrl+s save  (⌘ in a window)               │
 │  arrows  drag select  right-click menu  ⌘C/ctrl+c copy  esc quit     │
 └──────────────────────────────────────────────────────────────────────┘
 [cursor 3,4]

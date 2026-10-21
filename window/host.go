@@ -65,6 +65,15 @@ type host[S any] struct {
 	// menus shows native menus (nil: none); bar is the menu bar it shows.
 	menus menuBackend
 	bar   []flatte.Menu
+	// dialogs shows native dialogs (nil: every dialog answers as
+	// cancelled).
+	dialogs dialogBackend
+}
+
+// dialogBackend is a backend's native dialogs.
+type dialogBackend interface {
+	// run shows d modally and returns the user's answer.
+	run(d flatte.Dialog) flatte.DialogResult
 }
 
 // menuBackend is a backend's native menus.
@@ -154,6 +163,16 @@ func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, po
 				h.post(func() { h.handle(flatte.ClipboardEvent{Text: text}) })
 			}
 		})
+	// Dialogs run modally after the handler returns, never inside it.
+	h.fx = flatte.WithHostDialogs(h.fx, func(d flatte.Dialog, done func(flatte.DialogResult)) {
+		h.post(func() {
+			if h.dialogs == nil {
+				done(flatte.DialogResult{Button: -1})
+				return
+			}
+			done(h.dialogs.run(d))
+		})
+	})
 	go func() {
 		for {
 			select {
@@ -359,6 +378,19 @@ func findMenuItem(menus []flatte.Menu, id string) (flatte.MenuItem, bool) {
 		}
 	}
 	return flatte.MenuItem{}, false
+}
+
+// drop delivers files or text dropped at (x, y) points as a DropEvent,
+// located as mouse events are.
+func (h *host[S]) drop(x, y float64, paths []string, text string) {
+	scene := h.fresh()
+	ev := flatte.DropEvent{X: h.cols(x), Y: h.lines(y), Paths: paths, Text: text}
+	if id, r := scene.HitTest(x, y); id != "" {
+		ev.Target, ev.TargetRect = id, r.Cells(h.metrics)
+		ev.X = ev.TargetRect.X + h.cols(x-r.X)
+		ev.Y = ev.TargetRect.Y + h.lines(y-r.Y)
+	}
+	h.handle(ev)
 }
 
 // presentation is what to draw over the scene.

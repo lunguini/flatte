@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -22,16 +23,23 @@ type State struct {
 	// copyOnSelect puts a mouse selection on the clipboard as the drag
 	// ends, as some terminals do for their own selection (-copy-on-select).
 	copyOnSelect bool
-	lastKey      string
-	lastAction   string
+	// path is the open file ("" untitled); saved is the text as last
+	// opened or saved; status reports the last file operation.
+	path, saved, status string
+	lastKey             string
+	lastAction          string
 }
 
 func NewState() *State {
 	s := &State{debugKeys: os.Getenv("FLAT_DEBUG_KEYS") != ""}
 	s.ta.SetValue("Edit me.\nMultiple lines.\nGrapheme-correct.")
 	s.ta.SetSoftWrap(true)
+	s.saved = s.ta.Value()
 	return s
 }
+
+// dirty reports unsaved changes.
+func (s *State) dirty() bool { return s.ta.Value() != s.saved }
 
 // editorID names the textarea's node: the card's space left after the
 // pinned rows, as the frame solved it.
@@ -53,6 +61,11 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		s.ta.InsertText(e.Text)
 	case flatte.MenuEvent:
 		command(s, e.ID, fx)
+	case flatte.DropEvent: // a file dropped on the window opens
+		if len(e.Paths) > 0 {
+			path := e.Paths[0]
+			discardThen(s, fx, func(s *State) { open(s, fx, path) })
+		}
 	case flatte.MouseEvent:
 		handleMouse(s, e)
 		if s.copyOnSelect && e.Button == flatte.MouseLeft && e.Action == flatte.MouseRelease {
@@ -63,6 +76,10 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 
 // Menu commands.
 const (
+	cmdNew       = "new"
+	cmdOpen      = "open"
+	cmdSave      = "save"
+	cmdSaveAs    = "save-as"
 	cmdCut       = "cut"
 	cmdCopy      = "copy"
 	cmdPaste     = "paste"
@@ -89,9 +106,22 @@ func editItems(s *State) []flatte.MenuItem {
 	}
 }
 
-// Menus is the menu bar: Edit, and View's toggles.
+func ctrl(r rune) flatte.KeyEvent {
+	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModCtrl}
+}
+
+// Menus is the menu bar: File, Edit, and View's toggles.
 func Menus(s *State) []flatte.Menu {
+	saveAs := super('s')
+	saveAs.Mod |= flatte.ModShift
 	return []flatte.Menu{
+		{Title: "File", Items: []flatte.MenuItem{
+			{ID: cmdNew, Label: "New", Keys: []flatte.KeyEvent{super('n'), ctrl('n')}},
+			{ID: cmdOpen, Label: "Open…", Keys: []flatte.KeyEvent{super('o'), ctrl('o')}},
+			{Separator: true},
+			{ID: cmdSave, Label: "Save", Keys: []flatte.KeyEvent{super('s'), ctrl('s')}},
+			{ID: cmdSaveAs, Label: "Save As…", Keys: []flatte.KeyEvent{saveAs}},
+		}},
 		{Title: "Edit", Items: editItems(s)},
 		{Title: "View", Items: []flatte.MenuItem{
 			{ID: cmdWrap, Label: "Wrap Lines", Checked: s.ta.SoftWrap()},
@@ -112,6 +142,30 @@ func ContextMenu(s *State, target string) []flatte.MenuItem {
 func command(s *State, id string, fx flatte.Effects[State]) {
 	s.lastKey, s.lastAction = "menu", id
 	switch id {
+	case cmdNew:
+		discardThen(s, fx, func(s *State) {
+			s.ta.SetValue("")
+			s.path, s.saved, s.status = "", "", "New file."
+		})
+	case cmdOpen:
+		discardThen(s, fx, func(s *State) {
+			flatte.OpenFile(fx, "open-dialog", flatte.OpenDialog{Title: "Open", Directory: dirOf(s.path)}, func(s *State, paths []string, err error) {
+				switch {
+				case err != nil:
+					s.status = err.Error()
+				case len(paths) > 0:
+					open(s, fx, paths[0])
+				}
+			})
+		})
+	case cmdSave:
+		if s.path != "" {
+			save(s, fx, s.path)
+			break
+		}
+		saveAs(s, fx)
+	case cmdSaveAs:
+		saveAs(s, fx)
 	case cmdCut:
 		cutSelection(s, fx)
 	case cmdCopy:
@@ -141,6 +195,80 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 		s.ta.MoveToSelecting(m.Caret)
 	}
 }
+
+// The file commands. Their folds capture fx to chain the next step — a
+// dialog's answer starting the read or write, which runs off the loop.
+
+// discardThen runs then when there are no unsaved changes, or after the
+// user agrees to discard them.
+func discardThen(s *State, fx flatte.Effects[State], then func(*State)) {
+	if !s.dirty() {
+		then(s)
+		return
+	}
+	flatte.Alert(fx, "discard-changes", flatte.AlertDialog{
+		Title:   "Discard unsaved changes?",
+		Message: "Your changes to " + displayName(s.path) + " will be lost.",
+		Buttons: []string{"Discard", "Cancel"},
+	}, func(s *State, button int) {
+		if button == 0 {
+			then(s)
+		}
+	})
+}
+
+func saveAs(s *State, fx flatte.Effects[State]) {
+	flatte.SaveFile(fx, "save-dialog", flatte.SaveDialog{Title: "Save As", Directory: dirOf(s.path), Name: nameOr(s.path, "untitled.txt")}, func(s *State, path string, err error) {
+		switch {
+		case err != nil:
+			s.status = err.Error()
+		case path != "":
+			save(s, fx, path)
+		}
+	})
+}
+
+// open reads path off the loop and shows it.
+func open(s *State, fx flatte.Effects[State], path string) {
+	s.status = "Opening " + filepath.Base(path) + "…"
+	flatte.Go(fx, "read-file", func(context.Context) ([]byte, error) { return os.ReadFile(path) }, func(s *State, data []byte, err error) {
+		if err != nil {
+			s.status = err.Error()
+			return
+		}
+		s.ta.SetValue(string(data))
+		s.ta.MoveTo(0)
+		s.path, s.saved, s.status = path, s.ta.Value(), "Opened "+filepath.Base(path)+"."
+	})
+}
+
+// save writes the text to path off the loop.
+func save(s *State, fx flatte.Effects[State], path string) {
+	text := s.ta.Value()
+	flatte.Go(fx, "write-file", func(context.Context) (struct{}, error) { return struct{}{}, os.WriteFile(path, []byte(text), 0o644) }, func(s *State, _ struct{}, err error) {
+		if err != nil {
+			s.status = err.Error()
+			return
+		}
+		s.path, s.saved, s.status = path, text, "Saved "+filepath.Base(path)+"."
+	})
+}
+
+func dirOf(path string) string {
+	if path == "" {
+		return ""
+	}
+	return filepath.Dir(path)
+}
+
+func nameOr(path, fallback string) string {
+	if path == "" {
+		return fallback
+	}
+	return filepath.Base(path)
+}
+
+func displayName(path string) string { return nameOr(path, "this untitled file") }
 
 // handleSuper is the ⌘ (Super) chords that are not menu commands (those
 // arrive as MenuEvents): the platform's line and document moves (⌘←/→ line start/end, ⌘↑/↓ the start
@@ -467,10 +595,11 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	subtle := layout.TextStyle{Role: layout.TextSubtle}
 	rows := []layout.Node{
 		layout.Label{Text: "Flat Editor", Style: layout.TextStyle{Role: layout.TextTitle}},
-		layout.Label{Text: "multi-line textarea sample", Style: subtle},
+		layout.Label{Text: fileLine(s), Style: subtle},
 		layout.Label{},
 		editor,
 		layout.Label{},
+		layout.Label{Text: "ctrl+n new  ctrl+o open  ctrl+s save  (⌘ in a window)", Style: subtle},
 		layout.Label{Text: "arrows  drag select  right-click menu  ⌘C/ctrl+c copy  esc quit", Style: subtle},
 	}
 	if s.debugKeys {
@@ -480,6 +609,19 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 		Root:        flatui.CardLayout(rows...),
 		CursorStyle: cursorStyle(s),
 	}
+}
+
+// fileLine is the open file's name, marked when edited, and the last file
+// operation's status.
+func fileLine(s *State) string {
+	line := nameOr(s.path, "untitled")
+	if s.dirty() {
+		line += " (edited)"
+	}
+	if s.status != "" {
+		line += " — " + s.status
+	}
+	return line
 }
 
 func main() {

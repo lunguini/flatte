@@ -18,6 +18,7 @@ type ui interface {
 	paste()
 	hover(x, y float64) (pointer, string)
 	presentation() presentation
+	drop(x, y float64, paths []string, text string)
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
 	render() layout.Scene
 	frameTitle() string
@@ -173,6 +174,22 @@ var commandKeys = map[string]flatte.KeyEvent{
 func viewMethods() []objc.MethodDef {
 	return []objc.MethodDef{
 		{Cmd: sel("isFlipped"), Fn: func(objc.ID, objc.SEL) bool { return true }},
+		// Drops: files or text, always as a copy.
+		{Cmd: sel("draggingEntered:"), Fn: func(objc.ID, objc.SEL, objc.ID) uint { return nsDragOperationCopy }},
+		{Cmd: sel("draggingUpdated:"), Fn: func(objc.ID, objc.SEL, objc.ID) uint { return nsDragOperationCopy }},
+		{Cmd: sel("performDragOperation:"), Fn: func(self objc.ID, _ objc.SEL, info objc.ID) bool {
+			st := current
+			if st == nil {
+				return false
+			}
+			paths, text := dropped(info.Send(sel("draggingPasteboard")))
+			if len(paths) == 0 && text == "" {
+				return false
+			}
+			p := objc.Send[CGPoint](self, sel("convertPoint:fromView:"), objc.Send[CGPoint](info, sel("draggingLocation")), objc.ID(0))
+			st.ui.drop(p.X, p.Y, paths, text)
+			return true
+		}},
 		{Cmd: sel("acceptsFirstResponder"), Fn: func(objc.ID, objc.SEL) bool { return true }},
 		{Cmd: sel("viewDidChangeEffectiveAppearance"), Fn: func(self objc.ID, _ objc.SEL) {
 			self.Send(sel("setNeedsDisplay:"), true)

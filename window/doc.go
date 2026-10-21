@@ -43,6 +43,10 @@
 // Control-click. Choices arrive as MenuEvents. An item with the ⌘C shortcut
 // copies selected Label text instead, when there is some.
 //
+// Dialogs: OpenFile, SaveFile, and Alert show the system panels and alerts,
+// run after the handler that asked returns. Files or text dropped on the
+// window arrive as a DropEvent.
+//
 // Editing: the clipboard effects use the system pasteboard (ReadClipboard
 // answers with a ClipboardEvent), ⌘V delivers a PasteEvent unless a menu
 // item claims it, and ⌘ chords no menu item claims arrive as keys with ModSuper —

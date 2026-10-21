@@ -1,6 +1,6 @@
 ┌──────────────────────────────────────────────────────────────────────┐
 │   Flat Editor                                                        │
-│  multi-line textarea sample                                          │
+│  untitled (edited)                                                   │
 │                                                                      │
 │  he╭────────────────────╮                                            │
 │    │ Cut         Ctrl+X │                                            │
@@ -15,6 +15,6 @@
 │                                                                      │
 │                                                                      │
 │                                                                      │
-│                                                                      │
+│  ctrl+n new  ctrl+o open  ctrl+s save  (⌘ in a window)               │
 │  arrows  drag select  right-click menu  ⌘C/ctrl+c copy  esc quit     │
 └──────────────────────────────────────────────────────────────────────┘

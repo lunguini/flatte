@@ -73,6 +73,8 @@ type Effects[S any] struct {
 	// for a host with its own (WithHostClipboard).
 	setClipboard  func(string)
 	readClipboard func()
+	// dialogs shows dialogs (WithHostDialogs); nil: the host has none.
+	dialogs func(Dialog, func(DialogResult))
 }
 
 // cancelReaderFactory is a seam for the input lifecycle tests. Keeping the
@@ -629,7 +631,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	}()
 	updates := make(chan StateUpdate[S], 64)
 	quitRequested := false
+	// dialogs draws the dialogs the app asks for (see termDialogs).
+	dialogs := termDialogs{}
+	dialogs.home, _ = os.UserHomeDir()
 	effects := newEffects(runCtx, updates, func() { quitRequested = true })
+	effects.dialogs = dialogs.show
 	effects.enqueue = func(a action) { pending = append(pending, a) }
 	if app.Init != nil {
 		app.Init(app.State, effects)
@@ -697,6 +703,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		}
 		lastComp = comp
 		frame = menus.Paint(frame)
+		frame = dialogs.paint(frame, renderCtx.Width, terminalHeight)
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
 			if err := flushRenderer(); err == nil {
@@ -980,8 +987,20 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				mouse.Caret, mouse.HasCaret = lastComp.CaretAt(mouse.X, mouse.Y)
 				result.event = mouse
 			}
-			event, deliver := RouteMenus(&menus, app, result.event, screenWidth, screenHeight)
+			var event Event
+			var deliver bool
+			if dialogs.isOpen() {
+				event, deliver = dialogs.route(result.event)
+			} else {
+				event, deliver = RouteMenus(&menus, app, result.event, screenWidth, screenHeight)
+			}
 			if !deliver {
+				// A dialog answered here queued its result: apply it now,
+				// before any input that follows.
+				drainUpdates(app, updates)
+				if quitRequested {
+					return nil
+				}
 				render()
 				if sink.err != nil {
 					return sink.err

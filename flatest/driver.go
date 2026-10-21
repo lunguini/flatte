@@ -32,6 +32,9 @@ type Driver[S any] struct {
 	pending []func()
 	quit    bool
 	fx      flatte.Effects[S]
+	// dialogs are the dialogs the app asked for that the test has not
+	// answered, oldest first.
+	dialogs []pendingDialog
 }
 
 // Start builds a Driver, runs Init, delivers the initial ResizeEvent, and
@@ -55,6 +58,9 @@ func Start[S any](app flatte.App[S], width int) *Driver[S] {
 		func(f func()) { d.pending = append(d.pending, f) },
 		d.clock,
 	)
+	d.fx = flatte.WithHostDialogs(d.fx, func(dg flatte.Dialog, done func(flatte.DialogResult)) {
+		d.dialogs = append(d.dialogs, pendingDialog{dg, done})
+	})
 	if app.Init != nil {
 		app.Init(app.State, d.fx)
 	}
@@ -162,6 +168,35 @@ func Frames[S any](d *Driver[S], steps ...func(*Driver[S])) []flatte.Frame {
 		frames = append(frames, d.Frame())
 	}
 	return frames
+}
+
+type pendingDialog struct {
+	dialog flatte.Dialog
+	done   func(flatte.DialogResult)
+}
+
+// Dialog is the oldest dialog the app asked for (OpenFile, SaveFile, Alert)
+// that the test has not answered; ok is false when there is none. The
+// driver draws no dialogs: tests answer them with Answer.
+func (d *Driver[S]) Dialog() (dialog flatte.Dialog, ok bool) {
+	if len(d.dialogs) == 0 {
+		return flatte.Dialog{}, false
+	}
+	return d.dialogs[0].dialog, true
+}
+
+// Answer answers the oldest open dialog as the user would — the chosen
+// paths (none: cancelled) or button (-1: dismissed) — applies the app's
+// fold, and returns the rendered frame. It panics when no dialog is open.
+func (d *Driver[S]) Answer(r flatte.DialogResult) flatte.Frame {
+	if len(d.dialogs) == 0 {
+		panic("flatest: Answer with no dialog open")
+	}
+	p := d.dialogs[0]
+	d.dialogs = d.dialogs[1:]
+	p.done(r)
+	d.drain()
+	return d.render()
 }
 
 // State exposes the live state for field assertions.

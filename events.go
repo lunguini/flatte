@@ -149,6 +149,18 @@ type MouseEvent struct {
 	HasCaret bool
 }
 
+// DropEvent reports files or text dropped on a window (a terminal turns a
+// dropped file into a PasteEvent of its path instead). X, Y, Target, and
+// TargetRect locate the drop as a MouseEvent's do; Paths are the dropped
+// files, and Text is dropped text when there are none.
+type DropEvent struct {
+	X, Y       int
+	Target     string
+	TargetRect layout.Rect
+	Paths      []string
+	Text       string
+}
+
 func (KeyEvent) isEvent()       {}
 func (ResizeEvent) isEvent()    {}
 func (PasteEvent) isEvent()     {}
@@ -156,3 +168,4 @@ func (ClipboardEvent) isEvent() {}
 func (FocusEvent) isEvent()     {}
 func (MouseEvent) isEvent()     {}
 func (LayoutEvent) isEvent()    {}
+func (DropEvent) isEvent()      {}
