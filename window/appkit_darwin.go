@@ -89,6 +89,12 @@ var (
 	cgBitmapContextGetData      func(ctx uintptr) unsafe.Pointer
 	cgBitmapContextGetBytesPer  func(ctx uintptr) uintptr
 	cgContextRelease            func(ctx uintptr)
+	cgBitmapContextCreateImage  func(ctx uintptr) uintptr
+	cgImageRelease              func(img uintptr)
+	cgContextDrawImage          func(ctx uintptr, r CGRect, img uintptr)
+	cgContextSetInterpolationQ  func(ctx uintptr, q int32)
+	cgContextSetLineCap         func(ctx uintptr, c int32)
+	cgContextSetLineJoin        func(ctx uintptr, j int32)
 
 	ctFontCreateUIFontForLanguage    func(kind uint32, size float64, lang uintptr) uintptr
 	ctFontCreateWithName             func(name uintptr, size float64, m *CGAffineTransform) uintptr
@@ -183,6 +189,12 @@ func bindFrameworks() error {
 		{&cgBitmapContextGetData, cg, "CGBitmapContextGetData"},
 		{&cgBitmapContextGetBytesPer, cg, "CGBitmapContextGetBytesPerRow"},
 		{&cgContextRelease, cg, "CGContextRelease"},
+		{&cgBitmapContextCreateImage, cg, "CGBitmapContextCreateImage"},
+		{&cgImageRelease, cg, "CGImageRelease"},
+		{&cgContextDrawImage, cg, "CGContextDrawImage"},
+		{&cgContextSetInterpolationQ, cg, "CGContextSetInterpolationQuality"},
+		{&cgContextSetLineCap, cg, "CGContextSetLineCap"},
+		{&cgContextSetLineJoin, cg, "CGContextSetLineJoin"},
 		{&ctFontCreateUIFontForLanguage, ct, "CTFontCreateUIFontForLanguage"},
 		{&ctFontCreateWithName, ct, "CTFontCreateWithName"},
 		{&ctFontCreateCopyWithSymbolicTr, ct, "CTFontCreateCopyWithSymbolicTraits"},

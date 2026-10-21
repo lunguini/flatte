@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image"
 	"image/color"
 	"math"
 )
@@ -12,12 +13,15 @@ import (
 // cell). MeasureText reports the size of a
 // Label's text in the backend's font for its style, wrapped by words at
 // maxWidth points when maxWidth > 0 (a wrapping Label); nil measures text
-// as cells (one column per cell of width, one line per line).
+// as cells (one column per cell of width, one line per line). MeasureRuns
+// does the same for a rich-text Label's runs (styles resolved), wrapped as
+// one text; nil measures their text in the Label's style.
 type Metrics struct {
 	Column, Line float64
 	Step         float64
 	Border       float64
 	MeasureText  func(text string, style TextStyle, maxWidth float64) (w, h float64)
+	MeasureRuns  func(runs []Run, maxWidth float64) (w, h float64)
 }
 
 // PointRect is a rect in points.
@@ -47,7 +51,7 @@ func cellsOf(v, unit float64) int {
 }
 
 // Op is one drawing operation of a Scene, in paint order. The set is closed:
-// a backend draws these nine and nothing else. Every op's Clip is the visible
+// a backend draws these ten and nothing else. Every op's Clip is the visible
 // region (the frame narrowed by enclosing Scrolls); draw only inside it.
 type Op interface{ isOp() }
 
@@ -61,12 +65,17 @@ type BoxOp struct {
 
 // TextOp draws a Label's text from the top-left of Rect (the label's content
 // box), one line per "\n" — and, when Wrap, wrapped by words at Rect's
-// width as MeasureText wraps it.
+// width as MeasureText wraps it. For a rich-text Label, Runs holds its runs
+// with their styles resolved (Text is their text, Style the Label's), wrapped
+// as MeasureRuns wraps them. Selectable is the Label's: the backend lets
+// the user select and copy the text.
 type TextOp struct {
 	Rect, Clip PointRect
 	Text       string
 	Style      TextStyle
 	Wrap       bool
+	Runs       []Run
+	Selectable bool
 }
 
 // InputOp draws a text field in Rect (the input's content box). Caret is a
@@ -154,12 +163,20 @@ type CellsOp struct {
 	Content     string
 }
 
+// ImageOp draws an Image's Source in Rect (its content box) as Fit says.
+type ImageOp struct {
+	Rect, Clip PointRect
+	Source     image.Image
+	Fit        ImageFit
+}
+
 // LayerOp starts an overlay layer: clear Rect to the window background
 // before drawing the ops that follow, as the terminal clears its cells.
 type LayerOp struct{ Rect PointRect }
 
 func (BoxOp) isOp()       {}
 func (TextOp) isOp()      {}
+func (ImageOp) isOp()     {}
 func (InputOp) isOp()     {}
 func (IconOp) isOp()      {}
 func (MeterOp) isOp()     {}
@@ -233,6 +250,7 @@ type pointMetric struct{ Metrics }
 func (p pointMetric) cols(n int) float64           { return float64(n) * p.Column }
 func (p pointMetric) lines(n int) float64          { return float64(n) * p.Line }
 func (p pointMetric) steps(n int) float64          { return float64(n) * p.Step }
+func (p pointMetric) points(n int, _ bool) float64 { return float64(n) }
 func (p pointMetric) border() float64              { return p.Border }
 func (pointMetric) add(a, b float64) float64       { return a + b }
 func (pointMetric) sub(a, b float64) float64       { return a - b }
@@ -261,18 +279,25 @@ func (p pointMetric) leaf(n Node, width float64) (w, h sized[float64]) {
 			if width >= 0 {
 				maxWidth = max(width-horizOf[float64](p, insetsBase[float64](p, l.NodeBase)), 1e-9)
 			}
-			tw, th := p.text(l.Text, l.Style, maxWidth)
+			tw, th := p.label(l, maxWidth)
 			w, h = p.content(l.NodeBase, tw, th)
 			if l.W.Kind == SizeAuto {
 				w = growSized[float64]()
 			}
 			return w, h
 		}
-		tw, th := p.text(l.Text, l.Style, 0)
+		tw, th := p.label(l, 0)
 		return p.content(l.NodeBase, tw, th)
 	case Text:
 		cw, ch := measureString(l.String)
 		return p.content(l.NodeBase, p.cols(cw), p.lines(ch))
+	case Image:
+		if pw, ph := l.pixels(); pw > 0 && ph > 0 {
+			return p.content(l.NodeBase, float64(pw), float64(ph))
+		}
+		// No picture: its text, drawn as a Label's.
+		tw, th := p.label(l.label(), 0)
+		return p.content(l.NodeBase, tw, th)
 	case Icon:
 		// Columns, not the GUI font: an icon lines up with the terminal.
 		cw, ch := measureString(l.Style.Render(l.Text))
@@ -308,6 +333,25 @@ func (p pointMetric) content(nb NodeBase, w, h float64) (sw, sh sized[float64]) 
 		sh = sized[float64]{Kind: SizeContent, Value: h + vertOf[float64](p, inset)}
 	}
 	return sw, sh
+}
+
+// label measures a Label's text (see text).
+func (p pointMetric) label(l Label, maxWidth float64) (float64, float64) {
+	if len(l.Runs) == 0 {
+		return p.text(l.Text, l.Style, maxWidth)
+	}
+	if p.MeasureRuns != nil {
+		return p.MeasureRuns(l.runs(), maxWidth)
+	}
+	if p.MeasureText != nil {
+		return p.MeasureText(l.plain(), l.Style, maxWidth)
+	}
+	text := l.plain()
+	if maxWidth > 0 {
+		text = wrapCells(text, max(int(maxWidth/p.Column), 1))
+	}
+	w, h := measureString(l.styled(text))
+	return p.cols(w), p.lines(h)
 }
 
 func (p pointMetric) text(text string, style TextStyle, maxWidth float64) (float64, float64) {
@@ -385,10 +429,21 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		control(ControlOp{ID: l.ID, Kind: ControlSlider, Value: l.value(), Fill: l.Fill, Disabled: l.Disabled, Focused: l.Focused}, l.box())
 	case Label:
 		p.box(r, clip, l.box())
-		p.ops = append(p.ops, TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap})
+		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable}
+		if len(l.Runs) > 0 {
+			op.Text, op.Runs = l.plain(), l.runs()
+		}
+		p.ops = append(p.ops, op)
 	case Meter:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, MeterOp{Rect: p.content(n, r), Clip: PointRect(clip), Value: l.value(), Fill: l.Fill, Track: l.Track})
+	case Image:
+		p.box(r, clip, l.box())
+		if l.Source == nil {
+			p.ops = append(p.ops, TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.label().Style, Wrap: true})
+		} else {
+			p.ops = append(p.ops, ImageOp{Rect: p.content(n, r), Clip: PointRect(clip), Source: l.Source, Fit: l.Fit})
+		}
 	case Icon:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, IconOp{Rect: p.content(n, r), Clip: PointRect(clip), Name: l.Name, Text: l.Text, Style: l.Style})

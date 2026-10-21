@@ -21,18 +21,21 @@ type arc struct {
 }
 
 // poly is a closed filled polygon, or an open stroked polyline width points
-// wide (0 means 1pt).
+// wide (0 means 1pt), with round caps and joins when round.
 type poly struct {
 	pts   []point
 	fill  bool
 	width float64
+	round bool
 }
 
-// circle is a filled disc, or a 1pt ring, centered on c.
+// circle is a filled disc, or a ring width points wide (0 means 1pt),
+// centered on c.
 type circle struct {
-	c    point
-	r    float64
-	fill bool
+	c     point
+	r     float64
+	fill  bool
+	width float64
 }
 
 type cellShape struct {

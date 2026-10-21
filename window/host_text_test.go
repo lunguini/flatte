@@ -25,6 +25,11 @@ func (f *fakeText) caretStep(op layout.InputOp, caret, dir int, x float64) int {
 	return min(row*10+int(x), len(op.Value))
 }
 
+// textOffset lays a label out one point per byte on one line.
+func (f *fakeText) textOffset(op layout.TextOp, x, _ float64) int {
+	return min(max(int(x-op.Rect.X), 0), len(op.Text))
+}
+
 type fakeClip struct{ text string }
 
 func (c *fakeClip) get() string     { return c.text }

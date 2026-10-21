@@ -648,17 +648,42 @@ flatui/layout package layout
   const ControlRadio ControlKind = 3
   const ControlSlider ControlKind = 4
   const ControlSwitch ControlKind = 2
+  const IconArrowDown IconName = 17
+  const IconArrowLeft IconName = 18
+  const IconArrowRight IconName = 19
+  const IconArrowUp IconName = 16
   const IconBlank IconName = 6
+  const IconCheck IconName = 7
+  const IconChevronDown IconName = 22
+  const IconChevronLeft IconName = 20
   const IconChevronRight IconName = 1
+  const IconChevronUp IconName = 21
   const IconCircle IconName = 5
+  const IconClose IconName = 8
   const IconDisclosureClosed IconName = 2
   const IconDisclosureOpen IconName = 3
   const IconDot IconName = 4
+  const IconEllipsis IconName = 23
+  const IconError IconName = 15
+  const IconFile IconName = 25
+  const IconFolder IconName = 24
+  const IconGear IconName = 12
+  const IconInfo IconName = 13
+  const IconMinus IconName = 10
   const IconNone IconName = 0
+  const IconPlus IconName = 9
+  const IconSearch IconName = 11
+  const IconWarning IconName = 14
+  const ImageContain ImageFit = 0
+  const ImageCover ImageFit = 1
+  const ImageStretch ImageFit = 2
+  const PointsPerColumn untyped int = 8
+  const PointsPerLine untyped int = 16
   const SizeAuto SizeKind = 0
   const SizeContent SizeKind = 3
   const SizeFixed SizeKind = 1
   const SizeGrow SizeKind = 2
+  const SizePoints SizeKind = 4
   const TextBody TextRole = 0
   const TextSubtle TextRole = 2
   const TextTitle TextRole = 1
@@ -674,6 +699,7 @@ flatui/layout package layout
   func NewSpacer() *Spacer
   func Overlay(base string, layer string) string
   func OverlayOrigin(base string, layer string)(x int, y int)
+  func Points(n int) Size
   func Solve(root Node, width int, height int) map[string] Rect
   func SolveAndCompose(root Node, width int, height int)(string, map[string] Rect)
   func SolveAndComposeWithDiagnostics(root Node, width int, height int)(string, map[string] Rect, []DuplicateIDDiagnostic)
@@ -692,6 +718,8 @@ flatui/layout package layout
   method Composition.HitTest(x int, y int)(string, Rect)
   method Icon.Render(r Rect) string
   method Icon.Size()(Size, Size)
+  method Image.Render(r Rect) string
+  method Image.Size()(Size, Size)
   method Input.Render(r Rect) string
   method Input.Size()(Size, Size)
   method Label.Render(r Rect) string
@@ -733,6 +761,8 @@ flatui/layout package layout
   methodset *Col.IsOverlay() bool
   methodset *Icon.GetID() string
   methodset *Icon.IsOverlay() bool
+  methodset *Image.GetID() string
+  methodset *Image.IsOverlay() bool
   methodset *Input.GetID() string
   methodset *Input.IsOverlay() bool
   methodset *Label.GetID() string
@@ -760,6 +790,8 @@ flatui/layout package layout
   methodset Col.IsOverlay() bool
   methodset Icon.GetID() string
   methodset Icon.IsOverlay() bool
+  methodset Image.GetID() string
+  methodset Image.IsOverlay() bool
   methodset Input.GetID() string
   methodset Input.IsOverlay() bool
   methodset Label.GetID() string
@@ -857,6 +889,19 @@ flatui/layout package layout
   field IconOp.Text string [order=3]
   field IconOp.Style TextStyle [order=4]
   struct IconOp fields=5 comparable=true
+  type Image struct
+  field Image.NodeBase NodeBase [order=0]
+  field Image.Source image.Image [order=1]
+  field Image.Text string [order=2]
+  field Image.Fit ImageFit [order=3]
+  struct Image fields=4 comparable=false
+  type ImageFit int
+  type ImageOp struct
+  field ImageOp.Rect PointRect [order=0]
+  field ImageOp.Clip PointRect [order=1]
+  field ImageOp.Source image.Image [order=2]
+  field ImageOp.Fit ImageFit [order=3]
+  struct ImageOp fields=4 comparable=true
   type Input struct
   field Input.NodeBase NodeBase [order=0]
   field Input.Value string [order=1]
@@ -892,7 +937,9 @@ flatui/layout package layout
   field Label.Text string [order=1]
   field Label.Style TextStyle [order=2]
   field Label.Wrap bool [order=3]
-  struct Label fields=4 comparable=false
+  field Label.Runs []Run [order=4]
+  field Label.Selectable bool [order=5]
+  struct Label fields=6 comparable=false
   type LayerOp struct
   field LayerOp.Rect PointRect [order=0]
   struct LayerOp fields=1 comparable=true
@@ -915,7 +962,8 @@ flatui/layout package layout
   field Metrics.Step float64 [order=2]
   field Metrics.Border float64 [order=3]
   field Metrics.MeasureText func(text string, style TextStyle, maxWidth float64)(w float64, h float64) [order=4]
-  struct Metrics fields=5 comparable=false
+  field Metrics.MeasureRuns func(runs[]Run, maxWidth float64)(w float64, h float64) [order=5]
+  struct Metrics fields=6 comparable=false
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)
@@ -954,6 +1002,10 @@ flatui/layout package layout
   field Row.NodeBase NodeBase [order=0]
   field Row.Children []Node [order=1]
   struct Row fields=2 comparable=false
+  type Run struct
+  field Run.Text string [order=0]
+  field Run.Style TextStyle [order=1]
+  struct Run fields=2 comparable=true
   type Scene struct
   field Scene.Ops []Op [order=0]
   field Scene.Rects map[string] PointRect [order=1]
@@ -1007,17 +1059,20 @@ flatui/layout package layout
   field TextOp.Text string [order=2]
   field TextOp.Style TextStyle [order=3]
   field TextOp.Wrap bool [order=4]
-  struct TextOp fields=5 comparable=true
+  field TextOp.Runs []Run [order=5]
+  field TextOp.Selectable bool [order=6]
+  struct TextOp fields=7 comparable=false
   type TextRole int
   type TextStyle struct
   field TextStyle.Role TextRole [order=0]
   field TextStyle.Fg color.Color [order=1]
   field TextStyle.Bg color.Color [order=2]
-  field TextStyle.Bold bool [order=3]
-  field TextStyle.Italic bool [order=4]
-  field TextStyle.Underline bool [order=5]
-  field TextStyle.Strikethrough bool [order=6]
-  struct TextStyle fields=7 comparable=true
+  field TextStyle.Size float64 [order=3]
+  field TextStyle.Bold bool [order=4]
+  field TextStyle.Italic bool [order=5]
+  field TextStyle.Underline bool [order=6]
+  field TextStyle.Strikethrough bool [order=7]
+  struct TextStyle fields=8 comparable=true
   type Toggle struct
   field Toggle.NodeBase NodeBase [order=0]
   field Toggle.Kind ToggleKind [order=1]

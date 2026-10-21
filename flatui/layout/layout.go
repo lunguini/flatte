@@ -104,6 +104,19 @@ const (
 	// from content or children. It behaves like fixed on the parent's main
 	// axis, while still stretching on the cross axis.
 	SizeContent
+
+	// SizePoints is an exact length in points, for layouts designed for a
+	// window. A GUI lays it out exactly; a terminal reads it at a nominal
+	// cell of PointsPerColumn × PointsPerLine, rounding up. Otherwise it
+	// behaves like SizeFixed.
+	SizePoints
+)
+
+// PointsPerColumn and PointsPerLine are the nominal terminal cell a
+// terminal reads Points sizes at: the 13pt macOS monospace cell, rounded.
+const (
+	PointsPerColumn = 8
+	PointsPerLine   = 16
 )
 
 // Size is a one-axis layout constraint. Callers normally set Auto, Fixed, or
@@ -124,6 +137,7 @@ type Size struct {
 }
 
 func Fixed(n int) Size    { return Size{Kind: SizeFixed, Value: max(n, 0)} }
+func Points(n int) Size   { return Size{Kind: SizePoints, Value: max(n, 0)} }
 func Grow(w float64) Size { return normalizeSize(Size{Kind: SizeGrow, Weight: w}) }
 func Auto() Size          { return Size{Kind: SizeAuto} }
 
@@ -137,7 +151,7 @@ func normalizeSize(s Size) Size {
 	switch s.Kind {
 	case SizeAuto:
 		return s
-	case SizeFixed, SizeContent:
+	case SizeFixed, SizeContent, SizePoints:
 		s.Value = max(s.Value, 0)
 		return s
 	case SizeGrow:

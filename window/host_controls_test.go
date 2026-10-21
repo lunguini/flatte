@@ -27,15 +27,15 @@ func TestHostHoverPointerAndTooltip(t *testing.T) {
 
 	before := b.invalidates
 	shape, tip := h.hover(at("ok"))
-	if shape != pointerHand || tip != "Confirm" || h.hovered != "ok" || b.invalidates != before+1 {
-		t.Fatalf("over the button: shape %v tip %q hovered %q redraws %d", shape, tip, h.hovered, b.invalidates-before)
+	if shape != pointerHand || tip != "Confirm" || h.pres.hovered != "ok" || b.invalidates != before+1 {
+		t.Fatalf("over the button: shape %v tip %q hovered %q redraws %d", shape, tip, h.pres.hovered, b.invalidates-before)
 	}
 	h.hover(at("ok")) // unchanged: no redraw
 	if b.invalidates != before+1 {
 		t.Fatal("hovering the same control redrew")
 	}
-	if shape, _ := h.hover(at("off")); shape != pointerArrow || h.hovered != "" {
-		t.Fatalf("over a disabled button: shape %v hovered %q", shape, h.hovered)
+	if shape, _ := h.hover(at("off")); shape != pointerArrow || h.pres.hovered != "" {
+		t.Fatalf("over a disabled button: shape %v hovered %q", shape, h.pres.hovered)
 	}
 	if shape, _ := h.hover(at("name")); shape != pointerText {
 		t.Fatalf("over an input: shape %v, want text", shape)
@@ -45,8 +45,8 @@ func TestHostHoverPointerAndTooltip(t *testing.T) {
 	}
 	h.hover(at("ok"))
 	h.hover(-1, -1) // left the view
-	if h.hovered != "" {
-		t.Fatalf("left the view, hovered %q", h.hovered)
+	if h.pres.hovered != "" {
+		t.Fatalf("left the view, hovered %q", h.pres.hovered)
 	}
 	// Hover is presentation: the app saw no events for it.
 	for _, ev := range s.events {
@@ -63,18 +63,18 @@ func TestHostPressedControl(t *testing.T) {
 	h.render()
 	ok, off := h.scene.Rects["ok"], h.scene.Rects["off"]
 	h.mouse(ok.X+1, ok.Y+1, flatte.MouseLeft, flatte.MousePress, 0)
-	if _, pressed := h.controlState(); pressed != "ok" {
+	if pressed := h.presentation().pressed; pressed != "ok" {
 		t.Fatalf("pressed %q, want ok", pressed)
 	}
 	if m := lastMouse(t, s); m.Target != "ok" {
 		t.Fatalf("the click reached the app as %+v", m)
 	}
 	h.mouse(ok.X+1, ok.Y+1, flatte.MouseLeft, flatte.MouseRelease, 0)
-	if _, pressed := h.controlState(); pressed != "" {
+	if pressed := h.presentation().pressed; pressed != "" {
 		t.Fatalf("released, still pressed %q", pressed)
 	}
 	h.mouse(off.X+1, off.Y+1, flatte.MouseLeft, flatte.MousePress, 0)
-	if _, pressed := h.controlState(); pressed != "" {
+	if pressed := h.presentation().pressed; pressed != "" {
 		t.Fatalf("a disabled button shows pressed")
 	}
 }

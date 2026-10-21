@@ -17,7 +17,7 @@ type ui interface {
 	key(flatte.KeyEvent)
 	paste()
 	hover(x, y float64) (pointer, string)
-	controlState() (hovered, pressed string)
+	presentation() presentation
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
 	render() layout.Scene
 	frameTitle() string
@@ -194,7 +194,7 @@ func viewMethods() []objc.MethodDef {
 			ctx := uintptr(class("NSGraphicsContext").Send(sel("currentContext")).Send(sel("CGContext")))
 			scale := objc.Send[float64](st.window, sel("backingScaleFactor"))
 			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale}
-			p.hovered, p.pressed = st.ui.controlState()
+			p.presentation = st.ui.presentation()
 			p.draw(scene, b.Size.Width, b.Size.Height)
 			if c := st.ui.frameCursor(); c != nil {
 				p.clip = layout.PointRect{W: b.Size.Width, H: b.Size.Height}

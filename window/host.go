@@ -54,10 +54,37 @@ type host[S any] struct {
 	goal      float64
 	goalID    string
 	goalCaret int
-	// hovered and pressed are the IDs of the control under the pointer and
-	// the one the left button went down on: presentation only, drawn by the
-	// backend and never told to the app.
+	// pres is what the backend draws on its own and never tells the app:
+	// the control under the pointer and the one the left button went down
+	// on, and text selected in a Selectable Label. selecting is a drag
+	// extending the selection.
+	pres      presentation
+	selecting bool
+}
+
+// presentation is what a backend draws on its own.
+type presentation struct {
 	hovered, pressed string
+	sel              textSel
+}
+
+// textSel is the bytes from..to (either order) selected in the text of the
+// Selectable TextOp at index op of the scene — while that op still has the
+// same text.
+type textSel struct {
+	op       int
+	text     string
+	from, to int
+	ok       bool // a selection exists
+}
+
+// in is the selection's bytes in the op at index i, from < to; empty
+// (0, 0) when the selection is not in it.
+func (s textSel) in(i int, op layout.TextOp) (int, int) {
+	if !s.ok || i != s.op || op.Text != s.text {
+		return 0, 0
+	}
+	return min(s.from, s.to), max(s.from, s.to)
 }
 
 // pointer is the pointer shape a backend shows.
@@ -80,6 +107,9 @@ type textLayout interface {
 	// caret, nearest x within that row; caret itself on the first or last
 	// row.
 	caretStep(op layout.InputOp, caret, dir int, x float64) int
+	// textOffset is the byte offset into op.Text nearest (x, y) points,
+	// clamped into the text.
+	textOffset(op layout.TextOp, x, y float64) int
 }
 
 // clipboard is the system clipboard.
@@ -184,6 +214,13 @@ func (h *host[S]) resize(width, height float64) {
 // focused multi-line Input carry the caret one visual row away in the
 // backend's layout, keeping the x a run of vertical moves started at.
 func (h *host[S]) key(ev flatte.KeyEvent) {
+	// ⌘C copies selected label text; with none it is the app's.
+	if ev == (flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'c', Mod: flatte.ModSuper}) && h.clip != nil {
+		if text := h.selectedText(); text != "" {
+			h.clip.set(text)
+			return
+		}
+	}
 	vertical := (ev.Key == flatte.KeyUp || ev.Key == flatte.KeyDown) && ev.Mod&^flatte.ModShift == 0
 	if op, ok := h.focusedArea(); vertical && ok && h.text != nil {
 		if op.ID != h.goalID || op.Caret != h.goalCaret {
@@ -231,15 +268,96 @@ func (h *host[S]) hover(x, y float64) (pointer, string) {
 	} else {
 		id = ""
 	}
-	if id != h.hovered {
-		h.hovered = id
+	if shape == pointerArrow {
+		if _, _, ok := h.selectableAt(x, y); ok {
+			shape = pointerText
+		}
+	}
+	if id != h.pres.hovered {
+		h.pres.hovered = id
 		h.invalidate()
 	}
 	return shape, tooltip
 }
 
-// controlState is the hovered and pressed controls, for drawing.
-func (h *host[S]) controlState() (hovered, pressed string) { return h.hovered, h.pressed }
+// presentation is what to draw over the scene.
+func (h *host[S]) presentation() presentation { return h.pres }
+
+// selectableAt is the topmost Selectable TextOp at (x, y) points, and its
+// index in the scene; none under an overlay layer above it, or over an
+// Input or a control.
+func (h *host[S]) selectableAt(x, y float64) (int, layout.TextOp, bool) {
+	if x < 0 || y < 0 {
+		return 0, layout.TextOp{}, false
+	}
+	id, _ := h.scene.HitTest(x, y)
+	if _, ok := h.input(id); ok {
+		return 0, layout.TextOp{}, false
+	}
+	if _, ok := h.control(id); ok {
+		return 0, layout.TextOp{}, false
+	}
+	in := func(r layout.PointRect) bool { return x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H }
+	for i := len(h.scene.Ops) - 1; i >= 0; i-- {
+		switch op := h.scene.Ops[i].(type) {
+		case layout.TextOp:
+			if op.Selectable && in(op.Rect) && in(op.Clip) {
+				return i, op, true
+			}
+		case layout.LayerOp:
+			if in(op.Rect) {
+				return 0, layout.TextOp{}, false
+			}
+		}
+	}
+	return 0, layout.TextOp{}, false
+}
+
+// opAt is the scene's op at index i, if it is an O.
+func opAt[O layout.Op](s layout.Scene, i int) (O, bool) {
+	var zero O
+	if i < 0 || i >= len(s.Ops) {
+		return zero, false
+	}
+	op, ok := s.Ops[i].(O)
+	return op, ok
+}
+
+// selectedText is the text selected in a label, or "".
+func (h *host[S]) selectedText() string {
+	s := h.pres.sel
+	op, ok := opAt[layout.TextOp](h.scene, s.op)
+	if !ok {
+		return ""
+	}
+	a, b := s.in(s.op, op)
+	return op.Text[a:b]
+}
+
+// selectText tracks a left-button press, drag, or release at (x, y) for
+// label selection: a press on selectable text starts a selection there (and
+// one anywhere else clears it); a drag extends it, clamped to its label.
+func (h *host[S]) selectText(x, y float64, action flatte.MouseAction) {
+	before := h.pres.sel
+	switch action {
+	case flatte.MousePress:
+		h.pres.sel, h.selecting = textSel{}, false
+		if i, op, ok := h.selectableAt(x, y); ok && h.text != nil {
+			at := h.text.textOffset(op, x, y)
+			h.pres.sel = textSel{op: i, text: op.Text, from: at, to: at, ok: true}
+			h.selecting = true
+		}
+	case flatte.MouseMotion:
+		if op, ok := opAt[layout.TextOp](h.scene, h.pres.sel.op); h.selecting && ok && op.Text == h.pres.sel.text {
+			h.pres.sel.to = h.text.textOffset(op, x, y)
+		}
+	case flatte.MouseRelease:
+		h.selecting = false
+	}
+	if h.pres.sel != before {
+		h.invalidate()
+	}
+}
 
 // paste delivers text as a PasteEvent, as a terminal delivers a paste.
 func (h *host[S]) paste() {
@@ -313,7 +431,8 @@ func (h *host[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.M
 	}
 	// A control shows pressed while the left button is down on it.
 	if button == flatte.MouseLeft {
-		pressed := h.pressed
+		h.selectText(x, y, action)
+		pressed := h.pres.pressed
 		switch action {
 		case flatte.MousePress:
 			if _, ok := h.control(id); ok {
@@ -322,8 +441,8 @@ func (h *host[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.M
 		case flatte.MouseRelease:
 			pressed = ""
 		}
-		if pressed != h.pressed {
-			h.pressed = pressed
+		if pressed != h.pres.pressed {
+			h.pres.pressed = pressed
 			h.invalidate()
 		}
 	}
@@ -346,6 +465,12 @@ func (h *host[S]) render() layout.Scene {
 		}
 		h.scene = layout.LayoutScene(root, h.width, h.height, h.metrics)
 		h.dirty = false
+		// A selection lasts while its label does.
+		if s := h.pres.sel; s.ok {
+			if op, ok := opAt[layout.TextOp](h.scene, s.op); !ok || !op.Selectable || op.Text != s.text {
+				h.pres.sel, h.selecting = textSel{}, false
+			}
+		}
 		if frame.Root == nil || pass == maxLayoutPasses {
 			return h.scene
 		}

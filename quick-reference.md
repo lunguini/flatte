@@ -128,6 +128,7 @@ shared geometry and add their own fields.
 | `layout.Auto()` | `SizeAuto` | No explicit claim; measurable nodes report their natural size instead. |
 | `layout.Fixed(n)` | `SizeFixed` | Exactly `n` cells. |
 | `layout.Grow(w)` | `SizeGrow` | Weighted share of leftover space; `w` is the weight relative to sibling grows. |
+| `layout.Points(n)` | `SizePoints` | Exactly `n` points in a window; a terminal reads it at a nominal 8×16pt cell (`PointsPerColumn`, `PointsPerLine`), rounding up — `Points(200)` is 25 columns. For layouts designed for a window. |
 
 `SizeContent` is produced internally when an `Auto` axis measures natural
 content (e.g. `Text`); callers do not author it. On the cross axis, anything but
@@ -144,8 +145,9 @@ whole viewport.
 |---|---|
 | `layout.Row{Children: ...}` | Distribute children horizontally (main axis = width). |
 | `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
-| `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. `Wrap: true` wraps it by words at its width (cells in the terminal, the font in a window): it fills an Auto width, and its Auto height is the wrapped line count at the width it gets. |
-| `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`; `IconBlank` draws nothing — terminal-only decoration) in the same columns. Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
+| `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. `Wrap: true` wraps it by words at its width (cells in the terminal, the font in a window): it fills an Auto width, and its Auto height is the wrapped line count at the width it gets. `Runs: []layout.Run{{Text, Style}, ...}` makes it rich text (replacing `Text`; a run with a zero `Style` takes the Label's), wrapping across runs. `Selectable: true` lets a window user drag-select it and copy with ⌘C — the window draws the selection; the app still gets the clicks. |
+| `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`; `IconBlank` draws nothing — terminal-only decoration) in the same columns. Larger symbols — `IconCheck`, `IconClose`, `IconPlus`, `IconMinus`, `IconSearch`, `IconGear`, `IconInfo`, `IconWarning`, `IconError`, `IconArrowUp`/`Down`/`Left`/`Right`, `IconEllipsis`, `IconFolder`, `IconFile` — are 0.7 of a line, centered: give them two columns (`"✓ "`). `IconChevronLeft`/`Up`/`Down` match `IconChevronRight`. Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
+| `layout.Image{Source: img, Text: ..., Fit: ...}` | A picture: a window draws `Source` (`ImageContain`, `ImageCover`, `ImageStretch`), one pixel to a point on Auto axes; the terminal shows `Text`, subtle and wrapped — describe the picture. Size it with `Points`. Keep images in state: a window reads `Source` once, so give a new image to change it. |
 | `layout.Button{Label: ..., Default: ..., Disabled: ..., Focused: ...}` | A push button: `[ Label ]` in the terminal (bold when `Default`, label reversed when `Focused`, subtle when `Disabled`), a native bezel in a window (the accent when `Default`). |
 | `layout.Toggle{Kind: ..., Label: ..., Checked: ...}` | A checkbox (`[x]`), switch (`[ ●]`/`[○ ]`), or radio button (`(•)`), with its label; native indicators in a window. One-of-many for radios is the app's. |
 | `layout.Slider{Value: ..., Fill: ...}` | A 0..1 value on a track: `━━━●───` in the terminal, a native slider in a window; fills the width on Auto. `ValueAt(x, width)` maps a press or drag. |
@@ -246,7 +248,8 @@ as the root. `cmd/flat-scroll` shows panes; `cmd/flat-landing` shows a page.
 `layout.TextStyle{Role: ...}` says what text is for; the backend decides how
 it looks. Roles are `TextBody` (default), `TextTitle`, and `TextSubtle`;
 `Fg`, `Bg`, `Bold`, `Italic`, `Underline`, and `Strikethrough` override the
-role. `TextStyle.Render(s)` is the terminal look, and `flatui.Title` /
+role. `Size` sets the font size in points in a window (0: the role's size;
+lines grow to fit it); terminals ignore it. `TextStyle.Render(s)` is the terminal look, and `flatui.Title` /
 `flatui.Subtle` are those roles for string frames, so both paths match.
 
 ### Controls

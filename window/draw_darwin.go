@@ -65,6 +65,14 @@ const (
 	borderBand  = 12.0
 	strokeWidth = 1.0
 	fieldInset  = 4.0
+	// maxFontSize caps TextStyle.Size; sizes round to a quarter point so
+	// the font cache stays small.
+	maxFontSize = 512.0
+	// CGLineCap and CGLineJoin values.
+	cgLineCapButt   = 0
+	cgLineCapRound  = 1
+	cgLineJoinMiter = 0
+	cgLineJoinRound = 1
 	// NSFontWeightSemibold and NSFontWeightBold.
 	nsFontWeightSemibold = 0.3
 	nsFontWeightBold     = 0.4
@@ -85,6 +93,8 @@ func (th theme) radiusOf(k layout.BorderKind) float64 {
 type fontKey struct {
 	role               layout.TextRole
 	bold, italic, mono bool
+	// size overrides the role's point size when positive.
+	size float64
 }
 
 type font struct {
@@ -128,6 +138,12 @@ func (th theme) font(k fontKey) font {
 	} else if k.role == layout.TextTitle {
 		id.size = th.titleSize
 	}
+	// The size lives in id.size alone, so a bad one (NaN, ≤ 0, +Inf) never
+	// reaches the cache key.
+	if k.size > 0 && !math.IsInf(k.size, 1) {
+		id.size = math.Round(min(k.size, maxFontSize)*4) / 4
+	}
+	id.fontKey.size = 0
 	fontsMu.Lock()
 	defer fontsMu.Unlock()
 	if f, ok := fonts[id]; ok {
@@ -176,7 +192,7 @@ func (th theme) font(k fontKey) font {
 }
 
 func (th theme) styleFont(s layout.TextStyle) font {
-	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic})
+	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic, size: s.Size})
 }
 
 // textLine is a shaped CoreText line. Call release.
@@ -239,7 +255,81 @@ func (th theme) metrics() layout.Metrics {
 			}
 			return w, float64(len(lines)) * f.pitch()
 		},
+		MeasureRuns: func(runs []layout.Run, maxWidth float64) (float64, float64) {
+			rt := th.richText(runs)
+			w, h := 0.0, 0.0
+			for _, sp := range rt.lines(maxWidth) {
+				w = max(w, rt.width(sp.start, sp.end))
+				h += rt.metrics(sp).pitch
+			}
+			return w, h
+		},
 	}
+}
+
+// richText is a rich-text Label's runs in th's fonts, as one text.
+type richText struct {
+	text  string
+	runs  []layout.Run
+	fonts []font
+	// ends[i] is where run i ends in text.
+	ends []int
+}
+
+func (th theme) richText(runs []layout.Run) richText {
+	rt := richText{runs: runs, fonts: make([]font, len(runs)), ends: make([]int, len(runs))}
+	var b strings.Builder
+	for i, r := range runs {
+		b.WriteString(r.Text)
+		rt.fonts[i], rt.ends[i] = th.styleFont(r.Style), b.Len()
+	}
+	rt.text = b.String()
+	return rt
+}
+
+// pieces calls f for each run's part of text[a:b], in order.
+func (rt richText) pieces(a, b int, f func(run, a, b int)) {
+	start := 0
+	for i, end := range rt.ends {
+		if lo, hi := max(a, start), min(b, end); lo < hi {
+			f(i, lo, hi)
+		}
+		start = end
+	}
+}
+
+// width is the width of text[a:b], each run in its font.
+func (rt richText) width(a, b int) float64 {
+	w := 0.0
+	rt.pieces(a, b, func(i, a, b int) { w += rt.fonts[i].width(rt.text[a:b]) })
+	return w
+}
+
+// lines wraps the text at maxWidth (only at "\n" when maxWidth <= 0).
+func (rt richText) lines(maxWidth float64) []span {
+	return wrapSpans(rt.text, maxWidth, rt.width)
+}
+
+// lineMetrics is a line's height and where its baseline goes: the tallest
+// font on it sets both, so mixed sizes share a baseline.
+type lineMetrics struct{ pitch, ascent, height float64 }
+
+// metrics is sp's line metrics: of the fonts of the runs on it, or — on an
+// empty line — of the run it sits in.
+func (rt richText) metrics(sp span) lineMetrics {
+	var m lineMetrics
+	add := func(f font) {
+		m.pitch, m.ascent, m.height = max(m.pitch, f.pitch()), max(m.ascent, f.ascent), max(m.height, f.lineHeight())
+	}
+	rt.pieces(sp.start, sp.end, func(i, _, _ int) { add(rt.fonts[i]) })
+	if m.pitch == 0 && len(rt.fonts) > 0 {
+		i := 0
+		for i < len(rt.ends)-1 && rt.ends[i] < sp.start {
+			i++
+		}
+		add(rt.fonts[i])
+	}
+	return m
 }
 
 // painter draws a scene into a CoreGraphics context whose user space is
@@ -261,8 +351,9 @@ type painter struct {
 	caretClip layout.PointRect
 	// clip is the clip of the op being drawn.
 	clip layout.PointRect
-	// hovered and pressed are the host's hovered and pressed control IDs.
-	hovered, pressed string
+	// presentation is what the host draws itself: hovered and pressed
+	// controls, selected label text.
+	presentation
 	// layer is the rect of the overlay layer just started: its box, the
 	// next op, is a raised surface.
 	layer   layout.PointRect
@@ -294,7 +385,9 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 	cgContextFillRect(p.ctx, cgRect(0, 0, width, height))
 	// The space is flipped; flip glyphs back.
 	cgContextSetTextMatrix(p.ctx, CGAffineTransform{A: 1, D: -1})
-	for _, op := range s.Ops {
+	beginImages()
+	defer endImages()
+	for i, op := range s.Ops {
 		_, layer := op.(layout.LayerOp)
 		_, box := op.(layout.BoxOp)
 		if !layer && !box {
@@ -308,12 +401,15 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 		case layout.BoxOp:
 			p.clipped(op.Clip, func() { p.box(op) })
 		case layout.TextOp:
-			p.clipped(intersect(op.Rect, op.Clip), func() { p.text(op) })
+			from, to := p.sel.in(i, op)
+			p.clipped(intersect(op.Rect, op.Clip), func() { p.text(op, from, to) })
 		case layout.InputOp:
 			p.clip = intersect(op.Rect, op.Clip)
 			p.clipped(p.clip, func() { p.input(op) })
 		case layout.IconOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.icon(op) })
+		case layout.ImageOp:
+			p.clipped(intersect(op.Rect, op.Clip), func() { p.image(op) })
 		case layout.MeterOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.meter(op) })
 		case layout.ControlOp:
@@ -445,6 +541,12 @@ func (p *painter) roleColor(s layout.TextStyle) rgba {
 // line draws one line of text from x in the row of height h at y, centered
 // vertically; a background fills the row behind it.
 func (p *painter) line(text string, f font, x, y, h float64, fg rgba, bg color.Color, underline, strike bool) float64 {
+	return p.lineOn(text, f, x, y+(h-f.lineHeight())/2+f.ascent, y, h, fg, bg, underline, strike)
+}
+
+// lineOn draws one line of text from x on the baseline base, in the row of
+// height h at y (which a background fills).
+func (p *painter) lineOn(text string, f font, x, base, y, h float64, fg rgba, bg color.Color, underline, strike bool) float64 {
 	l := shape(text, f)
 	defer l.release()
 	if bg != nil {
@@ -452,7 +554,6 @@ func (p *painter) line(text string, f font, x, y, h float64, fg rgba, bg color.C
 		cgContextFillRect(p.ctx, cgRect(x, y, l.width, h))
 	}
 	p.fill(fg)
-	base := y + (h-f.lineHeight())/2 + f.ascent
 	cgContextSetTextPosition(p.ctx, x, base)
 	ctLineDraw(l.ref, p.ctx)
 	if underline {
@@ -466,16 +567,73 @@ func (p *painter) line(text string, f font, x, y, h float64, fg rgba, bg color.C
 	return l.width
 }
 
-func (p *painter) text(op layout.TextOp) {
-	f := p.th.styleFont(op.Style)
-	h := f.pitch()
-	lines := strings.Split(op.Text, "\n")
+// text draws a Label's text — plain, or its runs — wrapped as MeasureText
+// and MeasureRuns wrap it; each line's runs share the baseline of its
+// tallest font. sel (from < to) is the selected bytes, highlighted behind.
+func (p *painter) text(op layout.TextOp, from, to int) {
+	rt := p.th.opText(op)
+	for _, ln := range rt.layout(op) {
+		if a, b := max(from, ln.start), min(to, ln.end); a < b || (from <= ln.end && to > ln.end && ln.end < len(rt.text)) {
+			x0, x1 := rt.width(ln.start, a), rt.width(ln.start, b)
+			if b < to { // the selected line break
+				x1 += rt.fonts[0].width(" ")
+			}
+			p.fill(p.th.selection)
+			cgContextFillRect(p.ctx, cgRect(op.Rect.X+x0, ln.y, x1-x0, ln.pitch))
+		}
+		base := ln.y + (ln.pitch-ln.height)/2 + ln.ascent
+		x := op.Rect.X
+		rt.pieces(ln.start, ln.end, func(i, a, b int) {
+			st := rt.runs[i].Style
+			x += p.lineOn(rt.text[a:b], rt.fonts[i], x, base, ln.y, ln.pitch, p.roleColor(st), st.Bg, st.Underline, st.Strikethrough)
+		})
+	}
+}
+
+// laidLine is one laid-out line of a TextOp: its bytes, top, and metrics.
+type laidLine struct {
+	span
+	y float64
+	lineMetrics
+}
+
+// opText is op's text in th's fonts: its runs, or its text as one run.
+func (th theme) opText(op layout.TextOp) richText {
+	if len(op.Runs) > 0 {
+		return th.richText(op.Runs)
+	}
+	return th.richText([]layout.Run{{Text: op.Text, Style: op.Style}})
+}
+
+// layout is rt laid out as op draws it: wrapped at its width when it wraps,
+// lines stacked from its top.
+func (rt richText) layout(op layout.TextOp) []laidLine {
+	wrap := 0.0
 	if op.Wrap {
-		lines = wrapWords(op.Text, op.Rect.W, f.width)
+		wrap = op.Rect.W
 	}
-	for i, s := range lines {
-		p.line(s, f, op.Rect.X, op.Rect.Y+float64(i)*h, h, p.roleColor(op.Style), op.Style.Bg, op.Style.Underline, op.Style.Strikethrough)
+	spans := rt.lines(wrap)
+	lines := make([]laidLine, len(spans))
+	y := op.Rect.Y
+	for i, sp := range spans {
+		lines[i] = laidLine{span: sp, y: y, lineMetrics: rt.metrics(sp)}
+		y += lines[i].pitch
 	}
+	return lines
+}
+
+// nearest is the byte offset in line sp nearest x points from its start.
+func (rt richText) nearest(sp span, x float64) int {
+	prev := 0.0
+	for i := sp.start; i < sp.end; {
+		_, n := utf8.DecodeRuneInString(rt.text[i:sp.end])
+		next := rt.width(sp.start, i+n)
+		if x < (prev+next)/2 {
+			return i
+		}
+		prev, i = next, i+n
+	}
+	return sp.end
 }
 
 // input draws a text field: an outlined, filled rounded rect (outlined in
@@ -630,6 +788,17 @@ func (w windowText) caretAt(op layout.InputOp, x, y float64) int {
 		i = min(max(fl.first+int(math.Floor((y-fl.y0)/fl.pitch)), 0), len(fl.rows)-1)
 	}
 	return fl.index(i, x-fl.x0+fl.scroll)
+}
+
+func (w windowText) textOffset(op layout.TextOp, x, y float64) int {
+	rt := w.th().opText(op)
+	lines := rt.layout(op)
+	for i, ln := range lines {
+		if y < ln.y+ln.pitch || i == len(lines)-1 {
+			return rt.nearest(ln.span, x-op.Rect.X)
+		}
+	}
+	return 0
 }
 
 func (w windowText) caretX(op layout.InputOp, caret int) float64 {
@@ -876,7 +1045,9 @@ func (p *painter) shape(g cellShape, fg rgba) {
 		if c.fill {
 			cgContextFillPath(p.ctx)
 		} else {
+			cgContextSetLineWidth(p.ctx, max(c.width, strokeWidth))
 			cgContextStrokePath(p.ctx)
+			cgContextSetLineWidth(p.ctx, strokeWidth)
 		}
 	}
 	for _, a := range g.arcs {
@@ -895,8 +1066,14 @@ func (p *painter) shape(g cellShape, fg rgba) {
 			cgContextFillPath(p.ctx)
 		} else {
 			cgContextSetLineWidth(p.ctx, max(pl.width, strokeWidth))
+			if pl.round {
+				cgContextSetLineCap(p.ctx, cgLineCapRound)
+				cgContextSetLineJoin(p.ctx, cgLineJoinRound)
+			}
 			cgContextStrokePath(p.ctx)
 			cgContextSetLineWidth(p.ctx, strokeWidth)
+			cgContextSetLineCap(p.ctx, cgLineCapButt)
+			cgContextSetLineJoin(p.ctx, cgLineJoinMiter)
 		}
 	}
 }

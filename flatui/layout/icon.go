@@ -19,6 +19,31 @@ const (
 	// IconBlank draws nothing in a GUI, keeping its columns: for terminal-only
 	// decoration, such as the Powerline caps of a tab.
 	IconBlank
+
+	// The shapes below are drawn 0.7 of a line high, centered in the icon's
+	// box: give them two columns (the terminal glyph and a space, such as
+	// "✓ ") so a GUI has room to draw them. The chevrons are the exception:
+	// they match IconChevronRight, in the first column.
+
+	IconCheck   // ✓
+	IconClose   // ✕
+	IconPlus    // +
+	IconMinus   // −
+	IconSearch  // a magnifying glass
+	IconGear    // ⚙
+	IconInfo    // ⓘ, an i in a circle
+	IconWarning // ⚠, an ! in a triangle
+	IconError   // an ✕ in a circle
+	IconArrowUp
+	IconArrowDown
+	IconArrowLeft
+	IconArrowRight
+	IconChevronLeft
+	IconChevronUp
+	IconChevronDown
+	IconEllipsis // …
+	IconFolder
+	IconFile
 )
 
 // Icon is a small symbol with a terminal spelling: the terminal shows Text

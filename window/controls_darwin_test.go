@@ -88,7 +88,7 @@ func TestControlHoverAndPress(t *testing.T) {
 	scene := layout.LayoutScene(root, 20*m.Column, m.Line, m)
 	r := scene.Rects["b"]
 	fill := func(hovered, pressed string) color.Color {
-		img := renderImage(scene, darkTheme, m, 20*m.Column, m.Line, 2, nil, hovered, pressed)
+		img := renderImage(scene, darkTheme, m, 20*m.Column, m.Line, 2, nil, presentation{hovered: hovered, pressed: pressed})
 		return img.At(int((r.X+3)*2), int((r.Y+r.H/2)*2))
 	}
 	lum := func(c color.Color) uint32 { r, g, b, _ := c.RGBA(); return r + g + b }

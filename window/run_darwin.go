@@ -250,13 +250,12 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	defer h.cancel()
 	h.start(width, height)
 	scene := h.render()
-	return renderImage(scene, th, m, width, height, scale, h.frameCursor(), "", ""), nil
+	return renderImage(scene, th, m, width, height, scale, h.frameCursor(), presentation{}), nil
 }
 
 // renderImage draws scene offscreen into an RGBA image of width×height
-// points at scale pixels per point, with the controls hovered and pressed
-// as given.
-func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, hovered, pressed string) *image.RGBA {
+// points at scale pixels per point, with pres drawn over it.
+func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation) *image.RGBA {
 	pw, ph := int(math.Ceil(width*scale)), int(math.Ceil(height*scale))
 	cs := cgColorSpaceCreateDeviceRGB()
 	defer cgColorSpaceRelease(cs)
@@ -265,7 +264,7 @@ func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, 
 	// Top-left origin points, as in the flipped view.
 	cgContextTranslateCTM(ctx, 0, float64(ph))
 	cgContextScaleCTM(ctx, scale, -scale)
-	p := &painter{ctx: ctx, m: m, th: th, scale: scale, hovered: hovered, pressed: pressed}
+	p := &painter{ctx: ctx, m: m, th: th, scale: scale, presentation: pres}
 	withPool(func() {
 		// Fill the whole bitmap, including the partial pixel the point size
 		// rounds up to.

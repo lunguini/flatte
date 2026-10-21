@@ -18,7 +18,9 @@ type metric[T unit] interface {
 	cols(n int) T  // a column count (widths)
 	lines(n int) T // a line count (heights)
 	steps(n int) T // spacing steps (Pad, Gap)
-	border() T     // one border edge
+	// points is a Points size: exact in points, rounded up to cells.
+	points(n int, horizontal bool) T
+	border() T // one border edge
 
 	add(a, b T) T
 	sub(a, b T) T
@@ -47,6 +49,9 @@ type sized[T unit] struct {
 }
 
 func toSized[T unit](m metric[T], s Size, horizontal bool) sized[T] {
+	if s.Kind == SizePoints {
+		return sized[T]{Kind: SizeFixed, Value: m.points(max(s.Value, 0), horizontal)}
+	}
 	v := m.lines(s.Value)
 	if horizontal {
 		v = m.cols(s.Value)
@@ -86,7 +91,14 @@ type cells struct{}
 func (cells) cols(n int) int  { return n }
 func (cells) lines(n int) int { return n }
 func (cells) steps(n int) int { return n }
-func (cells) border() int     { return 1 }
+func (cells) points(n int, horizontal bool) int {
+	per := PointsPerLine
+	if horizontal {
+		per = PointsPerColumn
+	}
+	return (n + per - 1) / per
+}
+func (cells) border() int { return 1 }
 func (cells) add(a, b int) int {
 	return satAdd(a, b)
 }
