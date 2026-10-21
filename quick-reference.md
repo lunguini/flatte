@@ -432,8 +432,10 @@ func ContextMenu(s *State, target string) []flatte.MenuItem {
 
 - `Keys` are shortcuts: every host delivers a matching key as the item's
   `MenuEvent` instead of a `KeyEvent` (a disabled item's key does nothing).
-  List a ⌘ chord for windows and a Ctrl chord for terminals. Avoid plain
-  letters — they would be taken from text fields too. `MenuShortcut` finds
+  List a ⌘ chord for windows and a Ctrl chord for terminals. A terminal
+  can send only a plain Ctrl+letter — no Shift, and not Ctrl+I/M/H/[ (Tab,
+  Enter, Backspace, Esc). Avoid plain letters — they would be taken from
+  text fields too. `MenuShortcut` finds
   an item by key.
 - A window shows `Menus` as its menu bar and `ContextMenu` as a native popup
   (right-click or Control-click). A terminal shows no bar; it draws the
@@ -469,6 +471,40 @@ and `d.Answer(flatte.DialogResult{Paths: ...})` / `{Button: i}` answers it.
 A window delivers files or text dropped on it as `DropEvent{Paths, Text}`,
 located (`X`, `Y`, `Target`, `TargetRect`) like a mouse event. A terminal
 pastes a dropped file's path instead (`PasteEvent`).
+
+## Windows
+
+Declare secondary windows from state, like menus; `View` draws each one:
+
+```go
+app := flatte.App[State]{..., View: View, Windows: Windows}
+
+func Windows(s *State) []flatte.Window {
+	if !s.showStats {
+		return nil // not declared: closed
+	}
+	return []flatte.Window{{ID: "stats", Width: 30, Height: 7, Autosave: "my-app.stats"}}
+}
+
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+	if ctx.Window == "stats" {
+		return statsView(s) // its Frame.Title titles the window
+	}
+	return mainView(s)
+}
+```
+
+- `WindowEvent{Window, Kind}`: `WindowFocused` says which window ("" the
+  main one) now gets keys and pastes — keys are not tagged, so track it and
+  route keys yourself; `WindowCloseRequest` is the close button: stop
+  declaring the window to close it (or keep it to ask first).
+- `MouseEvent`, `DropEvent`, and `LayoutEvent` carry `Window`; secondary
+  windows get no `ResizeEvent` (their rects arrive as `LayoutEvent`s).
+- A desktop window opens real windows (`MinWidth`/`MinHeight`, `Autosave`
+  restores position and size; the Window menu has Minimize, Zoom, Full
+  Screen); `window.Options` has the same fields for the main window. A
+  terminal draws them as boxes over the main frame — `[×]` asks to close,
+  a click focuses. `flatest.Driver.WindowFrame(id)` is a window's frame.
 
 ## Native Window
 

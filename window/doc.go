@@ -43,6 +43,12 @@
 // Control-click. Choices arrive as MenuEvents. An item with the ⌘C shortcut
 // copies selected Label text instead, when there is some.
 //
+// Windows: App.Windows declares secondary windows, each opened as its own
+// native window drawn by View (RenderContext.Window); the close button sends
+// a WindowCloseRequest, and key changes a WindowFocused. Options.MinWidth,
+// MinHeight, and Autosave set the main window's minimum size and saved
+// frame; the Window menu minimizes, zooms, and enters full screen.
+//
 // Dialogs: OpenFile, SaveFile, and Alert show the system panels and alerts,
 // run after the handler that asked returns. Files or text dropped on the
 // window arrive as a DropEvent.

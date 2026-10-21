@@ -17,7 +17,7 @@ type fakeMenus struct {
 }
 
 func (f *fakeMenus) setBar(m []flatte.Menu) { f.bars = append(f.bars, m) }
-func (f *fakeMenus) popUp(items []flatte.MenuItem, x, y float64) string {
+func (f *fakeMenus) popUp(_ string, items []flatte.MenuItem, x, y float64) string {
 	f.popups = append(f.popups, items)
 	f.at = [2]float64{x, y}
 	return f.choose

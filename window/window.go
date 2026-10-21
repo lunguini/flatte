@@ -22,6 +22,12 @@ type Options struct {
 	// Theme is the window's look. Nil follows the system's appearance,
 	// switching between Dark and Light as it changes; Snapshot draws Dark.
 	Theme *Theme
+	// MinWidth and MinHeight are the smallest content size in columns and
+	// lines (at least 20×4).
+	MinWidth, MinHeight int
+	// Autosave, when set, names the window's saved frame: its position and
+	// size are restored from it at launch and saved as they change.
+	Autosave string
 }
 
 func (o Options) size() (cols, lines int) {

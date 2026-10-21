@@ -40,6 +40,12 @@ type App[S any] struct {
 	// is then delivered as usual); a shown menu consumes the click, and the
 	// choice arrives as a MenuEvent with Target set.
 	ContextMenu func(s *S, target string) []MenuItem
+	// Windows, when set, declares the app's secondary windows for the
+	// state, read like View after every change: a window appears when
+	// declared and closes when no longer declared. View draws each (see
+	// RenderContext.Window). A desktop host opens real windows; a terminal
+	// draws them over the main frame.
+	Windows func(*S) []Window
 }
 
 // action is a one-shot terminal capability request, queued by Effects
@@ -401,8 +407,10 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	// lastComp is the composition of the frame on screen; mouse events are
 	// hit-tested against it so Target matches what the user clicked.
 	var lastComp layout.Composition
-	// menus routes menu shortcuts and draws context menus (see MenuHost).
+	// menus routes menu shortcuts and draws context menus (see MenuHost);
+	// windows draws the app's secondary windows (see WindowHost).
 	var menus MenuHost
+	var windows WindowHost
 	// lastLayout is the rect set last delivered as a LayoutEvent.
 	var lastLayout map[string]layout.Rect
 	drew := false
@@ -692,6 +700,17 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				app.Handle(app.State, ev, effects)
 			}
 		}
+		// Adopt the declared windows first: focus changes reach the app
+		// before it draws.
+		for _, ev := range SyncWindows(&windows, app, renderCtx.Width, terminalHeight) {
+			app.Tracer.Event(ev)
+			if app.Handle != nil {
+				app.Handle(app.State, ev, effects)
+			}
+			if quitRequested {
+				return
+			}
+		}
 		frame, comp, delivered := settleFrame(
 			func() Frame { return app.View(app.State, renderCtx) },
 			handleLayout, lastLayout, renderCtx.Width,
@@ -702,6 +721,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			return // a LayoutEvent handler quit: paint nothing more
 		}
 		lastComp = comp
+		frame = PaintWindows(&windows, app, frame, handleLayout)
 		frame = menus.Paint(frame)
 		frame = dialogs.paint(frame, renderCtx.Width, terminalHeight)
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
@@ -987,14 +1007,15 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				mouse.Caret, mouse.HasCaret = lastComp.CaretAt(mouse.X, mouse.Y)
 				result.event = mouse
 			}
-			var event Event
-			var deliver bool
+			var events []Event
 			if dialogs.isOpen() {
-				event, deliver = dialogs.route(result.event)
+				if event, ok := dialogs.route(result.event); ok {
+					events = []Event{event}
+				}
 			} else {
-				event, deliver = RouteMenus(&menus, app, result.event, screenWidth, screenHeight)
+				events = RouteInput(&menus, &windows, app, result.event, screenWidth, screenHeight)
 			}
-			if !deliver {
+			if len(events) == 0 {
 				// A dialog answered here queued its result: apply it now,
 				// before any input that follows.
 				drainUpdates(app, updates)
@@ -1007,21 +1028,22 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				}
 				continue
 			}
-			result.event = event
-			// Trace before any exit decision so the recorder sees the
-			// exit-causing event too (incl. a default-quit Ctrl-C).
-			app.Tracer.Event(result.event)
-			if key, isKey := result.event.(KeyEvent); isKey && key.Key == KeyCtrlC && cfg.defaultQuit {
-				return nil
-			}
-			if app.Handle != nil {
-				app.Handle(app.State, result.event, effects)
-			}
-			// quitRequested flips synchronously inside Init, Handle, or a
-			// fold — all on the loop goroutine. The updates path is checked
-			// after drainUpdates below.
-			if quitRequested {
-				return nil
+			for _, event := range events {
+				// Trace before any exit decision so the recorder sees the
+				// exit-causing event too (incl. a default-quit Ctrl-C).
+				app.Tracer.Event(event)
+				if key, isKey := event.(KeyEvent); isKey && key.Key == KeyCtrlC && cfg.defaultQuit {
+					return nil
+				}
+				if app.Handle != nil {
+					app.Handle(app.State, event, effects)
+				}
+				// quitRequested flips synchronously inside Init, Handle, or
+				// a fold — all on the loop goroutine. The updates path is
+				// checked after drainUpdates below.
+				if quitRequested {
+					return nil
+				}
 			}
 		case <-resize:
 			forceRepaint = true

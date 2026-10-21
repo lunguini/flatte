@@ -597,7 +597,7 @@ func TestCursorIsABarWhileSelecting(t *testing.T) {
 }
 
 func editorDriver() *flatest.Driver[State] {
-	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View, Menus: Menus, ContextMenu: ContextMenu}, 72)
+	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View, Menus: Menus, ContextMenu: ContextMenu, Windows: Windows}, 72)
 	d.Send(flatte.ResizeEvent{Width: 72, Height: 20})
 	return d
 }
@@ -692,5 +692,62 @@ func TestFileDropAndErrors(t *testing.T) {
 	d.Settle()
 	if s.path != note || !strings.Contains(s.status, "no such file") {
 		t.Fatalf("missing: path %q status %q", s.path, s.status)
+	}
+}
+
+func TestStatisticsWindow(t *testing.T) {
+	d := editorDriver()
+	s := d.State()
+	d.Send(flatte.MenuEvent{ID: cmdSelectAll})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'a'})
+	typeRunes(s, " b c")
+	// Ctrl+T opens it (as a terminal sends it: 't' with Ctrl); it takes
+	// focus, so typing goes nowhere.
+	f := d.Send(ctrl('t'))
+	if !s.stats || s.focus != statsID {
+		t.Fatalf("stats %v focus %q", s.stats, s.focus)
+	}
+	if !strings.Contains(flatest.CleanFrame(f.Content), "Statistics — untitled") {
+		t.Fatalf("no window box:\n%s", flatest.CleanFrame(f.Content))
+	}
+	wf, ok := d.WindowFrame(statsID)
+	if !ok {
+		t.Fatal("no statistics frame")
+	}
+	plain := flatest.CleanFrame(wf.Content)
+	for _, want := range []string{"Words       3", "Lines       1", "Characters  5", "Selected    0"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("missing %q in\n%s", want, plain)
+		}
+	}
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'z'})
+	d.Send(flatte.PasteEvent{Text: "pasted"})
+	if s.ta.Value() != "a b c" {
+		t.Fatalf("typing reached the editor behind: %q", s.ta.Value())
+	}
+	// Esc closes it; focus returns to the editor, whose counts follow.
+	d.Send(flatte.KeyEvent{Key: flatte.KeyEscape})
+	if s.stats || s.focus != "" {
+		t.Fatalf("esc: stats %v focus %q", s.stats, s.focus)
+	}
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '!'})
+	if s.ta.Value() != "a b c!" {
+		t.Fatalf("editor keys after closing: %q", s.ta.Value())
+	}
+	// Its close mark is a close request, which the editor honours.
+	d.Send(flatte.MenuEvent{ID: cmdStats})
+	f = d.Frame()
+	lines := strings.Split(flatest.CleanFrame(f.Content), "\n")
+	for y, line := range lines {
+		if x := strings.Index(line, "[×]"); x >= 0 {
+			d.Send(flatte.MouseEvent{X: len([]rune(line[:x])) + 1, Y: y, Button: flatte.MouseLeft, Action: flatte.MousePress})
+			break
+		}
+	}
+	if s.stats {
+		t.Fatal("the close mark did not close it")
+	}
+	if _, ok := d.WindowFrame(statsID); ok {
+		t.Fatal("still declared")
 	}
 }

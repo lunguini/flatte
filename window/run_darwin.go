@@ -28,6 +28,8 @@ const (
 	nsBackingStoreBuffered    = 2
 	nsTerminateCancel         = 0
 	nsEventApplicationDefined = 15
+	// NSWindowCollectionBehaviorFullScreenPrimary.
+	nsWindowCollectionBehaviorFullScreenPrimary = 1 << 7
 )
 
 // --- running functions on the main thread ---
@@ -74,10 +76,101 @@ func run[S any](ctx context.Context, app flatte.App[S], opts Options) error {
 	return err
 }
 
+// running is set while Run runs: one app per process.
+var running bool
+
+// makeWindow creates a titled, resizable window of cols×lines cells of m,
+// with no smaller than minCols×minLines (at least 20×4), and its view of
+// class cls tracking the pointer and accepting drops. When autosave is set
+// the window saves its frame under that name and restores it (centered
+// otherwise). The caller releases both.
+func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, minCols, minLines int, autosave string) (win, view objc.ID) {
+	width, height := float64(cols)*m.Column, float64(lines)*m.Line
+	view = objc.ID(cls).Send(sel("alloc")).Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
+	// Pointer motion without a button, for hover, pointer shapes, and
+	// tooltips: entered/exited and moved, while key, over the visible rect.
+	tracking := alloc("NSTrackingArea").Send(sel("initWithRect:options:owner:userInfo:"),
+		cgRect(0, 0, 0, 0), uint(nsTrackingMouseEnteredAndExited|nsTrackingMouseMoved|nsTrackingActiveInKeyWindow|nsTrackingInVisibleRect), view, objc.ID(0))
+	view.Send(sel("addTrackingArea:"), tracking)
+	tracking.Send(sel("release"))
+	view.Send(sel("registerForDraggedTypes:"), dragTypes())
+	win = alloc("NSWindow").Send(sel("initWithContentRect:styleMask:backing:defer:"),
+		cgRect(0, 0, width, height), uint(nsWindowStyleMask), uint(nsBackingStoreBuffered), false)
+	win.Send(sel("setReleasedWhenClosed:"), false)
+	win.Send(sel("setTitle:"), nsString(title))
+	win.Send(sel("setContentView:"), view)
+	win.Send(sel("setCollectionBehavior:"), uint(nsWindowCollectionBehaviorFullScreenPrimary))
+	win.Send(sel("setContentMinSize:"), CGSize{Width: float64(max(minCols, 20)) * m.Column, Height: float64(max(minLines, 4)) * m.Line})
+	win.Send(sel("center"))
+	if autosave != "" {
+		win.Send(sel("setFrameAutosaveName:"), nsString(autosave))
+		win.Send(sel("setFrameUsingName:"), nsString(autosave))
+	}
+	return win, view
+}
+
+// nativeWindows is the window's windowBackend: secondary windows, each with
+// its own view and state, sharing the main window's look.
+type nativeWindows struct {
+	cls      objc.Class
+	m        layout.Metrics
+	th       func() theme
+	follow   bool
+	delegate objc.ID
+	// focused and closeRequested report window id becoming key and the
+	// user asking to close it.
+	focused, closeRequested func(id string)
+}
+
+func (n nativeWindows) openWindow(w flatte.Window, s ui) func() {
+	cols, lines := w.Width, w.Height
+	if cols <= 0 {
+		cols = 60
+	}
+	if lines <= 0 {
+		lines = 20
+	}
+	win, view := makeWindow(n.cls, n.m, w.ID, max(cols, w.MinWidth), max(lines, w.MinHeight), w.MinWidth, w.MinHeight, w.Autosave)
+	th := n.th()
+	st := &windowState{ui: s, m: n.m, th: th, follow: n.follow, dark: isDark(view), window: win, view: view, id: w.ID, title: w.ID}
+	id := w.ID
+	st.focused = func() { n.focused(id) }
+	st.closeRequested = func() { n.closeRequested(id) }
+	register(st)
+	win.Send(sel("setDelegate:"), n.delegate)
+	if w.Autosave == "" {
+		// Cascade from the key window so windows do not stack exactly.
+		if key := class("NSApplication").Send(sel("sharedApplication")).Send(sel("keyWindow")); key != 0 {
+			f := objc.Send[CGRect](key, sel("frame"))
+			win.Send(sel("cascadeTopLeftFromPoint:"), CGPoint{X: f.Origin.X + 24, Y: f.Origin.Y + f.Size.Height - 24})
+		}
+	}
+	win.Send(sel("makeKeyAndOrderFront:"), objc.ID(0))
+	win.Send(sel("makeFirstResponder:"), view)
+	return func() { view.Send(sel("setNeedsDisplay:"), true) }
+}
+
+func (n nativeWindows) closeWindow(id string) {
+	for _, st := range states {
+		if st.id != id || id == "" {
+			continue
+		}
+		unregister(st)
+		st.window.Send(sel("setDelegate:"), objc.ID(0))
+		st.window.Send(sel("orderOut:"), objc.ID(0))
+		st.window.Send(sel("close"))
+		st.view.Send(sel("release"))
+		st.window.Send(sel("release"))
+		return
+	}
+}
+
 func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) error {
-	if current != nil {
+	if running {
 		return errors.New("window: a window is already running")
 	}
+	running = true
+	defer func() { running = false }()
 	cols, lines := opts.size()
 	nsApp := class("NSApplication").Send(sel("sharedApplication"))
 	nsApp.Send(sel("setActivationPolicy:"), nsActivationPolicyRegular)
@@ -90,26 +183,15 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	dark := isDark(nsApp)
 	th := newTheme(themeFor(opts.Theme, dark))
 	m := th.metrics()
-	width, height := float64(cols)*m.Column, float64(lines)*m.Line
-	view := objc.ID(cls).Send(sel("alloc")).Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
-	defer view.Send(sel("release"))
-	// Pointer motion without a button, for hover, pointer shapes, and
-	// tooltips: entered/exited and moved, while key, over the visible rect.
-	tracking := alloc("NSTrackingArea").Send(sel("initWithRect:options:owner:userInfo:"),
-		cgRect(0, 0, 0, 0), uint(nsTrackingMouseEnteredAndExited|nsTrackingMouseMoved|nsTrackingActiveInKeyWindow|nsTrackingInVisibleRect), view, objc.ID(0))
-	view.Send(sel("addTrackingArea:"), tracking)
-	tracking.Send(sel("release"))
-	win := alloc("NSWindow").Send(sel("initWithContentRect:styleMask:backing:defer:"),
-		cgRect(0, 0, width, height), uint(nsWindowStyleMask), uint(nsBackingStoreBuffered), false)
-	win.Send(sel("setReleasedWhenClosed:"), false)
-	defer win.Send(sel("release"))
 	title := opts.Title
 	if title == "" {
 		title = "Flatte"
 	}
-	win.Send(sel("setTitle:"), nsString(title))
-	win.Send(sel("setContentView:"), view)
-	win.Send(sel("setContentMinSize:"), CGSize{Width: 20 * m.Column, Height: 4 * m.Line})
+	win, view := makeWindow(cls, m, title, max(cols, opts.MinWidth), max(lines, opts.MinHeight), opts.MinWidth, opts.MinHeight, opts.Autosave)
+	defer win.Send(sel("release"))
+	defer view.Send(sel("release"))
+	b := objc.Send[CGRect](view, sel("bounds"))
+	width, height := b.Size.Width, b.Size.Height
 
 	stopped := false
 	stop := func() {
@@ -121,16 +203,16 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 		wake(nsApp)
 	}
 	h := newHost(ctx, app, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
-	current = &windowState{ui: h, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, title: title}
-	st := current
+	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title}
+	st.focused = func() { h.focused("") }
+	register(st)
+	defer func() {
+		for _, other := range states {
+			unregister(other)
+		}
+	}()
 	h.text = windowText{th: func() theme { return st.th }}
 	h.clip = pasteboard{}
-	defer func() {
-		if st := current; st != nil && st.blink != nil {
-			st.blink.Stop()
-		}
-		current = nil
-	}()
 
 	delegate, err := newDelegate(stop)
 	if err != nil {
@@ -142,11 +224,12 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	if _, err := newMenuTarget(); err != nil {
 		return err
 	}
-	menus := nativeMenus{title: title, view: view}
+	menus := nativeMenus{title: title}
 	menus.setBar(nil)
 	h.menus = menus
 	h.dialogs = nativeDialogs{}
-	view.Send(sel("registerForDraggedTypes:"), dragTypes())
+	h.windows = nativeWindows{cls: cls, m: m, th: func() theme { return st.th }, follow: opts.Theme == nil, delegate: delegate,
+		focused: h.focused, closeRequested: h.closeRequested}
 	barChosen = h.menuChosen
 	defer func() { barChosen = nil }()
 
@@ -160,7 +243,6 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 		}
 	}()
 
-	win.Send(sel("center"))
 	win.Send(sel("makeKeyAndOrderFront:"), objc.ID(0))
 	win.Send(sel("makeFirstResponder:"), view)
 	h.start(width, height)
@@ -168,10 +250,10 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 		nsApp.Send(sel("activateIgnoringOtherApps:"), true)
 		nsApp.Send(sel("run"))
 	}
+	h.close()
 	win.Send(sel("setDelegate:"), objc.ID(0))
 	nsApp.Send(sel("setDelegate:"), objc.ID(0))
 	win.Send(sel("orderOut:"), objc.ID(0))
-	h.close()
 	return nil
 }
 
@@ -205,9 +287,27 @@ func newDelegate(stop func()) (objc.ID, error) {
 					}
 					return nsTerminateCancel
 				}},
-				{Cmd: sel("windowWillClose:"), Fn: func(objc.ID, objc.SEL, objc.ID) {
+				// A secondary window's close button asks the app (it closes
+				// when the app stops declaring it); the main window closes,
+				// which ends Run.
+				{Cmd: sel("windowShouldClose:"), Fn: func(_ objc.ID, _ objc.SEL, win objc.ID) bool {
+					if st := byWindow[win]; st != nil && st.closeRequested != nil {
+						st.closeRequested()
+						return false
+					}
+					return true
+				}},
+				{Cmd: sel("windowWillClose:"), Fn: func(_ objc.ID, _ objc.SEL, note objc.ID) {
+					if st := byWindow[note.Send(sel("object"))]; st != nil && st.id != "" {
+						return
+					}
 					if delegateStop != nil {
 						delegateStop()
+					}
+				}},
+				{Cmd: sel("windowDidBecomeKey:"), Fn: func(_ objc.ID, _ objc.SEL, note objc.ID) {
+					if st := byWindow[note.Send(sel("object"))]; st != nil && st.focused != nil {
+						st.focused()
 					}
 				}},
 			})

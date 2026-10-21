@@ -25,8 +25,10 @@ type Driver[S any] struct {
 	// against — the frame "on screen", as in Run.
 	delivered map[string]layout.Rect
 	comp      layout.Composition
-	// menus routes shortcuts and context menus, as Run does.
+	// menus routes shortcuts and context menus, and windows draws the
+	// app's secondary windows over the main frame, as Run does.
 	menus   flatte.MenuHost
+	windows flatte.WindowHost
 	updates []flatte.StateUpdate[S]
 	clock   *fakeClock
 	pending []func()
@@ -81,8 +83,12 @@ func (d *Driver[S]) Send(ev flatte.Event) flatte.Frame {
 // Root frame are delivered (and their updates drained) before the frame is
 // returned, and the composition is kept for hit-testing the next mouse event.
 func (d *Driver[S]) render() flatte.Frame {
+	for _, ev := range flatte.SyncWindows(&d.windows, d.app, d.width, d.height) {
+		d.handle(ev)
+	}
 	frame, comp, delivered := flatte.SettleFrame(d.view, d.deliverLayout, d.delivered, d.width, d.height)
 	d.delivered, d.comp = delivered, comp
+	frame = flatte.PaintWindows(&d.windows, d.app, frame, d.deliverLayout)
 	return d.menus.Paint(frame)
 }
 
@@ -97,12 +103,17 @@ func (d *Driver[S]) deliver(ev flatte.Event) {
 		e.Caret, e.HasCaret = d.comp.CaretAt(e.X, e.Y)
 		ev = e
 	}
-	if _, layout := ev.(flatte.LayoutEvent); !layout {
-		var ok bool
-		if ev, ok = flatte.RouteMenus(&d.menus, d.app, ev, d.width, d.height); !ok {
-			return
-		}
+	if _, layout := ev.(flatte.LayoutEvent); layout {
+		d.handle(ev)
+		return
 	}
+	for _, ev := range flatte.RouteInput(&d.menus, &d.windows, d.app, ev, d.width, d.height) {
+		d.handle(ev)
+	}
+}
+
+// handle delivers one routed event and drains the updates it produced.
+func (d *Driver[S]) handle(ev flatte.Event) {
 	if d.app.Tracer != nil {
 		d.app.Tracer.Event(ev)
 	}
@@ -152,7 +163,16 @@ func (d *Driver[S]) Advance(by time.Duration) flatte.Frame {
 // is composed at the driver size, as Run composes it at the terminal size.
 func (d *Driver[S]) Frame() flatte.Frame {
 	frame, _ := flatte.ComposeFrame(d.view(), d.width, d.height)
+	frame = flatte.PaintWindows(&d.windows, d.app, frame, nil)
 	return d.menus.Paint(frame)
+}
+
+// WindowFrame is secondary window id's own frame as last rendered (composed
+// at its size, without the box the terminal draws around it); ok is false
+// when the app does not declare it. Mouse events for it are sent in screen
+// cells, as a terminal reports them: over its box in Frame.
+func (d *Driver[S]) WindowFrame(id string) (frame flatte.Frame, ok bool) {
+	return d.windows.WindowFrame(id)
 }
 
 func (d *Driver[S]) view() flatte.Frame {

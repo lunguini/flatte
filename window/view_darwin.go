@@ -11,27 +11,20 @@ import (
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
-// ui is what the view needs from the generic host.
-type ui interface {
-	resize(width, height float64)
-	key(flatte.KeyEvent)
-	paste()
-	hover(x, y float64) (pointer, string)
-	presentation() presentation
-	drop(x, y float64, paths []string, text string)
-	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
-	render() layout.Scene
-	frameTitle() string
-	frameCursor() *flatte.Cursor
-}
-
-// windowState is the Go side of the one window a process shows. AppKit calls
-// the view's methods with self; there is a single view, so the state is a
-// package value, touched only on the main thread.
+// windowState is the Go side of one window. AppKit calls the view's methods
+// with self, the view, and the delegate's with the window: both find the
+// state in states. Main thread only.
 type windowState struct {
 	ui ui
 	m  layout.Metrics
 	th theme
+	// id is the window's ID ("" the main window); view is its content view.
+	id   string
+	view objc.ID
+	// focused and closeRequested report the window becoming key and the
+	// user asking to close it (nil: closing is not asked about).
+	focused        func()
+	closeRequested func()
 	// follow re-resolves th from the system appearance (dark) as it
 	// changes; set when Options has no Theme.
 	follow, dark bool
@@ -82,8 +75,8 @@ func caretOn(since time.Duration) bool { return since < 0 || (since/caretBlink)%
 func (st *windowState) blinkIn(d time.Duration) {
 	redraw := func() {
 		post(func() {
-			if current == st {
-				st.window.Send(sel("contentView")).Send(sel("setNeedsDisplay:"), true)
+			if states[st.view] == st {
+				st.view.Send(sel("setNeedsDisplay:"), true)
 			}
 		})
 	}
@@ -94,7 +87,27 @@ func (st *windowState) blinkIn(d time.Duration) {
 	st.blink.Reset(d)
 }
 
-var current *windowState
+// states are the open windows' states, by view and by window.
+var (
+	states   = map[objc.ID]*windowState{}
+	byWindow = map[objc.ID]*windowState{}
+)
+
+func stateOf(view objc.ID) *windowState { return states[view] }
+
+// register makes st findable from its view and window; unregister undoes
+// it and stops its blink timer.
+func register(st *windowState) {
+	states[st.view], byWindow[st.window] = st, st
+}
+
+func unregister(st *windowState) {
+	delete(states, st.view)
+	delete(byWindow, st.window)
+	if st.blink != nil {
+		st.blink.Stop()
+	}
+}
 
 // isDark reports whether view's effective appearance is a dark one.
 func isDark(view objc.ID) bool {
@@ -143,7 +156,7 @@ func eventMods(event objc.ID) flatte.Mod {
 
 func mouseHandler(button flatte.MouseButton, action flatte.MouseAction) func(objc.ID, objc.SEL, objc.ID) {
 	return func(self objc.ID, _ objc.SEL, event objc.ID) {
-		if st := current; st != nil {
+		if st := stateOf(self); st != nil {
 			p := location(self, event)
 			st.ui.mouse(p.X, p.Y, button, action, eventMods(event))
 		}
@@ -178,7 +191,7 @@ func viewMethods() []objc.MethodDef {
 		{Cmd: sel("draggingEntered:"), Fn: func(objc.ID, objc.SEL, objc.ID) uint { return nsDragOperationCopy }},
 		{Cmd: sel("draggingUpdated:"), Fn: func(objc.ID, objc.SEL, objc.ID) uint { return nsDragOperationCopy }},
 		{Cmd: sel("performDragOperation:"), Fn: func(self objc.ID, _ objc.SEL, info objc.ID) bool {
-			st := current
+			st := stateOf(self)
 			if st == nil {
 				return false
 			}
@@ -196,7 +209,7 @@ func viewMethods() []objc.MethodDef {
 		}},
 		{Cmd: sel("acceptsFirstMouse:"), Fn: func(objc.ID, objc.SEL, objc.ID) bool { return true }},
 		{Cmd: sel("drawRect:"), Fn: func(self objc.ID, _ objc.SEL, _ CGRect) {
-			st := current
+			st := stateOf(self)
 			if st == nil {
 				return
 			}
@@ -231,7 +244,7 @@ func viewMethods() []objc.MethodDef {
 			st.setTitle(st.ui.frameTitle())
 		}},
 		{Cmd: sel("keyDown:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
-			st := current
+			st := stateOf(self)
 			if st == nil {
 				return
 			}
@@ -254,14 +267,14 @@ func viewMethods() []objc.MethodDef {
 			self.Send(sel("interpretKeyEvents:"), class("NSArray").Send(sel("arrayWithObject:"), event))
 		}},
 		{Cmd: sel("mouseMoved:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
-			if st := current; st != nil {
+			if st := stateOf(self); st != nil {
 				p := location(self, event)
 				shape, tip := st.ui.hover(p.X, p.Y)
 				st.showPointer(self, shape, tip)
 			}
 		}},
 		{Cmd: sel("mouseExited:"), Fn: func(self objc.ID, _ objc.SEL, _ objc.ID) {
-			if st := current; st != nil {
+			if st := stateOf(self); st != nil {
 				shape, tip := st.ui.hover(-1, -1)
 				st.showPointer(self, shape, tip)
 			}
@@ -274,7 +287,7 @@ func viewMethods() []objc.MethodDef {
 		{Cmd: sel("otherMouseDown:"), Fn: mouseHandler(flatte.MouseMiddle, flatte.MousePress)},
 		{Cmd: sel("otherMouseUp:"), Fn: mouseHandler(flatte.MouseMiddle, flatte.MouseRelease)},
 		{Cmd: sel("scrollWheel:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
-			st := current
+			st := stateOf(self)
 			if st == nil {
 				return
 			}
@@ -296,27 +309,32 @@ func viewMethods() []objc.MethodDef {
 		// NSTextInputClient. The "document" is the composition alone:
 		// committed text goes to the app as key events, so only the marked
 		// text has ranges.
-		{Cmd: sel("hasMarkedText"), Fn: func(objc.ID, objc.SEL) bool { return current != nil && current.marked != "" }},
-		{Cmd: sel("markedRange"), Fn: func(objc.ID, objc.SEL) NSRange {
-			if current == nil || current.marked == "" {
-				return NSRange{Location: nsNotFound}
-			}
-			return NSRange{Length: uint(utf16Len(current.marked))}
+		{Cmd: sel("hasMarkedText"), Fn: func(self objc.ID, _ objc.SEL) bool {
+			st := stateOf(self)
+			return st != nil && st.marked != ""
 		}},
-		{Cmd: sel("selectedRange"), Fn: func(objc.ID, objc.SEL) NSRange {
-			if current == nil {
+		{Cmd: sel("markedRange"), Fn: func(self objc.ID, _ objc.SEL) NSRange {
+			st := stateOf(self)
+			if st == nil || st.marked == "" {
 				return NSRange{Location: nsNotFound}
 			}
-			return NSRange{Location: uint(utf16Len(current.marked))}
+			return NSRange{Length: uint(utf16Len(st.marked))}
+		}},
+		{Cmd: sel("selectedRange"), Fn: func(self objc.ID, _ objc.SEL) NSRange {
+			st := stateOf(self)
+			if st == nil {
+				return NSRange{Location: nsNotFound}
+			}
+			return NSRange{Location: uint(utf16Len(st.marked))}
 		}},
 		{Cmd: sel("setMarkedText:selectedRange:replacementRange:"), Fn: func(self objc.ID, _ objc.SEL, text objc.ID, _, _ NSRange) {
-			if st := current; st != nil {
+			if st := stateOf(self); st != nil {
 				st.marked = plainString(text)
 				self.Send(sel("setNeedsDisplay:"), true)
 			}
 		}},
 		{Cmd: sel("unmarkText"), Fn: func(self objc.ID, _ objc.SEL) {
-			if st := current; st != nil && st.marked != "" {
+			if st := stateOf(self); st != nil && st.marked != "" {
 				text := st.marked
 				st.marked = ""
 				for _, ev := range textKeys(text) {
@@ -331,7 +349,7 @@ func viewMethods() []objc.MethodDef {
 			return 0
 		}},
 		{Cmd: sel("insertText:replacementRange:"), Fn: func(self objc.ID, _ objc.SEL, text objc.ID, _ NSRange) {
-			if st := current; st != nil {
+			if st := stateOf(self); st != nil {
 				st.marked = ""
 				for _, ev := range textKeys(plainString(text)) {
 					st.ui.key(ev)
@@ -344,7 +362,7 @@ func viewMethods() []objc.MethodDef {
 			if actual != nil {
 				*actual = r
 			}
-			st := current
+			st := stateOf(self)
 			if st == nil || !st.caretOK {
 				return CGRect{}
 			}
@@ -355,7 +373,7 @@ func viewMethods() []objc.MethodDef {
 			return rect
 		}},
 		{Cmd: sel("doCommandBySelector:"), Fn: func(self objc.ID, _ objc.SEL, cmd objc.SEL) {
-			st := current
+			st := stateOf(self)
 			if st == nil {
 				return
 			}

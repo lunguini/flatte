@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -26,8 +27,12 @@ type State struct {
 	// path is the open file ("" untitled); saved is the text as last
 	// opened or saved; status reports the last file operation.
 	path, saved, status string
-	lastKey             string
-	lastAction          string
+	// stats shows the statistics window; focus is the focused window ("" the
+	// editor's), which keys and pastes belong to.
+	stats      bool
+	focus      string
+	lastKey    string
+	lastAction string
 }
 
 func NewState() *State {
@@ -48,12 +53,29 @@ const editorID = "editor"
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
 	case flatte.LayoutEvent:
-		if r, ok := e.Rects[editorID]; ok {
+		if r, ok := e.Rects[editorID]; ok && e.Window == "" {
 			s.ta.SetSize(max(r.W, 1), max(r.H, 1))
 		}
+	case flatte.WindowEvent:
+		switch {
+		case e.Kind == flatte.WindowFocused:
+			s.focus = e.Window
+		case e.Window == statsID: // its close button
+			s.stats = false
+		}
 	case flatte.KeyEvent:
+		if s.focus == statsID {
+			// The statistics window takes no text; Esc closes it.
+			if e.Key == flatte.KeyEscape {
+				s.stats = false
+			}
+			return
+		}
 		handleKey(s, e, fx)
 	case flatte.PasteEvent:
+		if s.focus == statsID {
+			return
+		}
 		s.lastAction = "paste"
 		s.ta.InsertText(e.Text)
 	case flatte.ClipboardEvent: // the answer to Paste's ReadClipboard
@@ -86,6 +108,7 @@ const (
 	cmdSelectAll = "select-all"
 	cmdWrap      = "wrap"
 	cmdKeys      = "show-keys"
+	cmdStats     = "stats"
 )
 
 func super(r rune) flatte.KeyEvent {
@@ -126,6 +149,8 @@ func Menus(s *State) []flatte.Menu {
 		{Title: "View", Items: []flatte.MenuItem{
 			{ID: cmdWrap, Label: "Wrap Lines", Checked: s.ta.SoftWrap()},
 			{ID: cmdKeys, Label: "Show Keys", Checked: s.debugKeys},
+			{Separator: true},
+			{ID: cmdStats, Label: "Statistics", Checked: s.stats, Keys: []flatte.KeyEvent{statsKey, ctrl('t')}},
 		}},
 	}
 }
@@ -178,7 +203,48 @@ func command(s *State, id string, fx flatte.Effects[State]) {
 		s.ta.SetSoftWrap(!s.ta.SoftWrap())
 	case cmdKeys:
 		s.debugKeys = !s.debugKeys
+	case cmdStats:
+		s.stats = !s.stats
 	}
+}
+
+// statsID is the statistics window's ID.
+const statsID = "stats"
+
+// statsKey is ⇧⌘I, the window's Statistics shortcut. A terminal gets
+// Ctrl+T: it cannot send Ctrl+Shift+I (Ctrl+I is Tab, and Shift is lost on
+// Ctrl+letter).
+var statsKey = flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'i', Mod: flatte.ModSuper | flatte.ModShift}
+
+// Windows declares the statistics window while it is shown.
+func Windows(s *State) []flatte.Window {
+	if !s.stats {
+		return nil
+	}
+	return []flatte.Window{{ID: statsID, Width: 30, Height: 7, MinWidth: 24, MinHeight: 6, Autosave: "flat-editor.statistics"}}
+}
+
+// statsView is the statistics window: live counts of the text.
+func statsView(s *State) flatte.Frame {
+	text := s.ta.Value()
+	selected := len([]rune(s.ta.SelectedText()))
+	row := func(name string, n int) layout.Node {
+		return layout.Row{Children: []layout.Node{
+			layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(12)}, Text: name, Style: layout.TextStyle{Role: layout.TextSubtle}},
+			layout.Label{NodeBase: layout.NodeBase{ID: "stat:" + name}, Text: strconv.Itoa(n), Style: layout.TextStyle{Bold: true}},
+		}}
+	}
+	return flatte.Frame{Title: "Statistics — " + nameOr(s.path, "untitled"), Root: layout.Col{
+		NodeBase: layout.NodeBase{Pad: 1},
+		Children: []layout.Node{
+			row("Words", len(strings.Fields(text))),
+			row("Lines", strings.Count(text, "\n")+1),
+			row("Characters", len([]rune(text))),
+			row("Selected", selected),
+			layout.NewSpacer(),
+			layout.Label{Text: "esc closes", Style: layout.TextStyle{Role: layout.TextSubtle}},
+		},
+	}}
 }
 
 // handleMouse places the caret where the host says a click or drag in the
@@ -589,7 +655,10 @@ func keyName(key flatte.Key) string {
 // View shows the textarea as Textarea.Layout, a multi-line Input: the
 // terminal draws its cells and places the cursor at its caret; a window
 // draws a native text area.
-func View(s *State, _ flatte.RenderContext) flatte.Frame {
+func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+	if ctx.Window == statsID {
+		return statsView(s)
+	}
 	editor := s.ta.Layout(editorID, true)
 	editor.SelectionStyle = layout.TextStyle{Fg: lipgloss.Color("16"), Bg: brand.Teal}
 	subtle := layout.TextStyle{Role: layout.TextSubtle}
@@ -599,7 +668,7 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 		layout.Label{},
 		editor,
 		layout.Label{},
-		layout.Label{Text: "ctrl+n new  ctrl+o open  ctrl+s save  (⌘ in a window)", Style: subtle},
+		layout.Label{Text: "ctrl+n new  ctrl+o open  ctrl+s save  ctrl+t stats  ⌘ in windows", Style: subtle},
 		layout.Label{Text: "arrows  drag select  right-click menu  ⌘C/ctrl+c copy  esc quit", Style: subtle},
 	}
 	if s.debugKeys {
@@ -636,10 +705,11 @@ func main() {
 		View:        View,
 		Menus:       Menus,
 		ContextMenu: ContextMenu,
+		Windows:     Windows,
 	}
 	var err error
 	if *gui {
-		err = window.Run(context.Background(), app, window.Options{Title: "Flat Editor", Width: 72, Height: 20})
+		err = window.Run(context.Background(), app, window.Options{Title: "Flat Editor", Width: 72, Height: 20, Autosave: "flat-editor.main"})
 	} else {
 		// Ctrl+C is the editor's (copy, or quit with nothing selected).
 		err = flatte.Run(context.Background(), app, flatte.WithMouse(flatte.MouseModeCellMotion), flatte.WithoutDefaultQuit())

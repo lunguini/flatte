@@ -52,7 +52,6 @@ func newMenuTarget() (objc.ID, error) {
 // nativeMenus is the window's menuBackend.
 type nativeMenus struct {
 	title string // the app's name, for Quit
-	view  objc.ID
 }
 
 func (n nativeMenus) setBar(menus []flatte.Menu) {
@@ -63,11 +62,20 @@ func (n nativeMenus) setBar(menus []flatte.Menu) {
 	})
 }
 
-func (n nativeMenus) popUp(items []flatte.MenuItem, x, y float64) string {
+func (n nativeMenus) popUp(id string, items []flatte.MenuItem, x, y float64) string {
+	var view objc.ID
+	for v, st := range states {
+		if st.id == id {
+			view = v
+		}
+	}
+	if view == 0 {
+		return ""
+	}
 	popupIDs, popupChosen = nil, ""
 	withPool(func() {
 		m := buildMenu("", items, sel("choosePopup:"), &popupIDs)
-		m.Send(sel("popUpMenuPositioningItem:atLocation:inView:"), objc.ID(0), CGPoint{X: x, Y: y}, n.view)
+		m.Send(sel("popUpMenuPositioningItem:atLocation:inView:"), objc.ID(0), CGPoint{X: x, Y: y}, view)
 		m.Send(sel("release"))
 	})
 	chosen := popupChosen
@@ -95,10 +103,31 @@ func mainMenu(title string, menus []flatte.Menu) objc.ID {
 	for _, m := range menus {
 		add(buildMenu(m.Title, m.Items, sel("chooseBar:"), &barIDs))
 	}
+	// The Window menu: AppKit's own actions, sent to the key window.
 	winMenu := alloc("NSMenu").Send(sel("initWithTitle:"), nsString("Window"))
-	closeItem := alloc("NSMenuItem").Send(sel("initWithTitle:action:keyEquivalent:"), nsString("Close"), sel("performClose:"), nsString("w"))
-	winMenu.Send(sel("addItem:"), closeItem)
-	closeItem.Send(sel("release"))
+	for _, it := range []struct {
+		title, action, key string
+		mask               uint
+	}{
+		{"Minimize", "performMiniaturize:", "m", macCommand},
+		{"Zoom", "performZoom:", "", 0},
+		{"", "", "", 0},
+		{"Enter Full Screen", "toggleFullScreen:", "f", macCommand | macControl},
+		{"", "", "", 0},
+		{"Close", "performClose:", "w", macCommand},
+	} {
+		if it.title == "" {
+			winMenu.Send(sel("addItem:"), class("NSMenuItem").Send(sel("separatorItem")))
+			continue
+		}
+		item := alloc("NSMenuItem").Send(sel("initWithTitle:action:keyEquivalent:"), nsString(it.title), sel(it.action), nsString(it.key))
+		if it.key != "" {
+			item.Send(sel("setKeyEquivalentModifierMask:"), it.mask)
+		}
+		winMenu.Send(sel("addItem:"), item)
+		item.Send(sel("release"))
+	}
+	class("NSApplication").Send(sel("sharedApplication")).Send(sel("setWindowsMenu:"), winMenu)
 	add(winMenu)
 	return bar
 }

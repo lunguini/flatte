@@ -123,6 +123,8 @@ const (
 // Rects is the handler's own copy.
 type LayoutEvent struct {
 	Rects map[string]layout.Rect
+	// Window is the window the rects are in ("" the main window).
+	Window string
 }
 
 // MouseEvent is a mouse press/release/motion/wheel; X/Y are zero-based
@@ -147,6 +149,9 @@ type MouseEvent struct {
 	// for the Input a drag began on, clamped to it.
 	Caret    int
 	HasCaret bool
+	// Window is the window the pointer is in ("" the main window); X, Y,
+	// Target, and TargetRect are in its frame.
+	Window string
 }
 
 // DropEvent reports files or text dropped on a window (a terminal turns a
@@ -159,6 +164,8 @@ type DropEvent struct {
 	TargetRect layout.Rect
 	Paths      []string
 	Text       string
+	// Window is the window it was dropped on ("" the main window).
+	Window string
 }
 
 func (KeyEvent) isEvent()       {}

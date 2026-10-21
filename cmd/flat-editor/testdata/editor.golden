@@ -19,7 +19,7 @@
 │                                                                      │
 │                                                                      │
 │                                                                      │
-│  ctrl+n new  ctrl+o open  ctrl+s save  (⌘ in a window)               │
+│  ctrl+n new  ctrl+o open  ctrl+s save  ctrl+t stats  ⌘ in windows    │
 │  arrows  drag select  right-click menu  ⌘C/ctrl+c copy  esc quit     │
 └──────────────────────────────────────────────────────────────────────┘
 [cursor 3,4]

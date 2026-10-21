@@ -47,6 +47,8 @@ flatte package flatte
   const MouseRight MouseButton = 3
   const MouseWheelDown MouseButton = 5
   const MouseWheelUp MouseButton = 4
+  const WindowCloseRequest WindowEventKind = 1
+  const WindowFocused WindowEventKind = 0
   func Alert[S any](fx Effects[S], name string, d AlertDialog, fold func(s*S, button int))
   func ApplyUpdate[S any](s*S, tracer Tracer, update StateUpdate[S])
   func Cancel[S any](fx Effects[S], name string)
@@ -63,7 +65,9 @@ flatte package flatte
   func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(StateUpdate[S]) bool, quit func(), dispatch func(func()), clock Clock) Effects[S]
   func NewScope[S any](fx Effects[S], name string) *Scope
   func OpenFile[S any](fx Effects[S], name string, d OpenDialog, fold func(s*S, paths[]string, err error))
+  func PaintWindows[S any](wh*WindowHost, app App[S], frame Frame, handle func(LayoutEvent)) Frame
   func RenderContextFor(out io.Writer) RenderContext
+  func RouteInput[S any](menus*MenuHost, windows*WindowHost, app App[S], ev Event, width int, height int)[]Event
   func RouteMenus[S any](m*MenuHost, app App[S], ev Event, width int, height int)(Event, bool)
   func Run[S any](ctx context.Context, app App[S], opts ... Option)(runErr error)
   func SaveFile[S any](fx Effects[S], name string, d SaveDialog, fold func(s*S, path string, err error))
@@ -74,6 +78,7 @@ flatte package flatte
   func SelectFile[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, FileSelection))
   func SettleFrame(view func() Frame, handle func(LayoutEvent), last map[string] layout.Rect, width int, height int)(Frame, layout.Composition, map[string] layout.Rect)
   func Stream[S any, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T))
+  func SyncWindows[S any](wh*WindowHost, app App[S], width int, height int)[]Event
   func WithHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S]
   func WithHostDialogs[S any](fx Effects[S], show func(d Dialog, done func(DialogResult))) Effects[S]
   func WithInline() Option
@@ -89,6 +94,9 @@ flatte package flatte
   method *MenuHost.Route(ev Event, menus[]Menu, contextMenu func(target string)[]MenuItem, width int, height int)(Event, bool)
   method *Scope.Cancel()
   method *Scope.Ctx() context.Context
+  method *WindowHost.Focus() string
+  method *WindowHost.Route(ev Event)[]Event
+  method *WindowHost.WindowFrame(id string)(Frame, bool)
   method Effects[S].Ctx() context.Context
   method Effects[S].Print(s string)
   method Effects[S].Printf(format string, args ... any)
@@ -116,7 +124,8 @@ flatte package flatte
   field App.OnExit func(*S) [order=5]
   field App.Menus func(*S)[]Menu [order=6]
   field App.ContextMenu func(s*S, target string)[]MenuItem [order=7]
-  struct App fields=8 comparable=false
+  field App.Windows func(*S)[]Window [order=8]
+  struct App fields=9 comparable=false
   type ClipboardEvent struct
   field ClipboardEvent.Text string [order=0]
   struct ClipboardEvent fields=1 comparable=true
@@ -149,7 +158,8 @@ flatte package flatte
   field DropEvent.TargetRect layout.Rect [order=3]
   field DropEvent.Paths []string [order=4]
   field DropEvent.Text string [order=5]
-  struct DropEvent fields=6 comparable=false
+  field DropEvent.Window string [order=6]
+  struct DropEvent fields=7 comparable=false
   type Effects[S any] struct
   field Effects.<unexported> context.Context [order=0]
   field Effects.<unexported> chan<-StateUpdate[S] [order=1]
@@ -189,7 +199,8 @@ flatte package flatte
   struct KeyEvent fields=5 comparable=true
   type LayoutEvent struct
   field LayoutEvent.Rects map[string] layout.Rect [order=0]
-  struct LayoutEvent fields=1 comparable=false
+  field LayoutEvent.Window string [order=1]
+  struct LayoutEvent fields=2 comparable=false
   type Menu struct
   field Menu.Title string [order=0]
   field Menu.Items []MenuItem [order=1]
@@ -224,7 +235,8 @@ flatte package flatte
   field MouseEvent.TargetRect layout.Rect [order=6]
   field MouseEvent.Caret int [order=7]
   field MouseEvent.HasCaret bool [order=8]
-  struct MouseEvent fields=9 comparable=true
+  field MouseEvent.Window string [order=9]
+  struct MouseEvent fields=10 comparable=true
   type MouseMode int
   type NoopTracer struct
   struct NoopTracer fields=0 comparable=true
@@ -242,7 +254,8 @@ flatte package flatte
   type RenderContext struct
   field RenderContext.Width int [order=0]
   field RenderContext.ColorProfile colorprofile.Profile [order=1]
-  struct RenderContext fields=2 comparable=true
+  field RenderContext.Window string [order=2]
+  struct RenderContext fields=3 comparable=true
   type ResizeEvent struct
   field ResizeEvent.Width int [order=0]
   field ResizeEvent.Height int [order=1]
@@ -265,6 +278,23 @@ flatte package flatte
   interface Tracer method Event(Event)
   interface Tracer method Update(string)
   type UpdateTracer func(string)
+  type Window struct
+  field Window.ID string [order=0]
+  field Window.Width int [order=1]
+  field Window.Height int [order=2]
+  field Window.MinWidth int [order=3]
+  field Window.MinHeight int [order=4]
+  field Window.Autosave string [order=5]
+  struct Window fields=6 comparable=true
+  type WindowEvent struct
+  field WindowEvent.Window string [order=0]
+  field WindowEvent.Kind WindowEventKind [order=1]
+  struct WindowEvent fields=2 comparable=true
+  type WindowEventKind int
+  type WindowHost struct
+  field WindowHost.<unexported> []*hostWindow [order=0]
+  field WindowHost.<unexported> string [order=1]
+  struct WindowHost fields=2 comparable=false
   var ErrInlineMouseUnsupported error
   var ErrInvalidInterval error
   var ErrNoDialogs error
@@ -287,6 +317,7 @@ flatest package flatest
   method *Driver[S].Send(ev flatte.Event) flatte.Frame
   method *Driver[S].Settle() flatte.Frame
   method *Driver[S].State() *S
+  method *Driver[S].WindowFrame(id string)(frame flatte.Frame, ok bool)
   method *Recorder.Event(ev flatte.Event)
   method *Recorder.Events()[]flatte.Event
   method *Recorder.Update(name string)
@@ -298,13 +329,14 @@ flatest package flatest
   field Driver.<unexported> map[string] layout.Rect [order=3]
   field Driver.<unexported> layout.Composition [order=4]
   field Driver.<unexported> flatte.MenuHost [order=5]
-  field Driver.<unexported> []flatte.StateUpdate[S] [order=6]
-  field Driver.<unexported> *fakeClock [order=7]
-  field Driver.<unexported> []func() [order=8]
-  field Driver.<unexported> bool [order=9]
-  field Driver.<unexported> flatte.Effects[S] [order=10]
-  field Driver.<unexported> []pendingDialog [order=11]
-  struct Driver fields=12 comparable=false
+  field Driver.<unexported> flatte.WindowHost [order=6]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=7]
+  field Driver.<unexported> *fakeClock [order=8]
+  field Driver.<unexported> []func() [order=9]
+  field Driver.<unexported> bool [order=10]
+  field Driver.<unexported> flatte.Effects[S] [order=11]
+  field Driver.<unexported> []pendingDialog [order=12]
+  struct Driver fields=13 comparable=false
   type Recorder struct
   field Recorder.Steps []Step [order=0]
   struct Recorder fields=1 comparable=false

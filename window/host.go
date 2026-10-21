@@ -18,17 +18,47 @@ import (
 const maxLayoutPasses = 2
 
 // host drives an App from window events: everything about running an app in
-// a window that a platform backend does not need to know. It runs on the UI
-// thread only; async results arrive through post.
+// windows that a platform backend does not need to know. It runs on the UI
+// thread only; async results arrive through post. Its embedded surface is
+// the main window; App.Windows declares the others.
 type host[S any] struct {
+	*surface[S]
+
 	app     flatte.App[S]
 	fx      flatte.Effects[S]
 	metrics layout.Metrics
 	cancel  context.CancelFunc
 
-	// stop ends the platform run loop; invalidate requests a redraw. Both
-	// are called on the UI thread.
-	stop       func()
+	// stop ends the platform run loop. It is called on the UI thread.
+	stop     func()
+	quitting bool
+
+	post func(func())
+	// text and clip are the backend's text layout and clipboard (nil: no
+	// carets in events; clipboard effects do nothing).
+	text textLayout
+	clip clipboard
+	// menus shows native menus (nil: none); bar is the menu bar it shows.
+	menus menuBackend
+	bar   []flatte.Menu
+	// dialogs shows native dialogs (nil: every dialog answers as
+	// cancelled).
+	dialogs dialogBackend
+	// windows opens and closes the secondary windows (nil: none open);
+	// open are the ones open, by ID; focus is the focused window's ID ("" the
+	// main window).
+	windows windowBackend
+	open    map[string]*surface[S]
+	focus   string
+}
+
+// surface is one window's share of the host: its view's size, the scene
+// drawn in it, and what the backend draws over it on its own.
+type surface[S any] struct {
+	h *host[S]
+	// id is the window's ID ("" the main window); invalidate requests a
+	// redraw of it, on the UI thread.
+	id         string
 	invalidate func()
 
 	width, height float64 // view size in points
@@ -38,16 +68,10 @@ type host[S any] struct {
 	// focused Input's caret instead.
 	cursor    *flatte.Cursor
 	delivered map[string]layout.Rect
-	quitting  bool
 	// dirty marks the scene stale: the app changed since it was rendered,
 	// so carets must be read from a fresh one.
 	dirty bool
 
-	post func(func())
-	// text and clip are the backend's text layout and clipboard (nil: no
-	// carets in events; clipboard effects do nothing).
-	text textLayout
-	clip clipboard
 	// drag is the ID of the Input a left-button drag began on: pointer
 	// events report carets for it until the button is released.
 	drag string
@@ -62,12 +86,6 @@ type host[S any] struct {
 	// extending the selection.
 	pres      presentation
 	selecting bool
-	// menus shows native menus (nil: none); bar is the menu bar it shows.
-	menus menuBackend
-	bar   []flatte.Menu
-	// dialogs shows native dialogs (nil: every dialog answers as
-	// cancelled).
-	dialogs dialogBackend
 }
 
 // dialogBackend is a backend's native dialogs.
@@ -80,9 +98,34 @@ type dialogBackend interface {
 type menuBackend interface {
 	// setBar shows menus in the menu bar.
 	setBar(menus []flatte.Menu)
-	// popUp shows items as a context menu at (x, y) points until the user
-	// chooses or dismisses it, and returns the chosen item's ID ("": none).
-	popUp(items []flatte.MenuItem, x, y float64) string
+	// popUp shows items as a context menu at (x, y) points in window id
+	// until the user chooses or dismisses it, and returns the chosen item's
+	// ID ("": none).
+	popUp(id string, items []flatte.MenuItem, x, y float64) string
+}
+
+// ui is what a window's view needs from the generic host: one window's
+// surface.
+type ui interface {
+	resize(width, height float64)
+	key(flatte.KeyEvent)
+	paste()
+	hover(x, y float64) (pointer, string)
+	presentation() presentation
+	drop(x, y float64, paths []string, text string)
+	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
+	render() layout.Scene
+	frameTitle() string
+	frameCursor() *flatte.Cursor
+}
+
+// windowBackend opens and closes a backend's secondary windows.
+type windowBackend interface {
+	// openWindow shows w, drawn from s, and returns the function that
+	// redraws it.
+	openWindow(w flatte.Window, s ui) (invalidate func())
+	// closeWindow closes window id.
+	closeWindow(id string)
 }
 
 // presentation is what a backend draws on its own.
@@ -142,13 +185,15 @@ type clipboard interface {
 }
 
 // newHost wires app to a backend. post runs a function on the UI thread
-// (from any goroutine); async updates reach the app through it.
+// (from any goroutine); async updates reach the app through it; invalidate
+// redraws the main window.
 func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, post func(func()), stop, invalidate func()) *host[S] {
 	if app.Tracer == nil {
 		app.Tracer = flatte.NoopTracer{}
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	h := &host[S]{app: app, metrics: m, cancel: cancel, stop: stop, invalidate: invalidate, post: post}
+	h := &host[S]{app: app, metrics: m, cancel: cancel, stop: stop, post: post, open: map[string]*surface[S]{}}
+	h.surface = &surface[S]{h: h, invalidate: invalidate}
 	updates := make(chan flatte.StateUpdate[S], 256)
 	h.fx = flatte.WithHostClipboard(flatte.NewHarnessEffects(ctx, updates, func() { h.quitting = true }, nil, nil),
 		func(text string) {
@@ -195,8 +240,15 @@ func (h *host[S]) start(width, height float64) {
 	h.resize(width, height)
 }
 
-// close releases the host's goroutines and runs OnExit.
+// close closes the secondary windows, releases the host's goroutines, and
+// runs OnExit.
 func (h *host[S]) close() {
+	for id := range h.open {
+		if h.windows != nil {
+			h.windows.closeWindow(id)
+		}
+		delete(h.open, id)
+	}
 	h.cancel()
 	if h.app.OnExit != nil {
 		h.app.OnExit(h.app.State)
@@ -217,14 +269,89 @@ func (h *host[S]) handle(ev flatte.Event) {
 	h.after()
 }
 
-// after reacts to a state change: stop on quit, else redraw.
+// after reacts to a state change: stop on quit, else open and close windows
+// as declared and redraw them all.
 func (h *host[S]) after() {
-	h.dirty = true
 	if h.quitting {
 		h.stop()
 		return
 	}
-	h.invalidate()
+	h.syncWindows()
+	for _, s := range h.surfaces() {
+		s.dirty = true
+		s.invalidate()
+	}
+}
+
+// surfaces is the main window's surface and the open windows'.
+func (h *host[S]) surfaces() []*surface[S] {
+	out := []*surface[S]{h.surface}
+	for _, id := range slices.Sorted(maps.Keys(h.open)) {
+		out = append(out, h.open[id])
+	}
+	return out
+}
+
+// syncWindows opens the windows the app declares that are not open, and
+// closes the open ones it no longer declares.
+func (h *host[S]) syncWindows() {
+	if h.windows == nil {
+		return
+	}
+	var declared []flatte.Window
+	if h.app.Windows != nil {
+		declared = h.app.Windows(h.app.State)
+	}
+	keep := map[string]bool{}
+	for _, w := range declared {
+		if w.ID == "" || keep[w.ID] {
+			continue
+		}
+		keep[w.ID] = true
+		if _, ok := h.open[w.ID]; ok {
+			continue
+		}
+		s := &surface[S]{h: h, id: w.ID, dirty: true, invalidate: func() {}}
+		h.open[w.ID] = s
+		s.invalidate = h.windows.openWindow(w, s)
+	}
+	for id := range h.open {
+		if !keep[id] {
+			delete(h.open, id)
+			h.windows.closeWindow(id)
+			if h.focus == id {
+				h.focus = "" // the backend reports the next key window
+			}
+		}
+	}
+}
+
+// focused reports that window id ("" the main window) became the key
+// window; the app hears of it when that changes the focus.
+func (h *host[S]) focused(id string) {
+	if id == h.focus {
+		return
+	}
+	if _, ok := h.open[id]; id != "" && !ok {
+		return
+	}
+	h.focus = id
+	h.handle(flatte.WindowEvent{Window: id, Kind: flatte.WindowFocused})
+}
+
+// closeRequested reports the user asking to close window id.
+func (h *host[S]) closeRequested(id string) {
+	if _, ok := h.open[id]; ok {
+		h.handle(flatte.WindowEvent{Window: id, Kind: flatte.WindowCloseRequest})
+	}
+}
+
+// focusedSurface is the focused window's surface.
+func (h *host[S]) focusedSurface() *surface[S] {
+	if s, ok := h.open[h.focus]; ok {
+		return s
+	}
+	return h.surface
 }
 
 func (h *host[S]) cols(points float64) int  { return cellsIn(points, h.metrics.Column) }
@@ -234,21 +361,28 @@ func cellsIn(points, unit float64) int {
 	return layout.PointRect{W: points}.Cells(layout.Metrics{Column: unit}).W
 }
 
-// resize records the view size and tells the app its size in cells.
-func (h *host[S]) resize(width, height float64) {
-	if width == h.width && height == h.height {
+// resize records the view size; the main window tells the app its size in
+// cells (secondary windows' sizes reach it as LayoutEvents).
+func (s *surface[S]) resize(width, height float64) {
+	if width == s.width && height == s.height {
 		return
 	}
-	h.width, h.height = width, height
-	h.handle(flatte.ResizeEvent{Width: h.cols(width), Height: h.lines(height)})
+	s.width, s.height = width, height
+	if s.id == "" {
+		s.h.handle(flatte.ResizeEvent{Width: s.h.cols(width), Height: s.h.lines(height)})
+		return
+	}
+	s.dirty = true
+	s.invalidate()
 }
 
 // key delivers a key event. Up and Down (plain or with Shift) over a
 // focused multi-line Input carry the caret one visual row away in the
 // backend's layout, keeping the x a run of vertical moves started at.
-func (h *host[S]) key(ev flatte.KeyEvent) {
+func (s *surface[S]) key(ev flatte.KeyEvent) {
+	h := s.h
 	// ⌘C copies selected label text; with none it is the app's.
-	if ev == copyKey && h.copySelection() {
+	if ev == copyKey && s.copySelection() {
 		return
 	}
 	// A menu shortcut the menu bar did not take natively (one without ⌘,
@@ -262,28 +396,28 @@ func (h *host[S]) key(ev flatte.KeyEvent) {
 		}
 	}
 	vertical := (ev.Key == flatte.KeyUp || ev.Key == flatte.KeyDown) && ev.Mod&^flatte.ModShift == 0
-	if op, ok := h.focusedArea(); vertical && ok && h.text != nil {
-		if op.ID != h.goalID || op.Caret != h.goalCaret {
-			h.goal = h.text.caretX(op, op.Caret)
+	if op, ok := s.focusedArea(); vertical && ok && h.text != nil {
+		if op.ID != s.goalID || op.Caret != s.goalCaret {
+			s.goal = h.text.caretX(op, op.Caret)
 		}
 		dir := 1
 		if ev.Key == flatte.KeyUp {
 			dir = -1
 		}
-		ev.Caret, ev.HasCaret = h.text.caretStep(op, op.Caret, dir, h.goal), true
-		h.goalID, h.goalCaret = op.ID, ev.Caret
+		ev.Caret, ev.HasCaret = h.text.caretStep(op, op.Caret, dir, s.goal), true
+		s.goalID, s.goalCaret = op.ID, ev.Caret
 	}
 	h.handle(ev)
 }
 
 // control is the control with id in the scene; ok is false when there is
 // none or it is disabled.
-func (h *host[S]) control(id string) (layout.ControlOp, bool) {
+func (s *surface[S]) control(id string) (layout.ControlOp, bool) {
 	if id == "" {
 		return layout.ControlOp{}, false
 	}
-	for i := len(h.scene.Ops) - 1; i >= 0; i-- {
-		if c, ok := h.scene.Ops[i].(layout.ControlOp); ok && c.ID == id {
+	for i := len(s.scene.Ops) - 1; i >= 0; i-- {
+		if c, ok := s.scene.Ops[i].(layout.ControlOp); ok && c.ID == id {
 			return c, !c.Disabled
 		}
 	}
@@ -293,29 +427,29 @@ func (h *host[S]) control(id string) (layout.ControlOp, bool) {
 // hover tracks the pointer at (x, y) points (outside the view: x < 0):
 // it records the control under it, redrawing when that changes, and
 // reports the pointer shape and tooltip to show there.
-func (h *host[S]) hover(x, y float64) (pointer, string) {
-	scene := h.fresh()
+func (s *surface[S]) hover(x, y float64) (pointer, string) {
+	scene := s.fresh()
 	id, tooltip, shape := "", "", pointerArrow
 	if x >= 0 && y >= 0 {
 		id, _ = scene.HitTest(x, y)
 		tooltip = scene.TooltipAt(x, y)
-		if _, ok := h.input(id); ok {
+		if _, ok := s.input(id); ok {
 			shape = pointerText
 		}
 	}
-	if _, ok := h.control(id); ok {
+	if _, ok := s.control(id); ok {
 		shape = pointerHand
 	} else {
 		id = ""
 	}
 	if shape == pointerArrow {
-		if _, _, ok := h.selectableAt(x, y); ok {
+		if _, _, ok := s.selectableAt(x, y); ok {
 			shape = pointerText
 		}
 	}
-	if id != h.pres.hovered {
-		h.pres.hovered = id
-		h.invalidate()
+	if id != s.pres.hovered {
+		s.pres.hovered = id
+		s.invalidate()
 	}
 	return shape, tooltip
 }
@@ -336,22 +470,23 @@ var copyKey = flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'c', Mod: flatte.M
 
 // copySelection copies the selected label text, reporting whether there
 // was any.
-func (h *host[S]) copySelection() bool {
-	if h.clip == nil {
+func (s *surface[S]) copySelection() bool {
+	if s.h.clip == nil {
 		return false
 	}
-	text := h.selectedText()
+	text := s.selectedText()
 	if text != "" {
-		h.clip.set(text)
+		s.h.clip.set(text)
 	}
 	return text != ""
 }
 
 // menuChosen delivers the menu bar's choice of the item with id — except
 // that the app's Copy (an item with the ⌘C shortcut) copies selected label
-// text when there is some, as Copy acts on the selection in native apps.
+// text in the focused window when there is some, as Copy acts on the
+// selection in native apps.
 func (h *host[S]) menuChosen(id string) {
-	if it, ok := findMenuItem(h.bar, id); ok && slices.Contains(it.Keys, copyKey) && h.copySelection() {
+	if it, ok := findMenuItem(h.bar, id); ok && slices.Contains(it.Keys, copyKey) && h.focusedSurface().copySelection() {
 		return
 	}
 	h.handle(flatte.MenuEvent{ID: id})
@@ -382,9 +517,10 @@ func findMenuItem(menus []flatte.Menu, id string) (flatte.MenuItem, bool) {
 
 // drop delivers files or text dropped at (x, y) points as a DropEvent,
 // located as mouse events are.
-func (h *host[S]) drop(x, y float64, paths []string, text string) {
-	scene := h.fresh()
-	ev := flatte.DropEvent{X: h.cols(x), Y: h.lines(y), Paths: paths, Text: text}
+func (s *surface[S]) drop(x, y float64, paths []string, text string) {
+	h := s.h
+	scene := s.fresh()
+	ev := flatte.DropEvent{X: h.cols(x), Y: h.lines(y), Paths: paths, Text: text, Window: s.id}
 	if id, r := scene.HitTest(x, y); id != "" {
 		ev.Target, ev.TargetRect = id, r.Cells(h.metrics)
 		ev.X = ev.TargetRect.X + h.cols(x-r.X)
@@ -394,25 +530,25 @@ func (h *host[S]) drop(x, y float64, paths []string, text string) {
 }
 
 // presentation is what to draw over the scene.
-func (h *host[S]) presentation() presentation { return h.pres }
+func (s *surface[S]) presentation() presentation { return s.pres }
 
 // selectableAt is the topmost Selectable TextOp at (x, y) points, and its
 // index in the scene; none under an overlay layer above it, or over an
 // Input or a control.
-func (h *host[S]) selectableAt(x, y float64) (int, layout.TextOp, bool) {
+func (s *surface[S]) selectableAt(x, y float64) (int, layout.TextOp, bool) {
 	if x < 0 || y < 0 {
 		return 0, layout.TextOp{}, false
 	}
-	id, _ := h.scene.HitTest(x, y)
-	if _, ok := h.input(id); ok {
+	id, _ := s.scene.HitTest(x, y)
+	if _, ok := s.input(id); ok {
 		return 0, layout.TextOp{}, false
 	}
-	if _, ok := h.control(id); ok {
+	if _, ok := s.control(id); ok {
 		return 0, layout.TextOp{}, false
 	}
 	in := func(r layout.PointRect) bool { return x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H }
-	for i := len(h.scene.Ops) - 1; i >= 0; i-- {
-		switch op := h.scene.Ops[i].(type) {
+	for i := len(s.scene.Ops) - 1; i >= 0; i-- {
+		switch op := s.scene.Ops[i].(type) {
 		case layout.TextOp:
 			if op.Selectable && in(op.Rect) && in(op.Clip) {
 				return i, op, true
@@ -437,60 +573,61 @@ func opAt[O layout.Op](s layout.Scene, i int) (O, bool) {
 }
 
 // selectedText is the text selected in a label, or "".
-func (h *host[S]) selectedText() string {
-	s := h.pres.sel
-	op, ok := opAt[layout.TextOp](h.scene, s.op)
+func (s *surface[S]) selectedText() string {
+	sel := s.pres.sel
+	op, ok := opAt[layout.TextOp](s.scene, sel.op)
 	if !ok {
 		return ""
 	}
-	a, b := s.in(s.op, op)
+	a, b := sel.in(sel.op, op)
 	return op.Text[a:b]
 }
 
 // selectText tracks a left-button press, drag, or release at (x, y) for
 // label selection: a press on selectable text starts a selection there (and
 // one anywhere else clears it); a drag extends it, clamped to its label.
-func (h *host[S]) selectText(x, y float64, action flatte.MouseAction) {
-	before := h.pres.sel
+func (s *surface[S]) selectText(x, y float64, action flatte.MouseAction) {
+	text := s.h.text
+	before := s.pres.sel
 	switch action {
 	case flatte.MousePress:
-		h.pres.sel, h.selecting = textSel{}, false
-		if i, op, ok := h.selectableAt(x, y); ok && h.text != nil {
-			at := h.text.textOffset(op, x, y)
-			h.pres.sel = textSel{op: i, text: op.Text, from: at, to: at, ok: true}
-			h.selecting = true
+		s.pres.sel, s.selecting = textSel{}, false
+		if i, op, ok := s.selectableAt(x, y); ok && text != nil {
+			at := text.textOffset(op, x, y)
+			s.pres.sel = textSel{op: i, text: op.Text, from: at, to: at, ok: true}
+			s.selecting = true
 		}
 	case flatte.MouseMotion:
-		if op, ok := opAt[layout.TextOp](h.scene, h.pres.sel.op); h.selecting && ok && op.Text == h.pres.sel.text {
-			h.pres.sel.to = h.text.textOffset(op, x, y)
+		if op, ok := opAt[layout.TextOp](s.scene, s.pres.sel.op); s.selecting && ok && op.Text == s.pres.sel.text {
+			s.pres.sel.to = text.textOffset(op, x, y)
 		}
 	case flatte.MouseRelease:
-		h.selecting = false
+		s.selecting = false
 	}
-	if h.pres.sel != before {
-		h.invalidate()
+	if s.pres.sel != before {
+		s.invalidate()
 	}
 }
 
 // paste delivers text as a PasteEvent, as a terminal delivers a paste.
-func (h *host[S]) paste() {
-	if h.clip != nil {
-		h.handle(flatte.PasteEvent{Text: h.clip.get()})
+func (s *surface[S]) paste() {
+	if s.h.clip != nil {
+		s.h.handle(flatte.PasteEvent{Text: s.h.clip.get()})
 	}
 }
 
 // fresh returns the scene as the app now stands, rendering again when the
 // app changed since the last one.
-func (h *host[S]) fresh() layout.Scene {
-	if h.dirty {
-		h.render()
+func (s *surface[S]) fresh() layout.Scene {
+	if s.dirty {
+		s.render()
 	}
-	return h.scene
+	return s.scene
 }
 
 // focusedArea is the topmost focused multi-line Input of a fresh scene.
-func (h *host[S]) focusedArea() (layout.InputOp, bool) {
-	ops := h.fresh().Ops
+func (s *surface[S]) focusedArea() (layout.InputOp, bool) {
+	ops := s.fresh().Ops
 	for i := len(ops) - 1; i >= 0; i-- {
 		if in, ok := ops[i].(layout.InputOp); ok && in.Focused && in.Multiline {
 			return in, true
@@ -500,12 +637,12 @@ func (h *host[S]) focusedArea() (layout.InputOp, bool) {
 }
 
 // input is the topmost Input with id in the scene.
-func (h *host[S]) input(id string) (layout.InputOp, bool) {
+func (s *surface[S]) input(id string) (layout.InputOp, bool) {
 	if id == "" {
 		return layout.InputOp{}, false
 	}
-	for i := len(h.scene.Ops) - 1; i >= 0; i-- {
-		if in, ok := h.scene.Ops[i].(layout.InputOp); ok && in.ID == id {
+	for i := len(s.scene.Ops) - 1; i >= 0; i-- {
+		if in, ok := s.scene.Ops[i].(layout.InputOp); ok && in.ID == id {
 			return in, true
 		}
 	}
@@ -520,13 +657,14 @@ func (h *host[S]) input(id string) (layout.InputOp, bool) {
 // Over an ID'd Input the event carries the caret nearest the pointer; a
 // left-button drag that began on one keeps targeting it, with carets
 // clamped to it, until the button is released.
-func (h *host[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod) {
-	scene := h.fresh()
-	ev := flatte.MouseEvent{Button: button, Action: action, Mod: mod, X: h.cols(x), Y: h.lines(y)}
+func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod) {
+	h := s.h
+	scene := s.fresh()
+	ev := flatte.MouseEvent{Button: button, Action: action, Mod: mod, X: h.cols(x), Y: h.lines(y), Window: s.id}
 	id, r := scene.HitTest(x, y)
-	dragging := h.drag != "" && button == flatte.MouseLeft && action != flatte.MousePress
+	dragging := s.drag != "" && button == flatte.MouseLeft && action != flatte.MousePress
 	if dragging {
-		id, r = h.drag, scene.Rects[h.drag]
+		id, r = s.drag, scene.Rects[s.drag]
 	}
 	if id != "" {
 		ev.Target, ev.TargetRect = id, r.Cells(h.metrics)
@@ -539,36 +677,36 @@ func (h *host[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.M
 	secondary := button == flatte.MouseRight || button == flatte.MouseLeft && mod.Contains(flatte.ModCtrl)
 	if secondary && action == flatte.MousePress && h.app.ContextMenu != nil && h.menus != nil {
 		if items := h.app.ContextMenu(h.app.State, id); len(items) > 0 {
-			if chosen := h.menus.popUp(items, x, y); chosen != "" {
+			if chosen := h.menus.popUp(s.id, items, x, y); chosen != "" {
 				h.handle(flatte.MenuEvent{ID: chosen, Target: id})
 			}
 			return
 		}
 	}
-	if op, ok := h.input(id); ok && h.text != nil {
+	if op, ok := s.input(id); ok && h.text != nil {
 		ev.Caret, ev.HasCaret = h.text.caretAt(op, x, y), true
 		if button == flatte.MouseLeft && action == flatte.MousePress {
-			h.drag = id
+			s.drag = id
 		}
 	}
 	if button == flatte.MouseLeft && action == flatte.MouseRelease {
-		h.drag = ""
+		s.drag = ""
 	}
 	// A control shows pressed while the left button is down on it.
 	if button == flatte.MouseLeft {
-		h.selectText(x, y, action)
-		pressed := h.pres.pressed
+		s.selectText(x, y, action)
+		pressed := s.pres.pressed
 		switch action {
 		case flatte.MousePress:
-			if _, ok := h.control(id); ok {
+			if _, ok := s.control(id); ok {
 				pressed = id
 			}
 		case flatte.MouseRelease:
 			pressed = ""
 		}
-		if pressed != h.pres.pressed {
-			h.pres.pressed = pressed
-			h.invalidate()
+		if pressed != s.pres.pressed {
+			s.pres.pressed = pressed
+			s.invalidate()
 		}
 	}
 	h.handle(ev)
@@ -577,53 +715,55 @@ func (h *host[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.M
 // render produces the scene to draw, settling layout first: while the
 // solved rects (in cells) differ from the last delivered, deliver them as a
 // LayoutEvent and render again, at most maxLayoutPasses times.
-func (h *host[S]) render() layout.Scene {
+func (s *surface[S]) render() layout.Scene {
+	h := s.h
 	for pass := 0; ; pass++ {
-		frame := h.view()
-		h.title = frame.Title
-		h.cursor = nil
+		frame := s.view()
+		s.title = frame.Title
+		s.cursor = nil
 		root := frame.Root
 		if root == nil {
 			// A string frame shows as a cell grid, with its cursor.
 			root = layout.Text{String: frame.Content}
-			h.cursor = frame.Cursor
+			s.cursor = frame.Cursor
 		}
-		h.scene = layout.LayoutScene(root, h.width, h.height, h.metrics)
-		h.dirty = false
+		s.scene = layout.LayoutScene(root, s.width, s.height, h.metrics)
+		s.dirty = false
 		h.syncMenus()
 		// A selection lasts while its label does.
-		if s := h.pres.sel; s.ok {
-			if op, ok := opAt[layout.TextOp](h.scene, s.op); !ok || !op.Selectable || op.Text != s.text {
-				h.pres.sel, h.selecting = textSel{}, false
+		if sel := s.pres.sel; sel.ok {
+			if op, ok := opAt[layout.TextOp](s.scene, sel.op); !ok || !op.Selectable || op.Text != sel.text {
+				s.pres.sel, s.selecting = textSel{}, false
 			}
 		}
 		if frame.Root == nil || pass == maxLayoutPasses {
-			return h.scene
+			return s.scene
 		}
-		rects := make(map[string]layout.Rect, len(h.scene.Rects))
-		for id, r := range h.scene.Rects {
+		rects := make(map[string]layout.Rect, len(s.scene.Rects))
+		for id, r := range s.scene.Rects {
 			rects[id] = r.Cells(h.metrics)
 		}
-		if maps.Equal(rects, h.delivered) {
-			return h.scene
+		if maps.Equal(rects, s.delivered) {
+			return s.scene
 		}
-		h.delivered = rects
-		h.app.Tracer.Event(flatte.LayoutEvent{Rects: maps.Clone(rects)})
+		s.delivered = rects
+		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), Window: s.id}
+		h.app.Tracer.Event(ev)
 		if h.app.Handle != nil {
-			h.app.Handle(h.app.State, flatte.LayoutEvent{Rects: maps.Clone(rects)}, h.fx)
+			h.app.Handle(h.app.State, flatte.LayoutEvent{Rects: maps.Clone(rects), Window: s.id}, h.fx)
 		}
 		if h.quitting {
 			h.stop()
-			return h.scene
+			return s.scene
 		}
 	}
 }
 
-func (h *host[S]) view() flatte.Frame {
-	if h.app.View == nil {
+func (s *surface[S]) view() flatte.Frame {
+	if s.h.app.View == nil {
 		return flatte.Frame{}
 	}
-	return h.app.View(h.app.State, flatte.RenderContext{Width: h.cols(h.width), ColorProfile: colorprofile.TrueColor})
+	return s.h.app.View(s.h.app.State, flatte.RenderContext{Width: s.h.cols(s.width), ColorProfile: colorprofile.TrueColor, Window: s.id})
 }
 
 // wheelAccumulator turns precise scroll deltas (trackpads, in points) into
@@ -643,7 +783,7 @@ func (w *wheelAccumulator) notches(delta, line float64) int {
 }
 
 // frameTitle is the last rendered frame's title.
-func (h *host[S]) frameTitle() string { return h.title }
+func (s *surface[S]) frameTitle() string { return s.title }
 
 // frameCursor is the last rendered string frame's cursor, in cells.
-func (h *host[S]) frameCursor() *flatte.Cursor { return h.cursor }
+func (s *surface[S]) frameCursor() *flatte.Cursor { return s.cursor }

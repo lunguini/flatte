@@ -21,7 +21,9 @@ type Menu struct {
 // its ID. Keys are its shortcuts: a host delivers a key equal to one of
 // them (Key, Rune, and Mod; letters in either case) as the item's
 // MenuEvent instead of a KeyEvent — list several to cover hosts, such as
-// ⌘S for a window and Ctrl+S for a terminal. A Disabled item is shown
+// ⌘S for a window and Ctrl+S for a terminal. Most terminals can send only
+// a plain Ctrl+letter: not with Shift, and not Ctrl+I, M, H, or [ (they
+// are Tab, Enter, Backspace, and Esc). A Disabled item is shown
 // dimmed and cannot be chosen; its shortcuts do nothing. Checked shows a
 // check mark. Separator makes the item a divider (its other fields are
 // ignored); Items makes it a submenu.

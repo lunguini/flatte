@@ -16,6 +16,9 @@ const (
 type RenderContext struct {
 	Width        int
 	ColorProfile colorprofile.Profile
+	// Window is the window being drawn: "" for the main window, or a
+	// secondary window's ID (App.Windows).
+	Window string
 }
 
 type fdWriter interface {
