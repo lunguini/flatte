@@ -25,6 +25,12 @@ func OverlayOrigin(base, layer string) (x, y int) {
 	return max(0, (w-lb.Dx())/2), max(0, (h-lb.Dy())/2)
 }
 
+// OverlayAt draws layer over base with its top-left cell at (x, y), as an
+// ANSI-aware cell composite (the canvas grows to hold the layer).
+func OverlayAt(base, layer string, x, y int) string {
+	return compositeAt(base, layer, max(x, 0), max(y, 0))
+}
+
 // compositeAt paints layer onto base at cell (x,y); the layer rectangle covers
 // the base (so styled backgrounds survive on both sides).
 func compositeAt(base, layer string, x, y int) string {
@@ -38,8 +44,9 @@ func compositeAt(base, layer string, x, y int) string {
 		return layer
 	}
 	lb := layerStyled.Bounds()
-	w := max(bb.Dx(), lb.Dx())
-	h := max(bb.Dy(), lb.Dy())
+	// The canvas holds the base and the layer where it lands.
+	w := max(bb.Dx(), x+lb.Dx())
+	h := max(bb.Dy(), y+lb.Dy())
 	canvas := uv.NewScreenBuffer(w, h)
 	baseStyled.Draw(canvas, canvas.Bounds())
 	if !lb.Empty() {

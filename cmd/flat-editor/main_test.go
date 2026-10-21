@@ -33,6 +33,15 @@ func emptyState() *State {
 	return s
 }
 
+// routed delivers ev as a host does: menu shortcuts become MenuEvents.
+func routed(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	var m flatte.MenuHost
+	app := flatte.App[State]{State: s, Menus: Menus, ContextMenu: ContextMenu}
+	if ev, ok := flatte.RouteMenus(&m, app, ev, 80, 24); ok {
+		Handle(s, ev, fx)
+	}
+}
+
 func typeRunes(s *State, text string) {
 	for _, r := range text {
 		Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r}, flatte.Effects[State]{})
@@ -376,9 +385,10 @@ func TestSuperChordsCopyCutSelectAllAndPaste(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "one two")
 	var clip []string
-	fx := flatte.WithHostClipboard(flatte.Effects[State]{}, func(text string) { clip = append(clip, text) }, nil)
+	reads := 0
+	fx := flatte.WithHostClipboard(flatte.Effects[State]{}, func(text string) { clip = append(clip, text) }, func() { reads++ })
 	super := func(r rune) {
-		Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModSuper}, fx)
+		routed(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModSuper}, fx)
 	}
 	super('a')
 	super('c')
@@ -396,6 +406,98 @@ func TestSuperChordsCopyCutSelectAllAndPaste(t *testing.T) {
 	Handle(s, flatte.PasteEvent{Text: "pasted\nlines"}, fx)
 	if s.ta.Value() != "pasted\nlines" || s.ta.Row() != 1 {
 		t.Fatalf("paste: %q at row %d", s.ta.Value(), s.ta.Row())
+	}
+	// ⌘V is the Paste command: it reads the clipboard, whose answer is
+	// inserted.
+	super('v')
+	Handle(s, flatte.ClipboardEvent{Text: "!"}, fx)
+	if reads != 1 || s.ta.Value() != "pasted\nlines!" {
+		t.Fatalf("⌘V: %d reads, value %q", reads, s.ta.Value())
+	}
+	// Without a selection Cut and Copy are disabled: their keys do nothing.
+	super('c')
+	super('x')
+	if len(clip) != 2 || s.ta.Value() != "pasted\nlines!" {
+		t.Fatalf("disabled cut/copy acted: clip %q value %q", clip, s.ta.Value())
+	}
+}
+
+func TestCopyOnSelectIsOptIn(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		s := emptyState()
+		s.copyOnSelect = on
+		typeRunes(s, "hello")
+		var clip []string
+		fx := flatte.WithHostClipboard(flatte.Effects[State]{}, func(text string) { clip = append(clip, text) }, nil)
+		drag := func(caret int, action flatte.MouseAction) {
+			Handle(s, flatte.MouseEvent{Button: flatte.MouseLeft, Action: action, Target: editorID, Caret: caret, HasCaret: true}, fx)
+		}
+		drag(0, flatte.MousePress)
+		drag(4, flatte.MouseMotion)
+		if len(clip) != 0 {
+			t.Fatalf("on=%v: copied mid-drag", on)
+		}
+		drag(4, flatte.MouseRelease)
+		want := 0
+		if on {
+			want = 1
+		}
+		if len(clip) != want || on && clip[0] != "hell" {
+			t.Fatalf("on=%v: clipboard %q after the drag", on, clip)
+		}
+		// A click without a selection copies nothing.
+		drag(2, flatte.MousePress)
+		drag(2, flatte.MouseRelease)
+		if len(clip) != want {
+			t.Fatalf("on=%v: a click copied %q", on, clip)
+		}
+	}
+}
+
+func TestMenus(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello")
+	if ContextMenu(s, "elsewhere") != nil {
+		t.Error("a context menu outside the editor")
+	}
+	items := ContextMenu(s, editorID)
+	if len(items) != 5 || !items[0].Disabled || !items[1].Disabled || items[2].Disabled {
+		t.Fatalf("context menu without a selection: %+v", items)
+	}
+	Handle(s, flatte.MenuEvent{ID: cmdSelectAll, Target: editorID}, flatte.Effects[State]{})
+	if items := ContextMenu(s, editorID); items[0].Disabled || items[1].Disabled {
+		t.Fatal("cut/copy disabled with a selection")
+	}
+	view := Menus(s)[1].Items
+	if !view[0].Checked || view[1].Checked {
+		t.Fatalf("view toggles %+v", view)
+	}
+	Handle(s, flatte.MenuEvent{ID: cmdWrap}, flatte.Effects[State]{})
+	Handle(s, flatte.MenuEvent{ID: cmdKeys}, flatte.Effects[State]{})
+	if s.ta.SoftWrap() || !s.debugKeys || Menus(s)[1].Items[0].Checked || !Menus(s)[1].Items[1].Checked {
+		t.Fatal("view toggles did not toggle")
+	}
+}
+
+// The terminal draws the context menu over the editor and delivers the
+// choice.
+func TestContextMenuInTheTerminal(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello world")
+	d := flatest.Start(flatte.App[State]{State: s, Handle: Handle, View: View, Menus: Menus, ContextMenu: ContextMenu}, 72)
+	d.Send(flatte.ResizeEvent{Width: 72, Height: 20})
+	d.Send(flatte.MenuEvent{ID: cmdSelectAll})
+	_, comp := flatte.ComposeFrame(d.Frame(), 72, 20)
+	r := comp.Rects[editorID]
+	f := d.Send(flatte.MouseEvent{X: r.X + 2, Y: r.Y, Button: flatte.MouseRight, Action: flatte.MousePress})
+	flatest.AssertGoldenFrame(t, "testdata/context-menu.golden", f)
+	d.Send(flatte.KeyEvent{Key: flatte.KeyDown}) // Copy
+	d.Send(flatte.KeyEvent{Key: flatte.KeyDown}) // Paste
+	d.Send(flatte.KeyEvent{Key: flatte.KeyUp})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyUp}) // Cut
+	d.Send(flatte.KeyEvent{Key: flatte.KeyEnter})
+	if s.ta.Value() != "" || s.lastAction != cmdCut {
+		t.Fatalf("cut from the context menu: value %q action %q", s.ta.Value(), s.lastAction)
 	}
 }
 
@@ -457,7 +559,7 @@ func TestCtrlKeysCopyCutQuitAndMoveLines(t *testing.T) {
 	quit := false
 	fx := flatte.WithHostClipboard(flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil),
 		func(text string) { clip = append(clip, text) }, nil)
-	ctrl := func(r rune) { Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModCtrl}, fx) }
+	ctrl := func(r rune) { routed(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModCtrl}, fx) }
 	ctrl('a')
 	if s.ta.Col() != 0 {
 		t.Fatalf("ctrl+a col %d", s.ta.Col())

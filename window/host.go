@@ -4,6 +4,8 @@ import (
 	"context"
 	"maps"
 	"math"
+	"reflect"
+	"slices"
 
 	"github.com/charmbracelet/colorprofile"
 
@@ -60,6 +62,18 @@ type host[S any] struct {
 	// extending the selection.
 	pres      presentation
 	selecting bool
+	// menus shows native menus (nil: none); bar is the menu bar it shows.
+	menus menuBackend
+	bar   []flatte.Menu
+}
+
+// menuBackend is a backend's native menus.
+type menuBackend interface {
+	// setBar shows menus in the menu bar.
+	setBar(menus []flatte.Menu)
+	// popUp shows items as a context menu at (x, y) points until the user
+	// chooses or dismisses it, and returns the chosen item's ID ("": none).
+	popUp(items []flatte.MenuItem, x, y float64) string
 }
 
 // presentation is what a backend draws on its own.
@@ -215,9 +229,16 @@ func (h *host[S]) resize(width, height float64) {
 // backend's layout, keeping the x a run of vertical moves started at.
 func (h *host[S]) key(ev flatte.KeyEvent) {
 	// ⌘C copies selected label text; with none it is the app's.
-	if ev == (flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'c', Mod: flatte.ModSuper}) && h.clip != nil {
-		if text := h.selectedText(); text != "" {
-			h.clip.set(text)
+	if ev == copyKey && h.copySelection() {
+		return
+	}
+	// A menu shortcut the menu bar did not take natively (one without ⌘,
+	// or a disabled item's) is routed here, as a terminal routes it.
+	if h.app.Menus != nil {
+		if it, ok := flatte.MenuShortcut(h.app.Menus(h.app.State), ev); ok {
+			if !it.Disabled {
+				h.handle(flatte.MenuEvent{ID: it.ID})
+			}
 			return
 		}
 	}
@@ -278,6 +299,66 @@ func (h *host[S]) hover(x, y float64) (pointer, string) {
 		h.invalidate()
 	}
 	return shape, tooltip
+}
+
+// syncMenus shows the app's menu bar when it changed.
+func (h *host[S]) syncMenus() {
+	if h.menus == nil || h.app.Menus == nil {
+		return
+	}
+	if bar := h.app.Menus(h.app.State); !reflect.DeepEqual(bar, h.bar) {
+		h.bar = bar
+		h.menus.setBar(bar)
+	}
+}
+
+// copyKey is ⌘C.
+var copyKey = flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'c', Mod: flatte.ModSuper}
+
+// copySelection copies the selected label text, reporting whether there
+// was any.
+func (h *host[S]) copySelection() bool {
+	if h.clip == nil {
+		return false
+	}
+	text := h.selectedText()
+	if text != "" {
+		h.clip.set(text)
+	}
+	return text != ""
+}
+
+// menuChosen delivers the menu bar's choice of the item with id — except
+// that the app's Copy (an item with the ⌘C shortcut) copies selected label
+// text when there is some, as Copy acts on the selection in native apps.
+func (h *host[S]) menuChosen(id string) {
+	if it, ok := findMenuItem(h.bar, id); ok && slices.Contains(it.Keys, copyKey) && h.copySelection() {
+		return
+	}
+	h.handle(flatte.MenuEvent{ID: id})
+}
+
+// findMenuItem is the command with id in menus.
+func findMenuItem(menus []flatte.Menu, id string) (flatte.MenuItem, bool) {
+	var find func(items []flatte.MenuItem) (flatte.MenuItem, bool)
+	find = func(items []flatte.MenuItem) (flatte.MenuItem, bool) {
+		for _, it := range items {
+			if len(it.Items) > 0 {
+				if sub, ok := find(it.Items); ok {
+					return sub, true
+				}
+			} else if !it.Separator && it.ID == id {
+				return it, true
+			}
+		}
+		return flatte.MenuItem{}, false
+	}
+	for _, m := range menus {
+		if it, ok := find(m.Items); ok {
+			return it, true
+		}
+	}
+	return flatte.MenuItem{}, false
 }
 
 // presentation is what to draw over the scene.
@@ -420,6 +501,18 @@ func (h *host[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.M
 		ev.X = ev.TargetRect.X + h.cols(x-r.X)
 		ev.Y = ev.TargetRect.Y + h.lines(y-r.Y)
 	}
+	// A right press (or a Control-click, as on macOS) with a context menu
+	// shows it instead of being delivered; the choice arrives as a
+	// MenuEvent.
+	secondary := button == flatte.MouseRight || button == flatte.MouseLeft && mod.Contains(flatte.ModCtrl)
+	if secondary && action == flatte.MousePress && h.app.ContextMenu != nil && h.menus != nil {
+		if items := h.app.ContextMenu(h.app.State, id); len(items) > 0 {
+			if chosen := h.menus.popUp(items, x, y); chosen != "" {
+				h.handle(flatte.MenuEvent{ID: chosen, Target: id})
+			}
+			return
+		}
+	}
 	if op, ok := h.input(id); ok && h.text != nil {
 		ev.Caret, ev.HasCaret = h.text.caretAt(op, x, y), true
 		if button == flatte.MouseLeft && action == flatte.MousePress {
@@ -465,6 +558,7 @@ func (h *host[S]) render() layout.Scene {
 		}
 		h.scene = layout.LayoutScene(root, h.width, h.height, h.metrics)
 		h.dirty = false
+		h.syncMenus()
 		// A selection lasts while its label does.
 		if s := h.pres.sel; s.ok {
 			if op, ok := opAt[layout.TextOp](h.scene, s.op); !ok || !op.Selectable || op.Text != s.text {

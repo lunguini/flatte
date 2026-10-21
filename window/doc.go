@@ -36,9 +36,16 @@
 // macOS only for now, with no cgo: the system frameworks are bound at run
 // time through purego. On other platforms Run returns ErrUnsupported.
 //
+// Menus: App.Menus is the native menu bar, between the application menu
+// (Quit, ⌘Q) and the Window menu (Close, ⌘W); an item's first ⌘ shortcut is
+// its native key equivalent, and its other shortcuts are routed by the
+// host. App.ContextMenu shows as a native popup on a right-click or
+// Control-click. Choices arrive as MenuEvents. An item with the ⌘C shortcut
+// copies selected Label text instead, when there is some.
+//
 // Editing: the clipboard effects use the system pasteboard (ReadClipboard
-// answers with a ClipboardEvent), ⌘V delivers a PasteEvent, and ⌘ chords
-// the menu does not own (it owns ⌘Q and ⌘W) arrive as keys with ModSuper —
+// answers with a ClipboardEvent), ⌘V delivers a PasteEvent unless a menu
+// item claims it, and ⌘ chords no menu item claims arrive as keys with ModSuper —
 // except ⌘← and ⌘→, which arrive as Home and End (with Shift when held).
 // Pointer events over an Input carry the caret under the pointer, and ↑/↓
 // in a focused multi-line Input carry the caret a visual row away, both in

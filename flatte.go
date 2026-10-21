@@ -29,6 +29,17 @@ type App[S any] struct {
 	// context cancel, signal). Use it to persist state before the process
 	// exits. It fires before terminal restoration.
 	OnExit func(*S)
+	// Menus, when set, is the menu bar for the state, read like View after
+	// every change: a window shows it natively, and every host delivers a
+	// key matching an item's Keys as its MenuEvent (a terminal shows no
+	// bar).
+	Menus func(*S) []Menu
+	// ContextMenu, when set, is the menu for a right-click on the ID'd node
+	// target ("" outside any): a window shows it as a native popup, a
+	// terminal draws it over the frame. Return nil for no menu (the click
+	// is then delivered as usual); a shown menu consumes the click, and the
+	// choice arrives as a MenuEvent with Target set.
+	ContextMenu func(s *S, target string) []MenuItem
 }
 
 // action is a one-shot terminal capability request, queued by Effects
@@ -388,6 +399,8 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	// lastComp is the composition of the frame on screen; mouse events are
 	// hit-tested against it so Target matches what the user clicked.
 	var lastComp layout.Composition
+	// menus routes menu shortcuts and draws context menus (see MenuHost).
+	var menus MenuHost
 	// lastLayout is the rect set last delivered as a LayoutEvent.
 	var lastLayout map[string]layout.Rect
 	drew := false
@@ -683,6 +696,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			return // a LayoutEvent handler quit: paint nothing more
 		}
 		lastComp = comp
+		frame = menus.Paint(frame)
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
 			if err := flushRenderer(); err == nil {
@@ -966,6 +980,15 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				mouse.Caret, mouse.HasCaret = lastComp.CaretAt(mouse.X, mouse.Y)
 				result.event = mouse
 			}
+			event, deliver := RouteMenus(&menus, app, result.event, screenWidth, screenHeight)
+			if !deliver {
+				render()
+				if sink.err != nil {
+					return sink.err
+				}
+				continue
+			}
+			result.event = event
 			// Trace before any exit decision so the recorder sees the
 			// exit-causing event too (incl. a default-quit Ctrl-C).
 			app.Tracer.Event(result.event)

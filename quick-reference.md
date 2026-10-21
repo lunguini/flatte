@@ -404,6 +404,45 @@ For app-defined regions (rows, dividers), give nodes IDs and look their rects
 up directly, or feed rects into `flatui.ZoneMap` (`Clear`, then `Set(id, rect)`,
 then `At(x, y)`). `ZoneScanner` remains as deprecated compatibility API.
 
+## Menus
+
+Declare menus beside `View`, derived from state; choices arrive as
+`MenuEvent{ID, Target}`:
+
+```go
+app := flatte.App[State]{State: s, Handle: Handle, View: View, Menus: Menus, ContextMenu: ContextMenu}
+
+func Menus(s *State) []flatte.Menu {
+	return []flatte.Menu{{Title: "Edit", Items: []flatte.MenuItem{
+		{ID: "cut", Label: "Cut", Disabled: !s.hasSelection,
+			Keys: []flatte.KeyEvent{{Key: flatte.KeyCharacter, Rune: 'x', Mod: flatte.ModSuper},
+				{Key: flatte.KeyCharacter, Rune: 'x', Mod: flatte.ModCtrl}}},
+		{Separator: true},
+		{ID: "wrap", Label: "Wrap Lines", Checked: s.wrap},
+	}}}
+}
+
+func ContextMenu(s *State, target string) []flatte.MenuItem {
+	if target != "editor" {
+		return nil // no menu: the right-click is delivered as usual
+	}
+	return editItems(s)
+}
+```
+
+- `Keys` are shortcuts: every host delivers a matching key as the item's
+  `MenuEvent` instead of a `KeyEvent` (a disabled item's key does nothing).
+  List a ⌘ chord for windows and a Ctrl chord for terminals. Avoid plain
+  letters — they would be taken from text fields too. `MenuShortcut` finds
+  an item by key.
+- A window shows `Menus` as its menu bar and `ContextMenu` as a native popup
+  (right-click or Control-click). A terminal shows no bar; it draws the
+  context menu over the frame at the pointer (↑/↓, Enter, →/← for submenus,
+  Esc, mouse). An item with `Items` is a submenu; `Checked` shows a check.
+- `flatest.Driver` routes menus as `Run` does, so tests can send keys and
+  right-clicks and assert the `MenuEvent`, and goldens show the popup.
+  `cmd/flat-editor` has Edit and View menus and an edit context menu.
+
 ## Native Window
 
 The `window` module (`github.com/lunguini/flatte/window`, macOS, no cgo) runs

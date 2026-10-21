@@ -56,11 +56,13 @@ flatte package flatte
   func Latest[S any, T any](fx Effects[S], name string, work func(context.Context)(T, error), fold func(*S, T, error))
   func LoadState[S any](path string, defaultState S) S
   func LoadStateWithError[S any](path string, defaultState S)(S, error)
+  func MenuShortcut(menus[]Menu, key KeyEvent)(MenuItem, bool)
   func Named[S any](name string, apply func(*S)) StateUpdate[S]
   func NewHarnessEffects[S any](ctx context.Context, updates chan<-StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S]
   func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(StateUpdate[S]) bool, quit func(), dispatch func(func()), clock Clock) Effects[S]
   func NewScope[S any](fx Effects[S], name string) *Scope
   func RenderContextFor(out io.Writer) RenderContext
+  func RouteMenus[S any](m*MenuHost, app App[S], ev Event, width int, height int)(Event, bool)
   func Run[S any](ctx context.Context, app App[S], opts ... Option)(runErr error)
   func SaveState[S any](path string, state S) error
   func ScopeEvery[S any](scope*Scope, fx Effects[S], interval time.Duration, fold func(*S, time.Time)) error
@@ -77,6 +79,10 @@ flatte package flatte
   func WithReportFocus() Option
   func WithoutBracketedPaste() Option
   func WithoutDefaultQuit() Option
+  method *MenuHost.Close()
+  method *MenuHost.IsOpen() bool
+  method *MenuHost.Paint(frame Frame) Frame
+  method *MenuHost.Route(ev Event, menus[]Menu, contextMenu func(target string)[]MenuItem, width int, height int)(Event, bool)
   method *Scope.Cancel()
   method *Scope.Ctx() context.Context
   method Effects[S].Ctx() context.Context
@@ -99,7 +105,9 @@ flatte package flatte
   field App.View func(*S, RenderContext) Frame [order=3]
   field App.Tracer Tracer [order=4]
   field App.OnExit func(*S) [order=5]
-  struct App fields=6 comparable=false
+  field App.Menus func(*S)[]Menu [order=6]
+  field App.ContextMenu func(s*S, target string)[]MenuItem [order=7]
+  struct App fields=8 comparable=false
   type ClipboardEvent struct
   field ClipboardEvent.Text string [order=0]
   struct ClipboardEvent fields=1 comparable=true
@@ -155,6 +163,27 @@ flatte package flatte
   type LayoutEvent struct
   field LayoutEvent.Rects map[string] layout.Rect [order=0]
   struct LayoutEvent fields=1 comparable=false
+  type Menu struct
+  field Menu.Title string [order=0]
+  field Menu.Items []MenuItem [order=1]
+  struct Menu fields=2 comparable=false
+  type MenuEvent struct
+  field MenuEvent.ID string [order=0]
+  field MenuEvent.Target string [order=1]
+  struct MenuEvent fields=2 comparable=true
+  type MenuHost struct
+  field MenuHost.<unexported> []menuLevel [order=0]
+  field MenuHost.<unexported> string [order=1]
+  struct MenuHost fields=2 comparable=false
+  type MenuItem struct
+  field MenuItem.ID string [order=0]
+  field MenuItem.Label string [order=1]
+  field MenuItem.Keys []KeyEvent [order=2]
+  field MenuItem.Checked bool [order=3]
+  field MenuItem.Disabled bool [order=4]
+  field MenuItem.Separator bool [order=5]
+  field MenuItem.Items []MenuItem [order=6]
+  struct MenuItem fields=7 comparable=false
   type Mod int
   type MouseAction int
   type MouseButton int
@@ -225,12 +254,13 @@ flatest package flatest
   field Driver.<unexported> int [order=2]
   field Driver.<unexported> map[string] layout.Rect [order=3]
   field Driver.<unexported> layout.Composition [order=4]
-  field Driver.<unexported> []flatte.StateUpdate[S] [order=5]
-  field Driver.<unexported> *fakeClock [order=6]
-  field Driver.<unexported> []func() [order=7]
-  field Driver.<unexported> bool [order=8]
-  field Driver.<unexported> flatte.Effects[S] [order=9]
-  struct Driver fields=10 comparable=false
+  field Driver.<unexported> flatte.MenuHost [order=5]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=6]
+  field Driver.<unexported> *fakeClock [order=7]
+  field Driver.<unexported> []func() [order=8]
+  field Driver.<unexported> bool [order=9]
+  field Driver.<unexported> flatte.Effects[S] [order=10]
+  struct Driver fields=11 comparable=false
   type Recorder struct
   field Recorder.Steps []Step [order=0]
   struct Recorder fields=1 comparable=false
@@ -698,6 +728,7 @@ flatui/layout package layout
   func LayoutScene(root Node, width float64, height float64, m Metrics) Scene
   func NewSpacer() *Spacer
   func Overlay(base string, layer string) string
+  func OverlayAt(base string, layer string, x int, y int) string
   func OverlayOrigin(base string, layer string)(x int, y int)
   func Points(n int) Size
   func Solve(root Node, width int, height int) map[string] Rect

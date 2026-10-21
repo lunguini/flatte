@@ -139,7 +139,14 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	defer delegate.Send(sel("release"))
 	nsApp.Send(sel("setDelegate:"), delegate)
 	win.Send(sel("setDelegate:"), delegate)
-	nsApp.Send(sel("setMainMenu:"), mainMenu(title))
+	if _, err := newMenuTarget(); err != nil {
+		return err
+	}
+	menus := nativeMenus{title: title, view: view}
+	menus.setBar(nil)
+	h.menus = menus
+	barChosen = h.menuChosen
+	defer func() { barChosen = nil }()
 
 	done := make(chan struct{})
 	defer close(done)
@@ -207,24 +214,6 @@ func newDelegate(stop func()) (objc.ID, error) {
 		return 0, delegateClassErr
 	}
 	return objc.ID(delegateClass).Send(sel("new")), nil
-}
-
-// mainMenu provides the application menu with ⌘Q (and ⌘W to close).
-func mainMenu(title string) objc.ID {
-	appMenu := alloc("NSMenu").Send(sel("init"))
-	appMenu.Send(sel("addItem:"), alloc("NSMenuItem").Send(sel("initWithTitle:action:keyEquivalent:"),
-		nsString("Quit "+title), sel("terminate:"), nsString("q")))
-	appItem := alloc("NSMenuItem").Send(sel("init"))
-	appItem.Send(sel("setSubmenu:"), appMenu)
-	winMenu := alloc("NSMenu").Send(sel("initWithTitle:"), nsString("Window"))
-	winMenu.Send(sel("addItem:"), alloc("NSMenuItem").Send(sel("initWithTitle:action:keyEquivalent:"),
-		nsString("Close"), sel("performClose:"), nsString("w")))
-	winItem := alloc("NSMenuItem").Send(sel("init"))
-	winItem.Send(sel("setSubmenu:"), winMenu)
-	bar := alloc("NSMenu").Send(sel("init"))
-	bar.Send(sel("addItem:"), appItem)
-	bar.Send(sel("addItem:"), winItem)
-	return bar
 }
 
 // --- Snapshot ---

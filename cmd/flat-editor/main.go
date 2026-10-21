@@ -17,10 +17,13 @@ import (
 )
 
 type State struct {
-	ta         flatui.Textarea
-	debugKeys  bool
-	lastKey    string
-	lastAction string
+	ta        flatui.Textarea
+	debugKeys bool
+	// copyOnSelect puts a mouse selection on the clipboard as the drag
+	// ends, as some terminals do for their own selection (-copy-on-select).
+	copyOnSelect bool
+	lastKey      string
+	lastAction   string
 }
 
 func NewState() *State {
@@ -45,8 +48,82 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	case flatte.PasteEvent:
 		s.lastAction = "paste"
 		s.ta.InsertText(e.Text)
+	case flatte.ClipboardEvent: // the answer to Paste's ReadClipboard
+		s.lastAction = "paste"
+		s.ta.InsertText(e.Text)
+	case flatte.MenuEvent:
+		command(s, e.ID, fx)
 	case flatte.MouseEvent:
 		handleMouse(s, e)
+		if s.copyOnSelect && e.Button == flatte.MouseLeft && e.Action == flatte.MouseRelease {
+			copySelection(s, fx)
+		}
+	}
+}
+
+// Menu commands.
+const (
+	cmdCut       = "cut"
+	cmdCopy      = "copy"
+	cmdPaste     = "paste"
+	cmdSelectAll = "select-all"
+	cmdWrap      = "wrap"
+	cmdKeys      = "show-keys"
+)
+
+func super(r rune) flatte.KeyEvent {
+	return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModSuper}
+}
+
+// editItems are the editing commands, in the Edit menu and the editor's
+// context menu: ⌘ shortcuts for a window (and terminals that report ⌘);
+// Ctrl+X too, which a terminal sends. Cut and Copy need a selection.
+func editItems(s *State) []flatte.MenuItem {
+	_, selected := s.ta.Selection()
+	return []flatte.MenuItem{
+		{ID: cmdCut, Label: "Cut", Keys: []flatte.KeyEvent{super('x'), {Key: flatte.KeyCharacter, Rune: 'x', Mod: flatte.ModCtrl}}, Disabled: !selected},
+		{ID: cmdCopy, Label: "Copy", Keys: []flatte.KeyEvent{super('c')}, Disabled: !selected},
+		{ID: cmdPaste, Label: "Paste", Keys: []flatte.KeyEvent{super('v')}},
+		{Separator: true},
+		{ID: cmdSelectAll, Label: "Select All", Keys: []flatte.KeyEvent{super('a')}},
+	}
+}
+
+// Menus is the menu bar: Edit, and View's toggles.
+func Menus(s *State) []flatte.Menu {
+	return []flatte.Menu{
+		{Title: "Edit", Items: editItems(s)},
+		{Title: "View", Items: []flatte.MenuItem{
+			{ID: cmdWrap, Label: "Wrap Lines", Checked: s.ta.SoftWrap()},
+			{ID: cmdKeys, Label: "Show Keys", Checked: s.debugKeys},
+		}},
+	}
+}
+
+// ContextMenu is the editing commands on the editor.
+func ContextMenu(s *State, target string) []flatte.MenuItem {
+	if target != editorID {
+		return nil
+	}
+	return editItems(s)
+}
+
+// command runs a menu command.
+func command(s *State, id string, fx flatte.Effects[State]) {
+	s.lastKey, s.lastAction = "menu", id
+	switch id {
+	case cmdCut:
+		cutSelection(s, fx)
+	case cmdCopy:
+		copySelection(s, fx)
+	case cmdPaste:
+		fx.ReadClipboard()
+	case cmdSelectAll:
+		s.ta.SelectAll()
+	case cmdWrap:
+		s.ta.SetSoftWrap(!s.ta.SoftWrap())
+	case cmdKeys:
+		s.debugKeys = !s.debugKeys
 	}
 }
 
@@ -65,13 +142,13 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 	}
 }
 
-// handleSuper is the ⌘ (Super) chords: copy, cut, select all, and the
-// platform's line and document moves (⌘←/→ line start/end, ⌘↑/↓ the start
+// handleSuper is the ⌘ (Super) chords that are not menu commands (those
+// arrive as MenuEvents): the platform's line and document moves (⌘←/→ line start/end, ⌘↑/↓ the start
 // or end of the text, with Shift to select; ⌘⌫ deletes to the line start).
 // A window delivers ⌘←/→ as Home/End already; a terminal that reports
 // Super delivers them as arrows with ModSuper. It reports whether key was
 // one.
-func handleSuper(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) bool {
+func handleSuper(s *State, key flatte.KeyEvent) bool {
 	if !key.Mod.Contains(flatte.ModSuper) {
 		return false
 	}
@@ -112,24 +189,8 @@ func handleSuper(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) bool {
 		}
 		s.ta.Backspace()
 		return true
-	case flatte.KeyCharacter:
-	default:
-		return false
 	}
-	switch key.Rune {
-	case 'c':
-		s.lastAction = "copy"
-		copySelection(s, fx)
-	case 'x':
-		s.lastAction = "cut"
-		cutSelection(s, fx)
-	case 'a':
-		s.lastAction = "select-all"
-		s.ta.SelectAll()
-	default:
-		return false
-	}
-	return true
+	return false
 }
 
 // copySelection puts the selection on the clipboard, reporting whether
@@ -172,7 +233,7 @@ func vertical(s *State, key flatte.KeyEvent, dir int) {
 func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	s.lastKey = describeKey(key)
 	s.lastAction = "ignored"
-	if handleSuper(s, key, fx) || (key.Key == flatte.KeyCharacter && key.Mod.Contains(flatte.ModSuper)) {
+	if handleSuper(s, key) || (key.Key == flatte.KeyCharacter && key.Mod.Contains(flatte.ModSuper)) {
 		return // other ⌘ chords are not text
 	}
 	switch key.Key {
@@ -272,7 +333,7 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 			}
 			return
 		}
-		if handleCtrlKey(s, key, fx) {
+		if handleCtrlKey(s, key) {
 			return
 		}
 		if handleAltWordKey(key, s.ta.MoveWordLeft, s.ta.MoveWordRight) {
@@ -292,17 +353,14 @@ func wordMove(mod flatte.Mod) bool {
 	return mod.Contains(flatte.ModAlt) || mod.Contains(flatte.ModCtrl)
 }
 
-// handleCtrlKey is the Control letter chords: ctrl+x cuts, and ctrl+a /
-// ctrl+e move to the line start / end, as in readline (some terminals send
-// them for ⌘← / ⌘→). It reports whether key was one.
-func handleCtrlKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) bool {
+// handleCtrlKey is the Control letter chords: ctrl+a / ctrl+e move to the
+// line start / end, as in readline (some terminals send them for ⌘← / ⌘→);
+// ctrl+x is the Cut command. It reports whether key was one.
+func handleCtrlKey(s *State, key flatte.KeyEvent) bool {
 	if !key.Mod.Contains(flatte.ModCtrl) {
 		return false
 	}
 	switch key.Rune {
-	case 'x', 'X':
-		s.lastAction = "cut"
-		cutSelection(s, fx)
 	case 'a', 'A':
 		s.lastAction = "move-line-start"
 		s.ta.MoveLineStart()
@@ -413,7 +471,7 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 		layout.Label{},
 		editor,
 		layout.Label{},
-		layout.Label{Text: "arrows move  click/drag select  ctrl+c copy  esc quit", Style: subtle},
+		layout.Label{Text: "arrows  drag select  right-click menu  ⌘C/ctrl+c copy  esc quit", Style: subtle},
 	}
 	if s.debugKeys {
 		rows = append(rows, layout.Label{Text: fmt.Sprintf("last: %s -> %s", s.lastKey, s.lastAction), Style: subtle})
@@ -426,11 +484,16 @@ func View(s *State, _ flatte.RenderContext) flatte.Frame {
 
 func main() {
 	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	copyOnSelect := flag.Bool("copy-on-select", false, "copy a mouse selection to the clipboard when the drag ends")
 	flag.Parse()
+	s := NewState()
+	s.copyOnSelect = *copyOnSelect
 	app := flatte.App[State]{
-		State:  NewState(),
-		Handle: Handle,
-		View:   View,
+		State:       s,
+		Handle:      Handle,
+		View:        View,
+		Menus:       Menus,
+		ContextMenu: ContextMenu,
 	}
 	var err error
 	if *gui {

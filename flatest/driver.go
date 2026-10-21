@@ -25,11 +25,13 @@ type Driver[S any] struct {
 	// against — the frame "on screen", as in Run.
 	delivered map[string]layout.Rect
 	comp      layout.Composition
-	updates   []flatte.StateUpdate[S]
-	clock     *fakeClock
-	pending   []func()
-	quit      bool
-	fx        flatte.Effects[S]
+	// menus routes shortcuts and context menus, as Run does.
+	menus   flatte.MenuHost
+	updates []flatte.StateUpdate[S]
+	clock   *fakeClock
+	pending []func()
+	quit    bool
+	fx      flatte.Effects[S]
 }
 
 // Start builds a Driver, runs Init, delivers the initial ResizeEvent, and
@@ -75,7 +77,7 @@ func (d *Driver[S]) Send(ev flatte.Event) flatte.Frame {
 func (d *Driver[S]) render() flatte.Frame {
 	frame, comp, delivered := flatte.SettleFrame(d.view, d.deliverLayout, d.delivered, d.width, d.height)
 	d.delivered, d.comp = delivered, comp
-	return frame
+	return d.menus.Paint(frame)
 }
 
 func (d *Driver[S]) deliverLayout(ev flatte.LayoutEvent) { d.deliver(ev) }
@@ -88,6 +90,12 @@ func (d *Driver[S]) deliver(ev flatte.Event) {
 		e.Target, e.TargetRect = d.comp.HitTest(e.X, e.Y)
 		e.Caret, e.HasCaret = d.comp.CaretAt(e.X, e.Y)
 		ev = e
+	}
+	if _, layout := ev.(flatte.LayoutEvent); !layout {
+		var ok bool
+		if ev, ok = flatte.RouteMenus(&d.menus, d.app, ev, d.width, d.height); !ok {
+			return
+		}
 	}
 	if d.app.Tracer != nil {
 		d.app.Tracer.Event(ev)
@@ -138,7 +146,7 @@ func (d *Driver[S]) Advance(by time.Duration) flatte.Frame {
 // is composed at the driver size, as Run composes it at the terminal size.
 func (d *Driver[S]) Frame() flatte.Frame {
 	frame, _ := flatte.ComposeFrame(d.view(), d.width, d.height)
-	return frame
+	return d.menus.Paint(frame)
 }
 
 func (d *Driver[S]) view() flatte.Frame {

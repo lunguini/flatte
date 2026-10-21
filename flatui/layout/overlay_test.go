@@ -100,3 +100,13 @@ func TestOverlayChildDoesNotSizeItsParent(t *testing.T) {
 		t.Fatalf("row %+v next %+v: the overlay sized its parent", rects["row"], rects["next"])
 	}
 }
+
+func TestOverlayAtGrowsToHoldTheLayer(t *testing.T) {
+	got := OverlayAt("ab\ncd", "XYZ", 1, 2)
+	if got != "ab\ncd\n XYZ" {
+		t.Errorf("OverlayAt = %q", got)
+	}
+	if got := OverlayAt("abcd", "X", -3, -1); got != "Xbcd" {
+		t.Errorf("negative origin clamps: %q", got)
+	}
+}
