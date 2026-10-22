@@ -107,11 +107,59 @@ func (f font) lineHeight() float64 { return f.ascent + f.descent + f.leading }
 // pitch is the height of one line of f's text, on whole points.
 func (f font) pitch() float64 { return math.Round(f.lineHeight() * f.spacing) }
 
-// width is the advance width of s set in f.
+// width is the advance width of s set in f, shaped once per font and text:
+// a layout pass measures each label several times, and a live resize lays
+// the same labels out frame after frame.
 func (f font) width(s string) float64 {
+	k := widthKey{f.ref, s}
+	if w, ok := widths.get(k); ok {
+		return w
+	}
 	l := shape(s, f)
 	defer l.release()
+	widths.put(k, l.width)
 	return l.width
+}
+
+type widthKey struct {
+	font uintptr
+	text string
+}
+
+// widthCache is a bounded cache in two generations: when the current one
+// fills it becomes the previous, so text still in use survives the turn.
+type widthCache struct {
+	mu        sync.Mutex
+	cur, prev map[widthKey]float64
+	limit     int
+}
+
+var widths = &widthCache{limit: 4096}
+
+func (c *widthCache) get(k widthKey) (float64, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if w, ok := c.cur[k]; ok {
+		return w, true
+	}
+	w, ok := c.prev[k]
+	if ok {
+		c.store(k, w)
+	}
+	return w, ok
+}
+
+func (c *widthCache) put(k widthKey, w float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.store(k, w)
+}
+
+func (c *widthCache) store(k widthKey, w float64) {
+	if c.cur == nil || len(c.cur) >= c.limit {
+		c.prev, c.cur = c.cur, make(map[widthKey]float64, c.limit)
+	}
+	c.cur[k] = w
 }
 
 // fontID is a font as a theme asks for it.

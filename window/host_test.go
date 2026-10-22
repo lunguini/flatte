@@ -272,3 +272,32 @@ func TestWheelAccumulator(t *testing.T) {
 		}
 	}
 }
+
+func TestHostWheelBurstLaysOutOnce(t *testing.T) {
+	views := 0
+	s := &testState{root: func(*testState) layout.Node {
+		views++
+		return layout.Col{Children: []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "list"}, Text: "rows"}}}
+	}}
+	h, _ := newTestHost(t, s)
+	h.start(160, 64)
+	h.render()
+	r := h.scene.Rects["list"]
+	h.mouse(1, 1, flatte.MouseLeft, flatte.MousePress, 0) // dirties the frame
+	h.mouse(1, 1, flatte.MouseLeft, flatte.MouseRelease, 0)
+	before, n := views, len(s.events)
+	h.wheel(r.X+1, r.Y+1, flatte.MouseWheelDown, 5, flatte.ModShift)
+	if views-before != 1 {
+		t.Fatalf("a 5-notch burst laid the frame out %d times, want 1", views-before)
+	}
+	got := s.events[n:]
+	if len(got) != 5 {
+		t.Fatalf("events %#v, want 5 wheel presses", got)
+	}
+	for _, ev := range got {
+		m, ok := ev.(flatte.MouseEvent)
+		if !ok || m.Target != "list" || m.Button != flatte.MouseWheelDown || m.Action != flatte.MousePress || m.Mod != flatte.ModShift {
+			t.Fatalf("event %#v", ev)
+		}
+	}
+}

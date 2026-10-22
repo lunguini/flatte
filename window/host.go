@@ -114,6 +114,7 @@ type ui interface {
 	presentation() presentation
 	drop(x, y float64, paths []string, text string)
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
+	wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod)
 	render() layout.Scene
 	frameTitle() string
 	frameCursor() *flatte.Cursor
@@ -649,10 +650,7 @@ func (s *surface[S]) input(id string) (layout.InputOp, bool) {
 	return layout.InputOp{}, false
 }
 
-// mouse delivers a pointer event at (x, y) points. The cell coordinates are
-// chosen so that X-TargetRect.X and Y-TargetRect.Y are the exact column and
-// line inside the target, even though the target is not aligned to the
-// cell grid.
+// mouse delivers a pointer event at (x, y) points (see pointerAt).
 //
 // Over an ID'd Input the event carries the caret nearest the pointer; a
 // left-button drag that began on one keeps targeting it, with carets
@@ -660,17 +658,13 @@ func (s *surface[S]) input(id string) (layout.InputOp, bool) {
 func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod) {
 	h := s.h
 	scene := s.fresh()
-	ev := flatte.MouseEvent{Button: button, Action: action, Mod: mod, X: h.cols(x), Y: h.lines(y), Window: s.id}
 	id, r := scene.HitTest(x, y)
 	dragging := s.drag != "" && button == flatte.MouseLeft && action != flatte.MousePress
 	if dragging {
 		id, r = s.drag, scene.Rects[s.drag]
 	}
-	if id != "" {
-		ev.Target, ev.TargetRect = id, r.Cells(h.metrics)
-		ev.X = ev.TargetRect.X + h.cols(x-r.X)
-		ev.Y = ev.TargetRect.Y + h.lines(y-r.Y)
-	}
+	ev := s.pointerAt(x, y, id, r)
+	ev.Button, ev.Action, ev.Mod = button, action, mod
 	// A right press (or a Control-click, as on macOS) with a context menu
 	// shows it instead of being delivered; the choice arrives as a
 	// MenuEvent.
@@ -710,6 +704,36 @@ func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatt
 		}
 	}
 	h.handle(ev)
+}
+
+// wheel delivers notches wheel presses at (x, y), all hit-tested against
+// one scene: a fast scroll brings many notches at once, and laying the
+// frame out again between them made scrolling stutter.
+func (s *surface[S]) wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod) {
+	id, r := s.fresh().HitTest(x, y)
+	ev := s.pointerAt(x, y, id, r)
+	ev.Button, ev.Action, ev.Mod = button, flatte.MousePress, mod
+	if op, ok := s.input(id); ok && s.h.text != nil {
+		ev.Caret, ev.HasCaret = s.h.text.caretAt(op, x, y), true
+	}
+	for range notches {
+		s.h.handle(ev)
+	}
+}
+
+// pointerAt is a pointer event at (x, y) points over target id with rect r
+// ("": none). The cell coordinates are chosen so that X-TargetRect.X and
+// Y-TargetRect.Y are the exact column and line inside the target, even
+// though the target is not aligned to the cell grid.
+func (s *surface[S]) pointerAt(x, y float64, id string, r layout.PointRect) flatte.MouseEvent {
+	h := s.h
+	ev := flatte.MouseEvent{X: h.cols(x), Y: h.lines(y), Window: s.id}
+	if id != "" {
+		ev.Target, ev.TargetRect = id, r.Cells(h.metrics)
+		ev.X = ev.TargetRect.X + h.cols(x-r.X)
+		ev.Y = ev.TargetRect.Y + h.lines(y-r.Y)
+	}
+	return ev
 }
 
 // render produces the scene to draw, settling layout first: while the

@@ -300,9 +300,9 @@ func viewMethods() []objc.MethodDef {
 			if n < 0 {
 				button, n = flatte.MouseWheelDown, -n
 			}
-			p := location(self, event)
-			for range n {
-				st.ui.mouse(p.X, p.Y, button, flatte.MousePress, eventMods(event))
+			if n > 0 {
+				p := location(self, event)
+				st.ui.wheel(p.X, p.Y, button, n, eventMods(event))
 			}
 		}},
 
