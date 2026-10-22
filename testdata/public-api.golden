@@ -374,6 +374,7 @@ flatui package flatui
   method *FocusRing.SetCount(n int)
   method *List.MoveDown()
   method *List.MoveUp()
+  method *List.Scroll(rows int)
   method *List.ScrollTo(offset int)
   method *List.Select(i int)
   method *List.SetCount(n int)

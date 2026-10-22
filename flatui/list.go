@@ -11,8 +11,10 @@ import (
 // owns it (like TextField and Viewport): no goroutines, no key policy. It holds
 // no item data and imposes no appearance — the app supplies the item count,
 // drives the cursor, and renders each visible row through a callback, so the
-// selection marker and styling stay app policy, never the framework's. The
-// selected row is always kept inside the visible window.
+// selection marker and styling stay app policy, never the framework's.
+// Moving the selection keeps it inside the visible window; Scroll (a wheel)
+// moves the window alone, and may leave the selection out of view until it
+// next moves.
 type List struct {
 	count  int
 	cursor int
@@ -57,25 +59,35 @@ func (l List) Rows(id string, row func(index int, selected bool) layout.Node) la
 	return col
 }
 
-// SetCount sets the number of selectable items, clamping the cursor and scroll.
+// SetCount sets the number of selectable items, clamping the cursor and
+// scroll; a visible selection stays visible.
 func (l *List) SetCount(n int) {
+	shown := l.cursorShown()
 	l.count = max(n, 0)
-	l.clamp()
+	l.clamp(shown)
 }
 
 // SetHeight sets the number of visible rows, clamped to the supported widget
-// dimension range.
+// dimension range; a visible selection stays visible.
 func (l *List) SetHeight(h int) {
+	shown := l.cursorShown()
 	l.height = clampWidgetDimension(h)
-	l.clamp()
+	l.clamp(shown)
 }
 
 // MoveUp / MoveDown move the selection by one, keeping it visible.
-func (l *List) MoveUp()   { l.cursor--; l.clamp() }
-func (l *List) MoveDown() { l.cursor++; l.clamp() }
+func (l *List) MoveUp()   { l.cursor--; l.clamp(true) }
+func (l *List) MoveDown() { l.cursor++; l.clamp(true) }
 
 // Select moves the selection to index i (clamped), keeping it visible.
-func (l *List) Select(i int) { l.cursor = i; l.clamp() }
+func (l *List) Select(i int) { l.cursor = i; l.clamp(true) }
+
+// Scroll moves the visible window by rows (negative: up), clamped, leaving
+// the selection where it is — for a mouse wheel.
+func (l *List) Scroll(rows int) {
+	l.offset += rows
+	l.clamp(false)
+}
 
 // Cursor is the selected index (0 when empty).
 func (l List) Cursor() int { return l.cursor }
@@ -113,13 +125,19 @@ func (l *List) ScrollTo(offset int) {
 	}
 	l.offset = min(max(offset, 0), max(l.count-l.height, 0))
 	l.cursor = min(max(l.cursor, l.offset), l.offset+l.height-1)
-	l.clamp()
+	l.clamp(true)
 }
 
-// clamp keeps the cursor in range and the window on the cursor.
-func (l *List) clamp() {
+// cursorShown reports the selection inside the window (or no window yet).
+func (l List) cursorShown() bool {
+	return l.height <= 0 || l.cursor >= l.offset && l.cursor < l.offset+l.height
+}
+
+// clamp keeps the cursor and the window in range, and with reveal the
+// window on the cursor.
+func (l *List) clamp(reveal bool) {
 	l.cursor = min(max(l.cursor, 0), max(l.count-1, 0))
-	if l.height > 0 {
+	if reveal && l.height > 0 {
 		if l.cursor < l.offset {
 			l.offset = l.cursor
 		} else if l.cursor >= l.offset+l.height {

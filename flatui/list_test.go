@@ -183,3 +183,52 @@ func TestListScrollTo(t *testing.T) {
 		t.Fatalf("offset %d cursor %d, want 0 and 4", l.Offset(), l.Cursor())
 	}
 }
+
+func TestListScrollLeavesTheSelection(t *testing.T) {
+	var l List
+	l.SetCount(20)
+	l.SetHeight(5)
+	l.Select(2)
+	l.Scroll(3)
+	if l.Offset() != 3 || l.Cursor() != 2 {
+		t.Fatalf("offset %d cursor %d, want 3 and 2", l.Offset(), l.Cursor())
+	}
+	// Resizing and relisting (as every layout pass does) keep the scroll.
+	l.SetHeight(5)
+	l.SetCount(20)
+	if l.Offset() != 3 {
+		t.Fatalf("offset %d after SetHeight/SetCount, want 3", l.Offset())
+	}
+	if rows := l.Rows("l", func(int, bool) layout.Node { return layout.Text{} }); rows.Children[0].(layout.Row).ID != "l:3" {
+		t.Fatalf("first row %q", rows.Children[0].(layout.Row).ID)
+	}
+	l.Scroll(99)
+	if l.Offset() != 15 || l.Cursor() != 2 {
+		t.Fatalf("offset %d cursor %d, want clamped to 15 and 2", l.Offset(), l.Cursor())
+	}
+	l.Scroll(-99)
+	if l.Offset() != 0 {
+		t.Fatalf("offset %d, want 0", l.Offset())
+	}
+	// The next move brings the selection back into view.
+	l.Scroll(10)
+	l.MoveDown()
+	if l.Cursor() != 3 || l.Offset() != 3 {
+		t.Fatalf("offset %d cursor %d, want the window back on 3", l.Offset(), l.Cursor())
+	}
+}
+
+func TestListSetHeightKeepsAVisibleSelectionVisible(t *testing.T) {
+	var l List
+	l.SetCount(20)
+	l.SetHeight(10)
+	l.Select(8)
+	l.SetHeight(4)
+	if l.Offset() != 5 || l.Cursor() != 8 {
+		t.Fatalf("offset %d cursor %d, want the window moved onto 8", l.Offset(), l.Cursor())
+	}
+	l.SetCount(3) // the cursor clamps to the last item, shown
+	if l.Cursor() != 2 || l.Offset() != 0 {
+		t.Fatalf("offset %d cursor %d after shrinking", l.Offset(), l.Cursor())
+	}
+}
