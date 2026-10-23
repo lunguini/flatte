@@ -1,6 +1,7 @@
 package window
 
 import (
+	"image/color"
 	"image/png"
 	"os"
 	"testing"
@@ -11,6 +12,7 @@ import (
 var mediaIcons = []layout.IconName{
 	layout.IconPlay, layout.IconPause, layout.IconPrevious, layout.IconNext, layout.IconShuffle,
 	layout.IconRepeat, layout.IconSpeaker, layout.IconHome, layout.IconHeart, layout.IconHeartOutline,
+	layout.IconClock, layout.IconEqualizer, layout.IconLibrary,
 }
 
 func TestMediaIconsStayInTheirBox(t *testing.T) {
@@ -70,5 +72,58 @@ func TestSnapshotMediaButtons(t *testing.T) {
 	}
 	if img.Bounds().Dx() == 0 {
 		t.Fatal("empty snapshot")
+	}
+}
+
+func TestDefaultButtonTakesItsStyleColors(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	red := color.NRGBA{0xe0, 0x30, 0x30, 0xff}
+	root := func() layout.Node {
+		return layout.Col{Children: []layout.Node{layout.Row{Children: []layout.Node{
+			layout.Button{NodeBase: layout.NodeBase{W: layout.Points(40), H: layout.Points(40)}, Icon: layout.IconPlay, Label: "▶", Default: true, Style: layout.TextStyle{Bg: red, Fg: color.Black}},
+		}}}}
+	}
+	img, err := Snapshot(snapApp(root), Options{Width: 10, Height: 4}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Inside the circle, left of the icon: the style's fill, not the accent.
+	if got := img.At(6, 20); !near(got, red, 0x18) {
+		t.Fatalf("fill at (6,20) = %v, want %v", got, red)
+	}
+	// The icon, at the circle's center, in the style's Fg.
+	if got := img.At(20, 20); !near(got, color.Black, 0x18) {
+		t.Fatalf("icon at the center = %v, want black", got)
+	}
+}
+
+func TestChevronButtonsDrawTheirChevron(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []layout.IconName{layout.IconChevronLeft, layout.IconChevronRight} {
+		root := func() layout.Node {
+			return layout.Col{Children: []layout.Node{layout.Row{Children: []layout.Node{
+				layout.Button{NodeBase: layout.NodeBase{W: layout.Points(32), H: layout.Points(32)}, Icon: name, Label: "‹", Plain: true},
+			}}}}
+		}
+		img, err := Snapshot(snapApp(root), Options{Width: 8, Height: 3}, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bg := img.At(1, 1)
+		lit := 0
+		for y := 8; y < 24; y++ {
+			for x := 8; x < 24; x++ {
+				if !near(img.At(x, y), bg, 0x20) {
+					lit++
+				}
+			}
+		}
+		if lit == 0 {
+			t.Errorf("icon %d: the button's middle is blank", name)
+		}
 	}
 }

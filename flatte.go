@@ -81,6 +81,9 @@ type Effects[S any] struct {
 	readClipboard func()
 	// dialogs shows dialogs (WithHostDialogs); nil: the host has none.
 	dialogs func(Dialog, func(DialogResult))
+	// notify posts notifications (WithHostNotifications); nil: terminal
+	// escape sequences.
+	notify func(Notification)
 }
 
 // cancelReaderFactory is a seam for the input lifecycle tests. Keeping the

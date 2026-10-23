@@ -64,3 +64,24 @@ func TestDriverDeliversInitialResize(t *testing.T) {
 		t.Fatalf("initial ResizeEvent width = %d, want 55", sawWidth)
 	}
 }
+
+func TestDriverRecordsNotifications(t *testing.T) {
+	type st struct{}
+	app := flatte.App[st]{
+		State: &st{},
+		Handle: func(s *st, ev flatte.Event, fx flatte.Effects[st]) {
+			if k, ok := ev.(flatte.KeyEvent); ok && k.Rune == 'n' {
+				fx.Notify(flatte.Notification{Title: "Saved", Body: "notes.txt"})
+			}
+		},
+		View: func(*st, flatte.RenderContext) flatte.Frame { return flatte.Frame{Content: "x"} },
+	}
+	d := Start(app, 20)
+	if len(d.Notifications()) != 0 {
+		t.Fatal("notified before any key")
+	}
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'n'})
+	if got := d.Notifications(); len(got) != 1 || got[0] != (flatte.Notification{Title: "Saved", Body: "notes.txt"}) {
+		t.Fatalf("notifications %v", got)
+	}
+}

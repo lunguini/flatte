@@ -20,7 +20,8 @@ import (
 // Button is a push button. The terminal draws "[ Label ]" in Style — bold
 // when Default (the primary action), the label reversed when Focused,
 // subtle when Disabled; a GUI draws a bezel, filled with the accent when
-// Default. On Auto axes it is its spelling wide and one line tall.
+// Default (Style's Bg and Fg, when set, are a Default button's fill and
+// label colors). On Auto axes it is its spelling wide and one line tall.
 //
 // With an Icon, a GUI draws the icon's shape centered in the button instead
 // of the Label, which stays its terminal spelling (as an Icon's Text): give

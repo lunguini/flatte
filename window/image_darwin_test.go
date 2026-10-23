@@ -115,3 +115,67 @@ type uncomparable struct {
 	*image.RGBA
 	_ []int
 }
+
+func TestRoundImagesClipTheirCorners(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	red := color.RGBA{0xff, 0, 0, 0xff}
+	src := image.NewRGBA(image.Rect(0, 0, 40, 40))
+	for i := range src.Pix {
+		src.Pix[i] = []uint8{0xff, 0, 0, 0xff}[i%4]
+	}
+	for _, round := range []bool{false, true} {
+		root := func() layout.Node {
+			return layout.Col{Children: []layout.Node{layout.Row{Children: []layout.Node{
+				layout.Image{NodeBase: layout.NodeBase{W: layout.Points(40), H: layout.Points(40), Box: layout.Box{Round: round}}, Source: src, Fit: layout.ImageCover},
+			}}}}
+		}
+		img, err := Snapshot(snapApp(root), Options{Width: 10, Height: 4}, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := img.At(20, 20); !near(got, red, 0x10) {
+			t.Fatalf("round %v: middle %v, want red", round, got)
+		}
+		if corner := near(img.At(0, 0), red, 0x10); corner == round {
+			t.Errorf("round %v: corner red = %v", round, corner)
+		}
+	}
+}
+
+func TestPicturesRoundInProportion(t *testing.T) {
+	thumb, cover := cgRect(0, 0, 32, 32), cgRect(0, 0, 300, 300)
+	if r := boxRadius(thumb, true); r < 3 || r > 5 {
+		t.Errorf("a 32pt picture's radius is %v, want about 4", r)
+	}
+	if r := boxRadius(cover, true); r != 10 {
+		t.Errorf("a 300pt picture's radius is %v, want the 10pt cap", r)
+	}
+	// A plain 32pt box keeps its pill-like radius (tabs, buttons, rows).
+	if r := boxRadius(thumb, false); r != 10 {
+		t.Errorf("a 32pt box's radius is %v, want 10", r)
+	}
+}
+
+func TestBareInputsDrawNoField(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	red := color.NRGBA{0xc0, 0x20, 0x20, 0xff}
+	for _, bare := range []bool{false, true} {
+		root := func() layout.Node {
+			return layout.Col{Children: []layout.Node{layout.Row{NodeBase: layout.NodeBase{Box: layout.Box{Background: red}}, Children: []layout.Node{
+				layout.Input{Placeholder: "", Focused: true, Bare: bare},
+			}}}}
+		}
+		img, err := Snapshot(snapApp(root), Options{Width: 20, Height: 2}, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Mid-field, right of the caret: the container's red shows only when bare.
+		if got := near(img.At(80, 8), red, 0x18); got != bare {
+			t.Errorf("bare %v: red at the field's middle = %v", bare, got)
+		}
+	}
+}

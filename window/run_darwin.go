@@ -80,6 +80,9 @@ func run[S any](ctx context.Context, app flatte.App[S], opts Options) error {
 	if pthreadMainNP() == 0 {
 		return errNotMainThread
 	}
+	if err := registerFonts(opts.Fonts); err != nil {
+		return err
+	}
 	var err error
 	withPool(func() { err = runWindow(ctx, app, opts) })
 	return err
@@ -269,6 +272,10 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	menus.setBar(nil)
 	h.menus = menus
 	h.dialogs = nativeDialogs{}
+	h.notes = osNotifier{}
+	h.active = true // Run activates the app below
+	delegateActive = h.activated
+	defer func() { delegateActive = nil }()
 	h.windows = nativeWindows{cls: cls, m: m, th: func() theme { return st.th }, follow: opts.Theme == nil, delegate: delegate,
 		focused: h.focused, closeRequested: h.closeRequested}
 	barChosen = h.menuChosen
@@ -311,6 +318,7 @@ var (
 	delegateClass     objc.Class
 	delegateClassErr  error
 	delegateStop      func()
+	delegateActive    func(bool)
 )
 
 // newDelegate is the app and window delegate: quitting from the menu or
@@ -346,6 +354,16 @@ func newDelegate(stop func()) (objc.ID, error) {
 						delegateStop()
 					}
 				}},
+				{Cmd: sel("applicationDidBecomeActive:"), Fn: func(objc.ID, objc.SEL, objc.ID) {
+					if delegateActive != nil {
+						delegateActive(true)
+					}
+				}},
+				{Cmd: sel("applicationDidResignActive:"), Fn: func(objc.ID, objc.SEL, objc.ID) {
+					if delegateActive != nil {
+						delegateActive(false)
+					}
+				}},
 				{Cmd: sel("windowDidBecomeKey:"), Fn: func(_ objc.ID, _ objc.SEL, note objc.ID) {
 					if st := byWindow[note.Send(sel("object"))]; st != nil && st.focused != nil {
 						st.focused()
@@ -371,6 +389,9 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 		return nil, errors.New("window: snapshot scale must be positive")
 	}
 	if err := loadFrameworks(); err != nil {
+		return nil, err
+	}
+	if err := registerFonts(opts.Fonts); err != nil {
 		return nil, err
 	}
 	th := newTheme(themeFor(opts.Theme, true))

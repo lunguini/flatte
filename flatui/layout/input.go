@@ -22,6 +22,11 @@ import (
 //
 // On Auto axes an Input fills the available width and is one line tall.
 //
+// A Bare Input draws no field of its own in a GUI — no fill, no outline,
+// no focus ring — only its text and caret, so it can sit inside a box the
+// app draws (a search field with an icon and a clear button, say); the app
+// shows focus on that box. The terminal draws an Input bare either way.
+//
 // A Multiline Input is a text area (flatui.Textarea, via its Layout method,
 // fills one in): "\n" breaks lines, Wrap soft-wraps them at the field's
 // width, and its Auto height grows. Its selection runs from byte SelStart to
@@ -42,6 +47,7 @@ type Input struct {
 	SelStart, SelEnd int
 	SelectionStyle   TextStyle
 	OffsetX, OffsetY int
+	Bare             bool
 }
 
 func (in Input) Size() (Size, Size) {

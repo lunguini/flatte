@@ -316,3 +316,20 @@ func TestHostHit(t *testing.T) {
 		t.Fatalf("hit on nothing = %q", got)
 	}
 }
+
+func TestHostViewsAreGraphical(t *testing.T) {
+	var got flatte.RenderContext
+	s := &testState{content: "x"}
+	app := testApp(s)
+	app.View = func(_ *testState, ctx flatte.RenderContext) flatte.Frame {
+		got = ctx
+		return flatte.Frame{Content: "x"}
+	}
+	h := newHost(context.Background(), app, cellMetrics, func(func()) {}, func() {}, func() {})
+	t.Cleanup(h.cancel)
+	h.start(80, 16)
+	h.render()
+	if !got.Graphical {
+		t.Fatal("a window's view is not told it is graphical")
+	}
+}

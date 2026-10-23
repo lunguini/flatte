@@ -31,12 +31,31 @@ func (p *painter) control(op layout.ControlOp) {
 	down := hot && op.ID == p.pressed
 	switch op.Kind {
 	case layout.ControlButton:
-		p.button(op, hot, down)
+		p.button(op, p.levelOf(p.hovers, op.ID, hot, op.Disabled), p.levelOf(p.presses, op.ID, down, op.Disabled))
 	case layout.ControlSlider:
 		p.slider(op, hot, down)
 	default:
 		p.toggle(op, hot, down)
 	}
+}
+
+// levelOf is id's fading level in levels — or, when the host keeps none
+// (a snapshot), on as given — for an enabled control.
+func (p *painter) levelOf(levels map[string]float64, id string, on, disabled bool) float64 {
+	switch {
+	case disabled || id == "":
+		return 0
+	case levels != nil:
+		return levels[id]
+	case on:
+		return 1
+	}
+	return 0
+}
+
+// shadeBy is a control fill under hover and press levels (0..1).
+func (p *painter) shadeBy(c rgba, hot, down float64) rgba {
+	return mix(mix(c, white, 0.1*hot*(1-down)), p.th.bg, 0.25*down) // a press replaces the hover's lift
 }
 
 // shade is a control fill under hover and press.
@@ -66,7 +85,7 @@ func (p *painter) ring(r CGRect, rad float64) {
 	p.roundedPath(cgRect(r.Origin.X-o-1, r.Origin.Y-o-1, r.Size.Width+2*o+2, r.Size.Height+2*o+2), rad+o+1, func() { cgContextStrokePath(p.ctx) })
 }
 
-func (p *painter) button(op layout.ControlOp, hot, down bool) {
+func (p *painter) button(op layout.ControlOp, hot, down float64) {
 	r := op.Rect
 	bez := cgRect(r.X+0.5, r.Y+1.5, max(r.W-1, 0), max(r.H-3, 0))
 	rad := min(p.th.radiusOf(layout.BorderNormal)+1, bez.Size.Height/2)
@@ -81,18 +100,23 @@ func (p *painter) button(op layout.ControlOp, hot, down bool) {
 	fill, text := mix(p.th.surface, p.th.text, 0.08), p.roleColor(op.Style)
 	if op.Default {
 		fill, text = p.th.caret, white
+		if op.Style.Bg != nil { // the app's own accent for this button
+			fill = rgbaOf(op.Style.Bg)
+		}
+		if op.Style.Fg != nil {
+			text = rgbaOf(op.Style.Fg)
+		}
 	}
 	switch {
-	case op.Plain && !hot && !down: // a toolbar button shows only its content
+	case op.Plain && hot == 0 && down == 0: // a toolbar button shows only its content
 	case op.Plain:
-		lift := 0.1
-		if down {
-			lift = 0.16
-		}
-		p.fill(p.dim(mix(p.th.bg, p.th.text, lift), op.Disabled))
+		lift := 0.1*hot + 0.06*down
+		c := mix(p.th.bg, p.th.text, 0.16)
+		c.A *= min(lift/0.16, 1) // fades in over what is behind it
+		p.fill(c)
 		p.roundedPath(bez, rad, func() { cgContextFillPath(p.ctx) })
 	default:
-		fill = p.dim(p.shade(fill, hot, down), op.Disabled)
+		fill = p.dim(p.shadeBy(fill, hot, down), op.Disabled)
 		p.fill(fill)
 		p.roundedPath(bez, rad, func() { cgContextFillPath(p.ctx) })
 		if !op.Default {
@@ -101,13 +125,18 @@ func (p *painter) button(op layout.ControlOp, hot, down bool) {
 			p.roundedPath(bez, rad, func() { cgContextStrokePath(p.ctx) })
 		}
 	}
-	if op.Plain && hot && !op.Disabled && op.Style.Fg == nil {
-		text = p.th.title // a hovered toolbar button brightens
+	if op.Plain && !op.Disabled && op.Style.Fg == nil {
+		text = mix(text, p.th.title, hot) // a hovered toolbar button brightens
 	}
 	if icon {
 		// The icon fills half the button's shorter side, centered.
 		size := min(r.W, r.H) * 0.5
-		if g, ok := symbol(op.Icon, r.X+r.W/2, r.Y+r.H/2, size); ok {
+		cx, cy := r.X+r.W/2, r.Y+r.H/2
+		g, ok := symbol(op.Icon, cx, cy, size)
+		if !ok { // a line-glyph shape (chevrons, dots): centered the same
+			g, ok = iconShape(op.Icon, cx-size/2, cy-size/2, size, size, size)
+		}
+		if ok {
 			p.shape(g, p.dim(text, op.Disabled))
 		}
 	} else {

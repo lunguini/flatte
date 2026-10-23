@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"time"
 
 	"github.com/charmbracelet/colorprofile"
 
@@ -44,6 +45,10 @@ type host[S any] struct {
 	// dialogs shows native dialogs (nil: every dialog answers as
 	// cancelled).
 	dialogs dialogBackend
+	// notes posts notifications (nil: Notify does nothing); active is
+	// whether the app is in front, as last reported.
+	notes  notifier
+	active bool
 	// windows opens and closes the secondary windows (nil: none open);
 	// open are the ones open, by ID; focus is the focused window's ID ("" the
 	// main window).
@@ -84,11 +89,22 @@ type surface[S any] struct {
 	// the control under the pointer and the one the left button went down
 	// on, and text selected in a Selectable Label. selecting is a drag
 	// extending the selection.
-	pres      presentation
-	selecting bool
+	pres presentation
+	// over is the IDs under the pointer (all of them, nested ones too);
+	// hovers and presses fade their levels; clock is the time (time.Now
+	// outside tests).
+	over            map[string]bool
+	hovers, presses *fader
+	clock           func() time.Time
+	selecting       bool
 }
 
 // dialogBackend is a backend's native dialogs.
+// notifier posts system notifications, fire and forget.
+type notifier interface {
+	notify(n flatte.Notification)
+}
+
 type dialogBackend interface {
 	// run shows d modally and returns the user's answer.
 	run(d flatte.Dialog) flatte.DialogResult
@@ -135,6 +151,13 @@ type windowBackend interface {
 type presentation struct {
 	hovered, pressed string
 	sel              textSel
+	// hovers and presses are the nodes under the pointer and under a
+	// pressed left button, by ID, as levels fading in and out (0..1);
+	// moving reports a fade still under way (the view draws again soon).
+	// now is the time they are for, which animated icons also follow.
+	hovers, presses map[string]float64
+	moving          bool
+	now             time.Time
 }
 
 // textSel is the bytes from..to (either order) selected in the text of the
@@ -220,6 +243,11 @@ func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, po
 			}
 			done(h.dialogs.run(d))
 		})
+	})
+	h.fx = flatte.WithHostNotifications(h.fx, func(n flatte.Notification) {
+		if h.notes != nil {
+			h.notes.notify(n)
+		}
 	})
 	go func() {
 		for {
@@ -342,6 +370,16 @@ func (h *host[S]) focused(id string) {
 	h.handle(flatte.WindowEvent{Window: id, Kind: flatte.WindowFocused})
 }
 
+// activated reports the app coming to the front (or leaving it): the app
+// hears a FocusEvent, as a terminal reporting focus would send.
+func (h *host[S]) activated(on bool) {
+	if on == h.active {
+		return
+	}
+	h.active = on
+	h.handle(flatte.FocusEvent{Focused: on})
+}
+
 // closeRequested reports the user asking to close window id.
 func (h *host[S]) closeRequested(id string) {
 	if _, ok := h.open[id]; ok {
@@ -450,11 +488,44 @@ func (s *surface[S]) hover(x, y float64) (pointer, string) {
 			shape = pointerText
 		}
 	}
-	if id != s.pres.hovered {
-		s.pres.hovered = id
+	changed := id != s.pres.hovered
+	s.pres.hovered = id
+	if over := s.idsAt(x, y); !maps.Equal(over, s.over) {
+		s.over, changed = over, true
+		s.faders()
+		s.hovers.only(over, s.now())
+	}
+	if changed {
 		s.invalidate()
 	}
 	return shape, tooltip
+}
+
+// idsAt is every ID'd node whose rect holds (x, y) points.
+func (s *surface[S]) idsAt(x, y float64) map[string]bool {
+	out := map[string]bool{}
+	if x < 0 || y < 0 {
+		return out
+	}
+	for id, r := range s.scene.Rects {
+		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+func (s *surface[S]) faders() {
+	if s.hovers == nil {
+		s.hovers, s.presses = newFader(hoverFade), newFader(pressFade)
+	}
+}
+
+func (s *surface[S]) now() time.Time {
+	if s.clock != nil {
+		return s.clock()
+	}
+	return time.Now()
 }
 
 // syncMenus shows the app's menu bar when it changed.
@@ -532,8 +603,18 @@ func (s *surface[S]) drop(x, y float64, paths []string, text string) {
 	h.handle(ev)
 }
 
-// presentation is what to draw over the scene.
-func (s *surface[S]) presentation() presentation { return s.pres }
+// presentation is what to draw over the scene, with the hover and press
+// levels of now.
+func (s *surface[S]) presentation() presentation {
+	p := s.pres
+	s.faders()
+	p.now = s.now()
+	var moved bool
+	p.hovers, p.moving = s.hovers.levels(p.now)
+	p.presses, moved = s.presses.levels(p.now)
+	p.moving = p.moving || moved
+	return p
+}
 
 // selectableAt is the topmost Selectable TextOp at (x, y) points, and its
 // index in the scene; none under an overlay layer above it, or over an
@@ -704,6 +785,16 @@ func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatt
 			s.pres.pressed = pressed
 			s.invalidate()
 		}
+		// What is under the press shows pressed, fading in and out.
+		s.faders()
+		switch action {
+		case flatte.MousePress:
+			s.presses.only(s.idsAt(x, y), s.now())
+			s.invalidate()
+		case flatte.MouseRelease:
+			s.presses.only(nil, s.now())
+			s.invalidate()
+		}
 	}
 	h.handle(ev)
 }
@@ -794,7 +885,7 @@ func (s *surface[S]) view() flatte.Frame {
 	if s.h.app.View == nil {
 		return flatte.Frame{}
 	}
-	return s.h.app.View(s.h.app.State, flatte.RenderContext{Width: s.h.cols(s.width), ColorProfile: colorprofile.TrueColor, Window: s.id})
+	return s.h.app.View(s.h.app.State, flatte.RenderContext{Width: s.h.cols(s.width), ColorProfile: colorprofile.TrueColor, Window: s.id, Graphical: true})
 }
 
 // wheelAccumulator turns precise scroll deltas (trackpads, in points) into

@@ -37,6 +37,8 @@ type Driver[S any] struct {
 	// dialogs are the dialogs the app asked for that the test has not
 	// answered, oldest first.
 	dialogs []pendingDialog
+	// notifications are the ones the app posted, oldest first.
+	notifications []flatte.Notification
 }
 
 // Start builds a Driver, runs Init, delivers the initial ResizeEvent, and
@@ -62,6 +64,9 @@ func Start[S any](app flatte.App[S], width int) *Driver[S] {
 	)
 	d.fx = flatte.WithHostDialogs(d.fx, func(dg flatte.Dialog, done func(flatte.DialogResult)) {
 		d.dialogs = append(d.dialogs, pendingDialog{dg, done})
+	})
+	d.fx = flatte.WithHostNotifications(d.fx, func(n flatte.Notification) {
+		d.notifications = append(d.notifications, n)
 	})
 	if app.Init != nil {
 		app.Init(app.State, d.fx)
@@ -188,6 +193,12 @@ func Frames[S any](d *Driver[S], steps ...func(*Driver[S])) []flatte.Frame {
 		frames = append(frames, d.Frame())
 	}
 	return frames
+}
+
+// Notifications are the notifications the app posted with Notify, oldest
+// first. The driver shows none; tests read them here.
+func (d *Driver[S]) Notifications() []flatte.Notification {
+	return append([]flatte.Notification(nil), d.notifications...)
 }
 
 type pendingDialog struct {

@@ -81,6 +81,7 @@ flatte package flatte
   func SyncWindows[S any](wh*WindowHost, app App[S], width int, height int)[]Event
   func WithHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S]
   func WithHostDialogs[S any](fx Effects[S], show func(d Dialog, done func(DialogResult))) Effects[S]
+  func WithHostNotifications[S any](fx Effects[S], show func(Notification)) Effects[S]
   func WithInline() Option
   func WithInput(in io.Reader) Option
   func WithMouse(mode MouseMode) Option
@@ -98,6 +99,7 @@ flatte package flatte
   method *WindowHost.Route(ev Event)[]Event
   method *WindowHost.WindowFrame(id string)(Frame, bool)
   method Effects[S].Ctx() context.Context
+  method Effects[S].Notify(n Notification)
   method Effects[S].Print(s string)
   method Effects[S].Printf(format string, args ... any)
   method Effects[S].Quit()
@@ -172,7 +174,8 @@ flatte package flatte
   field Effects.<unexported> func(string) [order=8]
   field Effects.<unexported> func() [order=9]
   field Effects.<unexported> func(Dialog, func(DialogResult)) [order=10]
-  struct Effects fields=11 comparable=false
+  field Effects.<unexported> func(Notification) [order=11]
+  struct Effects fields=12 comparable=false
   type Event interface
   interface Event method isEvent()
   type FileSelection struct
@@ -240,6 +243,10 @@ flatte package flatte
   type MouseMode int
   type NoopTracer struct
   struct NoopTracer fields=0 comparable=true
+  type Notification struct
+  field Notification.Title string [order=0]
+  field Notification.Body string [order=1]
+  struct Notification fields=2 comparable=true
   type OpenDialog struct
   field OpenDialog.Title string [order=0]
   field OpenDialog.Directory string [order=1]
@@ -255,7 +262,8 @@ flatte package flatte
   field RenderContext.Width int [order=0]
   field RenderContext.ColorProfile colorprofile.Profile [order=1]
   field RenderContext.Window string [order=2]
-  struct RenderContext fields=3 comparable=true
+  field RenderContext.Graphical bool [order=3]
+  struct RenderContext fields=4 comparable=true
   type ResizeEvent struct
   field ResizeEvent.Width int [order=0]
   field ResizeEvent.Height int [order=1]
@@ -313,6 +321,7 @@ flatest package flatest
   method *Driver[S].Close()
   method *Driver[S].Dialog()(dialog flatte.Dialog, ok bool)
   method *Driver[S].Frame() flatte.Frame
+  method *Driver[S].Notifications()[]flatte.Notification
   method *Driver[S].Quit() bool
   method *Driver[S].Send(ev flatte.Event) flatte.Frame
   method *Driver[S].Settle() flatte.Frame
@@ -336,7 +345,8 @@ flatest package flatest
   field Driver.<unexported> bool [order=10]
   field Driver.<unexported> flatte.Effects[S] [order=11]
   field Driver.<unexported> []pendingDialog [order=12]
-  struct Driver fields=13 comparable=false
+  field Driver.<unexported> []flatte.Notification [order=13]
+  struct Driver fields=14 comparable=false
   type Recorder struct
   field Recorder.Steps []Step [order=0]
   struct Recorder fields=1 comparable=false
@@ -421,17 +431,25 @@ flatui package flatui
   method *TextField.Backspace()
   method *TextField.ClearSelection()
   method *TextField.Delete()
+  method *TextField.DeleteToEnd()
+  method *TextField.DeleteToStart()
   method *TextField.DeleteWordLeft()
   method *TextField.DeleteWordRight()
+  method *TextField.Edit(key flatte.KeyEvent) bool
   method *TextField.Insert(r rune)
+  method *TextField.MoveEnd()
+  method *TextField.MoveEndSelecting()
   method *TextField.MoveLeft()
   method *TextField.MoveLeftSelecting()
   method *TextField.MoveRight()
   method *TextField.MoveRightSelecting()
+  method *TextField.MoveStart()
+  method *TextField.MoveStartSelecting()
   method *TextField.MoveWordLeft()
   method *TextField.MoveWordLeftSelecting()
   method *TextField.MoveWordRight()
   method *TextField.MoveWordRightSelecting()
+  method *TextField.SelectAll()
   method *TextField.SetCursor(cursor int)
   method *Textarea.Backspace()
   method *Textarea.ClearSelection()
@@ -770,11 +788,13 @@ flatui/layout package layout
   const IconChevronRight IconName = 1
   const IconChevronUp IconName = 21
   const IconCircle IconName = 5
+  const IconClock IconName = 36
   const IconClose IconName = 8
   const IconDisclosureClosed IconName = 2
   const IconDisclosureOpen IconName = 3
   const IconDot IconName = 4
   const IconEllipsis IconName = 23
+  const IconEqualizer IconName = 37
   const IconError IconName = 15
   const IconFile IconName = 25
   const IconFolder IconName = 24
@@ -783,6 +803,7 @@ flatui/layout package layout
   const IconHeartOutline IconName = 35
   const IconHome IconName = 33
   const IconInfo IconName = 13
+  const IconLibrary IconName = 38
   const IconMinus IconName = 10
   const IconNext IconName = 29
   const IconNone IconName = 0
@@ -938,6 +959,11 @@ flatui/layout package layout
   methodset Toggle.GetID() string
   methodset Toggle.IsOverlay() bool
   type Align int
+  type Backdrop struct
+  field Backdrop.Source image.Image [order=0]
+  field Backdrop.Blur float64 [order=1]
+  field Backdrop.Opacity float64 [order=2]
+  struct Backdrop fields=3 comparable=true
   type BorderKind int
   type Box struct
   field Box.Border BorderKind [order=0]
@@ -947,12 +973,16 @@ flatui/layout package layout
   field Box.Round bool [order=4]
   field Box.Title string [order=5]
   field Box.TitleStyle TextStyle [order=6]
-  struct Box fields=7 comparable=true
+  field Box.Hover color.Color [order=7]
+  field Box.Backdrop *Backdrop [order=8]
+  field Box.InsetY float64 [order=9]
+  struct Box fields=10 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
   field BoxOp.Box Box [order=2]
-  struct BoxOp fields=3 comparable=true
+  field BoxOp.ID string [order=3]
+  struct BoxOp fields=4 comparable=true
   type Button struct
   field Button.NodeBase NodeBase [order=0]
   field Button.Label string [order=1]
@@ -1010,7 +1040,8 @@ flatui/layout package layout
   field Icon.Name IconName [order=1]
   field Icon.Text string [order=2]
   field Icon.Style TextStyle [order=3]
-  struct Icon fields=4 comparable=false
+  field Icon.Animate bool [order=4]
+  struct Icon fields=5 comparable=false
   type IconName int
   type IconOp struct
   field IconOp.Rect PointRect [order=0]
@@ -1018,7 +1049,8 @@ flatui/layout package layout
   field IconOp.Name IconName [order=2]
   field IconOp.Text string [order=3]
   field IconOp.Style TextStyle [order=4]
-  struct IconOp fields=5 comparable=true
+  field IconOp.Animate bool [order=5]
+  struct IconOp fields=6 comparable=true
   type Image struct
   field Image.NodeBase NodeBase [order=0]
   field Image.Source image.Image [order=1]
@@ -1031,7 +1063,8 @@ flatui/layout package layout
   field ImageOp.Clip PointRect [order=1]
   field ImageOp.Source image.Image [order=2]
   field ImageOp.Fit ImageFit [order=3]
-  struct ImageOp fields=4 comparable=true
+  field ImageOp.Round bool [order=4]
+  struct ImageOp fields=5 comparable=true
   type Input struct
   field Input.NodeBase NodeBase [order=0]
   field Input.Value string [order=1]
@@ -1046,7 +1079,8 @@ flatui/layout package layout
   field Input.SelectionStyle TextStyle [order=10]
   field Input.OffsetX int [order=11]
   field Input.OffsetY int [order=12]
-  struct Input fields=13 comparable=false
+  field Input.Bare bool [order=13]
+  struct Input fields=14 comparable=false
   type InputOp struct
   field InputOp.ID string [order=0]
   field InputOp.Rect PointRect [order=1]
@@ -1061,7 +1095,8 @@ flatui/layout package layout
   field InputOp.SelStart int [order=10]
   field InputOp.SelEnd int [order=11]
   field InputOp.OffsetY int [order=12]
-  struct InputOp fields=13 comparable=true
+  field InputOp.Bare bool [order=13]
+  struct InputOp fields=14 comparable=true
   type Label struct
   field Label.NodeBase NodeBase [order=0]
   field Label.Text string [order=1]
@@ -1201,11 +1236,12 @@ flatui/layout package layout
   field TextStyle.Fg color.Color [order=1]
   field TextStyle.Bg color.Color [order=2]
   field TextStyle.Size float64 [order=3]
-  field TextStyle.Bold bool [order=4]
-  field TextStyle.Italic bool [order=5]
-  field TextStyle.Underline bool [order=6]
-  field TextStyle.Strikethrough bool [order=7]
-  struct TextStyle fields=8 comparable=true
+  field TextStyle.Leading float64 [order=4]
+  field TextStyle.Bold bool [order=5]
+  field TextStyle.Italic bool [order=6]
+  field TextStyle.Underline bool [order=7]
+  field TextStyle.Strikethrough bool [order=8]
+  struct TextStyle fields=9 comparable=true
   type Toggle struct
   field Toggle.NodeBase NodeBase [order=0]
   field Toggle.Kind ToggleKind [order=1]

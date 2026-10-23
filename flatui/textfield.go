@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/rivo/uniseg"
 
+	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -130,6 +131,152 @@ func (f *TextField) DeleteWordRight() {
 	f.Value = f.Value[:f.Cursor] + f.Value[end:]
 }
 
+// MoveStart and MoveEnd put the cursor at the start or end of the value;
+// the Selecting forms extend the selection there.
+func (f *TextField) MoveStart() { f.SetCursor(0) }
+func (f *TextField) MoveEnd()   { f.SetCursor(len(f.Value)) }
+
+func (f *TextField) MoveStartSelecting() {
+	f.startSelection()
+	f.Cursor = 0
+}
+
+func (f *TextField) MoveEndSelecting() {
+	f.startSelection()
+	f.Cursor = len(f.Value)
+}
+
+// SelectAll selects the whole value, the cursor at its end.
+func (f *TextField) SelectAll() {
+	f.selectionAnchor, f.selectionActive = 0, true
+	f.Cursor = len(f.Value)
+}
+
+// DeleteToStart and DeleteToEnd delete from the cursor to the start or end
+// (or the selection, when there is one).
+func (f *TextField) DeleteToStart() {
+	f.clampCursor()
+	if f.deleteSelection() {
+		return
+	}
+	f.Value, f.Cursor = f.Value[f.Cursor:], 0
+}
+
+func (f *TextField) DeleteToEnd() {
+	f.clampCursor()
+	if f.deleteSelection() {
+		return
+	}
+	f.Value = f.Value[:f.Cursor]
+}
+
+// Edit applies key as a native one-line text field does, and reports
+// whether it was an editing key. It handles typing (replacing the
+// selection), ←/→ (Shift selects, ⌥ or Ctrl by word, ⌘ to the start or
+// end), Home/End (a window's ⌘←/⌘→), ⌫ and ⌦ (⌥ or Ctrl a word, ⌘ to the
+// start or end), ⌘A, and the terminal's Ctrl+A/E/U/K/W. Everything else is
+// the app's — Enter, Esc, Tab, ↑/↓, and copy, cut, and paste, which need
+// the clipboard (SelectedText gives what to copy).
+func (f *TextField) Edit(key flatte.KeyEvent) bool {
+	shift := key.Mod.Contains(flatte.ModShift)
+	super := key.Mod.Contains(flatte.ModSuper)
+	word := key.Mod.Contains(flatte.ModAlt) || key.Mod.Contains(flatte.ModCtrl)
+	switch key.Key {
+	case flatte.KeyCharacter:
+		switch {
+		case key.Mod&^flatte.ModShift == 0:
+			f.Insert(key.Rune)
+		case super && (key.Rune == 'a' || key.Rune == 'A') && key.Mod&^(flatte.ModSuper|flatte.ModShift) == 0:
+			f.SelectAll()
+		case key.Mod == flatte.ModCtrl:
+			switch key.Rune {
+			case 'a':
+				f.MoveStart()
+			case 'e':
+				f.MoveEnd()
+			case 'u':
+				f.DeleteToStart()
+			case 'k':
+				f.DeleteToEnd()
+			case 'w':
+				f.DeleteWordLeft()
+			default:
+				return false
+			}
+		default:
+			return false
+		}
+	case flatte.KeyLeft, flatte.KeyRight:
+		left := key.Key == flatte.KeyLeft
+		switch {
+		case super && shift && left:
+			f.MoveStartSelecting()
+		case super && shift:
+			f.MoveEndSelecting()
+		case super && left:
+			f.MoveStart()
+		case super:
+			f.MoveEnd()
+		case word && shift && left:
+			f.MoveWordLeftSelecting()
+		case word && shift:
+			f.MoveWordRightSelecting()
+		case word && left:
+			f.MoveWordLeft()
+		case word:
+			f.MoveWordRight()
+		case shift && left:
+			f.MoveLeftSelecting()
+		case shift:
+			f.MoveRightSelecting()
+		default:
+			// A selection collapses to the edge the arrow points at.
+			if start, end, ok := f.Selection(); ok && left {
+				f.SetCursor(start)
+			} else if ok {
+				f.SetCursor(end)
+			} else if left {
+				f.MoveLeft()
+			} else {
+				f.MoveRight()
+			}
+		}
+	case flatte.KeyHome, flatte.KeyEnd:
+		home := key.Key == flatte.KeyHome
+		switch {
+		case shift && home:
+			f.MoveStartSelecting()
+		case shift:
+			f.MoveEndSelecting()
+		case home:
+			f.MoveStart()
+		default:
+			f.MoveEnd()
+		}
+	case flatte.KeyBackspace:
+		switch {
+		case super:
+			f.DeleteToStart()
+		case word:
+			f.DeleteWordLeft()
+		default:
+			f.Backspace()
+		}
+	case flatte.KeyDelete:
+		switch {
+		case super:
+			f.DeleteToEnd()
+		case word:
+			f.DeleteWordRight()
+		default:
+			f.Delete()
+		}
+	default:
+		return false
+	}
+	return true
+}
+
 func (f *TextField) SetCursor(cursor int) {
 	f.Cursor = cursor
 	f.clampCursor()
@@ -175,11 +322,15 @@ func (f TextField) CursorColumn() int {
 }
 
 // Layout returns the field as a layout.Input node with the given ID, showing
-// the value and caret. focused is the app's focus decision: the focused
-// Input's caret places the frame cursor. Selection is not shown yet.
+// the value, caret, and selection. focused is the app's focus decision: the
+// focused Input's caret places the frame cursor.
 func (f TextField) Layout(id string, focused bool) layout.Input {
 	f.clampCursor()
-	return layout.Input{NodeBase: layout.NodeBase{ID: id}, Value: f.Value, Caret: f.Cursor, Focused: focused}
+	in := layout.Input{NodeBase: layout.NodeBase{ID: id}, Value: f.Value, Caret: f.Cursor, Focused: focused}
+	if start, end, ok := f.Selection(); ok {
+		in.SelStart, in.SelEnd = start, end
+	}
+	return in
 }
 
 func (f *TextField) startSelection() {

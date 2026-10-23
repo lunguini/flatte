@@ -57,6 +57,13 @@ const (
 	IconHome
 	IconHeart
 	IconHeartOutline
+	// A clock face (🕒), and an equalizer's three bars (▁▃▅: something
+	// playing).
+	IconClock
+	IconEqualizer
+	// A library: two books standing and one leaning (a shelf of saved
+	// things).
+	IconLibrary
 )
 
 // Icon is a small symbol with a terminal spelling: the terminal shows Text
@@ -67,6 +74,9 @@ type Icon struct {
 	Name  IconName
 	Text  string
 	Style TextStyle
+	// Animate moves the shape in a GUI (an equalizer's bars play); the
+	// terminal shows it still.
+	Animate bool
 }
 
 func (i Icon) Size() (Size, Size) { return i.label().Size() }

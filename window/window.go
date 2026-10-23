@@ -36,6 +36,10 @@ type Options struct {
 	// Translucent shows the desktop, blurred, through the window wherever
 	// the frame draws no background of its own.
 	Translucent bool
+	// Fonts are font files (TrueType or OpenType) for this process to use
+	// before the window draws, so Theme.Font can name a family the system
+	// does not have — an app embeds its font and names it.
+	Fonts [][]byte
 }
 
 // The window buttons' corner of a window with HideTitleBar, in points.

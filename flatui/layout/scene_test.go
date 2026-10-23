@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image/color"
 	"math"
 	"reflect"
 	"strings"
@@ -46,7 +47,7 @@ func TestSceneOpsInPaintOrder(t *testing.T) {
 	frame := PointRect{0, 0, 200, 100}
 	// The card's content box starts at 7,7: a 1pt border plus one 6pt step.
 	want := []Op{
-		BoxOp{Rect: frame, Clip: frame, Box: Box{Border: BorderNormal, BorderColor: grey}},
+		BoxOp{Rect: frame, Clip: frame, Box: Box{Border: BorderNormal, BorderColor: grey}, ID: "card"},
 		TextOp{Rect: PointRect{7, 7, 186, 20}, Clip: frame, Text: "Hello", Style: TextStyle{Role: TextTitle}},
 		TextOp{Rect: PointRect{7, 27, 30, 16}, Clip: frame, Text: "name:"},
 		InputOp{ID: "name", Rect: PointRect{43, 27, 150, 16}, Clip: frame, Value: "Ada", Caret: 1, Focused: true},
@@ -245,5 +246,55 @@ func TestSceneMultilineInputGrows(t *testing.T) {
 	_, rects := SolveAndCompose(root, 20, 10)
 	if rects["ed"].H != 9 {
 		t.Fatalf("terminal multi-line input %+v, want 9 lines", rects["ed"])
+	}
+}
+
+func TestHoverAndBackdropBoxesCarryTheirID(t *testing.T) {
+	root := Col{Children: []Node{
+		Row{NodeBase: NodeBase{ID: "row", H: Fixed(1), Box: Box{Hover: color.White}}, Children: []Node{Label{Text: "x"}}},
+		Row{NodeBase: NodeBase{ID: "head", H: Fixed(1), Box: Box{Backdrop: &Backdrop{Blur: 4}}}, Children: []Node{Label{Text: "y"}}},
+		Icon{NodeBase: NodeBase{ID: "eq"}, Name: IconEqualizer, Text: "♪ ", Animate: true},
+	}}
+	s := LayoutScene(root, 200, 100, testMetrics)
+	ids := map[string]bool{}
+	animated := false
+	for _, op := range s.Ops {
+		switch op := op.(type) {
+		case BoxOp:
+			ids[op.ID] = true
+		case IconOp:
+			animated = animated || op.Animate
+		}
+	}
+	if !ids["row"] || !ids["head"] || !animated {
+		t.Fatalf("box ids %v, animated icon %v", ids, animated)
+	}
+}
+
+func TestBoxInsetYDrawsInsideTheRect(t *testing.T) {
+	row := func(inset float64) Node {
+		return Col{Children: []Node{Row{NodeBase: NodeBase{ID: "row", H: Fixed(2), Box: Box{Background: color.White, InsetY: inset}}, Children: []Node{Label{Text: "x"}}}}}
+	}
+	box := func(n Node) PointRect {
+		for _, op := range LayoutScene(n, 200, 100, testMetrics).Ops {
+			if b, ok := op.(BoxOp); ok {
+				return b.Rect
+			}
+		}
+		t.Fatal("no box")
+		return PointRect{}
+	}
+	full, inset := box(row(0)), box(row(3))
+	if inset.Y != full.Y+3 || inset.H != full.H-6 || inset.X != full.X || inset.W != full.W {
+		t.Fatalf("inset %+v, full %+v", inset, full)
+	}
+	// A larger inset than half the height leaves an empty box, never a negative one.
+	if huge := box(row(1e9)); huge.H != 0 {
+		t.Fatalf("huge inset %+v", huge)
+	}
+	// Layout and hit-testing keep the whole rect.
+	c := Compose(row(3), 20, 5)
+	if r := c.Rects["row"]; r.H != 2 {
+		t.Fatalf("row rect %+v", r)
 	}
 }

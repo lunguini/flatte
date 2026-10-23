@@ -56,7 +56,7 @@ func TestPublicAPISnapshotIncludesContracts(t *testing.T) {
 		"flatte package flatte",
 		"func Named[S any](name string, apply func(*S)) StateUpdate[S]",
 		"const KeyUp Key = 1",
-		"struct Effects fields=11 comparable=false",
+		"struct Effects fields=12 comparable=false",
 		"field Effects.<unexported> context.Context [order=0]",
 		"field KeyEvent.Rune rune [order=1]",
 		"method Mod.Contains(mods Mod) bool",

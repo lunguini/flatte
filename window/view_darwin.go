@@ -44,6 +44,8 @@ type windowState struct {
 	// blink phase.
 	caretMoved time.Time
 	blink      *time.Timer
+	// frame redraws the next frame of a fade or an animated icon.
+	frame *time.Timer
 	// tooltip is the view's tooltip now.
 	tooltip string
 }
@@ -74,6 +76,28 @@ const caretBlink = 530 * time.Millisecond
 // caretOn reports whether a caret that moved since ago shows: on for a
 // phase, off for a phase, and so on.
 func caretOn(since time.Duration) bool { return since < 0 || (since/caretBlink)%2 == 0 }
+
+// Frame intervals: fades at the display's pace, animated icons at half.
+const (
+	fadeFrame    = time.Second / 60
+	animateFrame = time.Second / 30
+)
+
+// frameIn redraws the window after d, for an animation's next frame.
+func (st *windowState) frameIn(d time.Duration) {
+	redraw := func() {
+		post(func() {
+			if states[st.view] == st {
+				st.view.Send(sel("setNeedsDisplay:"), true)
+			}
+		})
+	}
+	if st.frame == nil {
+		st.frame = time.AfterFunc(d, redraw)
+		return
+	}
+	st.frame.Reset(d)
+}
 
 // blinkIn redraws the window after d, for the caret's next blink phase.
 func (st *windowState) blinkIn(d time.Duration) {
@@ -108,6 +132,9 @@ func register(st *windowState) {
 func unregister(st *windowState) {
 	delete(states, st.view)
 	delete(byWindow, st.window)
+	if st.frame != nil {
+		st.frame.Stop()
+	}
 	if st.blink != nil {
 		st.blink.Stop()
 	}
@@ -243,6 +270,12 @@ func viewMethods() []objc.MethodDef {
 			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale, translucent: st.translucent}
 			p.presentation = st.ui.presentation()
 			p.draw(scene, b.Size.Width, b.Size.Height)
+			switch {
+			case p.moving:
+				st.frameIn(fadeFrame)
+			case p.animated:
+				st.frameIn(animateFrame)
+			}
 			if c := st.ui.frameCursor(); c != nil {
 				p.clip = layout.PointRect{W: b.Size.Width, H: b.Size.Height}
 				p.caretAt(float64(c.X)*st.m.Column, float64(c.Y)*st.m.Line, st.m.Line, st.th.font(fontKey{mono: true}))

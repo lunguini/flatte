@@ -571,6 +571,7 @@ or relocation before 1.0.
 | Shell out to editor/tool | `flatte.Exec(fx, name, cmd, fold)` | Releases terminal, runs command, restores. |
 | File picker | `flatte.SelectFile(fx, name, cmd, fold)` | App chooses command; `cmd/flat-file-select` shows platform picker selection. |
 | Clipboard write/read | `fx.SetClipboard`, `fx.ReadClipboard`, `flatte.ClipboardEvent` | Reads are best-effort; unsupported terminals may never answer. A window uses the system pasteboard (hosts route it with `flatte.WithHostClipboard`). Pastes arrive as `PasteEvent` (⌘V in a window). |
+| Notifications | `fx.Notify(flatte.Notification{Title, Body})` | Fire and forget, no answer. A window posts a system notification; a terminal emits OSC 9 (iTerm2, Ghostty, WezTerm), OSC 99 (kitty) or OSC 777 (foot, rxvt), wrapped for tmux (needs `allow-passthrough`); others ignore it. The framework never decides when: track `FocusEvent` (`WithReportFocus` in a terminal; a window always sends it when the app comes to or leaves the front) to notify only while away. flatest records them: `d.Notifications()`. |
 | Suspend | `fx.Suspend()` | Releases and restores terminal state; Unix sends job-control suspend when supported. Apps should not assume a process stop on platforms without job control. |
 
 ## Navigation Recipes

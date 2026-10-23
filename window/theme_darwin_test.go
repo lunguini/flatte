@@ -2,6 +2,7 @@ package window
 
 import (
 	"image/color"
+	"math"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -152,4 +153,22 @@ func TestIsDarkFollowsAppearance(t *testing.T) {
 			t.Error("view does not redraw on appearance changes")
 		}
 	})
+}
+
+func TestTextStyleLeading(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	th := newTheme(Theme{LineSpacing: 1.35})
+	loose, tight := th.styleFont(layout.TextStyle{}), th.styleFont(layout.TextStyle{Leading: 1})
+	if !(tight.pitch() < loose.pitch()) || tight.ascent != loose.ascent {
+		t.Fatalf("leading 1 pitch %v, theme's %v: want shorter lines in the same font", tight.pitch(), loose.pitch())
+	}
+	// Out-of-range asks are bounded, and NaN is the theme's.
+	if f := th.styleFont(layout.TextStyle{Leading: 0.1}); f.spacing != minLeading {
+		t.Errorf("leading 0.1 spaced %v", f.spacing)
+	}
+	if f := th.styleFont(layout.TextStyle{Leading: math.NaN()}); f.spacing != loose.spacing {
+		t.Errorf("NaN leading spaced %v", f.spacing)
+	}
 }

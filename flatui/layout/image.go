@@ -21,6 +21,7 @@ const (
 // subtle and wrapped to its width (and sizes to Text on Auto axes), so give
 // pictures a short description. A GUI reads Source when it first draws it:
 // to change the picture, give a new image rather than changing its pixels.
+// A Round Box rounds the picture's corners as it would a box's.
 type Image struct {
 	NodeBase
 	Source image.Image

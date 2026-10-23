@@ -19,6 +19,7 @@
 package layout
 
 import (
+	"image"
 	"image/color"
 	"math"
 	"strings"
@@ -258,6 +259,17 @@ const (
 // writes " Title " in TitleStyle into the top rule after its first rule
 // glyph (cut to fit), and a GUI sets it in the top stroke, which breaks
 // around it.
+//
+// Hover is a GUI's fill while the pointer is over the node (it needs an
+// ID), fading in and out, under its content and over its Background; the
+// terminal draws nothing for it. Backdrop is a picture behind a GUI's box,
+// under its Background — a translucent Background over it tints and dims
+// it; the terminal draws only the Background.
+//
+// InsetY draws all of that InsetY points inside the node's rect, top and
+// bottom, in a GUI — a gap between the rows of a list without changing
+// their layout (clicks in the gap still reach the node); terminals ignore
+// it.
 type Box struct {
 	Border      BorderKind
 	BorderColor color.Color
@@ -266,6 +278,19 @@ type Box struct {
 	Round       bool
 	Title       string
 	TitleStyle  TextStyle
+	Hover       color.Color
+	Backdrop    *Backdrop
+	InsetY      float64
+}
+
+// Backdrop is a picture filling a box in a GUI: Source blurred by Blur
+// points and drawn at Opacity (0 means 1). Sharp (Blur 0), it is cropped to
+// cover the box; blurred, all of it is stretched to the box, so a large
+// blur leaves every color of it as a soft wash.
+type Backdrop struct {
+	Source  image.Image
+	Blur    float64
+	Opacity float64
 }
 
 // box resolves the Bordered shorthand into the effective Box.

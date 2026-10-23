@@ -65,6 +65,8 @@ var (
 	cgContextRestoreGState      func(ctx uintptr)
 	cgContextClipToRect         func(ctx uintptr, r CGRect)
 	cgContextClipToRects        func(ctx uintptr, rects *CGRect, count uintptr)
+	cgContextClip               func(ctx uintptr)
+	cgContextSetAlpha           func(ctx uintptr, a float64)
 	cgContextSetRGBFillColor    func(ctx uintptr, r, g, b, a float64)
 	cgContextSetRGBStrokeColor  func(ctx uintptr, r, g, b, a float64)
 	cgContextFillRect           func(ctx uintptr, r CGRect)
@@ -111,6 +113,10 @@ var (
 	ctLineGetOffsetForStringIndex    func(line uintptr, index int, secondary *float64) float64
 	ctLineGetStringIndexForPosition  func(line uintptr, p CGPoint) int
 	cfRelease                        func(ref uintptr)
+	cfDataCreate                     func(alloc uintptr, bytes *byte, length int) uintptr
+	cgDataProviderCreateWithCFData   func(data uintptr) uintptr
+	cgFontCreateWithDataProvider     func(provider uintptr) uintptr
+	ctFontManagerRegisterGraphicsFnt func(font uintptr, err *uintptr) bool
 
 	dispatchAsyncF       func(queue, ctx, fn uintptr)
 	dispatchMainQueue    uintptr
@@ -165,6 +171,8 @@ func bindFrameworks() error {
 		{&cgContextRestoreGState, cg, "CGContextRestoreGState"},
 		{&cgContextClipToRect, cg, "CGContextClipToRect"},
 		{&cgContextClipToRects, cg, "CGContextClipToRects"},
+		{&cgContextClip, cg, "CGContextClip"},
+		{&cgContextSetAlpha, cg, "CGContextSetAlpha"},
 		{&cgContextSetRGBFillColor, cg, "CGContextSetRGBFillColor"},
 		{&cgContextSetRGBStrokeColor, cg, "CGContextSetRGBStrokeColor"},
 		{&cgContextFillRect, cg, "CGContextFillRect"},
@@ -210,6 +218,10 @@ func bindFrameworks() error {
 		{&ctLineGetOffsetForStringIndex, ct, "CTLineGetOffsetForStringIndex"},
 		{&ctLineGetStringIndexForPosition, ct, "CTLineGetStringIndexForPosition"},
 		{&cfRelease, cf, "CFRelease"},
+		{&cfDataCreate, cf, "CFDataCreate"},
+		{&cgDataProviderCreateWithCFData, cg, "CGDataProviderCreateWithCFData"},
+		{&cgFontCreateWithDataProvider, cg, "CGFontCreateWithDataProvider"},
+		{&ctFontManagerRegisterGraphicsFnt, ct, "CTFontManagerRegisterGraphicsFont"},
 		{&dispatchAsyncF, sys, "dispatch_async_f"},
 		{&pthreadMainNP, sys, "pthread_main_np"},
 		{&autoreleasePoolPush, oc, "objc_autoreleasePoolPush"},

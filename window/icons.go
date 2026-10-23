@@ -2,6 +2,7 @@ package window
 
 import (
 	"math"
+	"time"
 
 	"github.com/lunguini/flatte/flatui/layout"
 )
@@ -114,6 +115,23 @@ func symbol(name layout.IconName, cx, cy, s float64) (cellShape, bool) {
 			return cellShape{polys: []poly{{pts: pts, fill: true}}}, true
 		}
 		return cellShape{polys: []poly{line(append(pts, pts[0])...)}}, true
+	case layout.IconClock:
+		return cellShape{
+			circles: []circle{ring(at(0, 0), 0.46*s)},
+			polys:   []poly{line(at(0, -0.26), at(0, 0), at(0.18, 0.12))},
+		}, true
+	case layout.IconEqualizer:
+		return cellShape{polys: []poly{
+			box(at(-0.36, 0.06), at(-0.16, 0.4)),
+			box(at(-0.1, -0.4), at(0.1, 0.4)),
+			box(at(0.16, -0.16), at(0.36, 0.4)),
+		}}, true
+	case layout.IconLibrary:
+		return cellShape{polys: []poly{
+			line(at(-0.3, -0.38), at(-0.3, 0.38)),
+			line(at(-0.08, -0.38), at(-0.08, 0.38)),
+			line(at(0.1, -0.34), at(0.34, 0.36)),
+		}}, true
 	case layout.IconSearch:
 		return cellShape{
 			circles: []circle{ring(at(-0.08, -0.08), 0.32*s)},
@@ -184,4 +202,18 @@ func mirrored(g cellShape, cx float64) cellShape {
 		out.polys = append(out.polys, p)
 	}
 	return out
+}
+
+// equalizer is IconEqualizer's bars at time now, each rising and falling
+// at its own pace, in an s-point box centered on (cx, cy).
+func equalizer(cx, cy, s float64, now time.Time) cellShape {
+	t := float64(now.UnixNano()) / 1e9
+	var g cellShape
+	for i, pace := range []float64{5.1, 7.3, 6.2} {
+		h := 0.25 + 0.75*math.Abs(math.Sin(t*pace+float64(i)*1.7))
+		x0 := cx + (-0.36+float64(i)*0.26)*s
+		top, bottom := cy+(0.4-0.8*h)*s, cy+0.4*s
+		g.polys = append(g.polys, poly{pts: []point{{x0, top}, {x0 + 0.2*s, top}, {x0 + 0.2*s, bottom}, {x0, bottom}}, fill: true})
+	}
+	return g
 }

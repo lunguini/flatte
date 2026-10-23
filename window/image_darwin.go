@@ -110,7 +110,8 @@ func fitRect(r layout.PointRect, w, h float64, fit layout.ImageFit) layout.Point
 	return layout.PointRect{X: r.X + (r.W-fw)/2, Y: r.Y + (r.H-fh)/2, W: fw, H: fh}
 }
 
-// image draws op's picture, clipped to its box.
+// image draws op's picture, clipped to its box (with rounded corners
+// when op.Round).
 func (p *painter) image(op layout.ImageOp) {
 	if op.Source == nil {
 		return
@@ -125,6 +126,10 @@ func (p *painter) image(op layout.ImageOp) {
 	// The space is flipped and CoreGraphics draws images bottom up: flip
 	// the image's rect back.
 	cgContextSaveGState(p.ctx)
+	if op.Round {
+		box := rectOf(op.Rect)
+		p.roundedPath(box, boxRadius(box, true), func() { cgContextClip(p.ctx) })
+	}
 	cgContextSetInterpolationQ(p.ctx, cgInterpolationHigh)
 	cgContextTranslateCTM(p.ctx, r.X, r.Y+r.H)
 	cgContextScaleCTM(p.ctx, 1, -1)

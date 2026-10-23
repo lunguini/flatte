@@ -19,6 +19,11 @@ type RenderContext struct {
 	// Window is the window being drawn: "" for the main window, or a
 	// secondary window's ID (App.Windows).
 	Window string
+	// Graphical reports a host that draws in points — a native window:
+	// Points sizes, images, and icon shapes show as themselves. False in a
+	// terminal, where they round up to whole cells and show their text, so
+	// a view can size generously for one and compactly for the other.
+	Graphical bool
 }
 
 type fdWriter interface {

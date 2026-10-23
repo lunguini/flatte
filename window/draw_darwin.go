@@ -94,8 +94,9 @@ func (th theme) radiusOf(k layout.BorderKind) float64 {
 type fontKey struct {
 	role               layout.TextRole
 	bold, italic, mono bool
-	// size overrides the role's point size when positive.
-	size float64
+	// size overrides the role's point size when positive, and leading the
+	// theme's line spacing.
+	size, leading float64
 }
 
 type font struct {
@@ -175,6 +176,9 @@ var (
 	fonts   = map[fontID]font{}
 )
 
+// The line spacing a TextStyle.Leading may ask for.
+const minLeading, maxLeading = 0.8, 3.0
+
 // fontFor is darkTheme's font for a role and emphasis.
 func fontFor(k fontKey) font { return darkTheme.font(k) }
 
@@ -193,6 +197,10 @@ func (th theme) font(k fontKey) font {
 		id.size = math.Round(min(k.size, maxFontSize)*4) / 4
 	}
 	id.fontKey.size = 0
+	if k.leading > 0 && !math.IsInf(k.leading, 1) {
+		id.spacing = min(max(k.leading, minLeading), maxLeading)
+	}
+	id.fontKey.leading = 0
 	fontsMu.Lock()
 	defer fontsMu.Unlock()
 	if f, ok := fonts[id]; ok {
@@ -241,7 +249,7 @@ func (th theme) font(k fontKey) font {
 }
 
 func (th theme) styleFont(s layout.TextStyle) font {
-	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic, size: s.Size})
+	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic, size: s.Size, leading: s.Leading})
 }
 
 // textLine is a shaped CoreText line. Call release.
@@ -387,6 +395,8 @@ type painter struct {
 	ctx uintptr
 	m   layout.Metrics
 	th  theme
+	// animated reports an animated icon drawn: the view draws again soon.
+	animated bool
 	// translucent leaves the background unpainted, for the blur behind.
 	translucent bool
 	// scale is device pixels per point, for snapping the cell grid.
@@ -484,12 +494,68 @@ func (p *painter) roundedPath(r CGRect, rad float64, f func()) {
 	cgPathRelease(path)
 }
 
+// boxRadius is the corner radius a Round box's fill takes: up to a pill's
+// for a plain box, but in proportion to its size for a picture (an Image,
+// or a box with a Backdrop) — a pill-like radius makes a small thumbnail
+// look like a squircle.
+func boxRadius(r CGRect, picture bool) float64 {
+	if picture {
+		return min(min(r.Size.Width, r.Size.Height)*pictureRound, 10)
+	}
+	return min(r.Size.Height/2, r.Size.Width/2, 10)
+}
+
+// pictureRound is a picture's corner radius over its shorter side.
+const pictureRound = 0.12
+
+// backdrop draws bd's picture covering op's box (rounded like its fill),
+// blurred and at its opacity.
+func (p *painter) backdrop(op layout.BoxOp, bd layout.Backdrop) {
+	r := rectOf(op.Rect)
+	cgContextSaveGState(p.ctx)
+	defer cgContextRestoreGState(p.ctx)
+	if op.Box.Round {
+		p.roundedPath(r, boxRadius(r, true), func() { cgContextClip(p.ctx) })
+	} else {
+		cgContextClipToRect(p.ctx, r)
+	}
+	if bd.Opacity > 0 && bd.Opacity < 1 {
+		cgContextSetAlpha(p.ctx, bd.Opacity)
+	}
+	src := blurred(bd.Source, op.Rect.W, op.Rect.H, bd.Blur)
+	p.image(layout.ImageOp{Rect: op.Rect, Clip: intersect(op.Rect, op.Clip), Source: src, Fit: layout.ImageCover})
+}
+
+// hoverFill draws a box's Hover fill at its node's hover level.
+func (p *painter) hoverFill(op layout.BoxOp) {
+	if op.Box.Hover == nil || op.ID == "" {
+		return
+	}
+	level := p.hovers[op.ID] + 0.5*p.presses[op.ID]
+	if level <= 0 {
+		return
+	}
+	c := rgbaOf(op.Box.Hover)
+	c.A *= min(level, 1.5)
+	r := rectOf(op.Rect)
+	p.fill(c)
+	if op.Box.Round {
+		p.roundedPath(r, boxRadius(r, op.Box.Backdrop != nil), func() { cgContextFillPath(p.ctx) })
+		return
+	}
+	p.cellFill(c, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H)
+}
+
 // box draws a Box. A border is a rounded stroke down the middle of its
 // band, with the background filling inside it; the first box of an overlay
 // layer is a raised surface; a selected box is highlighted first.
 func (p *painter) box(op layout.BoxOp) {
 	raised := p.inLayer && op.Rect == p.layer
 	p.inLayer = false
+	if bd := op.Box.Backdrop; bd != nil && bd.Source != nil {
+		p.backdrop(op, *bd)
+	}
+	defer p.hoverFill(op)
 	if op.Box.Selected {
 		r := rectOf(op.Rect)
 		p.fill(p.th.selection)
@@ -506,7 +572,7 @@ func (p *painter) box(op layout.BoxOp) {
 		case hasBg && op.Box.Round:
 			r := rectOf(op.Rect)
 			p.fill(bg)
-			p.roundedPath(r, min(r.Size.Height/2, r.Size.Width/2, 10), func() { cgContextFillPath(p.ctx) })
+			p.roundedPath(r, boxRadius(r, op.Box.Backdrop != nil), func() { cgContextFillPath(p.ctx) })
 		case hasBg:
 			// Snapped like cell fills: adjacent filled boxes meet on whole
 			// pixels, with no seam at fractional edges.
@@ -726,21 +792,24 @@ func (rt richText) nearest(sp span, x float64) int {
 }
 
 // input draws a text field: an outlined, filled rounded rect (outlined in
-// the focus color when focused) with its text laid out by field — rows,
-// scroll, selection, input-method text — and the caret when focused.
+// the focus color when focused; none for a Bare one) with its text laid
+// out by field — rows, scroll, selection, input-method text — and the
+// caret when focused.
 func (p *painter) input(op layout.InputOp) {
 	r := op.Rect
-	field := cgRect(r.X+0.5, r.Y+0.5, max(r.W-1, 0), max(r.H-1, 0))
-	rad := min(p.th.radiusOf(layout.BorderNormal), field.Size.Height/2)
-	p.fill(p.th.field)
-	p.roundedPath(field, rad, func() { cgContextFillPath(p.ctx) })
-	outline := p.th.border
-	if op.Focused {
-		outline = p.th.caret
+	if !op.Bare {
+		field := cgRect(r.X+0.5, r.Y+0.5, max(r.W-1, 0), max(r.H-1, 0))
+		rad := min(p.th.radiusOf(layout.BorderNormal), field.Size.Height/2)
+		p.fill(p.th.field)
+		p.roundedPath(field, rad, func() { cgContextFillPath(p.ctx) })
+		outline := p.th.border
+		if op.Focused {
+			outline = p.th.caret
+		}
+		p.stroke(outline)
+		cgContextSetLineWidth(p.ctx, strokeWidth)
+		p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
 	}
-	p.stroke(outline)
-	cgContextSetLineWidth(p.ctx, strokeWidth)
-	p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
 
 	fl := p.th.layoutField(op, p.marked)
 	if fl.text == "" {
@@ -1111,6 +1180,12 @@ func (p *painter) scrollBar(op layout.ScrollBarOp) {
 }
 
 func (p *painter) icon(op layout.IconOp) {
+	if op.Animate && op.Name == layout.IconEqualizer {
+		p.animated = true
+		s := min(0.7*op.Rect.H, op.Rect.W)
+		p.shape(equalizer(op.Rect.X+op.Rect.W/2, op.Rect.Y+op.Rect.H/2, s, p.now), p.roleColor(op.Style))
+		return
+	}
 	if g, ok := iconShape(op.Name, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H, p.m.Column); ok {
 		p.shape(g, p.roleColor(op.Style))
 		return

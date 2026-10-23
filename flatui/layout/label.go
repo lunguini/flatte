@@ -29,6 +29,10 @@ type TextStyle struct {
 	// Size is the font size in points (0: the role's size). A GUI sets the
 	// text at it, and its lines are that much taller; terminals ignore it.
 	Size float64
+	// Leading is a line's height over its font's in a GUI (0: the theme's
+	// line spacing): below it to set lines close, as a title over a
+	// subtitle; terminals ignore it.
+	Leading float64
 
 	Bold, Italic, Underline, Strikethrough bool
 }
@@ -42,7 +46,7 @@ func (s TextStyle) Render(text string) string {
 // zero reports whether s sets nothing. (Colors are interfaces, which ==
 // would panic on for an uncomparable implementation.)
 func (s TextStyle) zero() bool {
-	return s.Role == TextBody && s.Size == 0 && s.Fg == nil && s.Bg == nil && !s.Bold && !s.Italic && !s.Underline && !s.Strikethrough
+	return s.Role == TextBody && s.Size == 0 && s.Leading == 0 && s.Fg == nil && s.Bg == nil && !s.Bold && !s.Italic && !s.Underline && !s.Strikethrough
 }
 
 func (s TextStyle) lipgloss() lipgloss.Style {

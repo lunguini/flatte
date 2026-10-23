@@ -61,6 +61,7 @@ type Op interface{ isOp() }
 type BoxOp struct {
 	Rect, Clip PointRect
 	Box        Box
+	ID         string // the node's (for Box.Hover)
 }
 
 // TextOp draws a Label's text from the top-left of Rect (the label's content
@@ -98,6 +99,7 @@ type InputOp struct {
 	Multiline, Wrap  bool
 	SelStart, SelEnd int
 	OffsetY          int
+	Bare             bool // no field chrome: the text and caret only
 }
 
 // IconOp draws an Icon's named shape in Rect (the icon's content box), in
@@ -107,6 +109,7 @@ type IconOp struct {
 	Name       IconName
 	Text       string
 	Style      TextStyle
+	Animate    bool // the shape moves (Icon.Animate)
 }
 
 // MeterOp draws a Meter's gauge in Rect (its content box) filled to Value
@@ -171,6 +174,7 @@ type ImageOp struct {
 	Rect, Clip PointRect
 	Source     image.Image
 	Fit        ImageFit
+	Round      bool // corners rounded as a Round box's
 }
 
 // LayerOp starts an overlay layer: clear Rect to the window background
@@ -374,6 +378,7 @@ type scenePainter struct {
 	m    pointMetric
 	ops  []Op
 	tips []tip
+	id   string // the node being painted's ID, for its BoxOp
 }
 
 // tooltip records n's tooltip over its visible area.
@@ -393,8 +398,12 @@ func (p *scenePainter) content(n Node, r rect[float64]) PointRect {
 }
 
 func (p *scenePainter) box(r, clip rect[float64], b Box) {
-	if b.hasBorder() || b.hasBackground() || b.Selected {
-		p.ops = append(p.ops, BoxOp{Rect: PointRect(r), Clip: PointRect(clip), Box: b})
+	if in := b.InsetY; in > 0 && !math.IsInf(in, 1) {
+		in = min(in, r.H/2)
+		r.Y, r.H = r.Y+in, r.H-2*in
+	}
+	if b.hasBorder() || b.hasBackground() || b.Selected || b.Hover != nil || b.Backdrop != nil {
+		p.ops = append(p.ops, BoxOp{Rect: PointRect(r), Clip: PointRect(clip), Box: b, ID: p.id})
 	}
 }
 
@@ -410,6 +419,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	if !p.visible(r, clip) {
 		return
 	}
+	p.id = getID(n)
 	p.tooltip(n, r, clip)
 	control := func(op ControlOp, b Box) {
 		p.box(r, clip, b)
@@ -445,11 +455,11 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		if l.Source == nil {
 			p.ops = append(p.ops, TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.label().Style, Wrap: true})
 		} else {
-			p.ops = append(p.ops, ImageOp{Rect: p.content(n, r), Clip: PointRect(clip), Source: l.Source, Fit: l.Fit})
+			p.ops = append(p.ops, ImageOp{Rect: p.content(n, r), Clip: PointRect(clip), Source: l.Source, Fit: l.Fit, Round: l.box().Round})
 		}
 	case Icon:
 		p.box(r, clip, l.box())
-		p.ops = append(p.ops, IconOp{Rect: p.content(n, r), Clip: PointRect(clip), Name: l.Name, Text: l.Text, Style: l.Style})
+		p.ops = append(p.ops, IconOp{Rect: p.content(n, r), Clip: PointRect(clip), Name: l.Name, Text: l.Text, Style: l.Style, Animate: l.Animate})
 	case ScrollBar:
 		p.box(r, clip, l.box())
 		start, length, show := l.fraction()
@@ -459,7 +469,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		p.ops = append(p.ops, InputOp{
 			ID: l.ID, Rect: p.content(n, r), Clip: PointRect(clip),
 			Value: l.Value, Caret: l.Caret, Placeholder: l.Placeholder, Focused: l.Focused, Style: l.Style,
-			Multiline: l.Multiline, Wrap: l.Wrap, SelStart: l.SelStart, SelEnd: l.SelEnd, OffsetY: l.OffsetY,
+			Multiline: l.Multiline, Wrap: l.Wrap, SelStart: l.SelStart, SelEnd: l.SelEnd, OffsetY: l.OffsetY, Bare: l.Bare,
 		})
 	case *Spacer:
 		bg := l.bg
@@ -476,6 +486,7 @@ func (p *scenePainter) chrome(n Node, r, clip rect[float64]) {
 	if !p.visible(r, clip) {
 		return
 	}
+	p.id = getID(n)
 	p.tooltip(n, r, clip)
 	if ch := getChrome(n); ch != nil {
 		p.cells(r, clip, ch)
