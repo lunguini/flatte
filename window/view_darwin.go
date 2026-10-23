@@ -28,8 +28,12 @@ type windowState struct {
 	// follow re-resolves th from the system appearance (dark) as it
 	// changes; set when Options has no Theme.
 	follow, dark bool
-	window       objc.ID
-	title        string
+	// translucent leaves the window's background to the blur behind it;
+	// hideTitle has the content under the title bar, its strip dragging the
+	// window where nothing is.
+	translucent, hideTitle bool
+	window                 objc.ID
+	title                  string
 	// marked is the input method's uncommitted text; caret is where the
 	// focused input's caret was last drawn, in view coordinates.
 	marked  string
@@ -158,6 +162,17 @@ func mouseHandler(button flatte.MouseButton, action flatte.MouseAction) func(obj
 	return func(self objc.ID, _ objc.SEL, event objc.ID) {
 		if st := stateOf(self); st != nil {
 			p := location(self, event)
+			// Under a hidden title bar, a press on nothing in the strip is
+			// the title bar's: it drags the window, and a double click
+			// zooms it.
+			if st.hideTitle && button == flatte.MouseLeft && action == flatte.MousePress && p.Y < TitleBarHeight && st.ui.hit(p.X, p.Y) == "" {
+				if objc.Send[int](event, sel("clickCount")) == 2 {
+					st.window.Send(sel("performZoom:"), objc.ID(0))
+				} else {
+					st.window.Send(sel("performWindowDragWithEvent:"), event)
+				}
+				return
+			}
 			st.ui.mouse(p.X, p.Y, button, action, eventMods(event))
 		}
 	}
@@ -208,6 +223,8 @@ func viewMethods() []objc.MethodDef {
 			self.Send(sel("setNeedsDisplay:"), true)
 		}},
 		{Cmd: sel("acceptsFirstMouse:"), Fn: func(objc.ID, objc.SEL, objc.ID) bool { return true }},
+		// The window moves only where the title bar would be (above).
+		{Cmd: sel("mouseDownCanMoveWindow"), Fn: func(objc.ID, objc.SEL) bool { return false }},
 		{Cmd: sel("drawRect:"), Fn: func(self objc.ID, _ objc.SEL, _ CGRect) {
 			st := stateOf(self)
 			if st == nil {
@@ -223,7 +240,7 @@ func viewMethods() []objc.MethodDef {
 			scene := st.ui.render()
 			ctx := uintptr(class("NSGraphicsContext").Send(sel("currentContext")).Send(sel("CGContext")))
 			scale := objc.Send[float64](st.window, sel("backingScaleFactor"))
-			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale}
+			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale, translucent: st.translucent}
 			p.presentation = st.ui.presentation()
 			p.draw(scene, b.Size.Width, b.Size.Height)
 			if c := st.ui.frameCursor(); c != nil {

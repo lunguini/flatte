@@ -3,6 +3,7 @@ package window
 import (
 	"image/color"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"unicode/utf16"
@@ -386,6 +387,8 @@ type painter struct {
 	ctx uintptr
 	m   layout.Metrics
 	th  theme
+	// translucent leaves the background unpainted, for the blur behind.
+	translucent bool
 	// scale is device pixels per point, for snapping the cell grid.
 	scale float64
 	// marked is the input method's uncommitted text, shown at the focused
@@ -429,8 +432,10 @@ func (p *painter) clipped(r layout.PointRect, f func()) {
 
 func (p *painter) draw(s layout.Scene, width, height float64) {
 	p.clip = layout.PointRect{W: width, H: height}
-	p.fill(p.th.bg)
-	cgContextFillRect(p.ctx, cgRect(0, 0, width, height))
+	if !p.translucent {
+		p.fill(p.th.bg)
+		cgContextFillRect(p.ctx, cgRect(0, 0, width, height))
+	}
 	// The space is flipped; flip glyphs back.
 	cgContextSetTextMatrix(p.ctx, CGAffineTransform{A: 1, D: -1})
 	beginImages()
@@ -631,11 +636,47 @@ func (p *painter) text(op layout.TextOp, from, to int) {
 		}
 		base := ln.y + (ln.pitch-ln.height)/2 + ln.ascent
 		x := op.Rect.X
-		rt.pieces(ln.start, ln.end, func(i, a, b int) {
+		end, ellipsis := ln.end, -1
+		if op.Truncate && rt.width(ln.start, ln.end) > op.Rect.W {
+			end, ellipsis = rt.truncated(ln.span, op.Rect.W)
+		}
+		rt.pieces(ln.start, end, func(i, a, b int) {
 			st := rt.runs[i].Style
 			x += p.lineOn(rt.text[a:b], rt.fonts[i], x, base, ln.y, ln.pitch, p.roleColor(st), st.Bg, st.Underline, st.Strikethrough)
 		})
+		if ellipsis >= 0 {
+			st := rt.runs[ellipsis].Style
+			p.lineOn("…", rt.fonts[ellipsis], x, base, ln.y, ln.pitch, p.roleColor(st), st.Bg, false, false)
+		}
 	}
+}
+
+// truncated is where sp is cut to fit width with an ellipsis after it, and
+// the run whose style the ellipsis takes (the last one kept).
+func (rt richText) truncated(sp span, width float64) (end, run int) {
+	runAt := func(i int) int {
+		for k, e := range rt.ends {
+			if i < e {
+				return k
+			}
+		}
+		return len(rt.ends) - 1
+	}
+	// The rune boundaries, searched for the longest prefix that fits:
+	// a few measurements, not one per rune.
+	cuts := []int{sp.start}
+	for i := sp.start; i < sp.end; {
+		_, n := utf8.DecodeRuneInString(rt.text[i:sp.end])
+		i += n
+		cuts = append(cuts, i)
+	}
+	fits := func(k int) bool {
+		last := runAt(max(cuts[k]-1, sp.start))
+		return rt.width(sp.start, cuts[k])+rt.fonts[last].width("…") <= width
+	}
+	k := sort.Search(len(cuts), func(k int) bool { return !fits(k) }) - 1
+	k = max(k, 0)
+	return cuts[k], runAt(max(cuts[k]-1, sp.start))
 }
 
 // laidLine is one laid-out line of a TextOp: its bytes, top, and metrics.

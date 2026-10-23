@@ -2,6 +2,7 @@ package window
 
 import (
 	"github.com/charmbracelet/x/ansi"
+	"math"
 
 	"github.com/lunguini/flatte/flatui/layout"
 )
@@ -69,21 +70,51 @@ func (p *painter) button(op layout.ControlOp, hot, down bool) {
 	r := op.Rect
 	bez := cgRect(r.X+0.5, r.Y+1.5, max(r.W-1, 0), max(r.H-3, 0))
 	rad := min(p.th.radiusOf(layout.BorderNormal)+1, bez.Size.Height/2)
+	icon := op.Icon != layout.IconNone
+	if icon && math.Abs(r.W-r.H) < 1 {
+		// A square icon button: an inset square, a circle when Default.
+		bez = cgRect(r.X+1, r.Y+1, max(r.W-2, 0), max(r.H-2, 0))
+		if op.Default {
+			rad = bez.Size.Height / 2
+		}
+	}
 	fill, text := mix(p.th.surface, p.th.text, 0.08), p.roleColor(op.Style)
 	if op.Default {
 		fill, text = p.th.caret, white
 	}
-	fill = p.dim(p.shade(fill, hot, down), op.Disabled)
-	p.fill(fill)
-	p.roundedPath(bez, rad, func() { cgContextFillPath(p.ctx) })
-	if !op.Default {
-		p.stroke(p.dim(p.th.border, op.Disabled))
-		cgContextSetLineWidth(p.ctx, strokeWidth)
-		p.roundedPath(bez, rad, func() { cgContextStrokePath(p.ctx) })
+	switch {
+	case op.Plain && !hot && !down: // a toolbar button shows only its content
+	case op.Plain:
+		lift := 0.1
+		if down {
+			lift = 0.16
+		}
+		p.fill(p.dim(mix(p.th.bg, p.th.text, lift), op.Disabled))
+		p.roundedPath(bez, rad, func() { cgContextFillPath(p.ctx) })
+	default:
+		fill = p.dim(p.shade(fill, hot, down), op.Disabled)
+		p.fill(fill)
+		p.roundedPath(bez, rad, func() { cgContextFillPath(p.ctx) })
+		if !op.Default {
+			p.stroke(p.dim(p.th.border, op.Disabled))
+			cgContextSetLineWidth(p.ctx, strokeWidth)
+			p.roundedPath(bez, rad, func() { cgContextStrokePath(p.ctx) })
+		}
 	}
-	f := p.th.styleFont(op.Style)
-	w := f.width(op.Label)
-	p.line(op.Label, f, r.X+(r.W-w)/2, r.Y, r.H, p.dim(text, op.Disabled), nil, op.Style.Underline, op.Style.Strikethrough)
+	if op.Plain && hot && !op.Disabled && op.Style.Fg == nil {
+		text = p.th.title // a hovered toolbar button brightens
+	}
+	if icon {
+		// The icon fills half the button's shorter side, centered.
+		size := min(r.W, r.H) * 0.5
+		if g, ok := symbol(op.Icon, r.X+r.W/2, r.Y+r.H/2, size); ok {
+			p.shape(g, p.dim(text, op.Disabled))
+		}
+	} else {
+		f := p.th.styleFont(op.Style)
+		w := f.width(op.Label)
+		p.line(op.Label, f, r.X+(r.W-w)/2, r.Y, r.H, p.dim(text, op.Disabled), nil, op.Style.Underline, op.Style.Strikethrough)
+	}
 	if op.Focused && !op.Disabled {
 		p.ring(bez, rad)
 	}

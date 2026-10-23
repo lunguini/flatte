@@ -28,7 +28,21 @@ type Options struct {
 	// Autosave, when set, names the window's saved frame: its position and
 	// size are restored from it at launch and saved as they change.
 	Autosave string
+	// HideTitleBar extends the content under the title bar: the frame fills
+	// the whole window and the window's buttons float over its top-left
+	// corner, which the app leaves clear (TitleBarHeight tall,
+	// TitleBarButtonsWidth wide). The strip still drags the window.
+	HideTitleBar bool
+	// Translucent shows the desktop, blurred, through the window wherever
+	// the frame draws no background of its own.
+	Translucent bool
 }
+
+// The window buttons' corner of a window with HideTitleBar, in points.
+const (
+	TitleBarHeight       = 28
+	TitleBarButtonsWidth = 78
+)
 
 func (o Options) size() (cols, lines int) {
 	cols, lines = o.Width, o.Height

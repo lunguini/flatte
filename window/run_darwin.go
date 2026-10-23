@@ -25,6 +25,15 @@ var errNotMainThread = errors.New("window: Run must be called from the main goro
 const (
 	nsActivationPolicyRegular = 0
 	nsWindowStyleMask         = 1 | 2 | 4 | 8 // titled, closable, miniaturizable, resizable
+	nsFullSizeContentView     = 1 << 15
+	nsWindowTitleHidden       = 1
+	// NSVisualEffectView: the window's own background material, blending
+	// what is behind the window, always active; views sized with their
+	// window.
+	nsMaterialUnderWindow     = 21
+	nsBlendBehindWindow       = 0
+	nsEffectActive            = 1
+	nsViewSizable             = 2 | 16
 	nsBackingStoreBuffered    = 2
 	nsTerminateCancel         = 0
 	nsEventApplicationDefined = 15
@@ -79,12 +88,16 @@ func run[S any](ctx context.Context, app flatte.App[S], opts Options) error {
 // running is set while Run runs: one app per process.
 var running bool
 
+// chrome is how a window's frame looks: Options.HideTitleBar and
+// Translucent, and dark for the blur's appearance.
+type chrome struct{ hideTitle, translucent, dark bool }
+
 // makeWindow creates a titled, resizable window of cols×lines cells of m,
 // with no smaller than minCols×minLines (at least 20×4), and its view of
 // class cls tracking the pointer and accepting drops. When autosave is set
 // the window saves its frame under that name and restores it (centered
 // otherwise). The caller releases both.
-func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, minCols, minLines int, autosave string) (win, view objc.ID) {
+func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, minCols, minLines int, autosave string, ch chrome) (win, view objc.ID) {
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line
 	view = objc.ID(cls).Send(sel("alloc")).Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
 	// Pointer motion without a button, for hover, pointer shapes, and
@@ -94,11 +107,38 @@ func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, min
 	view.Send(sel("addTrackingArea:"), tracking)
 	tracking.Send(sel("release"))
 	view.Send(sel("registerForDraggedTypes:"), dragTypes())
+	mask := uint(nsWindowStyleMask)
+	if ch.hideTitle {
+		mask |= nsFullSizeContentView
+	}
 	win = alloc("NSWindow").Send(sel("initWithContentRect:styleMask:backing:defer:"),
-		cgRect(0, 0, width, height), uint(nsWindowStyleMask), uint(nsBackingStoreBuffered), false)
+		cgRect(0, 0, width, height), mask, uint(nsBackingStoreBuffered), false)
 	win.Send(sel("setReleasedWhenClosed:"), false)
 	win.Send(sel("setTitle:"), nsString(title))
-	win.Send(sel("setContentView:"), view)
+	if ch.hideTitle {
+		win.Send(sel("setTitlebarAppearsTransparent:"), true)
+		win.Send(sel("setTitleVisibility:"), int(nsWindowTitleHidden))
+	}
+	if ch.translucent {
+		// The view draws over a blur of what is behind the window.
+		effect := alloc("NSVisualEffectView").Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
+		effect.Send(sel("setMaterial:"), int(nsMaterialUnderWindow))
+		effect.Send(sel("setBlendingMode:"), int(nsBlendBehindWindow))
+		effect.Send(sel("setState:"), int(nsEffectActive))
+		view.Send(sel("setAutoresizingMask:"), uint(nsViewSizable))
+		effect.Send(sel("addSubview:"), view)
+		win.Send(sel("setContentView:"), effect)
+		effect.Send(sel("release"))
+		win.Send(sel("setOpaque:"), false)
+		win.Send(sel("setBackgroundColor:"), class("NSColor").Send(sel("clearColor")))
+		appearance := "NSAppearanceNameAqua"
+		if ch.dark {
+			appearance = "NSAppearanceNameDarkAqua"
+		}
+		win.Send(sel("setAppearance:"), class("NSAppearance").Send(sel("appearanceNamed:"), nsString(appearance)))
+	} else {
+		win.Send(sel("setContentView:"), view)
+	}
 	win.Send(sel("setCollectionBehavior:"), uint(nsWindowCollectionBehaviorFullScreenPrimary))
 	win.Send(sel("setContentMinSize:"), CGSize{Width: float64(max(minCols, 20)) * m.Column, Height: float64(max(minLines, 4)) * m.Line})
 	win.Send(sel("center"))
@@ -130,7 +170,7 @@ func (n nativeWindows) openWindow(w flatte.Window, s ui) func() {
 	if lines <= 0 {
 		lines = 20
 	}
-	win, view := makeWindow(n.cls, n.m, w.ID, max(cols, w.MinWidth), max(lines, w.MinHeight), w.MinWidth, w.MinHeight, w.Autosave)
+	win, view := makeWindow(n.cls, n.m, w.ID, max(cols, w.MinWidth), max(lines, w.MinHeight), w.MinWidth, w.MinHeight, w.Autosave, chrome{})
 	th := n.th()
 	st := &windowState{ui: s, m: n.m, th: th, follow: n.follow, dark: isDark(view), window: win, view: view, id: w.ID, title: w.ID}
 	id := w.ID
@@ -187,7 +227,8 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	if title == "" {
 		title = "Flatte"
 	}
-	win, view := makeWindow(cls, m, title, max(cols, opts.MinWidth), max(lines, opts.MinHeight), opts.MinWidth, opts.MinHeight, opts.Autosave)
+	win, view := makeWindow(cls, m, title, max(cols, opts.MinWidth), max(lines, opts.MinHeight), opts.MinWidth, opts.MinHeight, opts.Autosave,
+		chrome{hideTitle: opts.HideTitleBar, translucent: opts.Translucent, dark: dark})
 	defer win.Send(sel("release"))
 	defer view.Send(sel("release"))
 	b := objc.Send[CGRect](view, sel("bounds"))
@@ -203,7 +244,7 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 		wake(nsApp)
 	}
 	h := newHost(ctx, app, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
-	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title}
+	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, hideTitle: opts.HideTitleBar}
 	st.focused = func() { h.focused("") }
 	register(st)
 	defer func() {

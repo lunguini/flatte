@@ -45,6 +45,7 @@ func symbol(name layout.IconName, cx, cy, s float64) (cellShape, bool) {
 	line := func(pts ...point) poly { return poly{pts: pts, width: sw, round: true} }
 	ring := func(c point, r float64) circle { return circle{c: c, r: r - sw/2, width: sw} }
 	dot := func(c point, r float64) circle { return circle{c: c, r: r, fill: true} }
+	box := func(a, b point) poly { return poly{pts: []point{a, {b.X, a.Y}, b, {a.X, b.Y}}, fill: true} }
 	cross := func(d float64) []poly {
 		return []poly{line(at(-d, -d), at(d, d)), line(at(d, -d), at(-d, d))}
 	}
@@ -60,6 +61,59 @@ func symbol(name layout.IconName, cx, cy, s float64) (cellShape, bool) {
 		return cellShape{polys: []poly{line(at(-0.38, 0), at(0.38, 0)), line(at(0, -0.38), at(0, 0.38))}}, true
 	case layout.IconMinus:
 		return cellShape{polys: []poly{line(at(-0.38, 0), at(0.38, 0))}}, true
+	case layout.IconPlay:
+		return cellShape{polys: []poly{{pts: []point{at(-0.32, -0.4), at(0.4, 0), at(-0.32, 0.4)}, fill: true}}}, true
+	case layout.IconPause:
+		return cellShape{polys: []poly{box(at(-0.32, -0.38), at(-0.08, 0.38)), box(at(0.08, -0.38), at(0.32, 0.38))}}, true
+	case layout.IconNext, layout.IconPrevious:
+		g := cellShape{polys: []poly{
+			{pts: []point{at(-0.36, -0.36), at(0.18, 0), at(-0.36, 0.36)}, fill: true},
+			box(at(0.22, -0.36), at(0.36, 0.36)),
+		}}
+		if name == layout.IconPrevious {
+			g = mirrored(g, cx)
+		}
+		return g, true
+	case layout.IconShuffle:
+		return cellShape{polys: []poly{
+			line(at(-0.44, 0.28), at(-0.16, 0.28), at(0.16, -0.28), at(0.4, -0.28)),
+			line(at(-0.44, -0.28), at(-0.16, -0.28), at(0.16, 0.28), at(0.4, 0.28)),
+			line(at(0.26, -0.42), at(0.42, -0.28), at(0.26, -0.14)),
+			line(at(0.26, 0.14), at(0.42, 0.28), at(0.26, 0.42)),
+		}}, true
+	case layout.IconRepeat:
+		return cellShape{polys: []poly{
+			line(at(-0.42, 0.06), at(-0.42, -0.26), at(0.36, -0.26)),
+			line(at(0.22, -0.4), at(0.38, -0.26), at(0.22, -0.12)),
+			line(at(0.42, -0.06), at(0.42, 0.26), at(-0.36, 0.26)),
+			line(at(-0.22, 0.12), at(-0.38, 0.26), at(-0.22, 0.4)),
+		}}, true
+	case layout.IconSpeaker:
+		g := cellShape{polys: []poly{{pts: []point{at(-0.44, -0.14), at(-0.24, -0.14), at(-0.02, -0.36), at(-0.02, 0.36), at(-0.24, 0.14), at(-0.44, 0.14)}, fill: true}}}
+		for _, r := range []float64{0.2, 0.36} {
+			var pts []point
+			for k := -3; k <= 3; k++ {
+				a := float64(k) * math.Pi / 9 // ±60°
+				pts = append(pts, at(0.02+r*math.Cos(a), r*math.Sin(a)))
+			}
+			g.polys = append(g.polys, line(pts...))
+		}
+		return g, true
+	case layout.IconHome:
+		return cellShape{polys: []poly{line(at(-0.32, 0.4), at(-0.32, -0.06), at(0, -0.36), at(0.32, -0.06), at(0.32, 0.4), at(-0.32, 0.4))}}, true
+	case layout.IconHeart, layout.IconHeartOutline:
+		// The classic heart curve, scaled into the box.
+		var pts []point
+		for k := range 48 {
+			t := float64(k) / 48 * 2 * math.Pi
+			x := 16 * math.Pow(math.Sin(t), 3)
+			y := 13*math.Cos(t) - 5*math.Cos(2*t) - 2*math.Cos(3*t) - math.Cos(4*t)
+			pts = append(pts, at(x/34, -(y+2.5)/34))
+		}
+		if name == layout.IconHeart {
+			return cellShape{polys: []poly{{pts: pts, fill: true}}}, true
+		}
+		return cellShape{polys: []poly{line(append(pts, pts[0])...)}}, true
 	case layout.IconSearch:
 		return cellShape{
 			circles: []circle{ring(at(-0.08, -0.08), 0.32*s)},
@@ -111,6 +165,23 @@ func rotated(pts []point, c point, turns int) []point {
 			dx, dy = -dy, dx
 		}
 		out[i] = point{c.X + dx, c.Y + dy}
+	}
+	return out
+}
+
+// mirrored is g flipped left to right about x = cx.
+func mirrored(g cellShape, cx float64) cellShape {
+	flip := func(pts []point) []point {
+		out := make([]point, len(pts))
+		for i, p := range pts {
+			out[i] = point{2*cx - p.X, p.Y}
+		}
+		return out
+	}
+	out := cellShape{}
+	for _, p := range g.polys {
+		p.pts = flip(p.pts)
+		out.polys = append(out.polys, p)
 	}
 	return out
 }

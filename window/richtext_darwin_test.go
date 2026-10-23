@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"math"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/lunguini/flatte/flatui/layout"
 )
@@ -131,5 +132,32 @@ func TestTextOffsetAndSelection(t *testing.T) {
 	img = renderImage(scene, darkTheme, m, 100, 120, 2, nil, presentation{sel: textSel{op: 0, text: "other", from: 6, to: 10, ok: true}})
 	if c := px(sx, ln.y+1); near(c, highlight, 20) {
 		t.Errorf("stale selection drawn: %v", c)
+	}
+}
+
+func TestTruncatedFitsWithItsEllipsis(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	rt := darkTheme.richText([]layout.Run{{Text: "Insane — Alastor"}, {Text: " (Hazbin Hotel)", Style: layout.TextStyle{Bold: true}}})
+	whole := rt.width(0, len(rt.text))
+	sp := span{start: 0, end: len(rt.text)}
+	for _, width := range []float64{whole * 0.3, whole * 0.6, whole * 0.9} {
+		end, run := rt.truncated(sp, width)
+		if end <= 0 || end >= len(rt.text) {
+			t.Fatalf("width %v: cut at %d of %d", width, end, len(rt.text))
+		}
+		got := rt.width(0, end) + rt.fonts[run].width("…")
+		if got > width {
+			t.Errorf("width %v: kept %q plus … is %v wide", width, rt.text[:end], got)
+		}
+		// One more rune would not fit.
+		_, n := utf8.DecodeRuneInString(rt.text[end:])
+		if rt.width(0, end+n)+rt.fonts[run].width("…") <= width && rt.fonts[run] == rt.fonts[0] {
+			t.Errorf("width %v: cut at %q, but the next rune fits", width, rt.text[:end])
+		}
+	}
+	if end, _ := rt.truncated(sp, 1); end != 0 {
+		t.Fatalf("a 1pt box keeps %q", rt.text[:end])
 	}
 }

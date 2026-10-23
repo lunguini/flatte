@@ -114,6 +114,8 @@ type ui interface {
 	presentation() presentation
 	drop(x, y float64, paths []string, text string)
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
+	// hit is the ID of the node at (x, y) in a fresh scene ("": none).
+	hit(x, y float64) string
 	wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod)
 	render() layout.Scene
 	frameTitle() string
@@ -704,6 +706,11 @@ func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatt
 		}
 	}
 	h.handle(ev)
+}
+
+func (s *surface[S]) hit(x, y float64) string {
+	id, _ := s.fresh().HitTest(x, y)
+	return id
 }
 
 // wheel delivers notches wheel presses at (x, y), all hit-tested against

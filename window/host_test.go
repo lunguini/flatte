@@ -301,3 +301,18 @@ func TestHostWheelBurstLaysOutOnce(t *testing.T) {
 		}
 	}
 }
+
+func TestHostHit(t *testing.T) {
+	s := &testState{root: func(*testState) layout.Node {
+		return layout.Col{Children: []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "top"}, Text: "x"}, layout.Label{Text: "plain"}}}
+	}}
+	h, _ := newTestHost(t, s)
+	h.start(160, 64)
+	r := h.fresh().Rects["top"]
+	if got := h.hit(r.X+1, r.Y+1); got != "top" {
+		t.Fatalf("hit on the label = %q", got)
+	}
+	if got := h.hit(150, 60); got != "" {
+		t.Fatalf("hit on nothing = %q", got)
+	}
+}
