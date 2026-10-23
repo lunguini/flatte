@@ -76,6 +76,7 @@ type TextOp struct {
 	Wrap       bool
 	Runs       []Run
 	Selectable bool
+	Truncate   bool // a line too long for Rect ends in "…" (not with Wrap)
 }
 
 // InputOp draws a text field in Rect (the input's content box). Caret is a
@@ -151,6 +152,8 @@ type ControlOp struct {
 	Value                      float64
 	Fill                       color.Color
 	Default, Disabled, Focused bool
+	Icon                       IconName // a Button's icon (IconNone: its Label)
+	Plain                      bool     // a Button without a bezel until hovered
 }
 
 // CellsOp draws terminal content — a Text leaf's ANSI string, a container's
@@ -415,7 +418,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	}
 	switch l := n.(type) {
 	case Button:
-		control(ControlOp{ID: l.ID, Kind: ControlButton, Label: l.Label, Style: l.Style, Default: l.Default, Disabled: l.Disabled, Focused: l.Focused}, l.box())
+		control(ControlOp{ID: l.ID, Kind: ControlButton, Label: l.Label, Icon: l.Icon, Style: l.Style, Default: l.Default, Disabled: l.Disabled, Focused: l.Focused, Plain: l.Plain}, l.box())
 	case Toggle:
 		kind := ControlCheckbox
 		switch l.Kind {
@@ -429,7 +432,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		control(ControlOp{ID: l.ID, Kind: ControlSlider, Value: l.value(), Fill: l.Fill, Disabled: l.Disabled, Focused: l.Focused}, l.box())
 	case Label:
 		p.box(r, clip, l.box())
-		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable}
+		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap}
 		if len(l.Runs) > 0 {
 			op.Text, op.Runs = l.plain(), l.runs()
 		}

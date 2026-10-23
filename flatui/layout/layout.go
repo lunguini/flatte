@@ -517,6 +517,14 @@ func getID(n Node) string {
 	return ""
 }
 
+func getAlign(n Node) Align {
+	type aligner interface{ GetAlign() Align }
+	if a, ok := n.(aligner); ok {
+		return a.GetAlign()
+	}
+	return AlignStretch
+}
+
 func getGap(n Node) int {
 	type gapper interface{ GetGap() int }
 	if g, ok := n.(gapper); ok {

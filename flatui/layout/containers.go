@@ -2,11 +2,27 @@ package layout
 
 // Row lays children out horizontally (main axis = width).
 // Embed NodeBase for geometry. Children participate in distribution
-// via their Size() constraints.
+// via their Size() constraints. Align places them vertically.
 type Row struct {
 	NodeBase
 	Children []Node
+	Align    Align
 }
+
+// Align is how a container places its children across its main axis: a
+// Row's vertically, a Col's horizontally. A child with a Fixed or content
+// size keeps it, and the rest of the space goes before it (AlignEnd),
+// around it (AlignCenter), or after it (AlignStart). AlignStretch, the
+// default, keeps Fixed sizes at the start and stretches the rest; a Grow
+// child fills the space under every Align.
+type Align int
+
+const (
+	AlignStretch Align = iota
+	AlignStart
+	AlignCenter
+	AlignEnd
+)
 
 // Size declares the row's claims: explicit W/H as set, and on an Auto axis
 // the measured content of its children (or Grow(1) when the only claim on
@@ -37,11 +53,14 @@ func (r Row) Render(rect Rect) string {
 func (r Row) GetChildren() []Node { return r.Children }
 func (r Row) IsHorizontal() bool  { return true }
 func (r Row) GetGap() int         { return r.Gap }
+func (r Row) GetAlign() Align     { return r.Align }
 
-// Col lays children out vertically (main axis = height).
+// Col lays children out vertically (main axis = height). Align places
+// them horizontally.
 type Col struct {
 	NodeBase
 	Children []Node
+	Align    Align
 }
 
 // Size declares the column's claims; see Row.Size.
@@ -67,3 +86,4 @@ func (c Col) Render(rect Rect) string {
 func (c Col) GetChildren() []Node { return c.Children }
 func (c Col) IsHorizontal() bool  { return false }
 func (c Col) GetGap() int         { return c.Gap }
+func (c Col) GetAlign() Align     { return c.Align }

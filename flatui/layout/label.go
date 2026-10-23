@@ -97,6 +97,10 @@ type Label struct {
 	Wrap       bool
 	Runs       []Run
 	Selectable bool
+	// Truncate ends a line too long for the label's box in "…", in the
+	// terminal and a GUI (instead of clipping it); not with Wrap. A Tooltip
+	// can show the whole text.
+	Truncate bool
 }
 
 // Run is a span of a Label's text in a style of its own.
@@ -207,7 +211,17 @@ func (l Label) Render(r Rect) string {
 	if l.Wrap {
 		text = wrapCells(text, r.insetBy(l.insetSides()).W)
 	}
-	return fillBox(l.styled(text), r, l.padSides(), l.box())
+	out := l.styled(text)
+	if w := r.insetBy(l.insetSides()).W; l.Truncate && !l.Wrap && w > 0 {
+		lines := strings.Split(out, "\n")
+		for i, ln := range lines {
+			if ansi.StringWidth(ln) > w {
+				lines[i] = ansi.Truncate(ln, w, "…")
+			}
+		}
+		out = strings.Join(lines, "\n")
+	}
+	return fillBox(out, r, l.padSides(), l.box())
 }
 
 // wrapHeight is a wrapping Label's Auto height in cells at a rect width

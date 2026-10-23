@@ -21,11 +21,20 @@ import (
 // when Default (the primary action), the label reversed when Focused,
 // subtle when Disabled; a GUI draws a bezel, filled with the accent when
 // Default. On Auto axes it is its spelling wide and one line tall.
+//
+// With an Icon, a GUI draws the icon's shape centered in the button instead
+// of the Label, which stays its terminal spelling (as an Icon's Text): give
+// it Points sizes for a square, which a Default button draws as a circle.
+// Plain draws no bezel until the pointer is over it (a toolbar button), and
+// in the terminal spaces instead of the brackets. An icon button's terminal
+// brackets are tight ("[▶]"), so it fits a square of its own.
 type Button struct {
 	NodeBase
 	Label                      string
 	Style                      TextStyle
 	Default, Disabled, Focused bool
+	Icon                       IconName
+	Plain                      bool
 }
 
 // ToggleKind is how a Toggle looks: they differ in look only.
@@ -83,7 +92,22 @@ func (s Slider) value() float64 {
 	return min(max(s.Value, 0), 1)
 }
 
-func (b Button) spelling() string { return "[ " + b.Label + " ]" }
+func (b Button) spelling() string {
+	open, closing := b.ends()
+	return open + b.Label + closing
+}
+
+// ends are the terminal's brackets around a button's label: "[ " and " ]",
+// tight for an icon button ("[▶]"), and spaces for a Plain one.
+func (b Button) ends() (open, closing string) {
+	switch {
+	case b.Plain:
+		return " ", " "
+	case b.Icon != IconNone:
+		return "[", "]"
+	}
+	return "[ ", " ]"
+}
 
 func (t Toggle) indicator() string {
 	switch t.Kind {
@@ -151,7 +175,8 @@ func (b Button) Render(r Rect) string {
 	if b.Focused && !b.Disabled {
 		label = base.Reverse(true).Render(b.Label)
 	}
-	return fillBox(base.Render("[ ")+label+base.Render(" ]"), r, b.padSides(), b.box())
+	open, closing := b.ends()
+	return fillBox(base.Render(open)+label+base.Render(closing), r, b.padSides(), b.box())
 }
 
 func (t Toggle) Render(r Rect) string {

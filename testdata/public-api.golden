@@ -747,6 +747,10 @@ flatui package flatui
   var TabGlyphsPowerline TabGlyphs
   var TabGlyphsSafe TabGlyphs
 flatui/layout package layout
+  const AlignCenter Align = 2
+  const AlignEnd Align = 3
+  const AlignStart Align = 1
+  const AlignStretch Align = 0
   const BorderNone BorderKind = 0
   const BorderNormal BorderKind = 2
   const BorderRounded BorderKind = 1
@@ -775,11 +779,21 @@ flatui/layout package layout
   const IconFile IconName = 25
   const IconFolder IconName = 24
   const IconGear IconName = 12
+  const IconHeart IconName = 34
+  const IconHeartOutline IconName = 35
+  const IconHome IconName = 33
   const IconInfo IconName = 13
   const IconMinus IconName = 10
+  const IconNext IconName = 29
   const IconNone IconName = 0
+  const IconPause IconName = 27
+  const IconPlay IconName = 26
   const IconPlus IconName = 9
+  const IconPrevious IconName = 28
+  const IconRepeat IconName = 31
   const IconSearch IconName = 11
+  const IconShuffle IconName = 30
+  const IconSpeaker IconName = 32
   const IconWarning IconName = 14
   const ImageContain ImageFit = 0
   const ImageCover ImageFit = 1
@@ -816,6 +830,7 @@ flatui/layout package layout
   method *Spacer.WithBackground(c color.Color) *Spacer
   method Button.Render(r Rect) string
   method Button.Size()(Size, Size)
+  method Col.GetAlign() Align
   method Col.GetChildren()[]Node
   method Col.GetGap() int
   method Col.IsHorizontal() bool
@@ -841,6 +856,7 @@ flatui/layout package layout
   method Rect.Contains(x int, y int) bool
   method Rect.Inset(n int) Rect
   method Rect.Intersect(s Rect) Rect
+  method Row.GetAlign() Align
   method Row.GetChildren()[]Node
   method Row.GetGap() int
   method Row.IsHorizontal() bool
@@ -921,6 +937,7 @@ flatui/layout package layout
   methodset Text.IsOverlay() bool
   methodset Toggle.GetID() string
   methodset Toggle.IsOverlay() bool
+  type Align int
   type BorderKind int
   type Box struct
   field Box.Border BorderKind [order=0]
@@ -943,7 +960,9 @@ flatui/layout package layout
   field Button.Default bool [order=3]
   field Button.Disabled bool [order=4]
   field Button.Focused bool [order=5]
-  struct Button fields=6 comparable=false
+  field Button.Icon IconName [order=6]
+  field Button.Plain bool [order=7]
+  struct Button fields=8 comparable=false
   type CellsOp struct
   field CellsOp.Rect PointRect [order=0]
   field CellsOp.Clip PointRect [order=1]
@@ -954,7 +973,8 @@ flatui/layout package layout
   type Col struct
   field Col.NodeBase NodeBase [order=0]
   field Col.Children []Node [order=1]
-  struct Col fields=2 comparable=false
+  field Col.Align Align [order=2]
+  struct Col fields=3 comparable=false
   type Composition struct
   field Composition.Frame string [order=0]
   field Composition.Rects map[string] Rect [order=1]
@@ -977,7 +997,9 @@ flatui/layout package layout
   field ControlOp.Default bool [order=9]
   field ControlOp.Disabled bool [order=10]
   field ControlOp.Focused bool [order=11]
-  struct ControlOp fields=12 comparable=true
+  field ControlOp.Icon IconName [order=12]
+  field ControlOp.Plain bool [order=13]
+  struct ControlOp fields=14 comparable=true
   type DuplicateIDDiagnostic struct
   field DuplicateIDDiagnostic.ID string [order=0]
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
@@ -1047,7 +1069,8 @@ flatui/layout package layout
   field Label.Wrap bool [order=3]
   field Label.Runs []Run [order=4]
   field Label.Selectable bool [order=5]
-  struct Label fields=6 comparable=false
+  field Label.Truncate bool [order=6]
+  struct Label fields=7 comparable=false
   type LayerOp struct
   field LayerOp.Rect PointRect [order=0]
   struct LayerOp fields=1 comparable=true
@@ -1109,7 +1132,8 @@ flatui/layout package layout
   type Row struct
   field Row.NodeBase NodeBase [order=0]
   field Row.Children []Node [order=1]
-  struct Row fields=2 comparable=false
+  field Row.Align Align [order=2]
+  struct Row fields=3 comparable=false
   type Run struct
   field Run.Text string [order=0]
   field Run.Style TextStyle [order=1]
@@ -1169,7 +1193,8 @@ flatui/layout package layout
   field TextOp.Wrap bool [order=4]
   field TextOp.Runs []Run [order=5]
   field TextOp.Selectable bool [order=6]
-  struct TextOp fields=7 comparable=false
+  field TextOp.Truncate bool [order=7]
+  struct TextOp fields=8 comparable=false
   type TextRole int
   type TextStyle struct
   field TextStyle.Role TextRole [order=0]

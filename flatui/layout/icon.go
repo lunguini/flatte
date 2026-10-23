@@ -44,6 +44,19 @@ const (
 	IconEllipsis // …
 	IconFolder
 	IconFile
+	// Media and app shapes: play (▶), pause (⏸), previous and next track
+	// (⏮ ⏭), shuffle (⇄), repeat (↻), a speaker (🔈), a house (⌂), and a
+	// heart filled (♥) and outlined (♡).
+	IconPlay
+	IconPause
+	IconPrevious
+	IconNext
+	IconShuffle
+	IconRepeat
+	IconSpeaker
+	IconHome
+	IconHeart
+	IconHeartOutline
 )
 
 // Icon is a small symbol with a terminal spelling: the terminal shows Text

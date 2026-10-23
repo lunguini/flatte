@@ -127,3 +127,23 @@ func TestSceneControlsAndTooltips(t *testing.T) {
 		t.Errorf("tooltip under an overlay = %q", got)
 	}
 }
+
+func TestIconAndPlainButtonSpellings(t *testing.T) {
+	for _, c := range []struct {
+		b    Button
+		want string
+	}{
+		{Button{Label: "Save"}, "[ Save ]"},
+		{Button{Label: "▶", Icon: IconPlay, Default: true}, "[▶]"},
+		{Button{Label: "⏭", Icon: IconNext, Plain: true}, " ⏭ "},
+		{Button{Label: "Back", Plain: true}, " Back "},
+	} {
+		if got := c.b.spelling(); got != c.want {
+			t.Errorf("%+v spells %q, want %q", c.b, got, c.want)
+		}
+		w, _ := c.b.Size()
+		if got := ansi.StringWidth(ansi.Strip(c.b.Render(Rect{W: w.Value, H: 1}))); got != w.Value {
+			t.Errorf("%q renders %d wide, sized %d", c.want, got, w.Value)
+		}
+	}
+}

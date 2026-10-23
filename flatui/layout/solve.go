@@ -478,6 +478,32 @@ func distribute[T unit](m metric[T], children []Node, horizontal bool, gap, avai
 
 // crossOf is a child's cross-axis length: Fixed pins, everything else
 // stretches to fill.
+// alignedCross is a child's cross size of avail under align: crossOf when
+// stretching, else its Fixed or content size (all of avail when it grows).
+func alignedCross[T unit](align Align, s sized[T], avail T) T {
+	if align == AlignStretch {
+		return crossOf(s, avail)
+	}
+	s = s.normalized()
+	avail = max(avail, 0)
+	if (s.Kind == SizeFixed || s.Kind == SizeContent) && s.Value < avail {
+		return s.Value
+	}
+	return avail
+}
+
+// crossOffset is where a child of cross size size starts in avail.
+func crossOffset[T unit](m metric[T], align Align, size, avail T) T {
+	switch align {
+	case AlignCenter:
+		return m.half(m.sub(avail, size))
+	case AlignEnd:
+		return m.sub(avail, size)
+	}
+	var zero T
+	return zero
+}
+
 func crossOf[T unit](s sized[T], avail T) T {
 	s = s.normalized()
 	avail = max(avail, 0)
@@ -652,13 +678,16 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 	}
 	mainSizes := distribute(m, children, horizontal, gap, avail, cross)
 	innerEnd := endOf(m, pos, avail)
+	align := getAlign(n)
 	for i, c := range children {
 		cw, ch := intrinsic(m, c)
 		var cr rect[T]
 		if horizontal {
-			cr = rect[T]{pos, inner.Y, mainSizes[i], crossOf(ch, inner.H)}
+			size := alignedCross(align, ch, inner.H)
+			cr = rect[T]{pos, m.add(inner.Y, crossOffset(m, align, size, inner.H)), mainSizes[i], size}
 		} else {
-			cr = rect[T]{inner.X, pos, crossOf(cw, inner.W), mainSizes[i]}
+			size := alignedCross(align, cw, inner.W)
+			cr = rect[T]{m.add(inner.X, crossOffset(m, align, size, inner.W)), pos, size, mainSizes[i]}
 		}
 		// Fixed/Content children are not shrunk by distribution; clamp so an
 		// overflowing row/col cannot place a child past its parent.
