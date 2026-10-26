@@ -200,7 +200,7 @@ func mouseHandler(button flatte.MouseButton, action flatte.MouseAction) func(obj
 				}
 				return
 			}
-			st.ui.mouse(p.X, p.Y, button, action, eventMods(event))
+			st.ui.mouseClicks(p.X, p.Y, button, action, eventMods(event), objc.Send[int](event, sel("clickCount")))
 		}
 	}
 }

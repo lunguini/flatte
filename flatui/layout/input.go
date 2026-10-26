@@ -48,6 +48,10 @@ type Input struct {
 	SelectionStyle   TextStyle
 	OffsetX, OffsetY int
 	Bare             bool
+	// Clearable shows a native clear affordance while Value is nonempty.
+	// It emits MouseEvent.Clear for the app's field handler; terminal input
+	// remains keyboard-editable and unchanged.
+	Clearable bool
 }
 
 func (in Input) Size() (Size, Size) {

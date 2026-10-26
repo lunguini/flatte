@@ -131,3 +131,16 @@ func TestSettingsSnapshot(t *testing.T) {
 	open, _ := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: 64}), 64, 22)
 	flatest.AssertFrames(t, "testdata/settings.golden", []flatte.Frame{f, open})
 }
+
+func TestNameFieldNativeMouseSelectionAndClear(t *testing.T) {
+	s := NewState()
+	s.name.Value = "Hello World"
+	send(s, flatte.MouseEvent{Target: fieldIDs[fieldName], Button: flatte.MouseLeft, Action: flatte.MousePress, HasCaret: true, Caret: 8, Clicks: 2})
+	if s.name.SelectedText() != "World" {
+		t.Fatalf("selected %q", s.name.SelectedText())
+	}
+	send(s, flatte.MouseEvent{Target: fieldIDs[fieldName], Button: flatte.MouseLeft, Action: flatte.MousePress, Clear: true})
+	if s.name.Value != "" || !s.dirty() {
+		t.Fatal("clear did not edit the form draft")
+	}
+}

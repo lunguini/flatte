@@ -7,6 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // ready builds a state laid out on a 72x24 terminal (list height 17).
@@ -19,8 +20,7 @@ func ready() *State {
 // settle composes the view at width×height and delivers the solved rects as
 // the runtime does before painting.
 func settle(s *State, width, height int) {
-	_, comp := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, height)
-	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
+	flatte.SettleFrame(func() flatte.Frame { return View(s, flatte.RenderContext{Width: width}) }, func(e flatte.LayoutEvent) { Handle(s, e, flatte.Effects[State]{}) }, nil, width, height)
 }
 
 // composed is View's frame as the runtime paints it at 72×24.
@@ -132,4 +132,15 @@ func TestScrollSequenceSnapshot(t *testing.T) {
 		}, // bottom: offset 13, [30/30]
 	)
 	flatest.AssertFrames(t, "testdata/list-sequence.golden", frames)
+}
+
+func TestNativeListPagingUsesPointMeasurements(t *testing.T) {
+	s := NewState()
+	Handle(s, flatte.LayoutEvent{
+		Rects:      map[string]layout.Rect{listID: {H: 6}, listID + ":0": {H: 1}},
+		PointRects: map[string]layout.PointRect{listID: {H: 100}, listID + ":0": {H: 30}},
+	}, flatte.Effects[State]{})
+	if s.list.Height() != 3 {
+		t.Fatalf("visible rows %d, expected native measurements", s.list.Height())
+	}
 }

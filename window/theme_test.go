@@ -48,3 +48,15 @@ func TestThemeFor(t *testing.T) {
 		t.Fatal("an explicit light theme followed the dark system appearance")
 	}
 }
+
+func TestControlHeightThemeDefaultAndOverride(t *testing.T) {
+	if Dark().ControlHeight != 32 || Light().ControlHeight != 32 {
+		t.Fatal("themes do not share regular control height")
+	}
+	if got := themeFor(&Theme{ControlHeight: 40}, true); got.ControlHeight != 40 {
+		t.Fatalf("control height override %+v", got)
+	}
+	if got := themeFor(&Theme{ControlHeight: -1}, true); got.ControlHeight != -1 {
+		t.Fatal("minimum optout lost")
+	}
+}

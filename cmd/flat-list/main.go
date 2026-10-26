@@ -45,10 +45,7 @@ func NewState() *State {
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
 	case flatte.LayoutEvent:
-		// The list grows into the card's free rows; show as many items.
-		if r, ok := e.Rects[listID]; ok {
-			s.list.SetHeight(max(r.H, 1))
-		}
+		s.list.Adopt(e, listID)
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	case flatte.MouseEvent:

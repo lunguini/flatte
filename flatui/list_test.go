@@ -232,3 +232,18 @@ func TestListSetHeightKeepsAVisibleSelectionVisible(t *testing.T) {
 		t.Fatalf("offset %d cursor %d after shrinking", l.Offset(), l.Cursor())
 	}
 }
+
+func TestListRowsDoesNotOverwriteContainingViewportID(t *testing.T) {
+	var list List
+	list.SetCount(2)
+	list.SetHeight(2)
+	rows := list.Rows("list", func(int, bool) layout.Node { return layout.Label{Text: "row"} })
+	root := layout.Col{NodeBase: layout.NodeBase{ID: "list", W: layout.Grow(1), H: layout.Grow(1)}, Children: []layout.Node{rows}}
+	_, rects, diagnostics := layout.SolveAndComposeWithDiagnostics(root, 20, 9)
+	if got := rects["list"]; got.H != 9 {
+		t.Fatalf("row content overwrote viewport: %v", got)
+	}
+	if len(diagnostics) != 0 {
+		t.Fatalf("unexpected duplicate viewport ID: %v", diagnostics)
+	}
+}

@@ -26,10 +26,13 @@ func (osNotifier) notify(n flatte.Notification) {
 		ctx, cancel := context.WithTimeout(context.Background(), notifyTimeout)
 		defer cancel()
 		// Best effort, like a terminal's: nothing to tell the app.
-		_ = exec.CommandContext(ctx, "osascript",
-			"-e", "on run argv",
-			"-e", "display notification (item 2 of argv) with title (item 1 of argv)",
-			"-e", "end run",
-			n.Title, n.Body).Run()
+		_ = notificationCommand(ctx, n).Run()
 	}()
+}
+
+func notificationCommand(ctx context.Context, n flatte.Notification) *exec.Cmd {
+	return exec.CommandContext(ctx, "osascript",
+		"-e", "on run argv",
+		"-e", "display notification (item 2 of argv) with title (item 1 of argv)",
+		"-e", "end run", "--", n.Title, n.Body)
 }

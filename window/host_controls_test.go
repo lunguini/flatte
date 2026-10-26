@@ -78,3 +78,86 @@ func TestHostPressedControl(t *testing.T) {
 		t.Fatalf("a disabled button shows pressed")
 	}
 }
+
+func TestHostHoverIgnoresClippedAndCoveredRows(t *testing.T) {
+	s := &testState{root: func(*testState) layout.Node {
+		return layout.Col{Children: []layout.Node{
+			layout.Label{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Text: "head"},
+			layout.Scroll{NodeBase: layout.NodeBase{H: layout.Fixed(2)}, OffsetY: 1, Child: layout.Col{Children: []layout.Node{
+				layout.Label{NodeBase: layout.NodeBase{ID: "hidden", H: layout.Fixed(1)}, Text: "hidden"},
+				layout.Label{NodeBase: layout.NodeBase{ID: "row", H: layout.Fixed(1)}, Text: "row"},
+				layout.Label{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Text: "bottom"},
+			}}},
+			layout.Label{NodeBase: layout.NodeBase{ID: "modal", Overlay: true, W: layout.Fixed(4), H: layout.Fixed(1)}, Text: "modal"},
+		}}
+	}}
+	h, _ := newTestHost(t, s)
+	h.start(200, 60)
+	h.render()
+	r := h.scene.Rects["hidden"]
+	h.hover(r.X+1, r.Y+1)
+	if h.over["hidden"] {
+		t.Fatal("clipped row hovered")
+	}
+	r = h.scene.Rects["modal"]
+	h.hover(r.X+1, r.Y+1)
+	if h.over["row"] || !h.over["modal"] {
+		t.Fatalf("covered row hovered: %v", h.over)
+	}
+}
+
+func TestHostInteractiveBoxHoverIsDefaultPresentation(t *testing.T) {
+	state := &testState{root: func(*testState) layout.Node {
+		return layout.Col{Children: []layout.Node{
+			layout.Row{NodeBase: layout.NodeBase{ID: "item", Box: layout.Box{Interactive: true, Round: true}}, Children: []layout.Node{layout.Label{Text: "Choose"}}},
+			layout.Row{NodeBase: layout.NodeBase{ID: "plain"}, Children: []layout.Node{layout.Label{Text: "Plain"}}},
+		}}
+	}}
+	host, _ := newTestHost(t, state)
+	host.start(200, 100)
+	host.render()
+	rect := host.scene.Rects["item"]
+	shape, _ := host.hover(rect.X+1, rect.Y+1)
+	if shape != pointerHand || !host.over["item"] {
+		t.Fatalf("interactive row shape=%v over=%v", shape, host.over)
+	}
+	if len(state.events) != 0 {
+		for _, event := range state.events {
+			if _, ok := event.(flatte.MouseEvent); ok {
+				t.Fatal("hover wrote app state")
+			}
+		}
+	}
+	rect = host.scene.Rects["plain"]
+	if shape, _ := host.hover(rect.X+1, rect.Y+1); shape != pointerArrow {
+		t.Fatal("ordinary row became interactive")
+	}
+}
+
+func TestInteractiveItemHoverRespectsScrollAndOverlay(t *testing.T) {
+	state := &testState{root: func(*testState) layout.Node {
+		item := func(id string) layout.Node {
+			return layout.Row{NodeBase: layout.NodeBase{ID: id, H: layout.Fixed(1), Box: layout.Box{Interactive: true}}, Children: []layout.Node{layout.Label{Text: id}}}
+		}
+		return layout.Col{Children: []layout.Node{
+			layout.Label{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Text: "header"},
+			layout.Scroll{NodeBase: layout.NodeBase{H: layout.Fixed(2)}, OffsetY: 1, Child: layout.Col{Children: []layout.Node{item("hidden-item"), item("visible-item"), item("last-item")}}},
+			layout.Label{NodeBase: layout.NodeBase{ID: "cover", Overlay: true, W: layout.Fixed(4), H: layout.Fixed(1)}, Text: "cover"},
+		}}
+	}}
+	host, _ := newTestHost(t, state)
+	host.start(200, 60)
+	host.render()
+	hidden := host.scene.Rects["hidden-item"]
+	if shape, _ := host.hover(hidden.X+1, hidden.Y+1); shape != pointerArrow || host.over["hidden-item"] {
+		t.Fatal("clipped item gained hover")
+	}
+	visible := host.scene.Rects["visible-item"]
+	if shape, _ := host.hover(visible.X+1, visible.Y+1); shape != pointerHand {
+		t.Fatal("visible item lacks hover")
+	}
+	cover := host.scene.Rects["cover"]
+	if shape, _ := host.hover(cover.X+1, cover.Y+1); shape != pointerArrow || host.over["visible-item"] {
+		t.Fatal("item behind overlay gained hover")
+	}
+}

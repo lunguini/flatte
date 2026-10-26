@@ -26,6 +26,10 @@ type Theme struct {
 	// lines are measured in this type, so a larger size makes a larger
 	// window for the same Options.Width and Height.
 	FontSize, TitleSize, LineSpacing float64
+	// ControlHeight is the minimum Auto height of regular controls in points.
+	// Zero inherits the base theme (32pt); negative disables the minimum.
+	// Explicit node heights and Bare/multiline fields are unaffected.
+	ControlHeight float64
 	// Radius is a plain border's corner radius in points (a rounded border
 	// is twice as round); negative draws square corners.
 	Radius float64
@@ -39,7 +43,7 @@ func Dark() Theme {
 		Border: rgb(0x4c, 0x4e, 0x55), Field: rgb(0x17, 0x18, 0x1b),
 		Accent: rgb(0x66, 0xa7, 0xff), Selection: color.NRGBA{0x66, 0xa7, 0xff, 0x38},
 		Track:    rgb(0x3f, 0x41, 0x47),
-		FontSize: 13, TitleSize: 15, LineSpacing: 1.25, Radius: 4,
+		FontSize: 13, TitleSize: 15, LineSpacing: 1.25, Radius: 4, ControlHeight: 32,
 	}
 }
 
@@ -51,7 +55,7 @@ func Light() Theme {
 		Border: rgb(0xc9, 0xc9, 0xce), Field: rgb(0xff, 0xff, 0xff),
 		Accent: rgb(0x00, 0x6e, 0xe6), Selection: color.NRGBA{0x00, 0x6e, 0xe6, 0x2e},
 		Track:    rgb(0xdd, 0xdd, 0xe1),
-		FontSize: 13, TitleSize: 15, LineSpacing: 1.25, Radius: 4,
+		FontSize: 13, TitleSize: 15, LineSpacing: 1.25, Radius: 4, ControlHeight: 32,
 	}
 }
 
@@ -86,6 +90,7 @@ func (t Theme) over(base Theme) Theme {
 		Font:  str(t.Font, base.Font), MonoFont: str(t.MonoFont, base.MonoFont),
 		FontSize: num(t.FontSize, base.FontSize), TitleSize: num(t.TitleSize, base.TitleSize),
 		LineSpacing: num(t.LineSpacing, base.LineSpacing), Radius: num(t.Radius, base.Radius),
+		ControlHeight: num(t.ControlHeight, base.ControlHeight),
 	}
 }
 

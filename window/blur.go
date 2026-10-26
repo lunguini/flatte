@@ -8,10 +8,11 @@ import (
 )
 
 // blurredKey is a picture blurred for a box: the source, and the size it
-// is shrunk to.
+// is shrunk to, and the blur radius at that size.
 type blurredKey struct {
-	src  image.Image
-	w, h int
+	src    image.Image
+	w, h   int
+	radius int
 }
 
 var blurs = struct {
@@ -24,7 +25,7 @@ var blurs = struct {
 // stretch, and a crop would keep only a strip of a square cover in a wide
 // box — sampled at most 192 pixels wide, box-blurred three times (near a
 // Gaussian) and drawn back up smoothly. Sharp (blur under 1) sources are
-// src itself; results are kept per source and size.
+// src itself; results are kept per source, size, and blur radius.
 func blurred(src image.Image, w, h, blur float64) image.Image {
 	if blur < 1 || w <= 0 || h <= 0 {
 		return src
@@ -34,7 +35,7 @@ func blurred(src image.Image, w, h, blur float64) image.Image {
 		return src
 	}
 	per := max(w/192, 2.0) // points per pixel of the blurred image
-	k := blurredKey{w: max(int(math.Round(w/per)), 2), h: max(int(math.Round(h/per)), 2)}
+	k := blurredKey{w: max(int(math.Round(w/per)), 2), h: max(int(math.Round(h/per)), 2), radius: max(int(math.Round(blur/per/2)), 1)}
 	if reflect.TypeOf(src).Comparable() {
 		k.src = src
 		blurs.Lock()
@@ -54,7 +55,7 @@ func blurred(src image.Image, w, h, blur float64) image.Image {
 			px[y*k.w+x] = [4]float64{float64(r), float64(g), float64(bl), float64(a)}
 		}
 	}
-	radius := max(int(math.Round(blur/per/2)), 1)
+	radius := k.radius
 	for range 3 {
 		px = boxBlur(px, k.w, k.h, radius, true)
 		px = boxBlur(px, k.w, k.h, radius, false)

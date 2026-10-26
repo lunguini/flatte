@@ -105,6 +105,10 @@ type Label struct {
 	// terminal and a GUI (instead of clipping it); not with Wrap. A Tooltip
 	// can show the whole text.
 	Truncate bool
+	// HoverFg is the native foreground color while the pointer rests over
+	// this named label. It colors the whole label, including Runs; nil keeps
+	// the label's normal and per-run colors. Terminals ignore it.
+	HoverFg color.Color
 }
 
 // Run is a span of a Label's text in a style of its own.

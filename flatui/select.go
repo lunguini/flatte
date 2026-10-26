@@ -4,8 +4,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/x/ansi"
-
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -105,23 +103,30 @@ func optionPrefix(id string) string { return id + ":option:" }
 // "id:option:i" (the highlighted one marked "> " and Selected, the chosen
 // one bold). Click maps clicks on either.
 func (s Select) Layout(id string, focused bool) layout.Node {
-	button := layout.Button{NodeBase: layout.NodeBase{ID: id}, Label: s.Value() + " ▾", Focused: focused}
+	return s.LayoutWithButton(layout.Button{NodeBase: layout.NodeBase{ID: id}, Focused: focused})
+}
+
+// LayoutWithButton renders the dropdown using button's geometry, style,
+// focus and other presentation fields. Its ID identifies both the trigger
+// and the anchored popup (and is the id passed to Click). An empty Label
+// uses the current value and disclosure mark. The supplied button is copied.
+func (s Select) LayoutWithButton(button layout.Button) layout.Node {
+	id := button.ID
+	if button.Label == "" {
+		button.Label = s.Value() + " ▾"
+	}
 	if !s.open {
 		return button
-	}
-	width := 0
-	for _, o := range s.options {
-		width = max(width, ansi.StringWidth(o))
 	}
 	rows := s.list.Rows(strings.TrimSuffix(optionPrefix(id), ":"), func(i int, highlighted bool) layout.Node {
 		marker := layout.Icon{Text: "  "}
 		if highlighted {
 			marker = layout.Icon{Name: layout.IconChevronRight, Text: "> "}
 		}
-		return layout.Row{Children: []layout.Node{marker, layout.Label{Text: s.options[i], Style: layout.TextStyle{Bold: i == s.selected}}}}
+		return layout.Row{NodeBase: layout.NodeBase{ItemPadding: true}, Align: layout.AlignCenter, Children: []layout.Node{marker, layout.Label{Text: s.options[i], Style: layout.TextStyle{Bold: i == s.selected}}}}
 	})
 	menu := layout.Col{
-		NodeBase: layout.NodeBase{ID: id + ":menu", Overlay: true, Anchor: id, Bordered: true, W: layout.Fixed(width + 4)},
+		NodeBase: layout.NodeBase{ID: id + ":menu", Overlay: true, Anchor: id, Bordered: true, NoPadding: true},
 		Children: []layout.Node{rows},
 	}
 	return layout.Row{Children: []layout.Node{button, menu}}

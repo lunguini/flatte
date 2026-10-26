@@ -225,6 +225,13 @@ func activate(s *State) {
 // handleMouse: a click focuses the control it hits and acts on it; a
 // press on the slider sets the volume and a drag follows it.
 func handleMouse(s *State, m flatte.MouseEvent) {
+	if !s.dragging && s.name.HandleMouse(fieldIDs[fieldName], m) {
+		if m.Action == flatte.MousePress {
+			s.language.Close()
+			s.focus.Select(fieldName)
+		}
+		return
+	}
 	if s.dragging {
 		switch {
 		case m.Action == flatte.MouseRelease || m.Button != flatte.MouseLeft:
@@ -284,6 +291,7 @@ func field(name string, control layout.Node) layout.Node {
 func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	v, f := s.settings, s.focus.Focused
 	name := s.name.Layout(fieldIDs[fieldName], f(fieldName))
+	name.Clearable = true
 	name.W = layout.Fixed(24)
 	radios := layout.Row{NodeBase: layout.NodeBase{Gap: 2}}
 	for i, t := range themes {

@@ -40,6 +40,7 @@ type theme struct {
 	// border's corner radius (negative: square).
 	family, mono                     string
 	body, titleSize, spacing, radius float64
+	controlHeight                    float64
 }
 
 func newTheme(t Theme) theme {
@@ -52,6 +53,7 @@ func newTheme(t Theme) theme {
 		track:  rgbaOf(t.Track),
 		family: t.Font, mono: t.MonoFont,
 		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
+		controlHeight: t.ControlHeight,
 	}
 }
 
@@ -299,10 +301,12 @@ func (th theme) metrics() layout.Metrics {
 	zero := shape("0", th.font(fontKey{mono: true}))
 	defer zero.release()
 	return layout.Metrics{
-		Column: zero.width,
-		Line:   th.font(fontKey{}).pitch(),
-		Step:   stepPoints,
-		Border: borderBand,
+		DefaultPadding: true,
+		ControlHeight:  th.controlHeight,
+		Column:         zero.width,
+		Line:           th.font(fontKey{}).pitch(),
+		Step:           stepPoints,
+		Border:         borderBand,
 		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
 			f := th.styleFont(style)
 			lines := wrapWords(text, maxWidth, f.width)
@@ -458,8 +462,20 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 		}
 		switch op := op.(type) {
 		case layout.LayerOp:
-			p.fill(p.th.bg)
-			cgContextFillRect(p.ctx, rectOf(op.Rect))
+			// A decorated overlay paints its own raised surface. Clearing its
+			// bounding rectangle first would erase the page outside rounded
+			// corners (and outside a clipped surface). Plain overlays still
+			// need the legacy rectangular clear behind their content.
+			raisedBox := false
+			if i+1 < len(s.Ops) {
+				if next, ok := s.Ops[i+1].(layout.BoxOp); ok {
+					raisedBox = next.Rect == op.Rect
+				}
+			}
+			if !raisedBox {
+				p.fill(p.th.bg)
+				cgContextFillRect(p.ctx, rectOf(op.Rect))
+			}
 			p.layer, p.inLayer = op.Rect, true
 		case layout.BoxOp:
 			p.clipped(op.Clip, func() { p.box(op) })
@@ -468,7 +484,7 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.text(op, from, to) })
 		case layout.InputOp:
 			p.clip = intersect(op.Rect, op.Clip)
-			p.clipped(p.clip, func() { p.input(op) })
+			p.input(op)
 		case layout.IconOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.icon(op) })
 		case layout.ImageOp:
@@ -505,6 +521,20 @@ func boxRadius(r CGRect, picture bool) float64 {
 	return min(r.Size.Height/2, r.Size.Width/2, 10)
 }
 
+func selectionRadius(r CGRect, th theme) float64 {
+	return min(th.radiusOf(layout.BorderNormal), r.Size.Width/2, r.Size.Height/2)
+}
+
+func boxFillRadius(box layout.Box, r CGRect, th theme) float64 {
+	if box.Backdrop != nil {
+		return boxRadius(r, true)
+	}
+	if box.Interactive {
+		return selectionRadius(r, th)
+	}
+	return boxRadius(r, false)
+}
+
 // pictureRound is a picture's corner radius over its shorter side.
 const pictureRound = 0.12
 
@@ -528,19 +558,23 @@ func (p *painter) backdrop(op layout.BoxOp, bd layout.Backdrop) {
 
 // hoverFill draws a box's Hover fill at its node's hover level.
 func (p *painter) hoverFill(op layout.BoxOp) {
-	if op.Box.Hover == nil || op.ID == "" {
+	if op.ID == "" || op.Box.Hover == nil && !op.Box.Interactive {
 		return
 	}
 	level := p.hovers[op.ID] + 0.5*p.presses[op.ID]
 	if level <= 0 {
 		return
 	}
-	c := rgbaOf(op.Box.Hover)
+	c := p.th.text
+	c.A = 0.08
+	if op.Box.Hover != nil {
+		c = rgbaOf(op.Box.Hover)
+	}
 	c.A *= min(level, 1.5)
 	r := rectOf(op.Rect)
 	p.fill(c)
 	if op.Box.Round {
-		p.roundedPath(r, boxRadius(r, op.Box.Backdrop != nil), func() { cgContextFillPath(p.ctx) })
+		p.roundedPath(r, boxFillRadius(op.Box, r, p.th), func() { cgContextFillPath(p.ctx) })
 		return
 	}
 	p.cellFill(c, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H)
@@ -559,7 +593,7 @@ func (p *painter) box(op layout.BoxOp) {
 	if op.Box.Selected {
 		r := rectOf(op.Rect)
 		p.fill(p.th.selection)
-		p.roundedPath(r, min(p.th.radiusOf(layout.BorderNormal), r.Size.Width/2, r.Size.Height/2), func() { cgContextFillPath(p.ctx) })
+		p.roundedPath(r, selectionRadius(r, p.th), func() { cgContextFillPath(p.ctx) })
 	}
 	bg, hasBg := rgba{}, false
 	if op.Box.Background != nil && op.Box.Background != color.Transparent {
@@ -572,7 +606,7 @@ func (p *painter) box(op layout.BoxOp) {
 		case hasBg && op.Box.Round:
 			r := rectOf(op.Rect)
 			p.fill(bg)
-			p.roundedPath(r, boxRadius(r, op.Box.Backdrop != nil), func() { cgContextFillPath(p.ctx) })
+			p.roundedPath(r, boxFillRadius(op.Box, r, p.th), func() { cgContextFillPath(p.ctx) })
 		case hasBg:
 			// Snapped like cell fills: adjacent filled boxes meet on whole
 			// pixels, with no seam at fractional edges.
@@ -691,6 +725,11 @@ func (p *painter) lineOn(text string, f font, x, base, y, h float64, fg rgba, bg
 // tallest font. sel (from < to) is the selected bytes, highlighted behind.
 func (p *painter) text(op layout.TextOp, from, to int) {
 	rt := p.th.opText(op)
+	hover := p.levelOf(p.hovers, op.ID, op.ID != "" && op.ID == p.hovered, false)
+	hoverFg := rgba{}
+	if op.HoverFg != nil && hover > 0 {
+		hoverFg = rgbaOf(op.HoverFg)
+	}
 	for _, ln := range rt.layout(op) {
 		if a, b := max(from, ln.start), min(to, ln.end); a < b || (from <= ln.end && to > ln.end && ln.end < len(rt.text)) {
 			x0, x1 := rt.width(ln.start, a), rt.width(ln.start, b)
@@ -708,11 +747,19 @@ func (p *painter) text(op layout.TextOp, from, to int) {
 		}
 		rt.pieces(ln.start, end, func(i, a, b int) {
 			st := rt.runs[i].Style
-			x += p.lineOn(rt.text[a:b], rt.fonts[i], x, base, ln.y, ln.pitch, p.roleColor(st), st.Bg, st.Underline, st.Strikethrough)
+			fg := p.roleColor(st)
+			if op.HoverFg != nil && hover > 0 {
+				fg = mix(fg, hoverFg, hover)
+			}
+			x += p.lineOn(rt.text[a:b], rt.fonts[i], x, base, ln.y, ln.pitch, fg, st.Bg, st.Underline, st.Strikethrough)
 		})
 		if ellipsis >= 0 {
 			st := rt.runs[ellipsis].Style
-			p.lineOn("…", rt.fonts[ellipsis], x, base, ln.y, ln.pitch, p.roleColor(st), st.Bg, false, false)
+			fg := p.roleColor(st)
+			if op.HoverFg != nil && hover > 0 {
+				fg = mix(fg, hoverFg, hover)
+			}
+			p.lineOn("…", rt.fonts[ellipsis], x, base, ln.y, ln.pitch, fg, st.Bg, false, false)
 		}
 	}
 }
@@ -798,18 +845,63 @@ func (rt richText) nearest(sp span, x float64) int {
 func (p *painter) input(op layout.InputOp) {
 	r := op.Rect
 	if !op.Bare {
-		field := cgRect(r.X+0.5, r.Y+0.5, max(r.W-1, 0), max(r.H-1, 0))
-		rad := min(p.th.radiusOf(layout.BorderNormal), field.Size.Height/2)
-		p.fill(p.th.field)
-		p.roundedPath(field, rad, func() { cgContextFillPath(p.ctx) })
-		outline := p.th.border
-		if op.Focused {
-			outline = p.th.caret
-		}
-		p.stroke(outline)
-		cgContextSetLineWidth(p.ctx, strokeWidth)
-		p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
+		p.clipped(op.Clip, func() {
+			outer := op.Field
+			if outer.W == 0 && outer.H == 0 {
+				outer = r
+			}
+			field := cgRect(outer.X+0.5, outer.Y+0.5, max(outer.W-1, 0), max(outer.H-1, 0))
+			if !op.Multiline {
+				field = controlBezel(outer)
+			}
+			rad := min(p.th.radiusOf(layout.BorderNormal), field.Size.Height/2)
+			p.fill(p.th.field)
+			p.roundedPath(field, rad, func() { cgContextFillPath(p.ctx) })
+			outline := p.th.border
+			if p.hovered == op.ID || p.hovered == clearHoverID(op.ID) {
+				outline = mix(outline, p.th.text, 0.22)
+			}
+			if op.Focused {
+				outline = p.th.caret
+			}
+			p.stroke(outline)
+			cgContextSetLineWidth(p.ctx, strokeWidth)
+			p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
+		})
 	}
+	p.clipped(intersect(inputTextRect(op), op.Clip), func() { p.inputText(op) })
+	if clear, ok := inputClearRect(op); ok {
+		p.clipped(op.Clip, func() { p.inputClear(op, clear) })
+	}
+}
+
+func (p *painter) inputClear(op layout.InputOp, r layout.PointRect) {
+	cx, cy := r.X+r.W/2, r.Y+r.H/2
+	radius := min(7.0, r.H/2-1)
+	hot := p.hovered == clearHoverID(op.ID)
+	if hot {
+		color := p.th.text
+		color.A *= 0.12
+		p.fill(color)
+		cgContextAddEllipseInRect(p.ctx, cgRect(cx-radius, cy-radius, 2*radius, 2*radius))
+		cgContextFillPath(p.ctx)
+	}
+	color := p.th.subtle
+	if hot {
+		color = p.th.text
+	}
+	p.stroke(color)
+	cgContextSetLineWidth(p.ctx, 1.4)
+	arm := min(3.5, radius-2)
+	cgContextMoveToPoint(p.ctx, cx-arm, cy-arm)
+	cgContextAddLineToPoint(p.ctx, cx+arm, cy+arm)
+	cgContextMoveToPoint(p.ctx, cx-arm, cy+arm)
+	cgContextAddLineToPoint(p.ctx, cx+arm, cy-arm)
+	cgContextStrokePath(p.ctx)
+}
+
+func (p *painter) inputText(op layout.InputOp) {
+	r := inputTextRect(op)
 
 	fl := p.th.layoutField(op, p.marked)
 	if fl.text == "" {
@@ -906,9 +998,13 @@ func byteOfUTF16(s string, u int) int {
 // layoutField lays out op's text in th's type, with marked input-method
 // text at a focused field's caret.
 func (th theme) layoutField(op layout.InputOp, marked string) fieldText {
-	r := op.Rect
-	fl := fieldText{f: th.styleFont(op.Style), x0: r.X + fieldInset, y0: r.Y, single: !op.Multiline}
-	avail := max(r.W-2*fieldInset, 1)
+	r := inputTextRect(op)
+	inset := fieldInset
+	if op.Field.W > 0 || op.Field.H > 0 {
+		inset = 0
+	}
+	fl := fieldText{f: th.styleFont(op.Style), x0: r.X + inset, y0: r.Y, single: !op.Multiline}
+	avail := max(r.W-2*inset, 1)
 	caret := min(max(op.Caret, 0), len(op.Value))
 	for caret > 0 && caret < len(op.Value) && !runeStart(op.Value, caret) {
 		caret--

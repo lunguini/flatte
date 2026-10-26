@@ -85,9 +85,15 @@ func (p *painter) ring(r CGRect, rad float64) {
 	p.roundedPath(cgRect(r.Origin.X-o-1, r.Origin.Y-o-1, r.Size.Width+2*o+2, r.Size.Height+2*o+2), rad+o+1, func() { cgContextStrokePath(p.ctx) })
 }
 
+// controlBezel shares the visual inset of regular native buttons and
+// one-line fields; their full layout rectangles remain the hit targets.
+func controlBezel(r layout.PointRect) CGRect {
+	return cgRect(r.X+0.5, r.Y+1.5, max(r.W-1, 0), max(r.H-3, 0))
+}
+
 func (p *painter) button(op layout.ControlOp, hot, down float64) {
 	r := op.Rect
-	bez := cgRect(r.X+0.5, r.Y+1.5, max(r.W-1, 0), max(r.H-3, 0))
+	bez := controlBezel(r)
 	rad := min(p.th.radiusOf(layout.BorderNormal)+1, bez.Size.Height/2)
 	icon := op.Icon != layout.IconNone
 	if icon && math.Abs(r.W-r.H) < 1 {
@@ -142,7 +148,11 @@ func (p *painter) button(op layout.ControlOp, hot, down float64) {
 	} else {
 		f := p.th.styleFont(op.Style)
 		w := f.width(op.Label)
-		p.line(op.Label, f, r.X+(r.W-w)/2, r.Y, r.H, p.dim(text, op.Disabled), nil, op.Style.Underline, op.Style.Strikethrough)
+		content := op.Content
+		if content == (layout.PointRect{}) {
+			content = r
+		}
+		p.line(op.Label, f, content.X+(content.W-w)/2, content.Y, content.H, p.dim(text, op.Disabled), nil, op.Style.Underline, op.Style.Strikethrough)
 	}
 	if op.Focused && !op.Disabled {
 		p.ring(bez, rad)
@@ -159,7 +169,10 @@ func indicatorCols(k layout.ControlKind) int {
 }
 
 func (p *painter) toggle(op layout.ControlOp, hot, down bool) {
-	r := op.Rect
+	r := op.Content
+	if r == (layout.PointRect{}) {
+		r = op.Rect
+	}
 	cols := indicatorCols(op.Kind)
 	areaW := float64(cols) * p.m.Column
 	cy := r.Y + r.H/2

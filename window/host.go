@@ -71,8 +71,9 @@ type surface[S any] struct {
 	title         string
 	// cursor is a string frame's Frame.Cursor, in cells; Root frames show the
 	// focused Input's caret instead.
-	cursor    *flatte.Cursor
-	delivered map[string]layout.Rect
+	cursor          *flatte.Cursor
+	delivered       map[string]layout.Rect
+	deliveredPoints map[string]layout.PointRect
 	// dirty marks the scene stale: the app changed since it was rendered,
 	// so carets must be read from a fresh one.
 	dirty bool
@@ -130,6 +131,7 @@ type ui interface {
 	presentation() presentation
 	drop(x, y float64, paths []string, text string)
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
+	mouseClicks(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod, clicks int)
 	// hit is the ID of the node at (x, y) in a fresh scene ("": none).
 	hit(x, y float64) string
 	wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod)
@@ -465,23 +467,43 @@ func (s *surface[S]) control(id string) (layout.ControlOp, bool) {
 	return layout.ControlOp{}, false
 }
 
+// interactiveBox reports a named custom item that requests native hover.
+func (s *surface[S]) interactiveBox(id string) bool {
+	if id == "" {
+		return false
+	}
+	for i := len(s.scene.Ops) - 1; i >= 0; i-- {
+		if box, ok := s.scene.Ops[i].(layout.BoxOp); ok && box.ID == id {
+			return box.Box.Interactive
+		}
+	}
+	return false
+}
+
 // hover tracks the pointer at (x, y) points (outside the view: x < 0):
 // it records the control under it, redrawing when that changes, and
 // reports the pointer shape and tooltip to show there.
 func (s *surface[S]) hover(x, y float64) (pointer, string) {
 	scene := s.fresh()
 	id, tooltip, shape := "", "", pointerArrow
+	inputHovered := false
 	if x >= 0 && y >= 0 {
 		id, _ = scene.HitTest(x, y)
 		tooltip = scene.TooltipAt(x, y)
-		if _, ok := s.input(id); ok {
+		if input, ok := s.input(id); ok {
+			inputHovered = true
 			shape = pointerText
+			if inputClearAt(input, x, y) {
+				id, shape, tooltip = clearHoverID(id), pointerHand, "Clear text"
+			}
 		}
 	}
-	if _, ok := s.control(id); ok {
-		shape = pointerHand
-	} else {
-		id = ""
+	if !inputHovered {
+		if _, ok := s.control(id); ok || s.interactiveBox(id) {
+			shape = pointerHand
+		} else {
+			id = ""
+		}
 	}
 	if shape == pointerArrow {
 		if _, _, ok := s.selectableAt(x, y); ok {
@@ -501,16 +523,11 @@ func (s *surface[S]) hover(x, y float64) (pointer, string) {
 	return shape, tooltip
 }
 
-// idsAt is every ID'd node whose rect holds (x, y) points.
+// idsAt is the visible ID'd nodes under the pointer, above the topmost overlay.
 func (s *surface[S]) idsAt(x, y float64) map[string]bool {
 	out := map[string]bool{}
-	if x < 0 || y < 0 {
-		return out
-	}
-	for id, r := range s.scene.Rects {
-		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
-			out[id] = true
-		}
+	for _, id := range s.scene.IDsAt(x, y) {
+		out[id] = true
 	}
 	return out
 }
@@ -733,12 +750,38 @@ func (s *surface[S]) input(id string) (layout.InputOp, bool) {
 	return layout.InputOp{}, false
 }
 
+// inputClearRect is the affordance area inside a nonempty single-line field.
+// Its reserved text area is shared by painting and native caret layout.
+func inputClearRect(op layout.InputOp) (layout.PointRect, bool) {
+	r := op.Rect
+	if !op.Clearable || op.Multiline || op.Value == "" || r.W < 24 || r.H < 12 {
+		return layout.PointRect{}, false
+	}
+	return layout.PointRect{X: r.X + r.W - 20, Y: r.Y, W: 20, H: r.H}, true
+}
+func inputClearAt(op layout.InputOp, x, y float64) bool {
+	r, ok := inputClearRect(op)
+	return ok && x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H && x >= op.Clip.X && x < op.Clip.X+op.Clip.W && y >= op.Clip.Y && y < op.Clip.Y+op.Clip.H
+}
+func inputTextRect(op layout.InputOp) layout.PointRect {
+	r := op.Rect
+	if clear, ok := inputClearRect(op); ok {
+		r.W = max(clear.X-r.X-2, 0)
+	}
+	return r
+}
+func clearHoverID(id string) string { return id + "\x00clear" }
+
 // mouse delivers a pointer event at (x, y) points (see pointerAt).
 //
 // Over an ID'd Input the event carries the caret nearest the pointer; a
 // left-button drag that began on one keeps targeting it, with carets
 // clamped to it, until the button is released.
 func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod) {
+	s.mouseClicks(x, y, button, action, mod, 1)
+}
+
+func (s *surface[S]) mouseClicks(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod, clicks int) {
 	h := s.h
 	scene := s.fresh()
 	id, r := scene.HitTest(x, y)
@@ -747,7 +790,7 @@ func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatt
 		id, r = s.drag, scene.Rects[s.drag]
 	}
 	ev := s.pointerAt(x, y, id, r)
-	ev.Button, ev.Action, ev.Mod = button, action, mod
+	ev.Button, ev.Action, ev.Mod, ev.Clicks = button, action, mod, max(clicks, 1)
 	// A right press (or a Control-click, as on macOS) with a context menu
 	// shows it instead of being delivered; the choice arrives as a
 	// MenuEvent.
@@ -761,9 +804,14 @@ func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatt
 		}
 	}
 	if op, ok := s.input(id); ok && h.text != nil {
-		ev.Caret, ev.HasCaret = h.text.caretAt(op, x, y), true
-		if button == flatte.MouseLeft && action == flatte.MousePress {
-			s.drag = id
+		if !dragging && inputClearAt(op, x, y) && button == flatte.MouseLeft && action == flatte.MousePress {
+			ev.Clear = true
+			s.drag = ""
+		} else {
+			ev.Caret, ev.HasCaret = h.text.caretAt(op, x, y), true
+			if button == flatte.MouseLeft && action == flatte.MousePress {
+				s.drag = id
+			}
 		}
 	}
 	if button == flatte.MouseLeft && action == flatte.MouseRelease {
@@ -865,14 +913,15 @@ func (s *surface[S]) render() layout.Scene {
 		for id, r := range s.scene.Rects {
 			rects[id] = r.Cells(h.metrics)
 		}
-		if maps.Equal(rects, s.delivered) {
+		if maps.Equal(rects, s.delivered) && maps.Equal(s.scene.Rects, s.deliveredPoints) {
 			return s.scene
 		}
 		s.delivered = rects
-		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), Window: s.id}
+		s.deliveredPoints = maps.Clone(s.scene.Rects)
+		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Window: s.id}
 		h.app.Tracer.Event(ev)
 		if h.app.Handle != nil {
-			h.app.Handle(h.app.State, flatte.LayoutEvent{Rects: maps.Clone(rects), Window: s.id}, h.fx)
+			h.app.Handle(h.app.State, flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Window: s.id}, h.fx)
 		}
 		if h.quitting {
 			h.stop()

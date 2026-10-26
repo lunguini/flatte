@@ -61,7 +61,11 @@ func notificationSequence(n Notification, env func(string) string) string {
 		if title == "" {
 			title, body = body, ""
 		}
-		seq = "\x1b]99;i=flatte:d=0:p=title;" + title + "\x1b\\"
+		done := "1"
+		if body != "" {
+			done = "0"
+		}
+		seq = "\x1b]99;i=flatte:d=" + done + ":p=title;" + title + "\x1b\\"
 		if body != "" {
 			seq += "\x1b]99;i=flatte:d=1:p=body;" + body + "\x1b\\"
 		}

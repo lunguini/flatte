@@ -129,7 +129,7 @@ func (t Tree) Rows(id string, row func(row TreeRow, selected bool) layout.Node) 
 	var col layout.Col
 	for i, r := range rows {
 		col.Children = append(col.Children, layout.Row{
-			NodeBase: layout.NodeBase{ID: id + ":" + r.ID, Box: layout.Box{Selected: i == cursor}},
+			NodeBase: layout.NodeBase{ID: id + ":" + r.ID, Box: layout.Box{Selected: i == cursor, Interactive: true, Round: true}},
 			Children: []layout.Node{row(r, i == cursor)},
 		})
 	}

@@ -22,6 +22,15 @@ type Metrics struct {
 	Border       float64
 	MeasureText  func(text string, style TextStyle, maxWidth float64) (w, h float64)
 	MeasureRuns  func(runs []Run, maxWidth float64) (w, h float64)
+	// DefaultPadding supplies GUI component defaults: controls get 8pt
+	// horizontally/4pt vertically; decorated Row/Col containers get 12pt.
+	// Explicit Pad fields replace these defaults; NodeBase.NoPadding opts out.
+	// The window host enables this; custom point backends may opt in.
+	DefaultPadding bool
+	// ControlHeight is the minimum Auto height of buttons, toggles, and
+	// non-Bare single-line inputs, in points. Zero or negative means no
+	// minimum; explicit H values, Bare inputs and text areas are unchanged.
+	ControlHeight float64
 }
 
 // PointRect is a rect in points.
@@ -78,6 +87,8 @@ type TextOp struct {
 	Runs       []Run
 	Selectable bool
 	Truncate   bool // a line too long for Rect ends in "…" (not with Wrap)
+	ID         string
+	HoverFg    color.Color
 }
 
 // InputOp draws a text field in Rect (the input's content box). Caret is a
@@ -100,6 +111,10 @@ type InputOp struct {
 	SelStart, SelEnd int
 	OffsetY          int
 	Bare             bool // no field chrome: the text and caret only
+	Clearable        bool // native clear affordance; edit is delivered to the app
+	// Field is the outer field bezel; Rect remains its text/caret area.
+	// A zero Field uses Rect, for backends without component padding.
+	Field PointRect
 }
 
 // IconOp draws an Icon's named shape in Rect (the icon's content box), in
@@ -157,6 +172,9 @@ type ControlOp struct {
 	Default, Disabled, Focused bool
 	Icon                       IconName // a Button's icon (IconNone: its Label)
 	Plain                      bool     // a Button without a bezel until hovered
+	// Content is the padded label/indicator area. A zero value uses Rect.
+	// Rect retains the outer bezel and full-size centered icon geometry.
+	Content PointRect
 }
 
 // CellsOp draws terminal content — a Text leaf's ANSI string, a container's
@@ -177,8 +195,10 @@ type ImageOp struct {
 	Round      bool // corners rounded as a Round box's
 }
 
-// LayerOp starts an overlay layer: clear Rect to the window background
-// before drawing the ops that follow, as the terminal clears its cells.
+// LayerOp starts a logical overlay layer. A native backend lets an
+// immediately following root BoxOp paint its own surface, preserving the
+// page outside rounded corners; undecorated overlays clear their rectangle.
+// Input/tooltip barriers are independent of this painting behavior.
 type LayerOp struct{ Rect PointRect }
 
 func (BoxOp) isOp()       {}
@@ -234,6 +254,26 @@ func (s Scene) HitTest(x, y float64) (string, PointRect) {
 	return "", PointRect{}
 }
 
+// IDsAt returns the visible IDs at (x, y), innermost first. Unlike Rects,
+// it respects Scroll clipping and stops at the topmost overlay layer,
+// including an overlay area without an ID. Hosts use it to hover nested
+// nodes together without highlighting content covered by a modal.
+func (s Scene) IDsAt(x, y float64) []string {
+	var ids []string
+	var m pointMetric
+	for i := len(s.hits) - 1; i >= 0; i-- {
+		h := s.hits[i]
+		if !containsOf[float64](m, h.area, x, y) {
+			continue
+		}
+		if h.id == "" {
+			break
+		}
+		ids = append(ids, h.id)
+	}
+	return ids
+}
+
 // LayoutScene solves root in a width×height-point frame with m. It runs the
 // same walk as Compose — distribution, clipping, overlays, hit order — in
 // points instead of cells.
@@ -274,12 +314,90 @@ func (pointMetric) share(total, ratio float64) float64 {
 	return total * min(ratio, 1)
 }
 
+// padding resolves a host's default component insets in points.
+func (p pointMetric) padding(n Node) sidesOf[float64] {
+	pad := getPadSides(n)
+	s := sidesOf[float64]{p.steps(pad.top), p.steps(pad.right), p.steps(pad.bottom), p.steps(pad.left)}
+	if !p.DefaultPadding || pad.any() {
+		return s
+	}
+	if np, ok := n.(interface{ noPadding() bool }); ok && np.noPadding() {
+		return s
+	}
+	switch l := n.(type) {
+	case Button, Toggle:
+		return sidesOf[float64]{4, 8, 4, 8}
+	case Input:
+		if !l.Bare {
+			return sidesOf[float64]{4, 8, 4, 8}
+		}
+	case Row, Col, *Row, *Col:
+		if item, ok := n.(interface{ itemPadding() bool }); ok && item.itemPadding() {
+			return sidesOf[float64]{4, 8, 4, 8}
+		}
+		box := getBox(n)
+		if box.Backdrop == nil && (box.hasBorder() || box.hasBackground()) {
+			return sidesOf[float64]{12, 12, 12, 12}
+		}
+	}
+	return s
+}
+
+func (p pointMetric) paddedContent(n Node, nb NodeBase, w, h float64) (sw, sh sized[float64]) {
+	sw, sh = toSized[float64](p, nb.W, true), toSized[float64](p, nb.H, false)
+	inset := insetsOf[float64](p, n)
+	if sw.Kind == SizeAuto {
+		sw = sized[float64]{Kind: SizeContent, Value: w + horizOf[float64](p, inset)}
+	}
+	if sh.Kind == SizeAuto {
+		sh = sized[float64]{Kind: SizeContent, Value: h + vertOf[float64](p, inset)}
+	}
+	return sw, sh
+}
+
+// controlContent keeps Auto controls large enough for their contents and
+// the backend's shared minimum, without changing caller-sized axes.
+func (p pointMetric) controlContent(n Node, nb NodeBase, width, height float64) (w, h sized[float64]) {
+	w, h = p.paddedContent(n, nb, width, height)
+	minimum := p.ControlHeight
+	if nb.H.Kind == SizeAuto && minimum > 0 && !math.IsInf(minimum, 0) {
+		h.Value = max(h.Value, minimum)
+	}
+	return w, h
+}
+
 // leaf measures the known leaves in points: text by the backend's font,
 // inputs as one line (a multi-line one grows), and padding and borders in
 // steps and strokes rather than cells. Other nodes report their Size, read
 // as columns and lines.
 func (p pointMetric) leaf(n Node, width float64) (w, h sized[float64]) {
 	switch l := n.(type) {
+	case Button:
+		if !p.DefaultPadding && !(p.ControlHeight > 0 && !math.IsInf(p.ControlHeight, 0)) {
+			return sizedOf[float64](p, n)
+		}
+		tw, th := p.text(l.Label, l.Style, 0)
+		if l.Icon != IconNone {
+			tw, th = p.Line, p.Line
+		}
+		w, h = p.controlContent(n, l.NodeBase, tw, th)
+		if l.Icon != IconNone && l.W.Kind == SizeAuto && l.H.Kind == SizeAuto {
+			w.Value = h.Value
+		}
+		return w, h
+	case Toggle:
+		if !p.DefaultPadding && !(p.ControlHeight > 0 && !math.IsInf(p.ControlHeight, 0)) {
+			return sizedOf[float64](p, n)
+		}
+		tw, th := p.text(l.Label, l.Style, 0)
+		indicator := p.cols(3)
+		if l.Kind == ToggleSwitch {
+			indicator = p.cols(4)
+		}
+		if l.Label != "" {
+			tw += p.Column
+		}
+		return p.controlContent(n, l.NodeBase, indicator+tw, max(th, p.Line))
 	case Label:
 		if l.Wrap {
 			maxWidth := 0.0 // not known yet: unwrapped
@@ -316,7 +434,14 @@ func (p pointMetric) leaf(n Node, width float64) (w, h sized[float64]) {
 		}
 		return w, h
 	case Input:
-		w, h = p.content(l.NodeBase, 0, p.Line)
+		height := p.Line
+		if !l.Bare && !l.Multiline && p.ControlHeight > 0 {
+			_, textHeight := p.text("M", l.Style, 0)
+			height = max(height, textHeight)
+			w, h = p.controlContent(n, l.NodeBase, 0, height)
+		} else {
+			w, h = p.paddedContent(n, l.NodeBase, 0, height)
+		}
 		if l.W.Kind == SizeAuto {
 			w = growSized[float64]()
 		}
@@ -402,7 +527,7 @@ func (p *scenePainter) box(r, clip rect[float64], b Box) {
 		in = min(in, r.H/2)
 		r.Y, r.H = r.Y+in, r.H-2*in
 	}
-	if b.hasBorder() || b.hasBackground() || b.Selected || b.Hover != nil || b.Backdrop != nil {
+	if b.hasBorder() || b.hasBackground() || b.Selected || b.Hover != nil || b.Interactive || b.Backdrop != nil {
 		p.ops = append(p.ops, BoxOp{Rect: PointRect(r), Clip: PointRect(clip), Box: b, ID: p.id})
 	}
 }
@@ -424,6 +549,9 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	control := func(op ControlOp, b Box) {
 		p.box(r, clip, b)
 		op.Rect, op.Clip = p.content(n, r), PointRect(clip)
+		if p.m.DefaultPadding && op.Kind != ControlSlider {
+			op.Content, op.Rect = op.Rect, PointRect(r)
+		}
 		p.ops = append(p.ops, op)
 	}
 	switch l := n.(type) {
@@ -442,7 +570,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		control(ControlOp{ID: l.ID, Kind: ControlSlider, Value: l.value(), Fill: l.Fill, Disabled: l.Disabled, Focused: l.Focused}, l.box())
 	case Label:
 		p.box(r, clip, l.box())
-		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap}
+		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap, ID: l.ID, HoverFg: l.HoverFg}
 		if len(l.Runs) > 0 {
 			op.Text, op.Runs = l.plain(), l.runs()
 		}
@@ -465,11 +593,15 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		start, length, show := l.fraction()
 		p.ops = append(p.ops, ScrollBarOp{Rect: p.content(n, r), Clip: PointRect(clip), Start: start, Length: length, Show: show, Color: l.Color})
 	case Input:
+		field := PointRect{}
+		if p.m.DefaultPadding && !l.Bare {
+			field = PointRect(r)
+		}
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, InputOp{
-			ID: l.ID, Rect: p.content(n, r), Clip: PointRect(clip),
+			ID: l.ID, Rect: p.content(n, r), Clip: PointRect(clip), Field: field,
 			Value: l.Value, Caret: l.Caret, Placeholder: l.Placeholder, Focused: l.Focused, Style: l.Style,
-			Multiline: l.Multiline, Wrap: l.Wrap, SelStart: l.SelStart, SelEnd: l.SelEnd, OffsetY: l.OffsetY, Bare: l.Bare,
+			Multiline: l.Multiline, Wrap: l.Wrap, SelStart: l.SelStart, SelEnd: l.SelEnd, OffsetY: l.OffsetY, Bare: l.Bare, Clearable: l.Clearable,
 		})
 	case *Spacer:
 		bg := l.bg

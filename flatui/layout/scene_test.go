@@ -48,7 +48,7 @@ func TestSceneOpsInPaintOrder(t *testing.T) {
 	// The card's content box starts at 7,7: a 1pt border plus one 6pt step.
 	want := []Op{
 		BoxOp{Rect: frame, Clip: frame, Box: Box{Border: BorderNormal, BorderColor: grey}, ID: "card"},
-		TextOp{Rect: PointRect{7, 7, 186, 20}, Clip: frame, Text: "Hello", Style: TextStyle{Role: TextTitle}},
+		TextOp{Rect: PointRect{7, 7, 186, 20}, Clip: frame, Text: "Hello", Style: TextStyle{Role: TextTitle}, ID: "title"},
 		TextOp{Rect: PointRect{7, 27, 30, 16}, Clip: frame, Text: "name:"},
 		InputOp{ID: "name", Rect: PointRect{43, 27, 150, 16}, Clip: frame, Value: "Ada", Caret: 1, Focused: true},
 	}
@@ -271,6 +271,20 @@ func TestHoverAndBackdropBoxesCarryTheirID(t *testing.T) {
 	}
 }
 
+func TestLabelHoverForegroundCarriesIDToTextOp(t *testing.T) {
+	accent := color.NRGBA{R: 220, G: 40, B: 150, A: 255}
+	scene := LayoutScene(Label{NodeBase: NodeBase{ID: "artist"}, Text: "Artist", HoverFg: accent}, 200, 40, testMetrics)
+	for _, op := range scene.Ops {
+		if text, ok := op.(TextOp); ok {
+			if text.ID != "artist" || text.HoverFg != accent {
+				t.Fatalf("text hover metadata = ID %q color %v", text.ID, text.HoverFg)
+			}
+			return
+		}
+	}
+	t.Fatal("scene has no text operation")
+}
+
 func TestBoxInsetYDrawsInsideTheRect(t *testing.T) {
 	row := func(inset float64) Node {
 		return Col{Children: []Node{Row{NodeBase: NodeBase{ID: "row", H: Fixed(2), Box: Box{Background: color.White, InsetY: inset}}, Children: []Node{Label{Text: "x"}}}}}
@@ -296,5 +310,32 @@ func TestBoxInsetYDrawsInsideTheRect(t *testing.T) {
 	c := Compose(row(3), 20, 5)
 	if r := c.Rects["row"]; r.H != 2 {
 		t.Fatalf("row rect %+v", r)
+	}
+}
+
+func TestSceneIDsAtRespectsClipsAndOverlayLayers(t *testing.T) {
+	root := Col{NodeBase: NodeBase{ID: "root"}, Children: []Node{
+		Label{NodeBase: NodeBase{H: Fixed(1)}, Text: "head"},
+		Scroll{NodeBase: NodeBase{ID: "scroll", H: Fixed(2)}, OffsetY: 1, Child: Col{Children: []Node{
+			Label{NodeBase: NodeBase{ID: "hidden", H: Fixed(1)}, Text: "hidden"},
+			Row{NodeBase: NodeBase{ID: "row", H: Fixed(1)}, Children: []Node{Label{NodeBase: NodeBase{ID: "label"}, Text: "visible"}}},
+			Label{NodeBase: NodeBase{H: Fixed(1)}, Text: "bottom"},
+		}}},
+		Col{NodeBase: NodeBase{Overlay: true, W: Fixed(4), H: Fixed(1)}, Children: []Node{Label{NodeBase: NodeBase{ID: "modal-child", W: Fixed(1)}, Text: "x"}}},
+	}}
+	s := LayoutScene(root, 100, 48, testMetrics)
+	for _, tc := range []struct {
+		x, y float64
+		want []string
+	}{
+		{5, 5, []string{"root"}},
+		{5, 20, []string{"label", "row", "scroll", "root"}},
+		{35, 20, []string{"modal-child"}},
+		{60, 20, nil},
+		{-1, 20, nil},
+	} {
+		if got := s.IDsAt(tc.x, tc.y); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("IDsAt(%v,%v)=%v want %v", tc.x, tc.y, got, tc.want)
+		}
 	}
 }

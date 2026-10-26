@@ -19,10 +19,13 @@ import (
 // boundaries; clampCursor additionally guards against a manually-set offset
 // landing inside a UTF-8 rune.
 type TextField struct {
-	Value           string
-	Cursor          int
-	selectionActive bool
-	selectionAnchor int
+	Value                string
+	Cursor               int
+	selectionActive      bool
+	selectionAnchor      int
+	mouseSelecting       bool
+	mouseMode            int
+	mouseStart, mouseEnd int
 }
 
 func (f *TextField) Insert(r rune) {
@@ -507,4 +510,86 @@ func nextWordBoundary(s string, pos int) int {
 		i++
 	}
 	return clusters[i-1].end
+}
+
+// HandleMouse applies pointer editing for the input laid out with id. It
+// handles normal/Shift placement and drag, double-click word selection,
+// triple-click SelectAll, and the native clear affordance. It reports
+// whether the event belonged to this field. Apps still own focus policy.
+func (f *TextField) HandleMouse(id string, e flatte.MouseEvent) bool {
+	if e.Target != id || e.Button != flatte.MouseLeft {
+		return false
+	}
+	if e.Action == flatte.MousePress && e.Clear {
+		f.Value = ""
+		f.SetCursor(0)
+		f.mouseSelecting = false
+		return true
+	}
+	if !e.HasCaret {
+		return false
+	}
+	at := f.clampedOffset(e.Caret)
+	switch e.Action {
+	case flatte.MousePress:
+		f.mouseSelecting = true
+		f.mouseMode = max(e.Clicks, 1)
+		switch {
+		case e.Clicks >= 3:
+			f.SelectAll()
+		case e.Clicks == 2:
+			a, b := fieldWordRange(f.Value, at)
+			f.selectionAnchor, f.selectionActive, f.Cursor = a, true, b
+			f.mouseStart, f.mouseEnd = a, b
+		case e.Mod.Contains(flatte.ModShift):
+			f.startSelection()
+			f.Cursor = at
+		default:
+			f.SetCursor(at)
+		}
+	case flatte.MouseMotion:
+		if !f.mouseSelecting {
+			return false
+		}
+		if f.mouseMode >= 3 {
+			return true
+		}
+		if f.mouseMode == 2 {
+			a, b := fieldWordRange(f.Value, at)
+			f.selectionActive = true
+			if a < f.mouseStart {
+				f.selectionAnchor, f.Cursor = f.mouseEnd, a
+			} else {
+				f.selectionAnchor, f.Cursor = f.mouseStart, b
+			}
+		} else {
+			f.startSelection()
+			f.Cursor = at
+		}
+	case flatte.MouseRelease:
+		f.mouseSelecting = false
+	default:
+		return false
+	}
+	return true
+}
+
+func fieldWordRange(value string, at int) (int, int) {
+	if value == "" {
+		return 0, 0
+	}
+	if at >= len(value) {
+		at = len(value) - 1
+	}
+	offset, state := 0, -1
+	rest := value
+	for rest != "" {
+		word, next, nextState := uniseg.FirstWordInString(rest, state)
+		end := offset + len(word)
+		if at < end {
+			return offset, end
+		}
+		offset, rest, state = end, next, nextState
+	}
+	return len(value), len(value)
 }

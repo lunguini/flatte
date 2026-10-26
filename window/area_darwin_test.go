@@ -21,7 +21,7 @@ func TestSnapshotTextArea(t *testing.T) {
 	area := func(caret, selStart, selEnd int) func() layout.Node {
 		return func() layout.Node {
 			return layout.Col{Children: []layout.Node{
-				layout.Input{NodeBase: layout.NodeBase{ID: "ed", H: layout.Fixed(3)}, Value: value, Caret: caret,
+				layout.Input{NodeBase: layout.NodeBase{ID: "ed", H: layout.Fixed(3), NoPadding: true}, Value: value, Caret: caret,
 					SelStart: selStart, SelEnd: selEnd, Focused: true, Multiline: true, Wrap: true},
 			}}
 		}

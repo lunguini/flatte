@@ -233,7 +233,19 @@ type NodeBase struct {
 	// dropdown or a context menu. An anchor that is not laid out (or an
 	// empty one) centers the overlay as usual.
 	Anchor string
+
+	// NoPadding disables a GUI host's default component padding. Explicit
+	// Pad/PadTop/PadRight/PadBottom/PadLeft still apply. Terminals ignore it.
+	NoPadding bool
+
+	// ItemPadding gives a Row/Col the GUI's regular item insets (8pt
+	// horizontal, 4pt vertical) when default padding is enabled. Explicit
+	// Pad fields or NoPadding override it. Terminal geometry is unchanged.
+	ItemPadding bool
 }
+
+func (n NodeBase) noPadding() bool   { return n.NoPadding }
+func (n NodeBase) itemPadding() bool { return n.ItemPadding }
 
 func (n NodeBase) tooltip() string { return n.Tooltip }
 
@@ -279,6 +291,10 @@ type Box struct {
 	Title       string
 	TitleStyle  TextStyle
 	Hover       color.Color
+	// Interactive opts a named box into native hover feedback using the
+	// theme's text tint when Hover is nil. Explicit Hover wins; transparent
+	// disables the fill. Callers remove Interactive when the item is disabled.
+	Interactive bool
 	Backdrop    *Backdrop
 	InsetY      float64
 }

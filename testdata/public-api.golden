@@ -202,8 +202,9 @@ flatte package flatte
   struct KeyEvent fields=5 comparable=true
   type LayoutEvent struct
   field LayoutEvent.Rects map[string] layout.Rect [order=0]
-  field LayoutEvent.Window string [order=1]
-  struct LayoutEvent fields=2 comparable=false
+  field LayoutEvent.PointRects map[string] layout.PointRect [order=1]
+  field LayoutEvent.Window string [order=2]
+  struct LayoutEvent fields=3 comparable=false
   type Menu struct
   field Menu.Title string [order=0]
   field Menu.Items []MenuItem [order=1]
@@ -238,8 +239,10 @@ flatte package flatte
   field MouseEvent.TargetRect layout.Rect [order=6]
   field MouseEvent.Caret int [order=7]
   field MouseEvent.HasCaret bool [order=8]
-  field MouseEvent.Window string [order=9]
-  struct MouseEvent fields=10 comparable=true
+  field MouseEvent.Clicks int [order=9]
+  field MouseEvent.Clear bool [order=10]
+  field MouseEvent.Window string [order=11]
+  struct MouseEvent fields=12 comparable=true
   type MouseMode int
   type NoopTracer struct
   struct NoopTracer fields=0 comparable=true
@@ -382,6 +385,7 @@ flatui package flatui
   method *FocusRing.Prev()
   method *FocusRing.Select(i int)
   method *FocusRing.SetCount(n int)
+  method *List.Adopt(event flatte.LayoutEvent, id string)
   method *List.MoveDown()
   method *List.MoveUp()
   method *List.Scroll(rows int)
@@ -436,6 +440,7 @@ flatui package flatui
   method *TextField.DeleteWordLeft()
   method *TextField.DeleteWordRight()
   method *TextField.Edit(key flatte.KeyEvent) bool
+  method *TextField.HandleMouse(id string, e flatte.MouseEvent) bool
   method *TextField.Insert(r rune)
   method *TextField.MoveEnd()
   method *TextField.MoveEndSelecting()
@@ -533,6 +538,7 @@ flatui package flatui
   method Select.Highlighted() int
   method Select.IsOpen() bool
   method Select.Layout(id string, focused bool) layout.Node
+  method Select.LayoutWithButton(button layout.Button) layout.Node
   method Select.Options()[]string
   method Select.Selected() int
   method Select.Value() string
@@ -694,7 +700,11 @@ flatui package flatui
   field TextField.Cursor int [order=1]
   field TextField.<unexported> bool [order=2]
   field TextField.<unexported> int [order=3]
-  struct TextField fields=4 comparable=true
+  field TextField.<unexported> bool [order=4]
+  field TextField.<unexported> int [order=5]
+  field TextField.<unexported> int [order=6]
+  field TextField.<unexported> int [order=7]
+  struct TextField fields=8 comparable=true
   type TextPosition struct
   field TextPosition.Row int [order=0]
   field TextPosition.Col int [order=1]
@@ -884,6 +894,7 @@ flatui/layout package layout
   method Row.Render(rect Rect) string
   method Row.Size()(Size, Size)
   method Scene.HitTest(x float64, y float64)(string, PointRect)
+  method Scene.IDsAt(x float64, y float64)[]string
   method Scene.TooltipAt(x float64, y float64) string
   method Scroll.GetChildren()[]Node
   method Scroll.IsHorizontal() bool
@@ -974,9 +985,10 @@ flatui/layout package layout
   field Box.Title string [order=5]
   field Box.TitleStyle TextStyle [order=6]
   field Box.Hover color.Color [order=7]
-  field Box.Backdrop *Backdrop [order=8]
-  field Box.InsetY float64 [order=9]
-  struct Box fields=10 comparable=true
+  field Box.Interactive bool [order=8]
+  field Box.Backdrop *Backdrop [order=9]
+  field Box.InsetY float64 [order=10]
+  struct Box fields=11 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
@@ -1029,7 +1041,8 @@ flatui/layout package layout
   field ControlOp.Focused bool [order=11]
   field ControlOp.Icon IconName [order=12]
   field ControlOp.Plain bool [order=13]
-  struct ControlOp fields=14 comparable=true
+  field ControlOp.Content PointRect [order=14]
+  struct ControlOp fields=15 comparable=true
   type DuplicateIDDiagnostic struct
   field DuplicateIDDiagnostic.ID string [order=0]
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
@@ -1080,7 +1093,8 @@ flatui/layout package layout
   field Input.OffsetX int [order=11]
   field Input.OffsetY int [order=12]
   field Input.Bare bool [order=13]
-  struct Input fields=14 comparable=false
+  field Input.Clearable bool [order=14]
+  struct Input fields=15 comparable=false
   type InputOp struct
   field InputOp.ID string [order=0]
   field InputOp.Rect PointRect [order=1]
@@ -1096,7 +1110,9 @@ flatui/layout package layout
   field InputOp.SelEnd int [order=11]
   field InputOp.OffsetY int [order=12]
   field InputOp.Bare bool [order=13]
-  struct InputOp fields=14 comparable=true
+  field InputOp.Clearable bool [order=14]
+  field InputOp.Field PointRect [order=15]
+  struct InputOp fields=16 comparable=true
   type Label struct
   field Label.NodeBase NodeBase [order=0]
   field Label.Text string [order=1]
@@ -1105,7 +1121,8 @@ flatui/layout package layout
   field Label.Runs []Run [order=4]
   field Label.Selectable bool [order=5]
   field Label.Truncate bool [order=6]
-  struct Label fields=7 comparable=false
+  field Label.HoverFg color.Color [order=7]
+  struct Label fields=8 comparable=false
   type LayerOp struct
   field LayerOp.Rect PointRect [order=0]
   struct LayerOp fields=1 comparable=true
@@ -1129,7 +1146,9 @@ flatui/layout package layout
   field Metrics.Border float64 [order=3]
   field Metrics.MeasureText func(text string, style TextStyle, maxWidth float64)(w float64, h float64) [order=4]
   field Metrics.MeasureRuns func(runs[]Run, maxWidth float64)(w float64, h float64) [order=5]
-  struct Metrics fields=6 comparable=false
+  field Metrics.DefaultPadding bool [order=6]
+  field Metrics.ControlHeight float64 [order=7]
+  struct Metrics fields=8 comparable=false
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)
@@ -1149,7 +1168,9 @@ flatui/layout package layout
   field NodeBase.Box Box [order=12]
   field NodeBase.Tooltip string [order=13]
   field NodeBase.Anchor string [order=14]
-  struct NodeBase fields=15 comparable=false
+  field NodeBase.NoPadding bool [order=15]
+  field NodeBase.ItemPadding bool [order=16]
+  struct NodeBase fields=17 comparable=false
   type Op interface
   interface Op method isOp()
   type PointRect struct
@@ -1229,7 +1250,9 @@ flatui/layout package layout
   field TextOp.Runs []Run [order=5]
   field TextOp.Selectable bool [order=6]
   field TextOp.Truncate bool [order=7]
-  struct TextOp fields=8 comparable=false
+  field TextOp.ID string [order=8]
+  field TextOp.HoverFg color.Color [order=9]
+  struct TextOp fields=10 comparable=false
   type TextRole int
   type TextStyle struct
   field TextStyle.Role TextRole [order=0]

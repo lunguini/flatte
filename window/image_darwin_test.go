@@ -165,7 +165,7 @@ func TestBareInputsDrawNoField(t *testing.T) {
 	red := color.NRGBA{0xc0, 0x20, 0x20, 0xff}
 	for _, bare := range []bool{false, true} {
 		root := func() layout.Node {
-			return layout.Col{Children: []layout.Node{layout.Row{NodeBase: layout.NodeBase{Box: layout.Box{Background: red}}, Children: []layout.Node{
+			return layout.Col{Children: []layout.Node{layout.Row{NodeBase: layout.NodeBase{NoPadding: true, Box: layout.Box{Background: red}}, Children: []layout.Node{
 				layout.Input{Placeholder: "", Focused: true, Bare: bare},
 			}}}}
 		}

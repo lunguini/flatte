@@ -123,6 +123,10 @@ const (
 // Rects is the handler's own copy.
 type LayoutEvent struct {
 	Rects map[string]layout.Rect
+	// PointRects preserves native point geometry before conversion to cells.
+	// Window hosts populate it; terminal hosts leave it nil. Like Rects,
+	// this is the handler's own copy. Prefer it for native measurements.
+	PointRects map[string]layout.PointRect
 	// Window is the window the rects are in ("" the main window).
 	Window string
 }
@@ -149,6 +153,12 @@ type MouseEvent struct {
 	// for the Input a drag began on, clamped to it.
 	Caret    int
 	HasCaret bool
+	// Clicks is the native consecutive click count (2: word, 3: all).
+	// Zero means a normal single click, as in terminal events.
+	Clicks int
+	// Clear is a press on a clearable input's clear affordance. Target
+	// remains the input ID; the app applies the edit on its loop.
+	Clear bool
 	// Window is the window the pointer is in ("" the main window); X, Y,
 	// Target, and TargetRect are in its frame.
 	Window string

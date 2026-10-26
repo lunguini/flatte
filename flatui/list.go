@@ -1,9 +1,11 @@
 package flatui
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
+	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -41,7 +43,8 @@ func (l List) Layout() layout.Node {
 // the clicked row) whose Box is marked Selected for the selected one (a GUI
 // highlights it; the terminal shows only what row draws). The Col is the
 // app's: give it an ID or a size (usually H: layout.Grow(1), sizing the list
-// from its solved height) as needed.
+// from its solved height) as needed. Adopt uses the ID of the list's viewport;
+// the app must assign that ID to this Col or a containing viewport.
 func (l List) Rows(id string, row func(index int, selected bool) layout.Node) layout.Col {
 	var col layout.Col
 	if l.height <= 0 || l.count == 0 {
@@ -52,7 +55,7 @@ func (l List) Rows(id string, row func(index int, selected bool) layout.Node) la
 	for i := l.offset; i < end; i++ {
 		selected := i == l.cursor
 		col.Children = append(col.Children, layout.Row{
-			NodeBase: layout.NodeBase{ID: id + ":" + strconv.Itoa(i), Box: layout.Box{Selected: selected}},
+			NodeBase: layout.NodeBase{ID: id + ":" + strconv.Itoa(i), Box: layout.Box{Selected: selected, Interactive: true, Round: true}},
 			Children: []layout.Node{row(i, selected)},
 		})
 	}
@@ -65,6 +68,64 @@ func (l *List) SetCount(n int) {
 	shown := l.cursorShown()
 	l.count = max(n, 0)
 	l.clamp(shown)
+}
+
+// Adopt sizes the visible page from a LayoutEvent for the uniform-height
+// rows returned by Rows. Native point geometry is used before cell rounding;
+// terminal geometry is measured in cells. A partially clipped trailing row
+// does not change the measured row height. A positive viewport always keeps
+// at least one row, even when only part of it fits.
+//
+// Call Adopt on every LayoutEvent. With no rows measured yet, it asks for
+// one row so the next layout can measure it; normal layout settling adopts
+// the full page before painting. A missing viewport leaves paging unchanged;
+// a zero-height viewport adopts zero rows. Adopt changes no item data or
+// selection policy beyond SetHeight's normal visible-selection preservation.
+func (l *List) Adopt(event flatte.LayoutEvent, id string) {
+	viewport, native := event.PointRects[id]
+	if !native {
+		cells, ok := event.Rects[id]
+		if !ok {
+			return
+		}
+		viewport = layout.PointRect{X: float64(cells.X), Y: float64(cells.Y), W: float64(cells.W), H: float64(cells.H)}
+	}
+	if !(viewport.H > 0) || math.IsInf(viewport.H, 0) {
+		l.SetHeight(0)
+		return
+	}
+	rowHeight := 0.0
+	prefix := id + ":"
+	row := func(target string, height float64) {
+		suffix, ok := strings.CutPrefix(target, prefix)
+		if !ok {
+			return
+		}
+		index, err := strconv.Atoi(suffix)
+		if err != nil || index < 0 || math.IsNaN(height) || math.IsInf(height, 0) {
+			return
+		}
+		rowHeight = max(rowHeight, height)
+	}
+	if native {
+		for target, r := range event.PointRects {
+			row(target, r.H)
+		}
+	} else {
+		for target, r := range event.Rects {
+			row(target, float64(r.H))
+		}
+	}
+	count := 1
+	if rowHeight > 0 {
+		capacity := math.Floor(viewport.H/rowHeight + 1e-9)
+		if capacity >= maxWidgetDimension {
+			count = maxWidgetDimension
+		} else {
+			count = max(int(capacity), 1)
+		}
+	}
+	l.SetHeight(count)
 }
 
 // SetHeight sets the number of visible rows, clamped to the supported widget

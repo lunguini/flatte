@@ -26,11 +26,11 @@ func TestSnapshotControls(t *testing.T) {
 		}}
 	}
 	m := metrics()
-	img, err := Snapshot(snapApp(root), Options{Width: 30, Height: 6}, 2)
+	img, err := Snapshot(snapApp(root), Options{Width: 30, Height: 9}, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := layout.LayoutScene(root(), 30*m.Column, 6*m.Line, m)
+	s := layout.LayoutScene(root(), 30*m.Column, 9*m.Line, m)
 	at := func(x, y float64) color.Color { return img.At(int(x*2), int(y*2)) }
 	mid := func(id string, fx float64) color.Color { r := s.Rects[id]; return at(r.X+r.W*fx, r.Y+r.H/2) }
 	accent := toColor(darkTheme.caret)
@@ -42,15 +42,15 @@ func TestSnapshotControls(t *testing.T) {
 	}
 	box := s.Rects["box"]
 	indW := float64(indicatorCols(layout.ControlCheckbox)) * m.Column
-	if c := at(box.X+indW/2-4, box.Y+box.H/2); !near(c, accent, 12) {
+	if c := at(box.X+8+indW/2-4, box.Y+box.H/2); !near(c, accent, 12) {
 		t.Errorf("checked checkbox %v, want the accent", c)
 	}
 	on, off := s.Rects["on"], s.Rects["offsw"]
 	swW := float64(indicatorCols(layout.ControlSwitch)) * m.Column
-	if c := at(on.X+(swW-switchW)/2+3, on.Y+on.H/2); !near(c, accent, 30) {
+	if c := at(on.X+8+(swW-switchW)/2+3, on.Y+on.H/2); !near(c, accent, 30) {
 		t.Errorf("switch on %v, want the accent track", c)
 	}
-	if c := at(off.X+(swW-switchW)/2+switchW-3, off.Y+off.H/2); !near(c, toColor(darkTheme.track), 30) {
+	if c := at(off.X+8+(swW-switchW)/2+switchW-3, off.Y+off.H/2); !near(c, toColor(darkTheme.track), 30) {
 		t.Errorf("switch off %v, want the plain track", c)
 	}
 	vol := s.Rects["vol"]

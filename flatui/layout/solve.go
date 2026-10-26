@@ -21,6 +21,7 @@ type metric[T unit] interface {
 	// points is a Points size: exact in points, rounded up to cells.
 	points(n int, horizontal bool) T
 	border() T // one border edge
+	padding(n Node) sidesOf[T]
 
 	add(a, b T) T
 	sub(a, b T) T
@@ -99,6 +100,10 @@ func (cells) points(n int, horizontal bool) int {
 	return (n + per - 1) / per
 }
 func (cells) border() int { return 1 }
+func (cells) padding(n Node) sidesOf[int] {
+	p := getPadSides(n)
+	return sidesOf[int]{p.top, p.right, p.bottom, p.left}
+}
 func (cells) add(a, b int) int {
 	return satAdd(a, b)
 }
@@ -221,7 +226,12 @@ func intersectOf[T unit](m metric[T], r, s rect[T]) rect[T] {
 
 // insetsOf is a node's full per-side inset: padding steps plus the border.
 func insetsOf[T unit](m metric[T], n Node) sidesOf[T] {
-	return insetsFrom(m, getPadSides(n), getBox(n))
+	s := m.padding(n)
+	if getBox(n).hasBorder() {
+		b := m.border()
+		s = sidesOf[T]{m.add(s.top, b), m.add(s.right, b), m.add(s.bottom, b), m.add(s.left, b)}
+	}
+	return s
 }
 
 func insetsBase[T unit](m metric[T], nb NodeBase) sidesOf[T] {
@@ -275,7 +285,7 @@ func measureContainer[T unit](m metric[T], nb NodeBase, children []Node, horizon
 	if w.Kind != SizeAuto && h.Kind != SizeAuto {
 		return w, h
 	}
-	inset := insetsBase(m, nb)
+	inset := insetsOf(m, Col{NodeBase: nb})
 	if w.Kind == SizeFixed {
 		width = w.Value
 	}

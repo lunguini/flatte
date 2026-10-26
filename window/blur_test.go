@@ -46,3 +46,27 @@ func TestBlurredSmoothsAndKeepsColor(t *testing.T) {
 		t.Fatal("no blur copied it")
 	}
 }
+
+func TestBlurredCacheDistinguishesStrength(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 200, 100))
+	for y := range 100 {
+		for x := range 200 {
+			if x < 100 {
+				src.SetRGBA(x, y, color.RGBA{R: 255, A: 255})
+			} else {
+				src.SetRGBA(x, y, color.RGBA{B: 255, A: 255})
+			}
+		}
+	}
+	light := blurred(src, 400, 200, 4)
+	heavy := blurred(src, 400, 200, 60)
+	if light == heavy {
+		t.Fatal("different blur strengths reused one cached image")
+	}
+	if light.At(90, 25) == heavy.At(90, 25) {
+		t.Fatal("different strengths produced the same transition")
+	}
+	if blurred(src, 400, 200, 4) != light || blurred(src, 400, 200, 60) != heavy {
+		t.Fatal("strength-specific results were not cached")
+	}
+}

@@ -110,7 +110,9 @@ shared geometry and add their own fields.
 | Field | Type | Meaning |
 |---|---|---|
 | `W`, `H` | `Size` | Per-axis constraint (default `Auto`). |
-| `Pad` | `int` | Inner padding on all sides. |
+| `Pad` | `int` | Inner padding on all sides; explicit padding replaces GUI defaults. |
+| `ItemPadding` | `bool` | Give a Row/Col GUI item insets (8pt horizontal, 4pt vertical) when default padding is enabled; explicit padding or NoPadding overrides it. Terminal sizes stay unchanged. |
+| `NoPadding` | `bool` | Disable GUI default padding for this node; explicit `Pad*` still applies. Terminal layout is unchanged. |
 | `PadTop`/`PadRight`/`PadBottom`/`PadLeft` | `int` | Per-side padding added on top of `Pad` (inside the border) — for asymmetric insets like "header rows + left pad only". |
 | `Gap` | `int` | Space between children (containers). |
 | `Bordered` | `bool` | Draw a rounded border; adds one inset cell per side. Shorthand for `Box{Border: BorderRounded}`. |
@@ -120,6 +122,23 @@ shared geometry and add their own fields.
 | `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
 | `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Box` fill; layout inset still comes from `Pad` and the border. Terminal-only: prefer `Box` when it can say what you need. |
 | `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`, `Round`, `Title`, `TitleStyle`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). `Round` asks a window to round a background's corners (a pill when one line tall); the terminal draws it square. `Title` labels a border: the terminal writes ` Title ` in `TitleStyle` into the top rule, a window sets it in the stroke. |
+
+The native window supplies default inner spacing: 8pt horizontally and
+4pt vertically for buttons, toggles and non-bare inputs; 12pt on every
+side for bordered or background-filled Rows/Cols. Plain structural nodes,
+labels, images, backdrop tiles, bare inputs and sliders keep their geometry.
+Any nonzero `Pad`/`Pad*` replaces the defaults as a whole; `NoPadding: true`
+requests zero default inset. Fixed sizes remain the outer size, and input
+carets and text sit inside the padded bezel while clicks target the full
+control. Custom point backends opt in with `layout.Metrics.DefaultPadding`;
+terminal rendering and sizing are unchanged.
+
+Regular native buttons, toggles and single-line non-bare inputs have a 32pt
+minimum Auto height, shared through `window.Theme.ControlHeight`. Larger
+text grows the control; explicit `H` remains authoritative. Auto icon buttons
+are square. Set a negative theme ControlHeight to disable the minimum;
+custom point backends enable it with `layout.Metrics.ControlHeight`.
+Bare inputs and multiline inputs retain their own height rules.
 
 ### Size kinds
 
@@ -145,7 +164,7 @@ whole viewport.
 |---|---|
 | `layout.Row{Children: ...}` | Distribute children horizontally (main axis = width). |
 | `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
-| `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. `Wrap: true` wraps it by words at its width (cells in the terminal, the font in a window): it fills an Auto width, and its Auto height is the wrapped line count at the width it gets. `Runs: []layout.Run{{Text, Style}, ...}` makes it rich text (replacing `Text`; a run with a zero `Style` takes the Label's), wrapping across runs. `Selectable: true` lets a window user drag-select it and copy with ⌘C — the window draws the selection; the app still gets the clicks. |
+| `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. `Wrap: true` wraps it by words at its width (cells in the terminal, the font in a window): it fills an Auto width, and its Auto height is the wrapped line count at the width it gets. `Runs: []layout.Run{{Text, Style}, ...}` makes it rich text (replacing `Text`; a run with a zero `Style` takes the Label's), wrapping across runs. `Selectable: true` lets a window user drag-select it and copy with ⌘C — the window draws the selection; the app still gets the clicks. `HoverFg: color` opt-in tints the entire named label, including runs, toward that color while hovered in a window; nil preserves run colors and the terminal ignores it. |
 | `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`; `IconBlank` draws nothing — terminal-only decoration) in the same columns. Larger symbols — `IconCheck`, `IconClose`, `IconPlus`, `IconMinus`, `IconSearch`, `IconGear`, `IconInfo`, `IconWarning`, `IconError`, `IconArrowUp`/`Down`/`Left`/`Right`, `IconEllipsis`, `IconFolder`, `IconFile` — are 0.7 of a line, centered: give them two columns (`"✓ "`). `IconChevronLeft`/`Up`/`Down` match `IconChevronRight`. Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
 | `layout.Image{Source: img, Text: ..., Fit: ...}` | A picture: a window draws `Source` (`ImageContain`, `ImageCover`, `ImageStretch`), one pixel to a point on Auto axes; the terminal shows `Text`, subtle and wrapped — describe the picture. Size it with `Points`. Keep images in state: a window reads `Source` once, so give a new image to change it. |
 | `layout.Button{Label: ..., Default: ..., Disabled: ..., Focused: ...}` | A push button: `[ Label ]` in the terminal (bold when `Default`, label reversed when `Focused`, subtle when `Disabled`), a native bezel in a window (the accent when `Default`). |
@@ -272,6 +291,25 @@ case flatte.MouseEvent:
 	}
 ```
 
+### Measured list paging
+
+For uniform-height rows from `flatui.List.Rows`, adopt each layout event:
+
+```go
+case flatte.LayoutEvent:
+    s.items.Adopt(e, "items")
+```
+
+The list uses native `PointRects` before rounding in a window and `Rects`
+in terminal cells. Initial layout can request one measurement row, then
+settles the full page before painting. Positive viewports keep at least one
+accessible row; zero-height viewports show none. Give the Col returned by
+Rows a growing height and set its viewport ID explicitly to the same ID
+passed to Rows. Existing `SetHeight` remains available when the app chooses its own page size.
+`LayoutEvent.PointRects` is an independent handler-owned map in native
+windows; terminals leave it nil. Native fractional geometry changes also
+produce layout events, even if their rounded cell rectangles are unchanged.
+
 ### Inputs and the cursor
 
 Put a field in the tree with `TextField.Layout(id, focused)`. With
@@ -306,7 +344,7 @@ frame tree instead of being rendered and positioned by hand:
 | `flatui.Viewport` | A `layout.Scroll` over its lines at the current offset, as tall as the visible slice: a `Label` when plain (for `SetWrappedContent`, a wrapping `Label` of the raw text, so a window wraps it in its font), a `Text` when styled. Wrapped content breaks at words. Call `Adopt(rects, id)` with each `LayoutEvent` (id: the node holding `Layout()`) instead of `SetSize`: it sizes the viewport from that node and scrolls over the lines the host laid the text out in, so a window's scroll range, `AtBottom`, and `ScrollPercent` are its own; a viewport sent to the bottom stays there. |
 | `flatui.Progress` | A `layout.Meter` of the bar's width and the percent label: the same text in the terminal, a native bar in a window. |
 | `flatui.TextField` | `Layout(id, focused)`: a `layout.Input` showing the value and caret. |
-| `flatui.Select` | A dropdown: `Layout(id, focused)` is a `Button` showing the value and ▾ plus, while open, its options as an overlay anchored under it (rows `id:option:i`); `Click(target, id)` opens/closes or chooses; `Open`/`MoveUp`/`MoveDown`/`Confirm`/`Close` for keys. |
+| `flatui.Select` | A dropdown: `LayoutWithButton(layout.Button{NodeBase: layout.NodeBase{ID: id}, Focused: focused})` supplies normal button sizing/style/tooltip; an empty label uses the selected value and disclosure mark. `Layout(id, focused)` is a `Button` showing the value and ▾ plus, while open, its options as an overlay anchored under it (rows `id:option:i`); `Click(target, id)` opens/closes or chooses; `Open`/`MoveUp`/`MoveDown`/`Confirm`/`Close` for keys. Option rows have GUI item padding, and the popup measures its labels in the active font. |
 | `flatui.Textarea` | `Layout(id, focused)`: a multi-line `layout.Input` with the value, cursor, selection, soft-wrap, and scroll — in the terminal the same cells as `ViewWithSelection`. Size it from the node's rect (`LayoutEvent`). In a window it wraps by words in the UI font; use the events' carets for clicks and ↑/↓ (`MoveTo`, `MoveToSelecting`), `InsertText` for pastes, `SelectAll`. |
 
 ### Geometry-based hit-testing
@@ -667,3 +705,34 @@ unbounded allocation or repetition primitives.
   frames into scrollable regions.
 - Use terminal delegation for tools the terminal ecosystem already solves well:
   editors, file pickers, pagers, and external workflows.
+
+
+### Default item hover and native field pointer editing
+
+`flatui.List.Rows`, `Table.Rows`, `Tree.Rows`, and Select options provide
+interactive GUI rows by default. Named boxes can opt in with
+`Box{Interactive: true}`. The host supplies a theme-aware hover fill and
+pointing-hand cursor, respecting clipping and overlays. Explicit `Box.Hover`
+overrides the default; `color.Transparent` disables the fill. Plain panels
+and labels are unchanged. Menu surfaces opt out of extra panel padding; their border band supplies
+the outer gap while option content keeps its item insets.
+
+For single-line fields, apply pointer edits on the app loop:
+
+```go
+field := s.query.Layout("query", focused)
+field.Clearable = true
+// In Handle:
+case flatte.MouseEvent:
+    if s.query.HandleMouse("query", e) {
+        // Apply the app's normal change handling if Value changed.
+    }
+```
+
+Native `MouseEvent.Clicks` carries the OS click count: double-click selects
+a word, triple-click selects all; normal/Shift click and drag preserve
+selection semantics. `Input.Clearable` displays a trailing clear action
+while nonempty and large enough. A press reports `MouseEvent.Clear` with
+the same input Target; HandleMouse clears Value/selection on the loop.
+Focus and any search/save side effects remain app policy. Bare fields are
+supported; terminal rendering remains keyboard-editable and unchanged.
