@@ -42,8 +42,8 @@ Use these names for every app:
 | Inline (non-fullscreen) mode | `flatte.WithInline()` |
 | Handle Ctrl+C yourself | `flatte.WithoutDefaultQuit()` |
 
-`Run` treats context cancellation, input EOF, and `fx.Quit()` as clean
-shutdown and returns `nil` for those paths. It still restores terminal state
+On native builds, `Run` treats context cancellation, input EOF, and `fx.Quit()`
+as clean shutdown and returns `nil` for those paths. It restores terminal state
 before returning; `OnExit` runs during cleanup, before that restoration, so
 applications that report persistence failures should capture them in `OnExit`
 and print them after `Run` returns. A context cancellation is not returned as
@@ -57,6 +57,23 @@ currently delivered. IME/composite key text is reduced to its first rune.
 `flatte.ErrInlineMouseUnsupported` from `Run`. Resize events use `SIGWINCH` on
 Unix and ultraviolet Windows console events on a real console; cross-compiled
 or piped Windows tests do not verify live console resizing.
+
+## Running in a browser
+
+Compile the same `flatte.Run` app for js/wasm, then place a mount element with
+`data-flatte` on the page. Standard Go and TinyGo 0.41 use the same call:
+
+```bash
+cd cmd
+GOOS=js GOARCH=wasm go build -o app.wasm ./flat-landing
+tinygo build -target wasm -o app.wasm ./flat-landing
+```
+
+Load the `wasm_exec.js` shipped with the matching toolchain. The browser host
+renders the cell grid with DOM text nodes and reports `Graphical: false`; GUI
+scene rendering and images are not supported yet. See
+[`cmd/flat-landing/web/README.md`](cmd/flat-landing/web/README.md) for the
+complete build and serve steps.
 
 ## Choose The Right Helper
 
