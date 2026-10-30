@@ -77,7 +77,7 @@ func TestPaintAndRouteWindows(t *testing.T) {
 	var layouts []LayoutEvent
 	base := app.View(s, RenderContext{})
 	base.Cursor = &Cursor{}
-	f := PaintWindows(&wh, app, base, func(ev LayoutEvent) { layouts = append(layouts, ev) })
+	f := PaintWindows(&wh, app, RenderContext{}, base, func(ev LayoutEvent) { layouts = append(layouts, ev) })
 	lines := strings.Split(ansi.Strip(f.Content), "\n")
 	w := wh.open[0]
 	want := []string{
@@ -140,7 +140,7 @@ func TestRouteInputContextMenuInAWindow(t *testing.T) {
 	var wh WindowHost
 	var mh MenuHost
 	SyncWindows(&wh, app, 40, 16)
-	PaintWindows(&wh, app, app.View(s, RenderContext{}), nil)
+	PaintWindows(&wh, app, RenderContext{}, app.View(s, RenderContext{}), nil)
 	w := wh.open[0]
 	if evs := RouteInput(&mh, &wh, app, MouseEvent{X: w.x + 2, Y: w.y + 1, Button: MouseRight, Action: MousePress}, 40, 16); len(evs) != 0 {
 		t.Fatalf("the right-click was delivered: %v", evs)

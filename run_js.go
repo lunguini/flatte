@@ -59,6 +59,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	})
 	effects = WithHostClipboard(effects, host.writeClipboard, host.readClipboard)
 	effects = WithHostNotifications(effects, host.notify)
+	effects = WithHostCapabilities(effects, browserCapabilities(cfg))
 	var dialogs termDialogs
 	effects = WithHostDialogs(effects, func(d Dialog, done func(DialogResult)) {
 		if d.Alert == nil {
@@ -137,7 +138,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				return
 			}
 		}
-		renderContext := RenderContext{Width: width, Height: height, ColorProfile: colorprofile.TrueColor, Graphical: false, Capabilities: Capabilities{Alert: true, Notifications: true, Clipboard: true, Mouse: cfg.mouse != MouseModeNone, Quit: true}}
+		renderContext := RenderContext{Width: width, Height: height, ColorProfile: colorprofile.TrueColor, Capabilities: effects.caps}
 		var handleLayout func(LayoutEvent)
 		if app.Handle != nil {
 			handleLayout = func(ev LayoutEvent) {
@@ -155,7 +156,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		if quitRequested {
 			return
 		}
-		frame = PaintWindows(&windows, app, frame, handleLayout)
+		frame = PaintWindows(&windows, app, renderContext, frame, handleLayout)
 		frame = menus.Paint(frame)
 		frame = dialogs.paint(frame, width, height)
 		host.render(frame)

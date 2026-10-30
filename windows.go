@@ -134,8 +134,9 @@ func SyncWindows[S any](wh *WindowHost, app App[S], width, height int) []Event {
 // PaintWindows draws app's windows over frame: each window's View, settled
 // at its size (its LayoutEvents, with Window set, go to handle), in a
 // bordered box titled by its Frame.Title. The focused window's cursor
-// shows; the main frame's shows only while it has focus.
-func PaintWindows[S any](wh *WindowHost, app App[S], frame Frame, handle func(LayoutEvent)) Frame {
+// shows; the main frame's shows only while it has focus. Each View gets
+// base with its own Window, Width and Height.
+func PaintWindows[S any](wh *WindowHost, app App[S], base RenderContext, frame Frame, handle func(LayoutEvent)) Frame {
 	if len(wh.open) == 0 {
 		return frame
 	}
@@ -152,7 +153,9 @@ func PaintWindows[S any](wh *WindowHost, app App[S], frame Frame, handle func(La
 			}
 		}
 		wf, comp, delivered := SettleFrame(func() Frame {
-			return app.View(app.State, RenderContext{Width: hw.w, Height: hw.h, Window: id, Capabilities: Capabilities{Exec: true, Suspend: true, Print: true, Alert: true, OpenFile: true, SaveFile: true, Clipboard: true, Quit: true}})
+			ctx := base
+			ctx.Window, ctx.Width, ctx.Height = id, hw.w, hw.h
+			return app.View(app.State, ctx)
 		}, deliver, hw.delivered, hw.w, hw.h)
 		hw.comp, hw.delivered, hw.title, hw.frame = comp, delivered, wf.Title, wf
 		frame.Content = layout.OverlayAt(frame.Content, hw.render(id == wh.focus), hw.x, hw.y)

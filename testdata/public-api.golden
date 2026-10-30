@@ -70,7 +70,7 @@ flatte package flatte
   func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(StateUpdate[S]) bool, quit func(), dispatch func(func()), clock Clock) Effects[S]
   func NewScope[S any](fx Effects[S], name string) *Scope
   func OpenFile[S any](fx Effects[S], name string, d OpenDialog, fold func(s*S, paths[]string, err error))
-  func PaintWindows[S any](wh*WindowHost, app App[S], frame Frame, handle func(LayoutEvent)) Frame
+  func PaintWindows[S any](wh*WindowHost, app App[S], base RenderContext, frame Frame, handle func(LayoutEvent)) Frame
   func RenderContextFor(out io.Writer) RenderContext
   func RouteInput[S any](menus*MenuHost, windows*WindowHost, app App[S], ev Event, width int, height int)[]Event
   func RouteMenus[S any](m*MenuHost, app App[S], ev Event, width int, height int)(Event, bool)
@@ -84,6 +84,7 @@ flatte package flatte
   func SettleFrame(view func() Frame, handle func(LayoutEvent), last map[string] layout.Rect, width int, height int)(Frame, layout.Composition, map[string] layout.Rect)
   func Stream[S any, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T))
   func SyncWindows[S any](wh*WindowHost, app App[S], width int, height int)[]Event
+  func WithHostCapabilities[S any](fx Effects[S], c Capabilities) Effects[S]
   func WithHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S]
   func WithHostDesktop[S any](fx Effects[S], command func(DesktopCommand)) Effects[S]
   func WithHostDialogs[S any](fx Effects[S], show func(d Dialog, done func(DialogResult))) Effects[S]
@@ -105,6 +106,7 @@ flatte package flatte
   method *WindowHost.Focus() string
   method *WindowHost.Route(ev Event)[]Event
   method *WindowHost.WindowFrame(id string)(Frame, bool)
+  method Effects[S].Capabilities() Capabilities
   method Effects[S].Ctx() context.Context
   method Effects[S].Desktop(command DesktopCommand)
   method Effects[S].Notify(n Notification)
@@ -148,9 +150,8 @@ flatte package flatte
   field Capabilities.Clipboard bool [order=7]
   field Capabilities.Drop bool [order=8]
   field Capabilities.Mouse bool [order=9]
-  field Capabilities.Graphical bool [order=10]
-  field Capabilities.Quit bool [order=11]
-  struct Capabilities fields=12 comparable=true
+  field Capabilities.Quit bool [order=10]
+  struct Capabilities fields=11 comparable=true
   type ClipboardEvent struct
   field ClipboardEvent.Text string [order=0]
   struct ClipboardEvent fields=1 comparable=true
@@ -214,7 +215,8 @@ flatte package flatte
   field Effects.<unexported> func(Dialog, func(DialogResult)) [order=10]
   field Effects.<unexported> func(Notification) [order=11]
   field Effects.<unexported> func(DesktopCommand) [order=12]
-  struct Effects fields=13 comparable=false
+  field Effects.<unexported> Capabilities [order=13]
+  struct Effects fields=14 comparable=false
   type Event interface
   interface Event method isEvent()
   type FileSelection struct
@@ -397,19 +399,18 @@ flatest package flatest
   field Driver.<unexported> int [order=1]
   field Driver.<unexported> int [order=2]
   field Driver.<unexported> bool [order=3]
-  field Driver.<unexported> flatte.Capabilities [order=4]
-  field Driver.<unexported> map[string] layout.Rect [order=5]
-  field Driver.<unexported> layout.Composition [order=6]
-  field Driver.<unexported> flatte.MenuHost [order=7]
-  field Driver.<unexported> flatte.WindowHost [order=8]
-  field Driver.<unexported> []flatte.StateUpdate[S] [order=9]
-  field Driver.<unexported> *fakeClock [order=10]
-  field Driver.<unexported> []func() [order=11]
-  field Driver.<unexported> bool [order=12]
-  field Driver.<unexported> flatte.Effects[S] [order=13]
-  field Driver.<unexported> []pendingDialog [order=14]
-  field Driver.<unexported> []flatte.Notification [order=15]
-  struct Driver fields=16 comparable=false
+  field Driver.<unexported> map[string] layout.Rect [order=4]
+  field Driver.<unexported> layout.Composition [order=5]
+  field Driver.<unexported> flatte.MenuHost [order=6]
+  field Driver.<unexported> flatte.WindowHost [order=7]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=8]
+  field Driver.<unexported> *fakeClock [order=9]
+  field Driver.<unexported> []func() [order=10]
+  field Driver.<unexported> bool [order=11]
+  field Driver.<unexported> flatte.Effects[S] [order=12]
+  field Driver.<unexported> []pendingDialog [order=13]
+  field Driver.<unexported> []flatte.Notification [order=14]
+  struct Driver fields=15 comparable=false
   type Options struct
   field Options.Width int [order=0]
   field Options.Height int [order=1]

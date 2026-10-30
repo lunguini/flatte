@@ -89,15 +89,12 @@ func (fx Effects[S]) trySend(update StateUpdate[S]) bool {
 // a zero Effects value.
 func Exec[S any](fx Effects[S], name string, cmd *exec.Cmd, fold func(*S, error)) {
 	if fx.enqueue == nil {
+		// A host that cannot exec still answers, so an app waiting on
+		// the fold does not hang.
 		update := Named(name, func(s *S) { fold(s, ErrUnsupported) })
-		if !fx.trySend(update) {
-			if fx.sendUpdate == nil && fx.updates == nil {
-				var zero S
-				fold(&zero, ErrUnsupported)
-			} else {
-				ctx := fx.Ctx()
-				go fx.send(ctx, update)
-			}
+		if !fx.trySend(update) && (fx.updates != nil || fx.sendUpdate != nil) {
+			ctx := fx.Ctx()
+			go fx.send(ctx, update)
 		}
 		return
 	}

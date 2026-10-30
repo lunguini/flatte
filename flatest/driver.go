@@ -21,7 +21,6 @@ type Driver[S any] struct {
 	width     int
 	height    int // from the last ResizeEvent; Root frames compose at width×height
 	graphical bool
-	caps      flatte.Capabilities
 	// delivered is the rect set last delivered as a LayoutEvent; comp is the
 	// composition of the last rendered frame, which mouse events hit-test
 	// against — the frame "on screen", as in Run.
@@ -69,7 +68,6 @@ func StartWith[S any](app flatte.App[S], opts Options) *Driver[S] {
 		width:     opts.Width,
 		height:    opts.Height,
 		graphical: opts.Graphical,
-		caps:      opts.Capabilities,
 		updates:   make([]flatte.StateUpdate[S], 0, 64),
 		clock:     newFakeClock(),
 	}
@@ -91,6 +89,7 @@ func StartWith[S any](app flatte.App[S], opts Options) *Driver[S] {
 	d.fx = flatte.WithHostNotifications(d.fx, func(n flatte.Notification) {
 		d.notifications = append(d.notifications, n)
 	})
+	d.fx = flatte.WithHostCapabilities(d.fx, opts.Capabilities)
 	if app.Init != nil {
 		app.Init(app.State, d.fx)
 	}
@@ -128,7 +127,7 @@ func (d *Driver[S]) render() flatte.Frame {
 	}
 	frame, comp, delivered := flatte.SettleFrame(d.view, d.deliverLayout, d.delivered, d.width, d.height)
 	d.delivered, d.comp = delivered, comp
-	frame = flatte.PaintWindows(&d.windows, d.app, frame, d.deliverLayout)
+	frame = flatte.PaintWindows(&d.windows, d.app, d.renderContext(), frame, d.deliverLayout)
 	return d.menus.Paint(frame)
 }
 
@@ -204,7 +203,7 @@ func (d *Driver[S]) Advance(by time.Duration) flatte.Frame {
 // is composed at the driver size, as Run composes it at the terminal size.
 func (d *Driver[S]) Frame() flatte.Frame {
 	frame, _ := flatte.ComposeFrame(d.view(), d.width, d.height)
-	frame = flatte.PaintWindows(&d.windows, d.app, frame, nil)
+	frame = flatte.PaintWindows(&d.windows, d.app, d.renderContext(), frame, nil)
 	return d.menus.Paint(frame)
 }
 
@@ -217,7 +216,7 @@ func (d *Driver[S]) WindowFrame(id string) (frame flatte.Frame, ok bool) {
 }
 
 func (d *Driver[S]) view() flatte.Frame {
-	return d.app.View(d.app.State, flatte.RenderContext{Width: d.width, Height: d.height, Graphical: d.graphical, Capabilities: d.caps})
+	return d.app.View(d.app.State, d.renderContext())
 }
 
 // Frames runs the driver through a sequence of steps and returns the
@@ -278,4 +277,9 @@ func (d *Driver[S]) Close() {
 	if d.app.OnExit != nil {
 		d.app.OnExit(d.app.State)
 	}
+}
+
+// renderContext is what View sees: the driver's size and render context.
+func (d *Driver[S]) renderContext() flatte.RenderContext {
+	return flatte.RenderContext{Width: d.width, Height: d.height, Graphical: d.graphical, Capabilities: d.fx.Capabilities()}
 }

@@ -127,3 +127,15 @@ func isBrowserSchemeStart(b byte) bool {
 func isBrowserSchemePart(b byte) bool {
 	return isBrowserSchemeStart(b) || b >= '0' && b <= '9' || b == '+' || b == '-' || b == '.'
 }
+
+// browserCapabilities is what the browser host supports under cfg: alerts
+// drawn in the cell grid, Web Notifications and the async clipboard where
+// the page allows them, and no exec, files or process to quit.
+func browserCapabilities(cfg runConfig) Capabilities {
+	return Capabilities{
+		Alert:         true,
+		Notifications: true,
+		Clipboard:     true,
+		Mouse:         cfg.mouse != MouseModeNone,
+	}
+}

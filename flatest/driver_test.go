@@ -80,6 +80,9 @@ func TestDriverResizeUpdatesHandleAndViewDimensions(t *testing.T) {
 		},
 	}
 	d := StartWith(app, Options{Width: 30, Height: 12, Graphical: true, Capabilities: flatte.Capabilities{Drop: true}})
+	if !d.fx.Capabilities().Drop {
+		t.Fatal("Effects do not report the driver's capabilities")
+	}
 	d.Resize(50, 18)
 	if handleW != 50 || handleH != 18 || viewW != 50 || viewH != 18 {
 		t.Fatalf("Handle=%dx%d View=%dx%d; want all dimensions 50x18", handleW, handleH, viewW, viewH)

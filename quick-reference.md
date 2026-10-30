@@ -89,11 +89,13 @@ TinyGo builds use the matching TinyGo runtime loader.
 | Clipboard | Terminal OSC 52 | Native clipboard when available | Browser permission/API dependent |
 | Mouse | Off until `WithMouse` | Always on | Off until `WithMouse` |
 | Drop / graphical point layout | No | Drop and point layout | No |
-| Default quit | Ctrl+C exits | `fx.Quit()` closes the window | `fx.Quit()` ends `Run` |
+| Default quit | Ctrl+C exits | `fx.Quit()` closes the window | `fx.Quit()` ends `Run`; the page stays, frozen |
 | Run options | `WithInput`, `WithOutput`, `WithInline`, `WithMouse`, `WithReportFocus` honored | Configure `window.Options`; terminal options do not apply | `WithMouse` honored; `WithInline`, `WithInput`, `WithOutput`, `WithReportFocus` are ignored |
 
-`RenderContext.Capabilities` reports host support; `Graphical` means point-based
-native rendering. `flatest.StartWith` lets tests set width, height, Graphical,
+`fx.Capabilities()` in `Handle` and `RenderContext.Capabilities` in `View`
+report the same host support, so an app can hide actions the host lacks;
+`Graphical` means point-based native rendering. Unsupported effects still
+answer: `Exec` folds `ErrUnsupported`, dialogs fold `ErrNoDialogs`. `flatest.StartWith` lets tests set width, height, Graphical,
 and capabilities, while `Driver.Resize(w, h)` updates both Handle and View.
 Use `flatest` for event and state behavior; native point metrics remain covered
 by `window.Snapshot` and window tests.

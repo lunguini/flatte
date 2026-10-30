@@ -90,6 +90,30 @@ type Effects[S any] struct {
 	notify func(Notification)
 	// desktop routes background utility commands to a native host.
 	desktop func(DesktopCommand)
+	// caps is what the host supports (WithHostCapabilities).
+	caps Capabilities
+}
+
+// Capabilities reports what the current host supports; the zero value on
+// a zero Effects value or a harness that did not set any.
+func (fx Effects[S]) Capabilities() Capabilities { return fx.caps }
+
+// WithHostCapabilities returns fx reporting c as the host's capabilities.
+// Like WithHostClipboard it is host plumbing, not application API.
+func WithHostCapabilities[S any](fx Effects[S], c Capabilities) Effects[S] {
+	fx.caps = c
+	return fx
+}
+
+// terminalCapabilities is what Run's terminal host supports under cfg.
+func terminalCapabilities(cfg runConfig) Capabilities {
+	return Capabilities{
+		Exec: true, Suspend: true, Print: true,
+		Alert: true, OpenFile: true, SaveFile: true,
+		Notifications: true, Clipboard: true,
+		Mouse: cfg.mouse != MouseModeNone,
+		Quit:  true,
+	}
 }
 
 // cancelReaderFactory is a seam for the input lifecycle tests. Keeping the
@@ -664,6 +688,7 @@ func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr
 	dialogs := termDialogs{}
 	dialogs.home, _ = os.UserHomeDir()
 	effects := newEffects(runCtx, updates, func() { quitRequested = true })
+	effects = WithHostCapabilities(effects, terminalCapabilities(cfg))
 	effects.dialogs = dialogs.show
 	effects.enqueue = func(a action) { pending = append(pending, a) }
 	if app.Init != nil {
@@ -727,7 +752,7 @@ func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr
 		renderCtx := RenderContextFor(out)
 		_, terminalHeight := terminalSize(out)
 		renderCtx.Height = terminalHeight
-		renderCtx.Capabilities.Mouse = cfg.mouse != MouseModeNone
+		renderCtx.Capabilities = effects.caps
 		var handleLayout func(LayoutEvent)
 		if app.Handle != nil {
 			handleLayout = func(ev LayoutEvent) {
@@ -759,7 +784,7 @@ func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr
 			return // a LayoutEvent handler quit: paint nothing more
 		}
 		lastComp = comp
-		frame = PaintWindows(&windows, app, frame, handleLayout)
+		frame = PaintWindows(&windows, app, renderCtx, frame, handleLayout)
 		frame = menus.Paint(frame)
 		frame = dialogs.paint(frame, renderCtx.Width, terminalHeight)
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {

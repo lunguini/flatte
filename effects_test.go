@@ -37,12 +37,44 @@ func TestEffectsSendIsSafeOnZeroAndNilUpdate(t *testing.T) {
 	}
 }
 
-func TestExecOnZeroEffectsReportsUnsupported(t *testing.T) {
-	var fx Effects[testState]
+func TestExecWithoutATerminalReportsUnsupported(t *testing.T) {
+	updates := make(chan StateUpdate[testState], 1)
+	fx := NewHarnessEffects[testState](context.Background(), updates, nil, nil, nil)
 	var got error
 	Exec(fx, "edit", nil, func(_ *testState, err error) { got = err })
+	select {
+	case u := <-updates:
+		if u.Name() != "edit" {
+			t.Fatalf("update name = %q, want edit", u.Name())
+		}
+		u.Apply(&testState{})
+	default:
+		t.Fatal("Exec sent no update on a host that cannot exec")
+	}
 	if got != ErrUnsupported {
 		t.Fatalf("Exec error = %v, want ErrUnsupported", got)
+	}
+}
+
+func TestHostsReportTheirCapabilities(t *testing.T) {
+	var zero Effects[testState]
+	if zero.Capabilities() != (Capabilities{}) {
+		t.Fatal("a zero Effects value reports capabilities")
+	}
+	term := terminalCapabilities(runConfig{})
+	if !term.Exec || !term.Alert || !term.Quit || term.Mouse || term.Drop {
+		t.Fatalf("terminal without WithMouse = %+v", term)
+	}
+	if !terminalCapabilities(runConfig{mouse: MouseModeCellMotion}).Mouse {
+		t.Fatal("terminal with WithMouse reports no mouse")
+	}
+	web := browserCapabilities(runConfig{})
+	if web.Exec || web.OpenFile || web.SaveFile || web.Quit || !web.Alert || web.Mouse {
+		t.Fatalf("browser without WithMouse = %+v", web)
+	}
+	fx := WithHostCapabilities(zero, Capabilities{Drop: true})
+	if !fx.Capabilities().Drop {
+		t.Fatal("WithHostCapabilities was not reported")
 	}
 }
 

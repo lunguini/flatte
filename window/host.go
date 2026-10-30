@@ -290,8 +290,19 @@ func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, po
 	return h
 }
 
+// capabilities is what the window supports with the services attached
+// (the clipboard and notifications are optional in tests).
+func (h *host[S]) capabilities() flatte.Capabilities {
+	return flatte.Capabilities{
+		Alert: true, OpenFile: true, SaveFile: true,
+		Notifications: h.notes != nil, Clipboard: h.clip != nil,
+		Drop: true, Mouse: true, Quit: true,
+	}
+}
+
 // start runs Init and delivers the first ResizeEvent.
 func (h *host[S]) start(width, height float64) {
+	h.fx = flatte.WithHostCapabilities(h.fx, h.capabilities())
 	if h.app.Init != nil {
 		h.app.Init(h.app.State, h.fx)
 	}
@@ -1059,7 +1070,7 @@ func (s *surface[S]) view() flatte.Frame {
 	if s.h.app.View == nil {
 		return flatte.Frame{}
 	}
-	return s.h.app.View(s.h.app.State, flatte.RenderContext{Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor, Window: s.id, Graphical: true, Capabilities: flatte.Capabilities{Alert: true, OpenFile: true, SaveFile: true, Notifications: s.h.notes != nil, Clipboard: s.h.clip != nil, Drop: true, Mouse: true, Graphical: true, Quit: true}})
+	return s.h.app.View(s.h.app.State, flatte.RenderContext{Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor, Window: s.id, Graphical: true, Capabilities: s.h.fx.Capabilities()})
 }
 
 // wheelAccumulator turns precise scroll deltas (trackpads, in points) into

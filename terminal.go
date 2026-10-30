@@ -28,12 +28,18 @@ type RenderContext struct {
 	Capabilities Capabilities
 }
 
-// Capabilities reports effect and input support provided by the current host.
+// Capabilities reports which effects and inputs the current host supports,
+// so an app can hide what would only fail or do nothing. Each host fills it
+// once; Effects.Capabilities and RenderContext.Capabilities report the same
+// value. Effects the host lacks still answer: Exec with ErrUnsupported,
+// dialogs with ErrNoDialogs.
 type Capabilities struct {
-	Exec, Suspend, Print                  bool
-	Alert, OpenFile, SaveFile             bool
-	Notifications, Clipboard, Drop, Mouse bool
-	Graphical, Quit                       bool
+	Exec, Suspend, Print      bool // shelling out and releasing the terminal
+	Alert, OpenFile, SaveFile bool // the dialogs the host can show
+	Notifications, Clipboard  bool
+	Drop                      bool // DropEvent for dropped files
+	Mouse                     bool // mouse events arrive (WithMouse in a terminal or browser)
+	Quit                      bool // Quit ends the program; false where it only stops the loop
 }
 
 type fdWriter interface {
@@ -67,6 +73,5 @@ func RenderContextFor(out io.Writer) RenderContext {
 		Width:        width,
 		Height:       height,
 		ColorProfile: detectRendererColorProfile(out, os.Environ()),
-		Capabilities: Capabilities{Exec: true, Suspend: true, Print: true, Alert: true, OpenFile: true, SaveFile: true, Clipboard: true, Mouse: true, Quit: true},
 	}
 }
