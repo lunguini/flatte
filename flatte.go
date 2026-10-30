@@ -284,8 +284,46 @@ func (fx Effects[S]) Printf(format string, args ...any) {
 	fx.Print(fmt.Sprintf(format, args...))
 }
 
-// Option configures Run behaviour.
-type Option func(*runConfig)
+// Option configures Run behavior. Options are host-plumbing values; the
+// standard With* functions are the application-facing constructors.
+type Option interface {
+	ConfigureRun(*RunConfig)
+}
+
+// RunConfig is opaque Run configuration supplied to Option implementations.
+// Its exported methods are for host plumbing; apps should use With* options.
+type RunConfig struct {
+	config runConfig
+	host   Host
+}
+
+// UseHost selects a host driver for Run. If more than one option installs a
+// host, the last one is used.
+func (c *RunConfig) UseHost(host Host) { c.host = host }
+
+type optionFunc func(*runConfig)
+
+func (o optionFunc) ConfigureRun(c *RunConfig) { o(&c.config) }
+
+func applyRunOptions(defaults runConfig, options ...Option) RunConfig {
+	c := RunConfig{config: defaults}
+	for _, option := range options {
+		if option != nil {
+			option.ConfigureRun(&c)
+		}
+	}
+	return c
+}
+
+func nativeRunConfig() runConfig {
+	return runConfig{
+		input:          os.Stdin,
+		output:         os.Stdout,
+		defaultQuit:    true,
+		bracketedPaste: true,
+		suspendProcess: suspendProcess,
+	}
+}
 
 // ErrInlineMouseUnsupported reports an invalid combination of options.
 // Inline frames do not have a stable terminal origin, so mouse coordinates
@@ -322,7 +360,7 @@ type runConfig struct {
 // the real one stops the whole process group, which would stop the test
 // runner too.
 func withSuspendProcess(fn func()) Option {
-	return func(c *runConfig) { c.suspendProcess = fn }
+	return optionFunc(func(c *runConfig) { c.suspendProcess = fn })
 }
 
 // WithHostMedia connects a terminal run to a system media host. Commands are
@@ -330,32 +368,34 @@ func withSuspendProcess(fn func()) Option {
 // an owned snapshot (or nil), and must return promptly. It receives nil again
 // at shutdown. Closing commands disconnects it without ending Run.
 func WithHostMedia(commands <-chan MediaEvent, publish func(*NowPlaying)) Option {
-	return func(c *runConfig) { c.mediaCommands, c.publishMedia = commands, publish }
+	return optionFunc(func(c *runConfig) { c.mediaCommands, c.publishMedia = commands, publish })
 }
 
 // WithInput sets the event source. Default: os.Stdin.
-func WithInput(in io.Reader) Option { return func(c *runConfig) { c.input = in } }
+func WithInput(in io.Reader) Option { return optionFunc(func(c *runConfig) { c.input = in }) }
 
 // WithOutput sets the render sink. Default: os.Stdout.
-func WithOutput(out io.Writer) Option { return func(c *runConfig) { c.output = out } }
+func WithOutput(out io.Writer) Option { return optionFunc(func(c *runConfig) { c.output = out }) }
 
 // WithoutDefaultQuit delivers Ctrl-C to the app instead of exiting the loop.
 // The app must call fx.Quit(), close the input, or cancel the context to exit.
-func WithoutDefaultQuit() Option { return func(c *runConfig) { c.defaultQuit = false } }
+func WithoutDefaultQuit() Option { return optionFunc(func(c *runConfig) { c.defaultQuit = false }) }
 
 // WithoutBracketedPaste disables bracketed paste mode. It is on by
 // default: without it a paste arrives as a flood of individual key
 // events instead of one PasteEvent.
-func WithoutBracketedPaste() Option { return func(c *runConfig) { c.bracketedPaste = false } }
+func WithoutBracketedPaste() Option {
+	return optionFunc(func(c *runConfig) { c.bracketedPaste = false })
+}
 
 // WithMouse enables terminal mouse reporting; events arrive as MouseEvent.
 // MouseModeNone remains compatible with WithInline; reporting modes do not.
-func WithMouse(mode MouseMode) Option { return func(c *runConfig) { c.mouse = mode } }
+func WithMouse(mode MouseMode) Option { return optionFunc(func(c *runConfig) { c.mouse = mode }) }
 
 // WithReportFocus enables focus reporting; terminal focus changes arrive
 // as FocusEvent. Some terminals and multiplexers need configuration to
 // report focus (tmux: focus-events).
-func WithReportFocus() Option { return func(c *runConfig) { c.reportFocus = true } }
+func WithReportFocus() Option { return optionFunc(func(c *runConfig) { c.reportFocus = true }) }
 
 // WithInline renders below the shell prompt instead of in the alternate
 // screen: the frame occupies exactly its own lines, the terminal's
@@ -363,12 +403,16 @@ func WithReportFocus() Option { return func(c *runConfig) { c.reportFocus = true
 // with the prompt landing below it. Mouse reporting cannot be enabled because
 // an inline frame has no stable terminal origin; Run returns
 // ErrInlineMouseUnsupported for that combination.
-func WithInline() Option { return func(c *runConfig) { c.inline = true } }
+func WithInline() Option { return optionFunc(func(c *runConfig) { c.inline = true }) }
 
 // runTerminal owns the native terminal loop. Run delegates here on non-WASM
 // builds; keeping the proven terminal implementation intact limits the
 // platform-host change to backend selection.
 func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) {
+	return runTerminalConfig(ctx, app, applyRunOptions(nativeRunConfig(), opts...).config)
+}
+
+func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (runErr error) {
 	if app.State == nil {
 		panic("flat: App.State is nil")
 	}
@@ -385,18 +429,6 @@ func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr
 		}
 	}()
 
-	cfg := runConfig{
-		input:          os.Stdin,
-		output:         os.Stdout,
-		defaultQuit:    true,
-		bracketedPaste: true,
-		suspendProcess: suspendProcess,
-	}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&cfg)
-		}
-	}
 	if cfg.inline && cfg.mouse != MouseModeNone {
 		return ErrInlineMouseUnsupported
 	}

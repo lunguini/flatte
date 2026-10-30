@@ -18,15 +18,11 @@ import (
 // the terminal host (flatte.SettleFrame).
 const maxLayoutPasses = 2
 
-// host drives an App from window events: everything about running an app in
-// windows that a platform backend does not need to know. It runs on the UI
-// thread only; async results arrive through post. Its embedded surface is
-// the main window; App.Windows declares the others.
-type host[S any] struct {
-	*surface[S]
-
-	app     flatte.App[S]
-	fx      flatte.Effects[S]
+// host drives a Session from window events. It runs on the UI thread only;
+// async updates arrive through post. Its embedded surface is the main window.
+type host struct {
+	*surface
+	session *flatte.Session
 	metrics layout.Metrics
 	cancel  context.CancelFunc
 
@@ -56,14 +52,14 @@ type host[S any] struct {
 	// open are the ones open, by ID; focus is the focused window's ID ("" the
 	// main window).
 	windows windowBackend
-	open    map[string]*surface[S]
+	open    map[string]*surface
 	focus   string
 }
 
 // surface is one window's share of the host: its view's size, the scene
 // drawn in it, and what the backend draws over it on its own.
-type surface[S any] struct {
-	h *host[S]
+type surface struct {
+	h *host
 	// id is the window's ID ("" the main window); invalidate requests a
 	// redraw of it, on the UI thread.
 	id         string
@@ -230,58 +226,21 @@ type clipboard interface {
 // newHost wires app to a backend. post runs a function on the UI thread
 // (from any goroutine); async updates reach the app through it; invalidate
 // redraws the main window.
-func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, post func(func()), stop, invalidate func()) *host[S] {
-	if app.Tracer == nil {
-		app.Tracer = flatte.NoopTracer{}
-	}
+func newSessionHost(ctx context.Context, session *flatte.Session, m layout.Metrics, post func(func()), stop, invalidate func()) *host {
 	ctx, cancel := context.WithCancel(ctx)
-	h := &host[S]{app: app, metrics: m, cancel: cancel, stop: stop, post: post, open: map[string]*surface[S]{}}
-	h.surface = &surface[S]{h: h, invalidate: invalidate}
-	updates := make(chan flatte.StateUpdate[S], 256)
-	h.fx = flatte.WithHostClipboard(flatte.NewHarnessEffects(ctx, updates, func() { h.quitting = true }, nil, nil),
-		func(text string) {
-			if h.clip != nil {
-				h.clip.set(text)
-			}
-		},
-		func() {
-			if h.clip != nil {
-				text := h.clip.get()
-				// Answered after the handler returns, like a terminal's reply.
-				h.post(func() { h.handle(flatte.ClipboardEvent{Text: text}) })
-			}
-		})
-	// Dialogs run modally after the handler returns, never inside it.
-	h.fx = flatte.WithHostDialogs(h.fx, func(d flatte.Dialog, done func(flatte.DialogResult)) {
-		h.post(func() {
-			if h.dialogs == nil {
-				done(flatte.DialogResult{Button: -1})
-				return
-			}
-			done(h.dialogs.run(d))
-		})
-	})
-	h.fx = flatte.WithHostNotifications(h.fx, func(n flatte.Notification) {
-		if h.notes != nil {
-			h.notes.notify(n)
-		}
-	})
-	h.fx = flatte.WithHostDesktop(h.fx, func(c flatte.DesktopCommand) {
-		h.post(func() {
-			if h.quitting || h.desktop == nil {
-				return
-			}
-			if c.Kind == "hide" {
-				h.clearDesktopPresentation()
-			}
-			h.desktop.command(c)
-		})
-	})
+	h := &host{session: session, metrics: m, cancel: cancel, stop: stop, post: post, open: map[string]*surface{}}
+	h.surface = &surface{h: h, invalidate: invalidate}
 	go func() {
 		for {
 			select {
-			case u := <-updates:
-				post(func() { h.apply(u) })
+			case <-session.Updates():
+				post(func() {
+					if h.closed {
+						return
+					}
+					session.ApplyPendingUpdates()
+					h.after()
+				})
 			case <-ctx.Done():
 				return
 			}
@@ -290,9 +249,52 @@ func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, po
 	return h
 }
 
-// capabilities is what the window supports with the services attached
-// (the clipboard and notifications are optional in tests).
-func (h *host[S]) capabilities() flatte.Capabilities {
+func (h *host) services() flatte.HostServices {
+	return flatte.HostServices{
+		Capabilities: h.capabilities(),
+		SetClipboard: func(text string) {
+			if h.clip != nil {
+				h.clip.set(text)
+			}
+		},
+		ReadClipboard: func() {
+			if h.clip != nil {
+				text := h.clip.get()
+				// Answered after the handler returns, like a terminal's reply.
+				h.post(func() { h.handle(flatte.ClipboardEvent{Text: text}) })
+			}
+		},
+		// Dialogs run modally after the handler returns, never inside it.
+		ShowDialog: func(d flatte.Dialog, done func(flatte.DialogResult)) {
+			h.post(func() {
+				if h.dialogs == nil {
+					done(flatte.DialogResult{Button: -1})
+					return
+				}
+				done(h.dialogs.run(d))
+			})
+		},
+		Notify: func(n flatte.Notification) {
+			if h.notes != nil {
+				h.notes.notify(n)
+			}
+		},
+		Desktop: func(c flatte.DesktopCommand) {
+			h.post(func() {
+				if h.quitting || h.desktop == nil {
+					return
+				}
+				if c.Kind == "hide" {
+					h.clearDesktopPresentation()
+				}
+				h.desktop.command(c)
+			})
+		},
+	}
+}
+
+// capabilities is what the window supports with the services attached.
+func (h *host) capabilities() flatte.Capabilities {
 	return flatte.Capabilities{
 		Alert: true, OpenFile: true, SaveFile: true,
 		Notifications: h.notes != nil, Clipboard: h.clip != nil,
@@ -300,19 +302,17 @@ func (h *host[S]) capabilities() flatte.Capabilities {
 	}
 }
 
-// start runs Init and delivers the first ResizeEvent.
-func (h *host[S]) start(width, height float64) {
-	h.fx = flatte.WithHostCapabilities(h.fx, h.capabilities())
-	if h.app.Init != nil {
-		h.app.Init(h.app.State, h.fx)
-	}
+// start installs services, then runs Init and delivers the first resize.
+func (h *host) start(width, height float64) {
+	h.surface.width, h.surface.height = width, height
+	h.session.UseHostServices(h.services())
+	h.session.Start(flatte.ResizeEvent{Width: h.cols(width), Height: h.lines(height)})
 	h.after()
-	h.resize(width, height)
 }
 
-// close closes the secondary windows, releases the host's goroutines, and
-// runs OnExit.
-func (h *host[S]) close() {
+// close closes secondary windows and releases the host's goroutines. Run
+// owns the Session.OnExit call after the host loop returns.
+func (h *host) close() {
 	if h.closed {
 		return
 	}
@@ -328,32 +328,22 @@ func (h *host[S]) close() {
 		delete(h.open, id)
 	}
 	h.cancel()
-	if h.app.OnExit != nil {
-		h.app.OnExit(h.app.State)
-	}
+	h.session.Cancel()
 }
 
-func (h *host[S]) apply(u flatte.StateUpdate[S]) {
-	flatte.ApplyUpdate(h.app.State, h.app.Tracer, u)
-	h.after()
-}
-
-// handle delivers ev to the app.
-func (h *host[S]) handle(ev flatte.Event) {
+func (h *host) handle(ev flatte.Event) {
 	for _, s := range h.surfaces() {
-		s.flushWheel() // scrolling that came first is handled first
+		s.flushWheel()
 	}
-	h.app.Tracer.Event(ev)
-	if h.app.Handle != nil {
-		h.app.Handle(h.app.State, ev, h.fx)
-	}
+	h.session.Handle(ev)
 	h.after()
 }
 
 // after reacts to a state change: stop on quit, else open and close windows
 // as declared and redraw them all.
-func (h *host[S]) after() {
-	if h.quitting {
+func (h *host) after() {
+	if h.session.Quitting() {
+		h.quitting = true
 		h.stop()
 		return
 	}
@@ -370,16 +360,16 @@ func (h *host[S]) after() {
 
 // syncMedia publishes app-owned metadata after each loop mutation, even
 // while the app is hidden or in the background.
-func (h *host[S]) syncMedia() {
-	if h.media == nil || h.app.NowPlaying == nil {
+func (h *host) syncMedia() {
+	if h.media == nil || !h.session.HasNowPlaying() {
 		return
 	}
-	h.media.update(h.app.NowPlaying(h.app.State))
+	h.media.update(h.session.NowPlaying())
 }
 
 // mediaCommand posts native commands back onto the UI loop. Callbacks never
 // mutate application state, and queued callbacks are discarded after close.
-func (h *host[S]) mediaCommand(command flatte.MediaCommand) {
+func (h *host) mediaCommand(command flatte.MediaCommand) {
 	h.post(func() {
 		if h.closed || h.quitting {
 			return
@@ -389,8 +379,8 @@ func (h *host[S]) mediaCommand(command flatte.MediaCommand) {
 }
 
 // surfaces is the main window's surface and the open windows'.
-func (h *host[S]) surfaces() []*surface[S] {
-	out := []*surface[S]{h.surface}
+func (h *host) surfaces() []*surface {
+	out := []*surface{h.surface}
 	for _, id := range slices.Sorted(maps.Keys(h.open)) {
 		out = append(out, h.open[id])
 	}
@@ -399,14 +389,11 @@ func (h *host[S]) surfaces() []*surface[S] {
 
 // syncWindows opens the windows the app declares that are not open, and
 // closes the open ones it no longer declares.
-func (h *host[S]) syncWindows() {
+func (h *host) syncWindows() {
 	if h.windows == nil {
 		return
 	}
-	var declared []flatte.Window
-	if h.app.Windows != nil {
-		declared = h.app.Windows(h.app.State)
-	}
+	declared := h.session.Windows()
 	keep := map[string]bool{}
 	for _, w := range declared {
 		if w.ID == "" || keep[w.ID] {
@@ -416,7 +403,7 @@ func (h *host[S]) syncWindows() {
 		if _, ok := h.open[w.ID]; ok {
 			continue
 		}
-		s := &surface[S]{h: h, id: w.ID, dirty: true, invalidate: func() {}}
+		s := &surface{h: h, id: w.ID, dirty: true, invalidate: func() {}}
 		h.open[w.ID] = s
 		s.invalidate = h.windows.openWindow(w, s)
 	}
@@ -433,7 +420,7 @@ func (h *host[S]) syncWindows() {
 
 // focused reports that window id ("" the main window) became the key
 // window; the app hears of it when that changes the focus.
-func (h *host[S]) focused(id string) {
+func (h *host) focused(id string) {
 	if id == h.focus {
 		return
 	}
@@ -446,7 +433,7 @@ func (h *host[S]) focused(id string) {
 
 // activated reports the app coming to the front (or leaving it): the app
 // hears a FocusEvent, as a terminal reporting focus would send.
-func (h *host[S]) activated(on bool) {
+func (h *host) activated(on bool) {
 	if on == h.active {
 		return
 	}
@@ -455,7 +442,7 @@ func (h *host[S]) activated(on bool) {
 }
 
 // closeRequested reports the user asking to close window id.
-func (h *host[S]) closeRequested(id string) {
+func (h *host) closeRequested(id string) {
 	if id == "" && h.desktop != nil {
 		h.desktop.command(flatte.DesktopCommand{Kind: "hide"})
 		h.handle(flatte.DesktopEvent{ID: "close", Source: "window"})
@@ -469,7 +456,7 @@ func (h *host[S]) closeRequested(id string) {
 
 // clearDesktopPresentation releases text retained only for host rendering.
 // The app owns its state and clears its draft when handling close/hide.
-func (h *host[S]) clearDesktopPresentation() {
+func (h *host) clearDesktopPresentation() {
 	h.scene = layout.Scene{}
 	h.pres = presentation{}
 	h.cursor = nil
@@ -477,15 +464,15 @@ func (h *host[S]) clearDesktopPresentation() {
 }
 
 // focusedSurface is the focused window's surface.
-func (h *host[S]) focusedSurface() *surface[S] {
+func (h *host) focusedSurface() *surface {
 	if s, ok := h.open[h.focus]; ok {
 		return s
 	}
 	return h.surface
 }
 
-func (h *host[S]) cols(points float64) int  { return cellsIn(points, h.metrics.Column) }
-func (h *host[S]) lines(points float64) int { return cellsIn(points, h.metrics.Line) }
+func (h *host) cols(points float64) int  { return cellsIn(points, h.metrics.Column) }
+func (h *host) lines(points float64) int { return cellsIn(points, h.metrics.Line) }
 
 func cellsIn(points, unit float64) int {
 	return layout.PointRect{W: points}.Cells(layout.Metrics{Column: unit}).W
@@ -493,7 +480,7 @@ func cellsIn(points, unit float64) int {
 
 // resize records the view size; the main window tells the app its size in
 // cells (secondary windows' sizes reach it as LayoutEvents).
-func (s *surface[S]) resize(width, height float64) {
+func (s *surface) resize(width, height float64) {
 	if width == s.width && height == s.height {
 		return
 	}
@@ -509,7 +496,7 @@ func (s *surface[S]) resize(width, height float64) {
 // key delivers a key event. Up and Down (plain or with Shift) over a
 // focused multi-line Input carry the caret one visual row away in the
 // backend's layout, keeping the x a run of vertical moves started at.
-func (s *surface[S]) key(ev flatte.KeyEvent) {
+func (s *surface) key(ev flatte.KeyEvent) {
 	h := s.h
 	// ⌘C copies selected label text; with none it is the app's.
 	if ev == copyKey && s.copySelection() {
@@ -517,13 +504,11 @@ func (s *surface[S]) key(ev flatte.KeyEvent) {
 	}
 	// A menu shortcut the menu bar did not take natively (one without ⌘,
 	// or a disabled item's) is routed here, as a terminal routes it.
-	if h.app.Menus != nil {
-		if it, ok := flatte.MenuShortcut(h.app.Menus(h.app.State), ev); ok {
-			if !it.Disabled {
-				h.handle(flatte.MenuEvent{ID: it.ID})
-			}
-			return
+	if it, ok := flatte.MenuShortcut(h.session.Menus(), ev); ok {
+		if !it.Disabled {
+			h.handle(flatte.MenuEvent{ID: it.ID})
 		}
+		return
 	}
 	vertical := (ev.Key == flatte.KeyUp || ev.Key == flatte.KeyDown) && ev.Mod&^flatte.ModShift == 0
 	if op, ok := s.focusedArea(); vertical && ok && h.text != nil {
@@ -542,7 +527,7 @@ func (s *surface[S]) key(ev flatte.KeyEvent) {
 
 // control is the control with id in the scene; ok is false when there is
 // none or it is disabled.
-func (s *surface[S]) control(id string) (layout.ControlOp, bool) {
+func (s *surface) control(id string) (layout.ControlOp, bool) {
 	if id == "" {
 		return layout.ControlOp{}, false
 	}
@@ -555,7 +540,7 @@ func (s *surface[S]) control(id string) (layout.ControlOp, bool) {
 }
 
 // interactiveBox reports a named custom item that requests native hover.
-func (s *surface[S]) interactiveBox(id string) bool {
+func (s *surface) interactiveBox(id string) bool {
 	if id == "" {
 		return false
 	}
@@ -570,7 +555,7 @@ func (s *surface[S]) interactiveBox(id string) bool {
 // hover tracks the pointer at (x, y) points (outside the view: x < 0):
 // it records the control under it, redrawing when that changes, and
 // reports the pointer shape and tooltip to show there.
-func (s *surface[S]) hover(x, y float64) (pointer, string) {
+func (s *surface) hover(x, y float64) (pointer, string) {
 	scene := s.fresh()
 	id, tooltip, shape := "", "", pointerArrow
 	inputHovered := false
@@ -611,7 +596,7 @@ func (s *surface[S]) hover(x, y float64) (pointer, string) {
 }
 
 // idsAt is the visible ID'd nodes under the pointer, above the topmost overlay.
-func (s *surface[S]) idsAt(x, y float64) map[string]bool {
+func (s *surface) idsAt(x, y float64) map[string]bool {
 	out := map[string]bool{}
 	for _, id := range s.scene.IDsAt(x, y) {
 		out[id] = true
@@ -619,13 +604,13 @@ func (s *surface[S]) idsAt(x, y float64) map[string]bool {
 	return out
 }
 
-func (s *surface[S]) faders() {
+func (s *surface) faders() {
 	if s.hovers == nil {
 		s.hovers, s.presses = newFader(hoverFade), newFader(pressFade)
 	}
 }
 
-func (s *surface[S]) now() time.Time {
+func (s *surface) now() time.Time {
 	if s.clock != nil {
 		return s.clock()
 	}
@@ -633,11 +618,11 @@ func (s *surface[S]) now() time.Time {
 }
 
 // syncMenus shows the app's menu bar when it changed.
-func (h *host[S]) syncMenus() {
-	if h.menus == nil || h.app.Menus == nil {
+func (h *host) syncMenus() {
+	if h.menus == nil {
 		return
 	}
-	if bar := h.app.Menus(h.app.State); !reflect.DeepEqual(bar, h.bar) {
+	if bar := h.session.Menus(); !reflect.DeepEqual(bar, h.bar) {
 		h.bar = bar
 		h.menus.setBar(bar)
 	}
@@ -648,7 +633,7 @@ var copyKey = flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'c', Mod: flatte.M
 
 // copySelection copies the selected label text, reporting whether there
 // was any.
-func (s *surface[S]) copySelection() bool {
+func (s *surface) copySelection() bool {
 	if s.h.clip == nil {
 		return false
 	}
@@ -663,7 +648,7 @@ func (s *surface[S]) copySelection() bool {
 // that the app's Copy (an item with the ⌘C shortcut) copies selected label
 // text in the focused window when there is some, as Copy acts on the
 // selection in native apps.
-func (h *host[S]) menuChosen(id string) {
+func (h *host) menuChosen(id string) {
 	if it, ok := findMenuItem(h.bar, id); ok && slices.Contains(it.Keys, copyKey) && h.focusedSurface().copySelection() {
 		return
 	}
@@ -695,7 +680,7 @@ func findMenuItem(menus []flatte.Menu, id string) (flatte.MenuItem, bool) {
 
 // drop delivers files or text dropped at (x, y) points as a DropEvent,
 // located as mouse events are.
-func (s *surface[S]) drop(x, y float64, paths []string, text string) {
+func (s *surface) drop(x, y float64, paths []string, text string) {
 	h := s.h
 	scene := s.fresh()
 	ev := flatte.DropEvent{X: h.cols(x), Y: h.lines(y), Paths: paths, Text: text, Window: s.id}
@@ -709,7 +694,7 @@ func (s *surface[S]) drop(x, y float64, paths []string, text string) {
 
 // presentation is what to draw over the scene, with the hover and press
 // levels of now.
-func (s *surface[S]) presentation() presentation {
+func (s *surface) presentation() presentation {
 	p := s.pres
 	s.faders()
 	p.now = s.now()
@@ -723,7 +708,7 @@ func (s *surface[S]) presentation() presentation {
 // selectableAt is the topmost Selectable TextOp at (x, y) points, and its
 // index in the scene; none under an overlay layer above it, or over an
 // Input or a control.
-func (s *surface[S]) selectableAt(x, y float64) (int, layout.TextOp, bool) {
+func (s *surface) selectableAt(x, y float64) (int, layout.TextOp, bool) {
 	if x < 0 || y < 0 {
 		return 0, layout.TextOp{}, false
 	}
@@ -761,7 +746,7 @@ func opAt[O layout.Op](s layout.Scene, i int) (O, bool) {
 }
 
 // selectedText is the text selected in a label, or "".
-func (s *surface[S]) selectedText() string {
+func (s *surface) selectedText() string {
 	sel := s.pres.sel
 	op, ok := opAt[layout.TextOp](s.scene, sel.op)
 	if !ok {
@@ -774,7 +759,7 @@ func (s *surface[S]) selectedText() string {
 // selectText tracks a left-button press, drag, or release at (x, y) for
 // label selection: a press on selectable text starts a selection there (and
 // one anywhere else clears it); a drag extends it, clamped to its label.
-func (s *surface[S]) selectText(x, y float64, action flatte.MouseAction) {
+func (s *surface) selectText(x, y float64, action flatte.MouseAction) {
 	text := s.h.text
 	before := s.pres.sel
 	switch action {
@@ -798,7 +783,7 @@ func (s *surface[S]) selectText(x, y float64, action flatte.MouseAction) {
 }
 
 // paste delivers text as a PasteEvent, as a terminal delivers a paste.
-func (s *surface[S]) paste() {
+func (s *surface) paste() {
 	if s.h.clip != nil {
 		s.h.handle(flatte.PasteEvent{Text: s.h.clip.get()})
 	}
@@ -806,7 +791,7 @@ func (s *surface[S]) paste() {
 
 // fresh returns the scene as the app now stands, rendering again when the
 // app changed since the last one.
-func (s *surface[S]) fresh() layout.Scene {
+func (s *surface) fresh() layout.Scene {
 	s.flushWheel()
 	if s.dirty {
 		s.render()
@@ -815,7 +800,7 @@ func (s *surface[S]) fresh() layout.Scene {
 }
 
 // focusedArea is the topmost focused multi-line Input of a fresh scene.
-func (s *surface[S]) focusedArea() (layout.InputOp, bool) {
+func (s *surface) focusedArea() (layout.InputOp, bool) {
 	ops := s.fresh().Ops
 	for i := len(ops) - 1; i >= 0; i-- {
 		if in, ok := ops[i].(layout.InputOp); ok && in.Focused && in.Multiline {
@@ -826,7 +811,7 @@ func (s *surface[S]) focusedArea() (layout.InputOp, bool) {
 }
 
 // input is the topmost Input with id in the scene.
-func (s *surface[S]) input(id string) (layout.InputOp, bool) {
+func (s *surface) input(id string) (layout.InputOp, bool) {
 	if id == "" {
 		return layout.InputOp{}, false
 	}
@@ -865,11 +850,11 @@ func clearHoverID(id string) string { return id + "\x00clear" }
 // Over an ID'd Input the event carries the caret nearest the pointer; a
 // left-button drag that began on one keeps targeting it, with carets
 // clamped to it, until the button is released.
-func (s *surface[S]) mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod) {
+func (s *surface) mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod) {
 	s.mouseClicks(x, y, button, action, mod, 1)
 }
 
-func (s *surface[S]) mouseClicks(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod, clicks int) {
+func (s *surface) mouseClicks(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod, clicks int) {
 	h := s.h
 	scene := s.fresh()
 	id, r := scene.HitTest(x, y)
@@ -883,8 +868,8 @@ func (s *surface[S]) mouseClicks(x, y float64, button flatte.MouseButton, action
 	// shows it instead of being delivered; the choice arrives as a
 	// MenuEvent.
 	secondary := button == flatte.MouseRight || button == flatte.MouseLeft && mod.Contains(flatte.ModCtrl)
-	if secondary && action == flatte.MousePress && h.app.ContextMenu != nil && h.menus != nil {
-		if items := h.app.ContextMenu(h.app.State, id); len(items) > 0 {
+	if secondary && action == flatte.MousePress && h.menus != nil {
+		if items := h.session.ContextMenu(id); len(items) > 0 {
 			if chosen := h.menus.popUp(s.id, items, x, y); chosen != "" {
 				h.handle(flatte.MenuEvent{ID: chosen, Target: id})
 			}
@@ -935,7 +920,7 @@ func (s *surface[S]) mouseClicks(x, y float64, button flatte.MouseButton, action
 	h.handle(ev)
 }
 
-func (s *surface[S]) hit(x, y float64) string {
+func (s *surface) hit(x, y float64) string {
 	id, _ := s.fresh().HitTest(x, y)
 	return id
 }
@@ -947,7 +932,7 @@ func (s *surface[S]) hit(x, y float64) string {
 // the turns are gathered and delivered once per frame: handling (and
 // redrawing) each one on arrival backs the events up, which caps the
 // scrolling speed and keeps it going after the gesture ends.
-func (s *surface[S]) wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod) {
+func (s *surface) wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod) {
 	if notches <= 0 {
 		return
 	}
@@ -983,7 +968,7 @@ type pendingWheel struct {
 
 // flushWheel delivers the gathered scrolling: one event per turn, as a
 // wheel reports them, and one redraw for all of them.
-func (s *surface[S]) flushWheel() {
+func (s *surface) flushWheel() {
 	p := s.scroll
 	if p == nil {
 		return
@@ -991,10 +976,7 @@ func (s *surface[S]) flushWheel() {
 	s.scroll = nil
 	h := s.h
 	for range p.n {
-		h.app.Tracer.Event(p.ev)
-		if h.app.Handle != nil {
-			h.app.Handle(h.app.State, p.ev, h.fx)
-		}
+		h.session.Handle(p.ev)
 		if h.quitting {
 			break
 		}
@@ -1006,7 +988,7 @@ func (s *surface[S]) flushWheel() {
 // ("": none). The cell coordinates are chosen so that X-TargetRect.X and
 // Y-TargetRect.Y are the exact column and line inside the target, even
 // though the target is not aligned to the cell grid.
-func (s *surface[S]) pointerAt(x, y float64, id string, r layout.PointRect) flatte.MouseEvent {
+func (s *surface) pointerAt(x, y float64, id string, r layout.PointRect) flatte.MouseEvent {
 	h := s.h
 	ev := flatte.MouseEvent{X: h.cols(x), Y: h.lines(y), Window: s.id}
 	if id != "" {
@@ -1020,7 +1002,7 @@ func (s *surface[S]) pointerAt(x, y float64, id string, r layout.PointRect) flat
 // render produces the scene to draw, settling layout first: while the
 // solved rects (in cells) differ from the last delivered, deliver them as a
 // LayoutEvent and render again, at most maxLayoutPasses times.
-func (s *surface[S]) render() layout.Scene {
+func (s *surface) render() layout.Scene {
 	h := s.h
 	s.flushWheel()
 	for pass := 0; ; pass++ {
@@ -1055,22 +1037,17 @@ func (s *surface[S]) render() layout.Scene {
 		s.delivered = rects
 		s.deliveredPoints = maps.Clone(s.scene.Rects)
 		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Window: s.id}
-		h.app.Tracer.Event(ev)
-		if h.app.Handle != nil {
-			h.app.Handle(h.app.State, flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Window: s.id}, h.fx)
-		}
-		if h.quitting {
+		h.session.Handle(ev)
+		if h.session.Quitting() {
+			h.quitting = true
 			h.stop()
 			return s.scene
 		}
 	}
 }
 
-func (s *surface[S]) view() flatte.Frame {
-	if s.h.app.View == nil {
-		return flatte.Frame{}
-	}
-	return s.h.app.View(s.h.app.State, flatte.RenderContext{Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor, Window: s.id, Graphical: true, Capabilities: s.h.fx.Capabilities()})
+func (s *surface) view() flatte.Frame {
+	return s.h.session.View(flatte.RenderContext{Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor, Window: s.id, Graphical: true, Capabilities: s.h.session.Capabilities()})
 }
 
 // wheelAccumulator turns precise scroll deltas (trackpads, in points) into
@@ -1090,7 +1067,7 @@ func (w *wheelAccumulator) notches(delta, line float64) int {
 }
 
 // frameTitle is the last rendered frame's title.
-func (s *surface[S]) frameTitle() string { return s.title }
+func (s *surface) frameTitle() string { return s.title }
 
 // frameCursor is the last rendered string frame's cursor, in cells.
-func (s *surface[S]) frameCursor() *flatte.Cursor { return s.cursor }
+func (s *surface) frameCursor() *flatte.Cursor { return s.cursor }

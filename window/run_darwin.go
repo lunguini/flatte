@@ -16,10 +16,6 @@ import (
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
-// AppKit must run on the process's main thread; keep the main goroutine
-// there.
-func init() { runtime.LockOSThread() }
-
 var errNotMainThread = errors.New("window: Run must be called from the main goroutine")
 
 const (
@@ -71,9 +67,23 @@ func runPosted() {
 	}
 }
 
-// --- Run ---
+// Options selects the native window host on macOS.
+func (o Options) ConfigureRun(config *flatte.RunConfig) {
+	config.UseHost(windowHost{options: o})
+}
 
-func run[S any](ctx context.Context, app flatte.App[S], opts Options) error {
+func Supported() bool { return true }
+
+type windowHost struct{ options Options }
+
+func (h windowHost) Run(ctx context.Context, session *flatte.Session) error {
+	return run(ctx, session, h.options)
+}
+
+// run enters AppKit on the calling goroutine, which Run documents as main.
+func run(ctx context.Context, session *flatte.Session, opts Options) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	if err := loadFrameworks(); err != nil {
 		return err
 	}
@@ -84,7 +94,7 @@ func run[S any](ctx context.Context, app flatte.App[S], opts Options) error {
 		return err
 	}
 	var err error
-	withPool(func() { err = runWindow(ctx, app, opts) })
+	withPool(func() { err = runWindow(ctx, session, opts) })
 	return err
 }
 
@@ -208,7 +218,7 @@ func (n nativeWindows) closeWindow(id string) {
 	}
 }
 
-func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) error {
+func runWindow(ctx context.Context, session *flatte.Session, opts Options) error {
 	if running {
 		return errors.New("window: a window is already running")
 	}
@@ -253,7 +263,7 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 		nsApp.Send(sel("stop:"), objc.ID(0))
 		wake(nsApp)
 	}
-	h := newHost(ctx, app, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
+	h := newSessionHost(ctx, session, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
 	defer h.cancel()
 	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, hideTitle: opts.HideTitleBar}
 	st.focused = func() { h.focused("") }
@@ -265,7 +275,7 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	}()
 	h.text = windowText{th: func() theme { return st.th }}
 	h.clip = pasteboard{}
-	if app.NowPlaying != nil {
+	if session.HasNowPlaying() {
 		media, err := newNativeMedia(h.mediaCommand)
 		if err != nil {
 			return err
@@ -433,8 +443,10 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	cols, lines := opts.size()
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line
 	// The first frame only: async results are dropped, quitting is moot.
-	h := newHost(context.Background(), app, m, func(func()) {}, func() {}, func() {})
+	session := flatte.NewSession(context.Background(), app)
+	h := newSessionHost(context.Background(), session, m, func(func()) {}, func() {}, func() {})
 	defer h.cancel()
+	defer session.Cancel()
 	h.start(width, height)
 	scene := h.render()
 	return renderImage(scene, th, m, width, height, scale, h.frameCursor(), presentation{}), nil

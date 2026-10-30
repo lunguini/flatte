@@ -14,9 +14,9 @@ import (
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
-// Run owns the browser event/update/render loop on js/wasm. It mounts the
-// first element marked data-flatte; platform wiring stays behind the same API
-// applications use in a terminal build.
+// Run uses the browser page by default on js/wasm, mounting the first element
+// marked data-flatte. An Option may select another Host; application code
+// keeps the same entry point used by native builds.
 func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) {
 	if app.State == nil {
 		panic("flat: App.State is nil")
@@ -24,6 +24,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	if app.View == nil {
 		panic("flat: App.View is nil")
 	}
+	configured := applyRunOptions(runConfig{bracketedPaste: true}, opts...)
+	if handled, err := runWithHost(ctx, app, configured); handled {
+		return err
+	}
+	cfg := configured.config
 	doc := js.Global().Get("document")
 	if doc.IsNull() || doc.IsUndefined() {
 		return errors.New("flat: browser document is unavailable")
@@ -31,15 +36,6 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	surface := doc.Call("querySelector", "[data-flatte]")
 	if surface.IsNull() || surface.IsUndefined() {
 		return errors.New("flat: browser mount element [data-flatte] not found")
-	}
-
-	// A browser page cannot be quit like a terminal process. Ctrl+C is
-	// delivered to the app, and browser copy/paste shortcuts remain available.
-	cfg := runConfig{bracketedPaste: true}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&cfg)
-		}
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)

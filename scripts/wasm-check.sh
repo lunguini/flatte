@@ -39,7 +39,7 @@ print_sizes tinygo
 node "$repo_root/testdata/run_browser_test.cjs" "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$tmp_root/go/flat-landing.wasm" landing
 node "$repo_root/testdata/run_browser_test.cjs" "$(tinygo env TINYGOROOT)/targets/wasm_exec.js" "$tmp_root/tinygo/flat-landing.wasm" landing
 
-GOOS=js GOARCH=wasm go test -c -run '^TestBrowser(Run|HostConformance)' -o "$tmp_root/go/flatte.test.wasm" "$repo_root"
+GOOS=js GOARCH=wasm go test -c -run '^(TestBrowser(Run|HostConformance)|TestRunSelectsHostAndOwnsSessionLifecycle)$' -o "$tmp_root/go/flatte.test.wasm" "$repo_root"
 node "$repo_root/testdata/run_browser_test.cjs" "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$tmp_root/go/flatte.test.wasm"
 
 (

@@ -1,10 +1,11 @@
 package window
 
 import (
+	"testing"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
-	"testing"
 )
 
 func TestHostInputClicksAndClearAreAppOwned(t *testing.T) {
@@ -15,15 +16,16 @@ func TestHostInputClicksAndClearAreAppOwned(t *testing.T) {
 		in.Clearable = true
 		return layout.Col{Children: []layout.Node{in}}
 	}
-	h, _ := newTestHost(t, s)
-	h.text = &fakeText{}
-	original := h.app.Handle
-	h.app.Handle = func(s *testState, e flatte.Event, fx flatte.Effects[testState]) {
+	app := testApp(s)
+	original := app.Handle
+	app.Handle = func(s *testState, e flatte.Event, fx flatte.Effects[testState]) {
 		original(s, e, fx)
 		if mouse, ok := e.(flatte.MouseEvent); ok {
 			field.HandleMouse("field", mouse)
 		}
 	}
+	h, _ := newTestHostWithApp(t, app)
+	h.text = &fakeText{}
 	h.start(200, 80)
 	h.render()
 	r := h.scene.Rects["field"]

@@ -89,11 +89,22 @@ func testApp(s *testState) flatte.App[testState] {
 	}
 }
 
-func newTestHost(t *testing.T, s *testState) (*host[testState], *fakeBackend) {
+func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, post func(func()), stop, invalidate func()) *host {
+	return newSessionHost(ctx, flatte.NewSession(ctx, app), m, post, stop, invalidate)
+}
+
+func newTestHost(t *testing.T, s *testState) (*host, *fakeBackend) {
+	return newTestHostWithApp(t, testApp(s))
+}
+
+func newTestHostWithApp[S any](t *testing.T, app flatte.App[S]) (*host, *fakeBackend) {
 	t.Helper()
 	b := &fakeBackend{}
-	h := newHost(context.Background(), testApp(s), cellMetrics, b.post, func() { b.stops++ }, func() { b.invalidates++ })
-	t.Cleanup(h.cancel)
+	h := newHost(context.Background(), app, cellMetrics, b.post, func() { b.stops++ }, func() { b.invalidates++ })
+	t.Cleanup(func() {
+		h.cancel()
+		h.session.Cancel()
+	})
 	return h, b
 }
 
@@ -223,6 +234,7 @@ func TestHostQuit(t *testing.T) {
 		t.Fatalf("Ctrl-C: stops %d, events %#v", b2.stops, s2.events)
 	}
 	h.close()
+	h.session.OnExit()
 	if !s.exited {
 		t.Fatal("OnExit not called on close")
 	}

@@ -12,12 +12,18 @@ func (f *fakeNotifier) notify(n flatte.Notification) { f.posted = append(f.poste
 
 func TestHostPostsNotifications(t *testing.T) {
 	s := &testState{content: "x"}
-	h, _ := newTestHost(t, s)
+	app := testApp(s)
+	app.Handle = func(_ *testState, ev flatte.Event, fx flatte.Effects[testState]) {
+		if key, ok := ev.(flatte.KeyEvent); ok && key.Rune == 'n' {
+			fx.Notify(flatte.Notification{Title: "Now playing", Body: "Glass"})
+		}
+	}
+	h, _ := newTestHostWithApp(t, app)
 	h.start(80, 48)
-	h.fx.Notify(flatte.Notification{Body: "dropped: no notifier"})
+	h.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'n'})
 	f := &fakeNotifier{}
 	h.notes = f
-	h.fx.Notify(flatte.Notification{Title: "Now playing", Body: "Glass"})
+	h.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'n'})
 	if len(f.posted) != 1 || f.posted[0] != (flatte.Notification{Title: "Now playing", Body: "Glass"}) {
 		t.Fatalf("posted %v", f.posted)
 	}

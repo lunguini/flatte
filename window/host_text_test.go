@@ -143,18 +143,24 @@ func TestHostVerticalKeysCarryCarets(t *testing.T) {
 }
 
 func TestHostClipboardAndPaste(t *testing.T) {
-	var fx flatte.Effects[testState]
 	s := &testState{content: "x"}
-	h, b := newTestHost(t, s)
+	app := testApp(s)
+	original := app.Handle
+	app.Handle = func(s *testState, ev flatte.Event, fx flatte.Effects[testState]) {
+		original(s, ev, fx)
+		if key, ok := ev.(flatte.KeyEvent); ok && key.Rune == 'c' {
+			fx.SetClipboard("copied")
+			fx.ReadClipboard()
+		}
+	}
+	h, b := newTestHostWithApp(t, app)
 	clip := &fakeClip{text: "from the system"}
 	h.clip = clip
 	h.start(100, 50)
-	fx = h.fx
-	fx.SetClipboard("copied")
+	h.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'c'})
 	if clip.text != "copied" {
 		t.Fatalf("clipboard %q, want copied", clip.text)
 	}
-	fx.ReadClipboard()
 	b.drain(t, 1)
 	if ev, ok := s.events[len(s.events)-1].(flatte.ClipboardEvent); !ok || ev.Text != "copied" {
 		t.Fatalf("last event %#v, want the clipboard's text", s.events[len(s.events)-1])

@@ -46,7 +46,7 @@ type windowConformanceDriver struct {
 	state    *hostconformance.State
 	observer *hostconformance.Observer
 	backend  *fakeBackend
-	host     *host[hostconformance.State]
+	host     *host
 	finished bool
 	once     sync.Once
 }
@@ -80,6 +80,7 @@ func (d *windowConformanceDriver) Close() { d.Finish() }
 func (d *windowConformanceDriver) Finish() {
 	d.once.Do(func() {
 		d.host.close()
+		d.host.session.OnExit()
 		d.finished = true
 	})
 }

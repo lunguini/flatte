@@ -2,12 +2,6 @@
 
 package window
 
-import (
-	"context"
+import "github.com/lunguini/flatte"
 
-	"github.com/lunguini/flatte"
-)
-
-func runTerminal[S any](ctx context.Context, app flatte.App[S], opts ...flatte.Option) error {
-	return flatte.Run(ctx, app, opts...)
-}
+func (MediaControls) ConfigureRun(*flatte.RunConfig) {}

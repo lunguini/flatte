@@ -6,15 +6,14 @@ import (
 	"github.com/lunguini/flatte"
 )
 
-// RunTerminal runs app in the terminal and, when App.NowPlaying is set,
-// publishes its media state to the operating system's media controls.
+// MediaControls opts into native media controls while Run uses the terminal
+// host. It has no effect on platforms without the native media integration.
+type MediaControls struct{}
+
+// RunTerminal is retained temporarily for source migration. Use flatte.Run
+// with MediaControls when terminal media integration is wanted.
 //
-// On macOS this requires RunTerminal to be called from the process main
-// goroutine, like Run. Other platforms run the terminal app without native
-// media controls.
+// Deprecated: call flatte.Run(ctx, app, opts..., window.MediaControls{}).
 func RunTerminal[S any](ctx context.Context, app flatte.App[S], opts ...flatte.Option) error {
-	if app.NowPlaying == nil {
-		return flatte.Run(ctx, app, opts...)
-	}
-	return runTerminal(ctx, app, opts...)
+	return flatte.Run(ctx, app, append(opts, MediaControls{})...)
 }

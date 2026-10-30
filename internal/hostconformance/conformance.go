@@ -128,7 +128,7 @@ func Verify(adapter Adapter, want Expectations) error {
 		return fmt.Errorf("send Ctrl+C: %w", err)
 	}
 	if want.CtrlCExitsRun {
-		if err := ctrl.Wait(func(s Snapshot) bool { return s.Exited }); err != nil {
+		if err := ctrl.Wait(func(s Snapshot) bool { return s.Exited && ctrl.Finished() }); err != nil {
 			ctrl.Close()
 			return fmt.Errorf("default Ctrl+C exit: %w", err)
 		}

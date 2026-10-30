@@ -29,7 +29,7 @@ func key(r rune, mod flatte.Mod) flatte.KeyEvent {
 
 // menuHost is a host whose app has a File menu (its Save label is
 // s.content, so tests can change the bar) and a context menu on "doc".
-func menuHost(t *testing.T) (*host[testState], *testState, *fakeMenus) {
+func menuHost(t *testing.T) (*host, *testState, *fakeMenus) {
 	s := &testState{content: "Save", root: func(s *testState) layout.Node {
 		return layout.Col{Children: []layout.Node{
 			layout.Label{NodeBase: layout.NodeBase{ID: "doc"}, Text: "document", Selectable: true},

@@ -24,7 +24,7 @@ type dialogState struct {
 	drops  []flatte.DropEvent
 }
 
-func dialogHost(t *testing.T) (*host[dialogState], *dialogState, *fakeBackend) {
+func dialogHost(t *testing.T) (*host, *dialogState, *fakeBackend) {
 	s := &dialogState{}
 	app := flatte.App[dialogState]{
 		State: s,

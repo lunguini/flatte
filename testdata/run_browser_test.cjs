@@ -11,7 +11,7 @@ require("./browser_dom_shim.cjs");
 
 const go = new Go();
 let browserPassed = false;
-go.argv = mode === "test" ? [testWasm, "-test.run=TestBrowser(Run|HostConformance)", "-test.v"] : [testWasm];
+go.argv = mode === "test" ? [testWasm, "-test.run=^(TestBrowser(Run|HostConformance)|TestRunSelectsHostAndOwnsSessionLifecycle)$", "-test.v"] : [testWasm];
 // Go's js/wasm runtime caps argv+env size; pass only what the test binary
 // needs rather than the (often large) CI environment.
 go.env = { TMPDIR: os.tmpdir() };

@@ -29,13 +29,14 @@ type multiState struct {
 	views  []string
 }
 
-func multiHost(t *testing.T) (*host[multiState], *multiState, *fakeWindows) {
+func multiHost(t *testing.T, keepWindow ...bool) (*host, *multiState, *fakeWindows) {
 	s := &multiState{}
+	keep := len(keepWindow) > 0 && keepWindow[0]
 	app := flatte.App[multiState]{
 		State: s,
 		Handle: func(s *multiState, ev flatte.Event, _ flatte.Effects[multiState]) {
 			s.events = append(s.events, ev)
-			if w, ok := ev.(flatte.WindowEvent); ok && w.Kind == flatte.WindowCloseRequest {
+			if w, ok := ev.(flatte.WindowEvent); ok && w.Kind == flatte.WindowCloseRequest && !keep {
 				s.stats = false
 			}
 		},
@@ -137,13 +138,9 @@ func TestHostOpensAndClosesDeclaredWindows(t *testing.T) {
 }
 
 func TestHostKeepsAWindowTheAppKeeps(t *testing.T) {
-	h, s, f := multiHost(t)
+	h, s, f := multiHost(t, true)
 	s.stats = true
 	h.handle(flatte.KeyEvent{})
-	// An app that keeps declaring the window keeps it open.
-	app := h.app
-	app.Handle = func(s *multiState, ev flatte.Event, _ flatte.Effects[multiState]) { s.events = append(s.events, ev) }
-	h.app = app
 	h.closeRequested("stats")
 	if len(f.closed) != 0 || len(h.open) != 1 {
 		t.Fatal("the window closed though the app kept it")

@@ -11,11 +11,19 @@ type fakeDesktop struct{ commands []flatte.DesktopCommand }
 func (f *fakeDesktop) command(c flatte.DesktopCommand) { f.commands = append(f.commands, c) }
 
 func TestDesktopCommandsAreDeferredAndOwned(t *testing.T) {
-	h, b := newTestHost(t, &testState{})
+	s := &testState{}
+	key := flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: ' ', Mod: flatte.ModSuper | flatte.ModShift}
+	app := testApp(s)
+	app.Handle = func(_ *testState, ev flatte.Event, fx flatte.Effects[testState]) {
+		if k, ok := ev.(flatte.KeyEvent); ok && k.Rune == 'd' {
+			fx.Desktop(flatte.DesktopCommand{Kind: "shortcut", Shortcut: &key})
+		}
+	}
+	h, b := newTestHostWithApp(t, app)
 	d := &fakeDesktop{}
 	h.desktop = d
-	key := flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: ' ', Mod: flatte.ModSuper | flatte.ModShift}
-	h.fx.Desktop(flatte.DesktopCommand{Kind: "shortcut", Shortcut: &key})
+	h.start(80, 24)
+	h.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'd'})
 	key.Rune = 'x'
 	if len(d.commands) != 0 {
 		t.Fatal("desktop command ran inside handler")

@@ -69,6 +69,7 @@ flatte package flatte
   func NewHarnessEffects[S any](ctx context.Context, updates chan<-StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S]
   func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(StateUpdate[S]) bool, quit func(), dispatch func(func()), clock Clock) Effects[S]
   func NewScope[S any](fx Effects[S], name string) *Scope
+  func NewSession[S any](ctx context.Context, app App[S]) *Session
   func OpenFile[S any](fx Effects[S], name string, d OpenDialog, fold func(s*S, paths[]string, err error))
   func PaintWindows[S any](wh*WindowHost, app App[S], base RenderContext, frame Frame, handle func(LayoutEvent)) Frame
   func RenderContextFor(out io.Writer) RenderContext
@@ -101,8 +102,25 @@ flatte package flatte
   method *MenuHost.IsOpen() bool
   method *MenuHost.Paint(frame Frame) Frame
   method *MenuHost.Route(ev Event, menus[]Menu, contextMenu func(target string)[]MenuItem, width int, height int)(Event, bool)
+  method *RunConfig.UseHost(host Host)
   method *Scope.Cancel()
   method *Scope.Ctx() context.Context
+  method *Session.ApplyPendingUpdates() int
+  method *Session.Cancel()
+  method *Session.Capabilities() Capabilities
+  method *Session.ContextMenu(target string)[]MenuItem
+  method *Session.Handle(ev Event)
+  method *Session.HasNowPlaying() bool
+  method *Session.Menus()[]Menu
+  method *Session.NowPlaying() *NowPlaying
+  method *Session.OnExit()
+  method *Session.Quitting() bool
+  method *Session.RunTerminal(ctx context.Context, options ... Option) error
+  method *Session.Start(size ResizeEvent)
+  method *Session.Updates() <-chan struct{}
+  method *Session.UseHostServices(services HostServices)
+  method *Session.View(ctx RenderContext) Frame
+  method *Session.Windows()[]Window
   method *WindowHost.Focus() string
   method *WindowHost.Route(ev Event)[]Event
   method *WindowHost.WindowFrame(id string)(Frame, bool)
@@ -233,6 +251,16 @@ flatte package flatte
   field Frame.Title string [order=3]
   field Frame.Root layout.Node [order=4]
   struct Frame fields=5 comparable=true
+  type Host interface
+  interface Host method Run(context.Context, *Session) error
+  type HostServices struct
+  field HostServices.Capabilities Capabilities [order=0]
+  field HostServices.SetClipboard func(string) [order=1]
+  field HostServices.ReadClipboard func() [order=2]
+  field HostServices.ShowDialog func(Dialog, func(DialogResult)) [order=3]
+  field HostServices.Notify func(Notification) [order=4]
+  field HostServices.Desktop func(DesktopCommand) [order=5]
+  struct HostServices fields=6 comparable=false
   type Key int
   type KeyEvent struct
   field KeyEvent.Key Key [order=0]
@@ -312,7 +340,8 @@ flatte package flatte
   field OpenDialog.Multiple bool [order=3]
   field OpenDialog.Folders bool [order=4]
   struct OpenDialog fields=5 comparable=false
-  type Option func(*runConfig)
+  type Option interface
+  interface Option method ConfigureRun(*RunConfig)
   type PasteEvent struct
   field PasteEvent.Text string [order=0]
   struct PasteEvent fields=1 comparable=true
@@ -328,6 +357,10 @@ flatte package flatte
   field ResizeEvent.Width int [order=0]
   field ResizeEvent.Height int [order=1]
   struct ResizeEvent fields=2 comparable=true
+  type RunConfig struct
+  field RunConfig.<unexported> runConfig [order=0]
+  field RunConfig.<unexported> Host [order=1]
+  struct RunConfig fields=2 comparable=false
   type SaveDialog struct
   field SaveDialog.Title string [order=0]
   field SaveDialog.Directory string [order=1]
@@ -339,6 +372,27 @@ flatte package flatte
   field Scope.<unexported> context.Context [order=1]
   field Scope.<unexported> context.CancelFunc [order=2]
   struct Scope fields=3 comparable=false
+  type Session struct
+  field Session.<unexported> sync.Mutex [order=0]
+  field Session.<unexported> []func() [order=1]
+  field Session.<unexported> chan struct{} [order=2]
+  field Session.<unexported> bool [order=3]
+  field Session.<unexported> bool [order=4]
+  field Session.<unexported> sync.Once [order=5]
+  field Session.<unexported> context.CancelFunc [order=6]
+  field Session.<unexported> func(ResizeEvent) [order=7]
+  field Session.<unexported> func(Event) [order=8]
+  field Session.<unexported> func(RenderContext) Frame [order=9]
+  field Session.<unexported> func(HostServices) [order=10]
+  field Session.<unexported> func() Capabilities [order=11]
+  field Session.<unexported> func() [order=12]
+  field Session.<unexported> func()[]Menu [order=13]
+  field Session.<unexported> func(string)[]MenuItem [order=14]
+  field Session.<unexported> func()[]Window [order=15]
+  field Session.<unexported> func() *NowPlaying [order=16]
+  field Session.<unexported> bool [order=17]
+  field Session.<unexported> func(context.Context, ... Option) error [order=18]
+  struct Session fields=19 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string

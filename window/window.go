@@ -8,8 +8,8 @@ import (
 	"github.com/lunguini/flatte"
 )
 
-// ErrUnsupported is returned by Run and Snapshot on platforms without a
-// window backend.
+// ErrUnsupported is returned by Snapshot on platforms without a window
+// backend. Window Options fall back to Run's default host on those platforms.
 var ErrUnsupported = errors.New("window: not supported on this platform")
 
 // Options configures the window.
@@ -64,12 +64,12 @@ func (o Options) size() (cols, lines int) {
 	return cols, lines
 }
 
-// Run opens a window and runs app in it until the app quits (fx.Quit), the
-// window is closed or the app is quit from its menu, or ctx is done. It
-// must be called from the main goroutine: the platform UI runs on the
-// process's main thread. OnExit runs before Run returns.
+// Run is retained temporarily for source migration. Use flatte.Run with
+// Options; unsupported platforms then fall back to their default host.
+//
+// Deprecated: call flatte.Run(ctx, app, opts).
 func Run[S any](ctx context.Context, app flatte.App[S], opts Options) error {
-	return run(ctx, app, opts)
+	return flatte.Run(ctx, app, opts)
 }
 
 // Snapshot renders app's first frame — after Init, the first ResizeEvent,
