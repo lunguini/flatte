@@ -241,9 +241,16 @@ func paintChrome(n Node, r Rect, buf uv.ScreenBuffer, clip Rect) {
 	if ch := getChrome(n); ch != nil {
 		paintClipped(buf, r, clip, ch)
 	} else if box := getBox(n); getInsetSides(n).any() || box.hasBackground() {
+		// Padding without a background of its own must not blank the one
+		// painted underneath (a padded row inside a card).
+		vis := r.Intersect(clip)
+		under := backgrounds(buf, vis)
 		paintClipped(buf, r, clip, func(r Rect) string {
 			return fillBox("", r, getPadSides(n), box)
 		})
+		if under != nil {
+			keepBackgrounds(buf, vis, under)
+		}
 	}
 }
 

@@ -290,6 +290,7 @@ func TestHostWheelBurstLaysOutOnce(t *testing.T) {
 	if views-before != 1 {
 		t.Fatalf("a 5-notch burst laid the frame out %d times, want 1", views-before)
 	}
+	h.render() // the next frame delivers the gathered turns
 	got := s.events[n:]
 	if len(got) != 5 {
 		t.Fatalf("events %#v, want 5 wheel presses", got)
@@ -299,6 +300,39 @@ func TestHostWheelBurstLaysOutOnce(t *testing.T) {
 		if !ok || m.Target != "list" || m.Button != flatte.MouseWheelDown || m.Action != flatte.MousePress || m.Mod != flatte.ModShift {
 			t.Fatalf("event %#v", ev)
 		}
+	}
+}
+
+func TestHostWheelGathersEventsUntilTheNextFrame(t *testing.T) {
+	views := 0
+	s := &testState{root: func(*testState) layout.Node {
+		views++
+		return layout.Col{Children: []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "list"}, Text: "rows"}}}
+	}}
+	h, _ := newTestHost(t, s)
+	h.start(160, 64)
+	h.render()
+	r := h.scene.Rects["list"]
+	before, n := views, len(s.events)
+	for range 20 { // a fast flick: many events within one frame
+		h.wheel(r.X+1, r.Y+1, flatte.MouseWheelDown, 2, 0)
+	}
+	if len(s.events) != n || views != before {
+		t.Fatalf("scrolling was handled before the frame: %d events, %d views", len(s.events)-n, views-before)
+	}
+	h.render()
+	if got := len(s.events) - n; got != 40 {
+		t.Fatalf("delivered %d turns, want 40", got)
+	}
+	if views-before != 1 {
+		t.Fatalf("20 scroll events laid out %d times, want 1", views-before)
+	}
+	// Another event first delivers the scrolling that came before it.
+	h.wheel(r.X+1, r.Y+1, flatte.MouseWheelUp, 1, 0)
+	h.handle(flatte.KeyEvent{Key: flatte.KeyEnter})
+	last := s.events[len(s.events)-2:]
+	if m, ok := last[0].(flatte.MouseEvent); !ok || m.Button != flatte.MouseWheelUp {
+		t.Fatalf("order %#v", last)
 	}
 }
 
@@ -331,5 +365,65 @@ func TestHostViewsAreGraphical(t *testing.T) {
 	h.render()
 	if !got.Graphical {
 		t.Fatal("a window's view is not told it is graphical")
+	}
+}
+
+type captureMedia struct {
+	updates []*flatte.NowPlaying
+	closed  int
+}
+
+func (m *captureMedia) update(item *flatte.NowPlaying) {
+	if item == nil {
+		m.updates = append(m.updates, nil)
+		return
+	}
+	copy := *item
+	m.updates = append(m.updates, &copy)
+}
+func (m *captureMedia) close() { m.closed++ }
+
+func TestHostNowPlayingSnapshotAndMediaCommandLifecycle(t *testing.T) {
+	s := &testState{content: "x"}
+	app := testApp(s)
+	item := &flatte.NowPlaying{Title: "Track", Artist: "Artist", Album: "Album", Duration: time.Minute, Position: 10 * time.Second, Playing: true, CanNext: true, CanPrevious: true}
+	app.NowPlaying = func(*testState) *flatte.NowPlaying { return item }
+	b := &fakeBackend{}
+	h := newHost(context.Background(), app, cellMetrics, b.post, func() {}, func() {})
+	t.Cleanup(h.cancel)
+	media := &captureMedia{}
+	h.media = media
+	h.start(80, 16)
+	if len(media.updates) == 0 || media.updates[len(media.updates)-1] == nil || *media.updates[len(media.updates)-1] != *item {
+		t.Fatalf("initial media snapshot = %+v", media.updates)
+	}
+
+	item = nil
+	h.handle(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'x'})
+	if media.updates[len(media.updates)-1] != nil {
+		t.Fatalf("nil media snapshot was not forwarded: %+v", media.updates[len(media.updates)-1])
+	}
+	eventsBefore := len(s.events)
+	h.mediaCommand(flatte.MediaNext)
+	if len(s.events) != eventsBefore {
+		t.Fatal("native command mutated app state before the UI-loop post ran")
+	}
+	b.drain(t, 1)
+	if len(s.events) != eventsBefore+1 {
+		t.Fatalf("media command event count = %d, want %d", len(s.events), eventsBefore+1)
+	}
+	got, ok := s.events[len(s.events)-1].(flatte.MediaEvent)
+	if !ok || got.Command != flatte.MediaNext {
+		t.Fatalf("last event = %#v, want MediaNext", s.events[len(s.events)-1])
+	}
+
+	h.close()
+	if media.closed != 1 {
+		t.Fatalf("media backend closed %d times", media.closed)
+	}
+	h.mediaCommand(flatte.MediaPlay)
+	b.drain(t, 1)
+	if len(s.events) != eventsBefore+1 {
+		t.Fatalf("queued command arrived after close: %#v", s.events[eventsBefore+1:])
 	}
 }

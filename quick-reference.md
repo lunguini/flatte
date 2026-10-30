@@ -532,6 +532,50 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 }
 ```
 
+## System media controls
+
+On macOS, opt in to Now Playing metadata and remote playback commands with
+`App.NowPlaying`. Return nil when no item is active; the window clears its
+metadata and disables its commands. `MediaEvent` arrives in `Handle`, where
+the app performs play, pause, toggle, next, or previous. `CanNext` and
+`CanPrevious` control whether the corresponding commands are enabled. This
+feature does not change terminal input or require a window option.
+
+```go
+app := flatte.App[State]{
+    State: s,
+    Handle: Handle,
+    View: View,
+    NowPlaying: func(s *State) *flatte.NowPlaying {
+        if s.track == nil {
+            return nil
+        }
+        return &flatte.NowPlaying{
+            Title: s.track.Title, Artist: s.track.Artist, Album: s.track.Album,
+            Duration: s.track.Duration, Position: s.position, Playing: s.playing,
+            CanNext: s.canNext, CanPrevious: s.canPrevious,
+        }
+    },
+}
+
+func Handle(s *State, event flatte.Event, fx flatte.Effects[State]) {
+    if event, ok := event.(flatte.MediaEvent); ok {
+        switch event.Command {
+        case flatte.MediaPlay:
+            // Resume through the app's player only if paused.
+        case flatte.MediaPause:
+            // Pause through the app's player only if playing.
+        case flatte.MediaTogglePlayPause:
+            // Toggle through the app's normal playback action.
+        case flatte.MediaNext:
+            // Skip only when the app has a next item.
+        case flatte.MediaPrevious:
+            // Skip only when the app has a previous item.
+        }
+    }
+}
+```
+
 - `WindowEvent{Window, Kind}`: `WindowFocused` says which window ("" the
   main one) now gets keys and pastes — keys are not tagged, so track it and
   route keys yourself; `WindowCloseRequest` is the close button: stop
@@ -736,3 +780,18 @@ while nonempty and large enough. A press reports `MouseEvent.Clear` with
 the same input Target; HandleMouse clears Value/selection on the loop.
 Focus and any search/save side effects remain app policy. Bare fields are
 supported; terminal rendering remains keyboard-editable and unchanged.
+
+
+For macOS menu-bar utilities, pass `Desktop: &flatte.Desktop{...}` in
+`window.Options`. It reuses the native `Frame.Root` renderer and `App.Menus`;
+selected text arrives as `DesktopEvent`, and `fx.Desktop` controls showing,
+hiding, capture permission and the global shortcut. See
+[window/desktop.md](window/desktop.md) for bundle declarations and verification.
+
+Terminal applications can opt into the native media host with
+`window.RunTerminal(ctx, app, terminalOptions...)`. It uses `App.NowPlaying`
+and `MediaEvent` just like `window.Run`, without opening a window. On macOS
+call it from the main goroutine; other platforms run the ordinary terminal
+host. `flatte.Run` itself stays independent of native platform dependencies.
+Custom hosts can connect `flatte.WithHostMedia(commands, publish)`; publishing
+runs on the state loop and must return promptly.

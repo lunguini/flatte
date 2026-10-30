@@ -31,6 +31,11 @@ flatte package flatte
   const KeyTab Key = 7
   const KeyUnknown Key = 0
   const KeyUp Key = 1
+  const MediaNext MediaCommand = 4
+  const MediaPause MediaCommand = 2
+  const MediaPlay MediaCommand = 1
+  const MediaPrevious MediaCommand = 5
+  const MediaTogglePlayPause MediaCommand = 3
   const ModAlt Mod = 2
   const ModCtrl Mod = 4
   const ModShift Mod = 1
@@ -80,7 +85,9 @@ flatte package flatte
   func Stream[S any, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T))
   func SyncWindows[S any](wh*WindowHost, app App[S], width int, height int)[]Event
   func WithHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S]
+  func WithHostDesktop[S any](fx Effects[S], command func(DesktopCommand)) Effects[S]
   func WithHostDialogs[S any](fx Effects[S], show func(d Dialog, done func(DialogResult))) Effects[S]
+  func WithHostMedia(commands<-chan MediaEvent, publish func(*NowPlaying)) Option
   func WithHostNotifications[S any](fx Effects[S], show func(Notification)) Effects[S]
   func WithInline() Option
   func WithInput(in io.Reader) Option
@@ -99,6 +106,7 @@ flatte package flatte
   method *WindowHost.Route(ev Event)[]Event
   method *WindowHost.WindowFrame(id string)(Frame, bool)
   method Effects[S].Ctx() context.Context
+  method Effects[S].Desktop(command DesktopCommand)
   method Effects[S].Notify(n Notification)
   method Effects[S].Print(s string)
   method Effects[S].Printf(format string, args ... any)
@@ -127,7 +135,8 @@ flatte package flatte
   field App.Menus func(*S)[]Menu [order=6]
   field App.ContextMenu func(s*S, target string)[]MenuItem [order=7]
   field App.Windows func(*S)[]Window [order=8]
-  struct App fields=9 comparable=false
+  field App.NowPlaying func(*S) *NowPlaying [order=9]
+  struct App fields=10 comparable=false
   type ClipboardEvent struct
   field ClipboardEvent.Text string [order=0]
   struct ClipboardEvent fields=1 comparable=true
@@ -144,6 +153,20 @@ flatte package flatte
   field CursorStyle.Blink bool [order=1]
   field CursorStyle.Color color.Color [order=2]
   struct CursorStyle fields=3 comparable=true
+  type Desktop struct
+  field Desktop.Title string [order=0]
+  field Desktop.Shortcut *KeyEvent [order=1]
+  struct Desktop fields=2 comparable=true
+  type DesktopCommand struct
+  field DesktopCommand.Kind string [order=0]
+  field DesktopCommand.Shortcut *KeyEvent [order=1]
+  struct DesktopCommand fields=2 comparable=true
+  type DesktopEvent struct
+  field DesktopEvent.ID string [order=0]
+  field DesktopEvent.Text string [order=1]
+  field DesktopEvent.Error string [order=2]
+  field DesktopEvent.Source string [order=3]
+  struct DesktopEvent fields=4 comparable=true
   type Dialog struct
   field Dialog.Open *OpenDialog [order=0]
   field Dialog.Save *SaveDialog [order=1]
@@ -175,7 +198,8 @@ flatte package flatte
   field Effects.<unexported> func() [order=9]
   field Effects.<unexported> func(Dialog, func(DialogResult)) [order=10]
   field Effects.<unexported> func(Notification) [order=11]
-  struct Effects fields=12 comparable=false
+  field Effects.<unexported> func(DesktopCommand) [order=12]
+  struct Effects fields=13 comparable=false
   type Event interface
   interface Event method isEvent()
   type FileSelection struct
@@ -205,6 +229,10 @@ flatte package flatte
   field LayoutEvent.PointRects map[string] layout.PointRect [order=1]
   field LayoutEvent.Window string [order=2]
   struct LayoutEvent fields=3 comparable=false
+  type MediaCommand uint8
+  type MediaEvent struct
+  field MediaEvent.Command MediaCommand [order=0]
+  struct MediaEvent fields=1 comparable=true
   type Menu struct
   field Menu.Title string [order=0]
   field Menu.Items []MenuItem [order=1]
@@ -250,6 +278,16 @@ flatte package flatte
   field Notification.Title string [order=0]
   field Notification.Body string [order=1]
   struct Notification fields=2 comparable=true
+  type NowPlaying struct
+  field NowPlaying.Title string [order=0]
+  field NowPlaying.Artist string [order=1]
+  field NowPlaying.Album string [order=2]
+  field NowPlaying.Duration time.Duration [order=3]
+  field NowPlaying.Position time.Duration [order=4]
+  field NowPlaying.Playing bool [order=5]
+  field NowPlaying.CanNext bool [order=6]
+  field NowPlaying.CanPrevious bool [order=7]
+  struct NowPlaying fields=8 comparable=true
   type OpenDialog struct
   field OpenDialog.Title string [order=0]
   field OpenDialog.Directory string [order=1]

@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image/color"
 	"reflect"
 	"strings"
 	"testing"
@@ -408,5 +409,14 @@ func TestNestedOverlayUnderRootPaintedOnce(t *testing.T) {
 	}
 	if n := strings.Count(stripped, "NEST"); n != 1 {
 		t.Fatalf("nested overlay painted %d times, want 1:\n%s", n, stripped)
+	}
+}
+
+func TestPaddedRowKeepsTheBackgroundBehindIt(t *testing.T) {
+	inner := Row{NodeBase: NodeBase{PadLeft: 1, PadRight: 1}, Children: []Node{Label{Text: "hi"}}}
+	outer := Col{NodeBase: NodeBase{Box: Box{Background: color.NRGBA{0x3b, 0x33, 0x55, 0xff}}}, Children: []Node{inner}}
+	out, _ := SolveAndCompose(outer, 6, 1)
+	if !strings.Contains(out, "48;2;59;51;85") || strings.Contains(out, "\x1b[m hi") {
+		t.Fatalf("the padded row blanked its parent's background: %q", out)
 	}
 }

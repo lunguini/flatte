@@ -216,7 +216,11 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	defer func() { running = false }()
 	cols, lines := opts.size()
 	nsApp := class("NSApplication").Send(sel("sharedApplication"))
-	nsApp.Send(sel("setActivationPolicy:"), nsActivationPolicyRegular)
+	policy := nsActivationPolicyRegular
+	if opts.Desktop != nil {
+		policy = 1
+	} // accessory: menu-bar utility, no Dock icon
+	nsApp.Send(sel("setActivationPolicy:"), policy)
 	cls, err := registerViewClass()
 	if err != nil {
 		return err
@@ -227,6 +231,9 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	th := newTheme(themeFor(opts.Theme, dark))
 	m := th.metrics()
 	title := opts.Title
+	if opts.Desktop != nil && opts.Desktop.Title != "" {
+		title = opts.Desktop.Title
+	}
 	if title == "" {
 		title = "Flatte"
 	}
@@ -247,6 +254,7 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 		wake(nsApp)
 	}
 	h := newHost(ctx, app, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
+	defer h.cancel()
 	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, hideTitle: opts.HideTitleBar}
 	st.focused = func() { h.focused("") }
 	register(st)
@@ -257,6 +265,14 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	}()
 	h.text = windowText{th: func() theme { return st.th }}
 	h.clip = pasteboard{}
+	if app.NowPlaying != nil {
+		media, err := newNativeMedia(h.mediaCommand)
+		if err != nil {
+			return err
+		}
+		h.media = media
+		defer media.close()
+	}
 
 	delegate, err := newDelegate(stop)
 	if err != nil {
@@ -273,13 +289,24 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 	h.menus = menus
 	h.dialogs = nativeDialogs{}
 	h.notes = osNotifier{}
-	h.active = true // Run activates the app below
+	h.active = opts.Desktop == nil // regular windows activate below
 	delegateActive = h.activated
 	defer func() { delegateActive = nil }()
 	h.windows = nativeWindows{cls: cls, m: m, th: func() theme { return st.th }, follow: opts.Theme == nil, delegate: delegate,
 		focused: h.focused, closeRequested: h.closeRequested}
 	barChosen = h.menuChosen
 	defer func() { barChosen = nil }()
+	var desktop *nativeDesktop
+	if opts.Desktop != nil {
+		desktop, err = newNativeDesktop(nsApp, win, view, st, h.handle, title)
+		if err != nil {
+			return err
+		}
+		defer desktop.close()
+		h.desktop = desktop
+		h.menus = desktopMenus{nativeMenus: menus, desktop: desktop}
+		st.closeRequested = func() { h.closeRequested("") }
+	}
 
 	done := make(chan struct{})
 	defer close(done)
@@ -291,11 +318,18 @@ func runWindow[S any](ctx context.Context, app flatte.App[S], opts Options) erro
 		}
 	}()
 
-	win.Send(sel("makeKeyAndOrderFront:"), objc.ID(0))
-	win.Send(sel("makeFirstResponder:"), view)
+	if desktop == nil {
+		win.Send(sel("makeKeyAndOrderFront:"), objc.ID(0))
+		win.Send(sel("makeFirstResponder:"), view)
+	}
 	h.start(width, height)
+	if desktop != nil && !stopped {
+		desktop.activate(opts.Desktop.Shortcut)
+	}
 	if !stopped {
-		nsApp.Send(sel("activateIgnoringOtherApps:"), true)
+		if desktop == nil {
+			nsApp.Send(sel("activateIgnoringOtherApps:"), true)
+		}
 		nsApp.Send(sel("run"))
 	}
 	h.close()

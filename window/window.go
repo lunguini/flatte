@@ -14,6 +14,11 @@ var ErrUnsupported = errors.New("window: not supported on this platform")
 
 // Options configures the window.
 type Options struct {
+	// Desktop opts into a background status-menu utility. Its main window
+	// starts hidden, floats when shown, and hides instead of quitting on
+	// close. It uses the same semantic renderer and native input as a normal
+	// window. Nil keeps ordinary window behavior unchanged.
+	Desktop *flatte.Desktop
 	// Title is the window title until the app's Frame.Title sets one.
 	Title string
 	// Width and Height are the initial content size in columns and lines of

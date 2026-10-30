@@ -33,6 +33,7 @@ type host[S any] struct {
 	// stop ends the platform run loop. It is called on the UI thread.
 	stop     func()
 	quitting bool
+	closed   bool
 
 	post func(func())
 	// text and clip are the backend's text layout and clipboard (nil: no
@@ -47,8 +48,10 @@ type host[S any] struct {
 	dialogs dialogBackend
 	// notes posts notifications (nil: Notify does nothing); active is
 	// whether the app is in front, as last reported.
-	notes  notifier
-	active bool
+	notes   notifier
+	desktop desktopBackend
+	media   mediaBackend
+	active  bool
 	// windows opens and closes the secondary windows (nil: none open);
 	// open are the ones open, by ID; focus is the focused window's ID ("" the
 	// main window).
@@ -77,6 +80,9 @@ type surface[S any] struct {
 	// dirty marks the scene stale: the app changed since it was rendered,
 	// so carets must be read from a fresh one.
 	dirty bool
+	// scroll is the wheel turned since the last frame, delivered all at
+	// once before the next render or event (see wheel).
+	scroll *pendingWheel
 
 	// drag is the ID of the Input a left-button drag began on: pointer
 	// events report carets for it until the button is released.
@@ -98,6 +104,15 @@ type surface[S any] struct {
 	hovers, presses *fader
 	clock           func() time.Time
 	selecting       bool
+}
+
+// desktopBackend performs native background-utility operations.
+type desktopBackend interface{ command(flatte.DesktopCommand) }
+
+// mediaBackend owns one app run's native system media controls.
+type mediaBackend interface {
+	update(*flatte.NowPlaying)
+	close()
 }
 
 // dialogBackend is a backend's native dialogs.
@@ -251,6 +266,17 @@ func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, po
 			h.notes.notify(n)
 		}
 	})
+	h.fx = flatte.WithHostDesktop(h.fx, func(c flatte.DesktopCommand) {
+		h.post(func() {
+			if h.quitting || h.desktop == nil {
+				return
+			}
+			if c.Kind == "hide" {
+				h.clearDesktopPresentation()
+			}
+			h.desktop.command(c)
+		})
+	})
 	go func() {
 		for {
 			select {
@@ -276,6 +302,14 @@ func (h *host[S]) start(width, height float64) {
 // close closes the secondary windows, releases the host's goroutines, and
 // runs OnExit.
 func (h *host[S]) close() {
+	if h.closed {
+		return
+	}
+	h.closed = true
+	if h.media != nil {
+		h.media.close()
+		h.media = nil
+	}
 	for id := range h.open {
 		if h.windows != nil {
 			h.windows.closeWindow(id)
@@ -295,6 +329,9 @@ func (h *host[S]) apply(u flatte.StateUpdate[S]) {
 
 // handle delivers ev to the app.
 func (h *host[S]) handle(ev flatte.Event) {
+	for _, s := range h.surfaces() {
+		s.flushWheel() // scrolling that came first is handled first
+	}
 	h.app.Tracer.Event(ev)
 	if h.app.Handle != nil {
 		h.app.Handle(h.app.State, ev, h.fx)
@@ -310,10 +347,34 @@ func (h *host[S]) after() {
 		return
 	}
 	h.syncWindows()
+	h.syncMedia()
+	if h.desktop != nil {
+		h.syncMenus()
+	}
 	for _, s := range h.surfaces() {
 		s.dirty = true
 		s.invalidate()
 	}
+}
+
+// syncMedia publishes app-owned metadata after each loop mutation, even
+// while the app is hidden or in the background.
+func (h *host[S]) syncMedia() {
+	if h.media == nil || h.app.NowPlaying == nil {
+		return
+	}
+	h.media.update(h.app.NowPlaying(h.app.State))
+}
+
+// mediaCommand posts native commands back onto the UI loop. Callbacks never
+// mutate application state, and queued callbacks are discarded after close.
+func (h *host[S]) mediaCommand(command flatte.MediaCommand) {
+	h.post(func() {
+		if h.closed || h.quitting {
+			return
+		}
+		h.handle(flatte.MediaEvent{Command: command})
+	})
 }
 
 // surfaces is the main window's surface and the open windows'.
@@ -384,9 +445,24 @@ func (h *host[S]) activated(on bool) {
 
 // closeRequested reports the user asking to close window id.
 func (h *host[S]) closeRequested(id string) {
+	if id == "" && h.desktop != nil {
+		h.desktop.command(flatte.DesktopCommand{Kind: "hide"})
+		h.handle(flatte.DesktopEvent{ID: "close", Source: "window"})
+		h.clearDesktopPresentation()
+		return
+	}
 	if _, ok := h.open[id]; ok {
 		h.handle(flatte.WindowEvent{Window: id, Kind: flatte.WindowCloseRequest})
 	}
+}
+
+// clearDesktopPresentation releases text retained only for host rendering.
+// The app owns its state and clears its draft when handling close/hide.
+func (h *host[S]) clearDesktopPresentation() {
+	h.scene = layout.Scene{}
+	h.pres = presentation{}
+	h.cursor = nil
+	h.dirty = true
 }
 
 // focusedSurface is the focused window's surface.
@@ -720,6 +796,7 @@ func (s *surface[S]) paste() {
 // fresh returns the scene as the app now stands, rendering again when the
 // app changed since the last one.
 func (s *surface[S]) fresh() layout.Scene {
+	s.flushWheel()
 	if s.dirty {
 		s.render()
 	}
@@ -855,16 +932,63 @@ func (s *surface[S]) hit(x, y float64) string {
 // wheel delivers notches wheel presses at (x, y), all hit-tested against
 // one scene: a fast scroll brings many notches at once, and laying the
 // frame out again between them made scrolling stutter.
+// A trackpad sends scroll events faster than a frame can be rendered, so
+// the turns are gathered and delivered once per frame: handling (and
+// redrawing) each one on arrival backs the events up, which caps the
+// scrolling speed and keeps it going after the gesture ends.
 func (s *surface[S]) wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod) {
-	id, r := s.fresh().HitTest(x, y)
+	if notches <= 0 {
+		return
+	}
+	var scene layout.Scene
+	if s.scroll != nil {
+		scene = s.scene // targets do not move under a gathered scroll
+	} else {
+		scene = s.fresh()
+	}
+	id, r := scene.HitTest(x, y)
 	ev := s.pointerAt(x, y, id, r)
 	ev.Button, ev.Action, ev.Mod = button, flatte.MousePress, mod
 	if op, ok := s.input(id); ok && s.h.text != nil {
 		ev.Caret, ev.HasCaret = s.h.text.caretAt(op, x, y), true
 	}
-	for range notches {
-		s.h.handle(ev)
+	if p := s.scroll; p != nil && (p.ev.Button != ev.Button || p.ev.Mod != ev.Mod || p.ev.Target != ev.Target) {
+		s.flushWheel()
 	}
+	if s.scroll == nil {
+		s.scroll = &pendingWheel{}
+	}
+	s.scroll.ev = ev
+	s.scroll.n += notches
+	s.invalidate()
+}
+
+// pendingWheel is the scrolling gathered for the next frame: n turns of
+// ev's button, at its latest position.
+type pendingWheel struct {
+	ev flatte.MouseEvent
+	n  int
+}
+
+// flushWheel delivers the gathered scrolling: one event per turn, as a
+// wheel reports them, and one redraw for all of them.
+func (s *surface[S]) flushWheel() {
+	p := s.scroll
+	if p == nil {
+		return
+	}
+	s.scroll = nil
+	h := s.h
+	for range p.n {
+		h.app.Tracer.Event(p.ev)
+		if h.app.Handle != nil {
+			h.app.Handle(h.app.State, p.ev, h.fx)
+		}
+		if h.quitting {
+			break
+		}
+	}
+	h.after()
 }
 
 // pointerAt is a pointer event at (x, y) points over target id with rect r
@@ -887,6 +1011,7 @@ func (s *surface[S]) pointerAt(x, y float64, id string, r layout.PointRect) flat
 // LayoutEvent and render again, at most maxLayoutPasses times.
 func (s *surface[S]) render() layout.Scene {
 	h := s.h
+	s.flushWheel()
 	for pass := 0; ; pass++ {
 		frame := s.view()
 		s.title = frame.Title

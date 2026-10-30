@@ -46,6 +46,10 @@ type App[S any] struct {
 	// RenderContext.Window). A desktop host opens real windows; a terminal
 	// draws them over the main frame.
 	Windows func(*S) []Window
+	// NowPlaying reports the current media item and the commands available
+	// for it. A native host publishes it to the system media controls; nil
+	// opts out. The callback is read on the app's state loop after changes.
+	NowPlaying func(*S) *NowPlaying
 }
 
 // action is a one-shot terminal capability request, queued by Effects
@@ -84,6 +88,8 @@ type Effects[S any] struct {
 	// notify posts notifications (WithHostNotifications); nil: terminal
 	// escape sequences.
 	notify func(Notification)
+	// desktop routes background utility commands to a native host.
+	desktop func(DesktopCommand)
 }
 
 // cancelReaderFactory is a seam for the input lifecycle tests. Keeping the
@@ -276,6 +282,8 @@ const (
 )
 
 type runConfig struct {
+	mediaCommands  <-chan MediaEvent
+	publishMedia   func(*NowPlaying)
 	input          io.Reader
 	output         io.Writer
 	defaultQuit    bool
@@ -291,6 +299,14 @@ type runConfig struct {
 // runner too.
 func withSuspendProcess(fn func()) Option {
 	return func(c *runConfig) { c.suspendProcess = fn }
+}
+
+// WithHostMedia connects a terminal run to a system media host. Commands are
+// handled on the state loop. publish is called synchronously on that loop with
+// an owned snapshot (or nil), and must return promptly. It receives nil again
+// at shutdown. Closing commands disconnects it without ending Run.
+func WithHostMedia(commands <-chan MediaEvent, publish func(*NowPlaying)) Option {
+	return func(c *runConfig) { c.mediaCommands, c.publishMedia = commands, publish }
 }
 
 // WithInput sets the event source. Default: os.Stdin.
@@ -360,6 +376,9 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	}
 	if cfg.inline && cfg.mouse != MouseModeNone {
 		return ErrInlineMouseUnsupported
+	}
+	if cfg.publishMedia != nil {
+		defer cfg.publishMedia(nil)
 	}
 	in, out := cfg.input, cfg.output
 	sink := &outputSink{w: out}
@@ -688,6 +707,21 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	}
 
 	draw := func() {
+		// Publish independently of visual frame equality. Playback may change
+		// while the visible terminal frame stays byte-identical.
+		defer func() {
+			if cfg.publishMedia != nil {
+				var snapshot *NowPlaying
+				if app.NowPlaying != nil {
+					if value := app.NowPlaying(app.State); value != nil {
+						copy := *value
+						snapshot = &copy
+					}
+				}
+				cfg.publishMedia(snapshot)
+			}
+		}()
+
 		if sink.err != nil {
 			return // terminal output failed; defer handles best-effort cleanup
 		}
@@ -1058,6 +1092,15 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			}
 			if quitRequested {
 				return nil
+			}
+		case event, ok := <-cfg.mediaCommands:
+			if !ok {
+				cfg.mediaCommands = nil
+				continue
+			}
+			app.Tracer.Event(event)
+			if app.Handle != nil {
+				app.Handle(app.State, event, effects)
 			}
 		case update := <-updates:
 			ApplyUpdate(app.State, app.Tracer, update)
