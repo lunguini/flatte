@@ -343,15 +343,17 @@ func onOff(on bool) string {
 }
 
 func main() {
-	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
 	flag.Parse()
 	app := flatte.App[State]{State: NewState(), Handle: Handle, View: View}
-	var err error
-	if *gui {
-		err = window.Run(context.Background(), app, window.Options{Title: "Settings", Width: 64, Height: 22})
-	} else {
-		err = flatte.Run(context.Background(), app, flatte.WithMouse(flatte.MouseModeCellMotion), flatte.WithoutDefaultQuit())
+	runOptions := []flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion), flatte.WithoutDefaultQuit()}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "Settings", Width: 64, Height: 22})
 	}
+	err := flatte.Run(context.Background(), app, runOptions...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

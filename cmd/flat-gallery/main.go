@@ -226,15 +226,17 @@ func mix(a, b color.RGBA, t float64) color.RGBA {
 }
 
 func main() {
-	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
 	flag.Parse()
 	app := flatte.App[State]{State: NewState(), Handle: Handle, View: View}
-	var err error
-	if *gui {
-		err = window.Run(context.Background(), app, window.Options{Title: "Gallery", Width: 80, Height: 34})
-	} else {
-		err = flatte.Run(context.Background(), app, flatte.WithMouse(flatte.MouseModeCellMotion), flatte.WithoutDefaultQuit())
+	runOptions := []flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion), flatte.WithoutDefaultQuit()}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "Gallery", Width: 80, Height: 34})
 	}
+	err := flatte.Run(context.Background(), app, runOptions...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

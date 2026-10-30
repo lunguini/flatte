@@ -3,18 +3,21 @@
 package main
 
 import (
-	"context"
 	"flag"
 
+	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/window"
 )
 
 func main() {
-	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
-	flag.Parse()
-	if *gui {
-		exitOnError(window.Run(context.Background(), landingApp(), window.Options{Title: "Flatte", Width: 100, Height: 32}))
-		return
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
 	}
-	exitOnError(runTerminal())
+	flag.Parse()
+	runOptions := []flatte.Option{}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "Flatte", Width: 100, Height: 32})
+	}
+	exitOnError(runApp(landingApp(), runOptions...))
 }

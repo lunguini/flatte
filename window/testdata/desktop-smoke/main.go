@@ -42,7 +42,7 @@ func main() {
 		OnExit: func(s *state) { s.exited = true },
 	}
 	shortcut := flatte.KeyEvent{Key: flatte.KeyF12, Mod: flatte.ModCtrl | flatte.ModAlt}
-	err := window.Run(ctx, app, window.Options{Width: 52, Height: 12, Desktop: &flatte.Desktop{Title: "Flatte smoke", Shortcut: &shortcut}})
+	err := flatte.Run(ctx, app, window.Options{Width: 52, Height: 12, Desktop: &flatte.Desktop{Title: "Flatte smoke", Shortcut: &shortcut}})
 	if err != nil || s.tick != 3 || !s.exited {
 		fmt.Fprintf(os.Stderr, "FAIL native lifecycle: %v, ticks=%d, exit=%v\n", err, s.tick, s.exited)
 		os.Exit(1)

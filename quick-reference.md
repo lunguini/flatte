@@ -25,14 +25,15 @@ import (
 
 ## One app, three hosts
 
-Keep application state, `Handle`, and `View` in `app.go`; keep platform entry
-points thin:
+Keep application state, `Handle`, and `View` in `app.go`. The same entry point
+uses the terminal by default on native builds, the browser page on js/wasm, or
+a macOS window when `window.Options` is passed:
 
 ```text
 myapp/
   app.go
-  main.go       # terminal or -gui on native builds
-  main_js.go    # browser bootstrap, js && wasm
+  main.go       # one flatte.Run call
+  main_js.go    # optional browser-specific integration
   index.html
   go.mod
 ```
@@ -42,26 +43,43 @@ needs both module requirements (and a local `replace` for development):
 
 ```go
 require (
-    github.com/lunguini/flatte v0.1.0
-    github.com/lunguini/flatte/window v0.1.0
+	github.com/lunguini/flatte v0.1.0
+	github.com/lunguini/flatte/window v0.1.0
 )
 replace github.com/lunguini/flatte => ../flatte
 replace github.com/lunguini/flatte/window => ../flatte/window
 ```
 
-The native `main.go` can fall back to the terminal when a requested window is
-unsupported:
+To request a window directly, pass it as an option:
 
 ```go
-err := window.Run(ctx, app, window.Options{Title: "My app"})
-if errors.Is(err, window.ErrUnsupported) {
-    err = flatte.Run(ctx, app)
-}
+err := flatte.Run(ctx, app, window.Options{Title: "My app"})
 ```
 
-For an optional `-gui` flag, call `flatte.Run` when it is false and use the
-same fallback when it is true. `main_js.go` simply calls `flatte.Run`; the
-build tagged implementation mounts the browser surface.
+On macOS this selects a native window. On other native platforms the option
+installs no host and `Run` uses the terminal; js/wasm keeps the browser page as
+the default. `window.Supported()` reports whether this build can open a native
+window. A sample that wants an optional `-gui` flag can define it only when
+`window.Supported()` is true, append `window.Options` when selected, and still
+call `flatte.Run` once:
+
+```go
+options := []flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion)}
+if gui {
+	options = append(options, window.Options{Title: "My app"})
+}
+err := flatte.Run(ctx, app, options...)
+```
+
+`window.MediaControls{}` opts a terminal run into the macOS media host. Use it
+when choosing terminal mode; `window.Options` selects the window host. If
+several options install a host, the last one wins. A native window must be
+started from the main goroutine.
+
+Host authors can implement `flatte.Host` and `flatte.Option`. `RunConfig` is
+opaque; `UseHost` selects the host driver. The non-generic `flatte.Session`
+gives it event, update, view, service, and lifecycle access without exposing
+`App[S]`.
 
 The browser page needs an element with `data-flatte`, a monospace font, a
 nonzero CSS size, and `tabindex="0"`. Load the `wasm_exec.js` supplied by the Go
@@ -90,15 +108,16 @@ TinyGo builds use the matching TinyGo runtime loader.
 | Mouse | Off until `WithMouse` | Always on | Off until `WithMouse` |
 | Drop / graphical point layout | No | Drop and point layout | No |
 | Default quit | Ctrl+C exits | `fx.Quit()` closes the window | `fx.Quit()` ends `Run`; the page stays, frozen |
-| Run options | `WithInput`, `WithOutput`, `WithInline`, `WithMouse`, `WithReportFocus` honored | Configure `window.Options`; terminal options do not apply | `WithMouse` honored; `WithInline`, `WithInput`, `WithOutput`, `WithReportFocus` are ignored |
+| Run options | `WithInput`, `WithOutput`, `WithInline`, `WithMouse`, `WithReportFocus` honored | `window.Options` selects the window; terminal input/output/mode options do not apply | `WithMouse` honored; `WithInline`, `WithInput`, `WithOutput`, `WithReportFocus` are ignored |
 
 `fx.Capabilities()` in `Handle` and `RenderContext.Capabilities` in `View`
 report the same host support, so an app can hide actions the host lacks;
 `Graphical` means point-based native rendering. Unsupported effects still
-answer: `Exec` folds `ErrUnsupported`, dialogs fold `ErrNoDialogs`. `flatest.StartWith` lets tests set width, height, Graphical,
-and capabilities, while `Driver.Resize(w, h)` updates both Handle and View.
-Use `flatest` for event and state behavior; native point metrics remain covered
-by `window.Snapshot` and window tests.
+answer: `Exec` folds `ErrUnsupported`, dialogs fold `ErrNoDialogs`.
+`flatest.StartWith` lets tests set width, height, Graphical, and capabilities,
+while `Driver.Resize(w, h)` updates both Handle and View. Use `flatest` for
+event and state behavior; native point metrics remain covered by
+`window.Snapshot` and window tests.
 
 ## Core Shape
 
@@ -685,13 +704,17 @@ func Handle(s *State, event flatte.Event, fx flatte.Effects[State]) {
 ## Native Window
 
 The `window` module (`github.com/lunguini/flatte/window`, macOS, no cgo) runs
-the same `App[S]` in a desktop window; choose the host at the call site:
+the same `App[S]` in a desktop window. Pass `window.Options` to the single Run
+entry point; on unsupported platforms it installs no host and Run falls back
+to the terminal or browser default:
 
 ```go
-err := window.Run(ctx, app, window.Options{Title: "My App", Width: 80, Height: 24})
+err := flatte.Run(ctx, app, window.Options{Title: "My App", Width: 80, Height: 24})
 ```
 
-`Run` must be called from the main goroutine. The window draws `Label`s in
+`window.Supported()` reports whether this build can open a window. A selected
+native window must be started from the main goroutine. The window draws
+`Label`s in
 the system font by role (titles semibold), `Box` borders as rounded strokes
 (an overlay's box as a raised surface; a `Title` in the stroke), `Input`s as
 outlined text fields with input-method support (multi-line ones as text
@@ -721,7 +744,7 @@ system's light/dark appearance live; `Snapshot` draws `Dark` when nil.
 ```go
 th := window.Light()
 th.Accent = color.RGBA{0x2e, 0x7d, 0x32, 0xff}
-err := window.Run(ctx, app, window.Options{Theme: &th})
+err := flatte.Run(ctx, app, window.Options{Theme: &th})
 ```
 
 ## Async And Effects
@@ -883,9 +906,9 @@ hiding, capture permission and the global shortcut. See
 [window/desktop.md](window/desktop.md) for bundle declarations and verification.
 
 Terminal applications can opt into the native media host with
-`window.RunTerminal(ctx, app, terminalOptions...)`. It uses `App.NowPlaying`
-and `MediaEvent` just like `window.Run`, without opening a window. On macOS
-call it from the main goroutine; other platforms run the ordinary terminal
-host. `flatte.Run` itself stays independent of native platform dependencies.
-Custom hosts can connect `flatte.WithHostMedia(commands, publish)`; publishing
-runs on the state loop and must return promptly.
+`flatte.Run(ctx, app, window.MediaControls{}, terminalOptions...)`. It uses
+`App.NowPlaying` and `MediaEvent` without opening a window. On macOS call it
+from the main goroutine; on other platforms the option is ignored. Choose
+`window.MediaControls` or `window.Options` for a run. Custom hosts can connect
+`flatte.WithHostMedia(commands, publish)`; publishing runs on the state loop
+and must return promptly.

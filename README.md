@@ -130,7 +130,8 @@ $env:FLATTE_WINDOWS_RESIZE_TTY = "1"
 ## Packages
 
 - `github.com/lunguini/flatte` (`flatte`) - runtime, events, effects, frame,
-  cursor, clipboard, exec, file selection.
+  cursor, clipboard, exec, file selection. `flatte.Run` uses the native
+  terminal by default and mounts a browser page on js/wasm.
 - `github.com/lunguini/flatte/flatui` - stateful UI helpers such as `TextField`,
   `Textarea`, `Viewport`, `List`, `Table`, `Tree`, `FocusRing`, `Paginator`,
   `Progress`, `Spinner`, `Timer`, and `Stopwatch`.
@@ -143,8 +144,10 @@ $env:FLATTE_WINDOWS_RESIZE_TTY = "1"
 - `github.com/lunguini/flatte/flatest` - deterministic app driver, golden
   assertions, frame rendering, and replay helpers.
 - `github.com/lunguini/flatte/window` (separate module) - runs the same app in
-  a native window with real text and components; macOS, no cgo. Choose the
-  host at the call site: `window.Run(ctx, app, window.Options{})`.
+  a native window with real text and components; macOS, no cgo. Select it
+  through the shared entry point: `flatte.Run(ctx, app, window.Options{})`.
+  On unsupported platforms `window.Options` installs no host; use
+  `window.Supported()` to show a native-window flag only where available.
 
 ## Navigation Patterns
 

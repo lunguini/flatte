@@ -1,7 +1,6 @@
 package window
 
 import (
-	"context"
 	"errors"
 	"image"
 
@@ -62,14 +61,6 @@ func (o Options) size() (cols, lines int) {
 		lines = 32
 	}
 	return cols, lines
-}
-
-// Run is retained temporarily for source migration. Use flatte.Run with
-// Options; unsupported platforms then fall back to their default host.
-//
-// Deprecated: call flatte.Run(ctx, app, opts).
-func Run[S any](ctx context.Context, app flatte.App[S], opts Options) error {
-	return flatte.Run(ctx, app, opts)
 }
 
 // Snapshot renders app's first frame — after Init, the first ResizeEvent,

@@ -15,7 +15,10 @@ import (
 )
 
 func main() {
-	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
 	flag.Parse()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -41,12 +44,11 @@ func main() {
 			saveErr = persist.Save(dockerapp.SessionFile, s.Session(), loadErr)
 		},
 	}
-	var runErr error
-	if *gui {
-		runErr = window.Run(ctx, app, window.Options{Title: "flat-docker", Width: 100, Height: 30})
-	} else {
-		runErr = flatte.Run(ctx, app, flatte.WithMouse(flatte.MouseModeCellMotion))
+	runOptions := []flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion)}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "flat-docker", Width: 100, Height: 30})
 	}
+	runErr := flatte.Run(ctx, app, runOptions...)
 	// Run has restored the terminal before returning; report persistence
 	// failures only after that cleanup and fail the process visibly.
 	if runErr != nil {

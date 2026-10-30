@@ -135,7 +135,10 @@ func formatDuration(d time.Duration) string {
 }
 
 func main() {
-	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
 	flag.Parse()
 	app := flatte.App[State]{
 		State:  NewState(),
@@ -143,12 +146,11 @@ func main() {
 		Handle: Handle,
 		View:   View,
 	}
-	var err error
-	if *gui {
-		err = window.Run(context.Background(), app, window.Options{Title: "Flat Timer", Width: 72, Height: 20})
-	} else {
-		err = flatte.Run(context.Background(), app)
+	runOptions := []flatte.Option{}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "Flat Timer", Width: 72, Height: 20})
 	}
+	err := flatte.Run(context.Background(), app, runOptions...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

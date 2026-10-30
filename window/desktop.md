@@ -7,7 +7,7 @@ shortcut := flatte.KeyEvent{
     Key: flatte.KeyCharacter, Rune: ' ',
     Mod: flatte.ModSuper | flatte.ModShift,
 }
-err := window.Run(ctx, app, window.Options{
+err := flatte.Run(ctx, app, window.Options{
     Title: "My app", Width: 80, Height: 37,
     Desktop: &flatte.Desktop{Title: "My app", Shortcut: &shortcut},
 })
@@ -16,8 +16,9 @@ err := window.Run(ctx, app, window.Options{
 The same `Frame.Root` and flatui controls render through the native scene
 renderer. No cgo, WebKit, local server, or alternate renderer is required.
 Ordinary window and terminal applications are unchanged when they do not opt in.
-The current desktop implementation is macOS-only. `Run` must start on the main
-goroutine, as for any native window app.
+The current desktop implementation is macOS-only. A run selecting
+`window.Options` must start on the main goroutine, as for any native window
+app.
 
 The utility starts hidden, with a status item and no Dock icon. Its status menu
 uses the existing `App.Menus` declaration; menu choices deliver `MenuEvent`.

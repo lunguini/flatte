@@ -62,7 +62,7 @@ func main() {
 	}, View: func(*state, flatte.RenderContext) flatte.Frame {
 		return flatte.Frame{Root: layout.Label{Text: "Direct capture smoke"}}
 	}}
-	err := window.Run(ctx, app, window.Options{Width: 40, Height: 10, Desktop: &flatte.Desktop{Title: "Direct capture test"}})
+	err := flatte.Run(ctx, app, window.Options{Width: 40, Height: 10, Desktop: &flatte.Desktop{Title: "Direct capture test"}})
 	if err != nil || s.failure != "" || s.tick != 2 {
 		fmt.Fprintln(os.Stderr, "FAIL", err, s.failure)
 		os.Exit(1)

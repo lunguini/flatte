@@ -981,10 +981,6 @@ func clampInt(n, low, high int) int {
 
 // ---------------------------------------------------------------- app setup
 
-func runTerminal() error {
-	return runApp(landingApp())
-}
-
 // newApp builds the landing page around caller-owned state.
 func newApp(state *State) flatte.App[State] {
 	return flatte.App[State]{

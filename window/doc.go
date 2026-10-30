@@ -1,9 +1,10 @@
 // Package window runs a Flatte app in a native desktop window instead of a
 // terminal. The app is unchanged — the same State, Handle, and View — and the
-// host is chosen at the call site:
+// host is selected with a flatte.Run option:
 //
-//	flatte.Run(ctx, app)                   // terminal
-//	window.Run(ctx, app, window.Options{}) // native window
+//	flatte.Run(ctx, app)                                    // terminal
+//	flatte.Run(ctx, app, window.Options{})                  // native window
+//	flatte.Run(ctx, app, window.Options{}, flatte.WithMouse(flatte.MouseModeCellMotion))
 //
 // The window draws the app's Frame.Root as real components: Labels in the
 // theme's font by text role, Boxes as rounded strokes (an overlay's box as a
@@ -27,14 +28,16 @@
 //
 //	th := window.Dark()
 //	th.Accent, th.Radius = color.RGBA{0xff, 0x80, 0x00, 0xff}, -1 // square
-//	window.Run(ctx, app, window.Options{Theme: &th})
+//	flatte.Run(ctx, app, window.Options{Theme: &th})
 //
 // Geometry reaches the app in cells, as in a terminal: ResizeEvent and
 // LayoutEvent sizes are whole columns and lines, and MouseEvent coordinates
 // are cells whose offset from TargetRect is exact inside the target.
 //
 // macOS only for now, with no cgo: the system frameworks are bound at run
-// time through purego. On other platforms Run returns ErrUnsupported.
+// time through purego. On other platforms Options installs no host and
+// flatte.Run falls back to the native terminal or browser page. Use
+// Supported to show a native-window flag only where a window is available.
 //
 // Menus: App.Menus is the native menu bar, between the application menu
 // (Quit, ⌘Q) and the Window menu (Close, ⌘W); an item's first ⌘ shortcut is

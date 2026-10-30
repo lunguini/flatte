@@ -698,7 +698,10 @@ func fileLine(s *State) string {
 }
 
 func main() {
-	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
 	copyOnSelect := flag.Bool("copy-on-select", false, "copy a mouse selection to the clipboard when the drag ends")
 	flag.Parse()
 	s := NewState()
@@ -711,13 +714,12 @@ func main() {
 		ContextMenu: ContextMenu,
 		Windows:     Windows,
 	}
-	var err error
-	if *gui {
-		err = window.Run(context.Background(), app, window.Options{Title: "Flat Editor", Width: 72, Height: 20, Autosave: "flat-editor.main"})
-	} else {
-		// Ctrl+C is the editor's (copy, or quit with nothing selected).
-		err = flatte.Run(context.Background(), app, flatte.WithMouse(flatte.MouseModeCellMotion), flatte.WithoutDefaultQuit())
+	runOptions := []flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion), flatte.WithoutDefaultQuit()}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "Flat Editor", Width: 72, Height: 20, Autosave: "flat-editor.main"})
 	}
+	// Ctrl+C is the editor's (copy, or quit with nothing selected).
+	err := flatte.Run(context.Background(), app, runOptions...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

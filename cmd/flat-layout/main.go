@@ -104,7 +104,10 @@ func main() {
 	}()
 	defer signal.Stop(sigCh)
 
-	gui := flag.Bool("gui", false, "run in a native window instead of the terminal")
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
 	flag.Parse()
 	state, loadErr := persist.Load(stateFile, State{})
 
@@ -117,12 +120,11 @@ func main() {
 			saveErr = persist.Save(stateFile, *s, loadErr)
 		},
 	}
-	var runErr error
-	if *gui {
-		runErr = window.Run(ctx, app, window.Options{Title: "flat-layout"})
-	} else {
-		runErr = flatte.Run(ctx, app, flatte.WithMouse(flatte.MouseModeNone))
+	runOptions := []flatte.Option{flatte.WithMouse(flatte.MouseModeNone)}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "flat-layout"})
 	}
+	runErr := flatte.Run(ctx, app, runOptions...)
 	// Run restores the terminal before returning, keeping the diagnostic
 	// visible when this watcher restarts the sample.
 	if runErr != nil {

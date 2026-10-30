@@ -7,6 +7,10 @@ cd cmd
 go run ./flat-pages
 ```
 
+Samples with an optional `-gui` flag define it only when `window.Supported()`
+is true. Selecting it appends `window.Options` to the same `flatte.Run` call;
+without the flag, native builds use the terminal and js/wasm uses the browser.
+
 ## Core Runtime And Async
 
 | Sample | Demonstrates |
