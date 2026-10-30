@@ -341,11 +341,10 @@ func WithReportFocus() Option { return func(c *runConfig) { c.reportFocus = true
 // ErrInlineMouseUnsupported for that combination.
 func WithInline() Option { return func(c *runConfig) { c.inline = true } }
 
-// Run owns the terminal loop until the app quits, input ends, or ctx is
-// cancelled. Those three shutdown paths are clean and return nil after OnExit
-// and terminal restoration; cancellation is intentionally not surfaced as
-// context.Canceled. Input, rendering, output, and cleanup failures are returned.
-func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) {
+// runTerminal owns the native terminal loop. Run delegates here on non-WASM
+// builds; keeping the proven terminal implementation intact limits the
+// platform-host change to backend selection.
+func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) {
 	if app.State == nil {
 		panic("flat: App.State is nil")
 	}

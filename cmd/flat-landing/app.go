@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"html"
 	"image/color"
 	"math"
 	"os"
@@ -192,9 +191,8 @@ func (s *State) adopt() {
 	}
 }
 
-// Tick advances the intro animation or the active hosted app. It is driven by
-// flatte.Every in the terminal and setInterval in the browser (Flatte's async
-// engine does not run under WASM), so the same stepping works on both paths.
+// Tick advances the intro animation or the active hosted app. App.Init drives
+// it through flatte.Every on both the terminal and browser Run backends.
 func Tick(s *State, now time.Time) {
 	s.frame++
 	// Real elapsed time since the previous tick, clamped so a backgrounded tab
@@ -981,160 +979,16 @@ func clampInt(n, low, high int) int {
 	return n
 }
 
-// ------------------------------------------------------------- ANSI to HTML
-
-func cssPixels(value string) (float64, bool) {
-	value = strings.TrimSpace(value)
-	value = strings.TrimSuffix(value, "px")
-	if value == "" {
-		return 0, false
-	}
-	n, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0, false
-	}
-	return n, true
-}
-
-type sgrState struct {
-	bold bool
-	fg   string
-}
-
-func ansiToHTML(s string) string {
-	var out strings.Builder
-	state := sgrState{}
-	open := false
-	for i := 0; i < len(s); {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-			end := i + 2
-			for end < len(s) && s[end] != 'm' {
-				end++
-			}
-			if end < len(s) {
-				if open {
-					out.WriteString("</span>")
-					open = false
-				}
-				state = applySGR(state, s[i+2:end])
-				if state.bold || state.fg != "" {
-					out.WriteString(`<span style="`)
-					if state.bold {
-						out.WriteString("font-weight:700;")
-					}
-					if state.fg != "" {
-						out.WriteString("color:")
-						out.WriteString(state.fg)
-						out.WriteByte(';')
-					}
-					out.WriteString(`">`)
-					open = true
-				}
-				i = end + 1
-				continue
-			}
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError && size == 1 {
-			out.WriteRune(r)
-			i++
-			continue
-		}
-		out.WriteString(html.EscapeString(string(r)))
-		i += size
-	}
-	if open {
-		out.WriteString("</span>")
-	}
-	return out.String()
-}
-
-func applySGR(state sgrState, params string) sgrState {
-	if params == "" {
-		return sgrState{}
-	}
-	parts := strings.Split(params, ";")
-	for i := 0; i < len(parts); i++ {
-		code, err := strconv.Atoi(parts[i])
-		if err != nil {
-			continue
-		}
-		switch code {
-		case 0:
-			state = sgrState{}
-		case 1:
-			state.bold = true
-		case 22:
-			state.bold = false
-		case 39:
-			state.fg = ""
-		case 38:
-			if i+4 < len(parts) && parts[i+1] == "2" {
-				state.fg = rgb(atoi(parts[i+2]), atoi(parts[i+3]), atoi(parts[i+4]))
-				i += 4
-			} else if i+2 < len(parts) && parts[i+1] == "5" {
-				state.fg = xterm256(atoi(parts[i+2]))
-				i += 2
-			}
-		}
-	}
-	return state
-}
-
-func atoi(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
-}
-
-func xterm256(n int) string {
-	if n < 0 {
-		n = 0
-	}
-	if n > 255 {
-		n = 255
-	}
-	base := []string{"#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0", "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff"}
-	if n < len(base) {
-		return base[n]
-	}
-	if n >= 232 {
-		level := 8 + (n-232)*10
-		return rgb(level, level, level)
-	}
-	n -= 16
-	return rgb(cubeLevel(n/36), cubeLevel((n/6)%6), cubeLevel(n%6))
-}
-
-func cubeLevel(n int) int {
-	if n == 0 {
-		return 0
-	}
-	return 55 + n*40
-}
-
-func rgb(r, g, b int) string { return "#" + hex2(r) + hex2(g) + hex2(b) }
-
-func hex2(n int) string {
-	if n < 0 {
-		n = 0
-	}
-	if n > 255 {
-		n = 255
-	}
-	const digits = "0123456789abcdef"
-	return string([]byte{digits[n>>4], digits[n&15]})
-}
-
-// ---------------------------------------------------------------- terminal
+// ---------------------------------------------------------------- app setup
 
 func runTerminal() error {
-	return flatte.Run(context.Background(), landingApp(), flatte.WithMouse(flatte.MouseModeCellMotion))
+	return runApp(landingApp())
 }
 
-// landingApp is the page as an app, ticking the intro and hosted apps.
-func landingApp() flatte.App[State] {
+// newApp builds the landing page around caller-owned state.
+func newApp(state *State) flatte.App[State] {
 	return flatte.App[State]{
-		State: NewState(),
+		State: state,
 		Init: func(_ *State, fx flatte.Effects[State]) {
 			if err := flatte.Every(fx, "host-tick", tickInterval, tickFold); err != nil {
 				panic(err) // tickInterval is a sample invariant
@@ -1143,6 +997,17 @@ func landingApp() flatte.App[State] {
 		Handle: Handle,
 		View:   View,
 	}
+}
+
+// runApp uses the same Run entry point on native and js/wasm hosts.
+func runApp(app flatte.App[State], opts ...flatte.Option) error {
+	options := append([]flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion)}, opts...)
+	return flatte.Run(context.Background(), app, options...)
+}
+
+// landingApp is the page as an app, ticking the intro and hosted apps.
+func landingApp() flatte.App[State] {
+	return newApp(NewState())
 }
 
 func tickFold(s *State, now time.Time) { Tick(s, now) }

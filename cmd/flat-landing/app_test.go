@@ -233,33 +233,6 @@ func TestTickAdvancesUIWidgets(t *testing.T) {
 	}
 }
 
-func TestANSIToHTMLPreservesBoxDrawingRunes(t *testing.T) {
-	html := ansiToHTML("╭─╮\n│x│\n╰─╯")
-	for _, want := range []string{"╭", "│", "╰"} {
-		if !strings.Contains(html, want) {
-			t.Fatalf("ansiToHTML() missing %q in %q", want, html)
-		}
-	}
-}
-
-func TestCSSPixelsParsesComputedStyles(t *testing.T) {
-	for _, tc := range []struct {
-		in   string
-		want float64
-		ok   bool
-	}{
-		{in: "24px", want: 24, ok: true},
-		{in: " 11.5px ", want: 11.5, ok: true},
-		{in: "normal", ok: false},
-		{in: "", ok: false},
-	} {
-		got, ok := cssPixels(tc.in)
-		if ok != tc.ok || got != tc.want {
-			t.Fatalf("cssPixels(%q) = %.2f, %v; want %.2f, %v", tc.in, got, ok, tc.want, tc.ok)
-		}
-	}
-}
-
 // The goldens were captured from the pre-Scroll View, which composed the
 // shell itself at max(window, minRowsFor(tab)) rows. In a window at least
 // that tall the runtime-composed page must be identical.
