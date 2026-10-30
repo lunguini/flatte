@@ -324,6 +324,11 @@ func (h *browserHost) bindInput() {
 	h.listen(h.surface, "pointerdown", func(js.Value) {
 		h.input.Call("focus", map[string]any{"preventScroll": true})
 	})
+	// The pointer's default action then focuses the surface itself (it is
+	// focusable for keyboard users); keys must keep reaching the input.
+	h.listen(h.surface, "focus", func(js.Value) {
+		h.input.Call("focus", map[string]any{"preventScroll": true})
+	})
 	h.listen(h.input, "keydown", func(ev js.Value) {
 		// While an IME composes, its keys (Enter to commit, arrows to pick a
 		// candidate, Backspace to edit) belong to it; the committed text
