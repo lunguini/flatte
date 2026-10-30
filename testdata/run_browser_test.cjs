@@ -2,8 +2,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 
 const [wasmExec, testWasm, mode = "test"] = process.argv.slice(2);
-if (!wasmExec || !testWasm || !["test", "smoke", "landing"].includes(mode)) {
-	throw new Error("usage: node run_browser_test.cjs WASM_EXEC WASM [test|smoke|landing]");
+if (!wasmExec || !testWasm || !["test", "smoke", "conformance", "landing"].includes(mode)) {
+	throw new Error("usage: node run_browser_test.cjs WASM_EXEC WASM [test|smoke|conformance|landing]");
 }
 
 require(wasmExec);
@@ -11,7 +11,7 @@ require("./browser_dom_shim.cjs");
 
 const go = new Go();
 let browserPassed = false;
-go.argv = mode === "test" ? [testWasm, "-test.run=TestBrowserRun", "-test.v"] : [testWasm];
+go.argv = mode === "test" ? [testWasm, "-test.run=TestBrowser(Run|HostConformance)", "-test.v"] : [testWasm];
 // Go's js/wasm runtime caps argv+env size; pass only what the test binary
 // needs rather than the (often large) CI environment.
 go.env = { TMPDIR: os.tmpdir() };
@@ -69,6 +69,75 @@ function smokeReady() {
 		globalThis.__flatteTest.clipboardText === "browser clipboard";
 }
 
+let conformanceStep = 0;
+function conformanceEvents() {
+	const dom = globalThis.__flatteTest;
+	const input = dom.input;
+	if (!input) return;
+	const text = dom.text;
+	const key = (name, values = {}) => {
+		if (name.length === 1 && !values.ctrlKey && !values.altKey && !values.metaKey) {
+			input.value = name;
+			input.__emit("input", {});
+			return;
+		}
+		input.__emit("keydown", { key: name, ...values });
+	};
+	switch (conformanceStep) {
+	case 0:
+		if (text.includes("async=true") && text.includes("order=init,resize")) {
+			key("a");
+			conformanceStep++;
+		}
+		break;
+	case 1:
+		if (text.includes("Choose a result")) {
+			key("Tab");
+			key("Enter");
+			conformanceStep++;
+		}
+		break;
+	case 2:
+		if (text.includes("alert=true/1/")) {
+			key("e");
+			conformanceStep++;
+		}
+		break;
+	case 3:
+		if (text.includes("exec=true/unsupported")) {
+			key("c");
+			conformanceStep++;
+		}
+		break;
+	case 4:
+		if (text.includes("clipboard=host conformance clipboard")) {
+			key("c", { ctrlKey: true });
+			conformanceStep++;
+		}
+		break;
+	case 5:
+		if (text.includes("ctrlc=1")) {
+			key("q");
+			conformanceStep++;
+		}
+	}
+}
+
+function conformanceReady() {
+	const dom = globalThis.__flatteTest;
+	const text = dom.text;
+	return [
+		"async=true",
+		"alert=true/1/",
+		"exec=true/unsupported",
+		"clipboard=host conformance clipboard",
+		"ctrlc=1",
+		"order=init,resize",
+		"fxcaps=exec:false,alert:true,clipboard:true,mouse:true,quit:false",
+		"ctxcaps=exec:false,alert:true,clipboard:true,mouse:true,quit:false",
+	].every((part) => text.includes(part)) && conformanceStep === 6 && dom.hostExit === true && dom.inputRemoved;
+}
+
 function landingReady() {
 	const text = globalThis.__flatteTest.text;
 	return text.includes("Game") && text.includes("App") && text.includes("Flatte") &&
@@ -93,10 +162,12 @@ WebAssembly.instantiate(fs.readFileSync(testWasm), go.importObject)
 			process.exit(1);
 		});
 		if (mode === "smoke") setTimeout(smokeEvents, 0);
+		if (mode === "conformance") setTimeout(conformanceEvents, 0);
 		if (mode === "landing") setTimeout(startLanding, 0);
 		const deadline = Date.now() + 10000;
 		const poll = () => {
-			const ready = mode === "smoke" ? smokeReady() : landingReady();
+			if (mode === "conformance") conformanceEvents();
+			const ready = mode === "smoke" ? smokeReady() : mode === "conformance" ? conformanceReady() : landingReady();
 			if (ready) {
 				browserPassed = true;
 				process.exit(0);
