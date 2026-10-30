@@ -17,9 +17,11 @@ import (
 // Settle; time-based effects (Every) are driven by a fake clock advanced
 // with Advance. The width is fixed so frames are deterministic.
 type Driver[S any] struct {
-	app    flatte.App[S]
-	width  int
-	height int // from the last ResizeEvent; Root frames compose at width×height
+	app       flatte.App[S]
+	width     int
+	height    int // from the last ResizeEvent; Root frames compose at width×height
+	graphical bool
+	caps      flatte.Capabilities
 	// delivered is the rect set last delivered as a LayoutEvent; comp is the
 	// composition of the last rendered frame, which mouse events hit-test
 	// against — the frame "on screen", as in Run.
@@ -44,11 +46,32 @@ type Driver[S any] struct {
 // Start builds a Driver, runs Init, delivers the initial ResizeEvent, and
 // renders the first frame.
 func Start[S any](app flatte.App[S], width int) *Driver[S] {
+	return StartWith(app, Options{Width: width, Height: 24})
+}
+
+// Options configures the deterministic render context of a Driver.
+type Options struct {
+	Width, Height int
+	Graphical     bool
+	Capabilities  flatte.Capabilities
+}
+
+// StartWith builds a Driver with an explicit size and host render context.
+func StartWith[S any](app flatte.App[S], opts Options) *Driver[S] {
+	if opts.Width <= 0 {
+		opts.Width = 72
+	}
+	if opts.Height <= 0 {
+		opts.Height = 24
+	}
 	d := &Driver[S]{
-		app:     app,
-		width:   width,
-		updates: make([]flatte.StateUpdate[S], 0, 64),
-		clock:   newFakeClock(),
+		app:       app,
+		width:     opts.Width,
+		height:    opts.Height,
+		graphical: opts.Graphical,
+		caps:      opts.Capabilities,
+		updates:   make([]flatte.StateUpdate[S], 0, 64),
+		clock:     newFakeClock(),
 	}
 	// One Effects for the whole session: the latest registry (and thus
 	// Latest's cross-event supersede) must persist across events, exactly
@@ -71,9 +94,21 @@ func Start[S any](app flatte.App[S], width int) *Driver[S] {
 	if app.Init != nil {
 		app.Init(app.State, d.fx)
 	}
-	d.deliver(flatte.ResizeEvent{Width: width, Height: 24})
+	d.deliver(flatte.ResizeEvent{Width: opts.Width, Height: opts.Height})
 	d.render()
 	return d
+}
+
+// Resize updates dimensions used by Handle, View, and root layout composition.
+func (d *Driver[S]) Resize(width, height int) flatte.Frame {
+	if width > 0 {
+		d.width = width
+	}
+	if height > 0 {
+		d.height = height
+	}
+	d.deliver(flatte.ResizeEvent{Width: d.width, Height: d.height})
+	return d.render()
 }
 
 // Send delivers one event, drains the synchronous updates it produced,
@@ -102,6 +137,7 @@ func (d *Driver[S]) deliverLayout(ev flatte.LayoutEvent) { d.deliver(ev) }
 func (d *Driver[S]) deliver(ev flatte.Event) {
 	switch e := ev.(type) {
 	case flatte.ResizeEvent:
+		d.width = e.Width
 		d.height = e.Height
 	case flatte.MouseEvent:
 		e.Target, e.TargetRect = d.comp.HitTest(e.X, e.Y)
@@ -181,7 +217,7 @@ func (d *Driver[S]) WindowFrame(id string) (frame flatte.Frame, ok bool) {
 }
 
 func (d *Driver[S]) view() flatte.Frame {
-	return d.app.View(d.app.State, flatte.RenderContext{Width: d.width})
+	return d.app.View(d.app.State, flatte.RenderContext{Width: d.width, Height: d.height, Graphical: d.graphical, Capabilities: d.caps})
 }
 
 // Frames runs the driver through a sequence of steps and returns the

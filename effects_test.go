@@ -37,6 +37,15 @@ func TestEffectsSendIsSafeOnZeroAndNilUpdate(t *testing.T) {
 	}
 }
 
+func TestExecOnZeroEffectsReportsUnsupported(t *testing.T) {
+	var fx Effects[testState]
+	var got error
+	Exec(fx, "edit", nil, func(_ *testState, err error) { got = err })
+	if got != ErrUnsupported {
+		t.Fatalf("Exec error = %v, want ErrUnsupported", got)
+	}
+}
+
 func TestEffectsSendRejectsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	updates := make(chan StateUpdate[testState], 1)

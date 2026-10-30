@@ -276,7 +276,11 @@ func discardThen(s *State, fx flatte.Effects[State], then func(*State)) {
 		Title:   "Discard unsaved changes?",
 		Message: "Your changes to " + displayName(s.path) + " will be lost.",
 		Buttons: []string{"Discard", "Cancel"},
-	}, func(s *State, button int) {
+	}, func(s *State, button int, err error) {
+		if err != nil {
+			s.status = err.Error()
+			return
+		}
 		if button == 0 {
 			then(s)
 		}

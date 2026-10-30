@@ -1059,7 +1059,7 @@ func (s *surface[S]) view() flatte.Frame {
 	if s.h.app.View == nil {
 		return flatte.Frame{}
 	}
-	return s.h.app.View(s.h.app.State, flatte.RenderContext{Width: s.h.cols(s.width), ColorProfile: colorprofile.TrueColor, Window: s.id, Graphical: true})
+	return s.h.app.View(s.h.app.State, flatte.RenderContext{Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor, Window: s.id, Graphical: true, Capabilities: flatte.Capabilities{Alert: true, OpenFile: true, SaveFile: true, Notifications: s.h.notes != nil, Clipboard: s.h.clip != nil, Drop: true, Mouse: true, Graphical: true, Quit: true}})
 }
 
 // wheelAccumulator turns precise scroll deltas (trackpads, in points) into

@@ -54,7 +54,7 @@ flatte package flatte
   const MouseWheelUp MouseButton = 4
   const WindowCloseRequest WindowEventKind = 1
   const WindowFocused WindowEventKind = 0
-  func Alert[S any](fx Effects[S], name string, d AlertDialog, fold func(s*S, button int))
+  func Alert[S any](fx Effects[S], name string, d AlertDialog, fold func(s*S, button int, err error))
   func ApplyUpdate[S any](s*S, tracer Tracer, update StateUpdate[S])
   func Cancel[S any](fx Effects[S], name string)
   func ComposeFrame(frame Frame, width int, height int)(Frame, layout.Composition)
@@ -137,6 +137,20 @@ flatte package flatte
   field App.Windows func(*S)[]Window [order=8]
   field App.NowPlaying func(*S) *NowPlaying [order=9]
   struct App fields=10 comparable=false
+  type Capabilities struct
+  field Capabilities.Exec bool [order=0]
+  field Capabilities.Suspend bool [order=1]
+  field Capabilities.Print bool [order=2]
+  field Capabilities.Alert bool [order=3]
+  field Capabilities.OpenFile bool [order=4]
+  field Capabilities.SaveFile bool [order=5]
+  field Capabilities.Notifications bool [order=6]
+  field Capabilities.Clipboard bool [order=7]
+  field Capabilities.Drop bool [order=8]
+  field Capabilities.Mouse bool [order=9]
+  field Capabilities.Graphical bool [order=10]
+  field Capabilities.Quit bool [order=11]
+  struct Capabilities fields=12 comparable=true
   type ClipboardEvent struct
   field ClipboardEvent.Text string [order=0]
   struct ClipboardEvent fields=1 comparable=true
@@ -175,7 +189,8 @@ flatte package flatte
   type DialogResult struct
   field DialogResult.Paths []string [order=0]
   field DialogResult.Button int [order=1]
-  struct DialogResult fields=2 comparable=false
+  field DialogResult.Err error [order=2]
+  struct DialogResult fields=3 comparable=false
   type DropEvent struct
   field DropEvent.X int [order=0]
   field DropEvent.Y int [order=1]
@@ -301,10 +316,12 @@ flatte package flatte
   struct PasteEvent fields=1 comparable=true
   type RenderContext struct
   field RenderContext.Width int [order=0]
-  field RenderContext.ColorProfile colorprofile.Profile [order=1]
-  field RenderContext.Window string [order=2]
-  field RenderContext.Graphical bool [order=3]
-  struct RenderContext fields=4 comparable=true
+  field RenderContext.Height int [order=1]
+  field RenderContext.ColorProfile colorprofile.Profile [order=2]
+  field RenderContext.Window string [order=3]
+  field RenderContext.Graphical bool [order=4]
+  field RenderContext.Capabilities Capabilities [order=5]
+  struct RenderContext fields=6 comparable=true
   type ResizeEvent struct
   field ResizeEvent.Width int [order=0]
   field ResizeEvent.Height int [order=1]
@@ -348,6 +365,7 @@ flatte package flatte
   var ErrInvalidInterval error
   var ErrNoDialogs error
   var ErrNoSelection error
+  var ErrUnsupported error
 flatest package flatest
   func AssertFrames(t*testing.T, path string, frames[]flatte.Frame)
   func AssertGolden(t*testing.T, path string, frame string)
@@ -357,6 +375,7 @@ flatest package flatest
   func RenderFrame(frame flatte.Frame) string
   func Replay[S any](app flatte.App[S], width int, rec*Recorder) *Recorder
   func Start[S any](app flatte.App[S], width int) *Driver[S]
+  func StartWith[S any](app flatte.App[S], opts Options) *Driver[S]
   method *Driver[S].Advance(by time.Duration) flatte.Frame
   method *Driver[S].Answer(r flatte.DialogResult) flatte.Frame
   method *Driver[S].Close()
@@ -364,6 +383,7 @@ flatest package flatest
   method *Driver[S].Frame() flatte.Frame
   method *Driver[S].Notifications()[]flatte.Notification
   method *Driver[S].Quit() bool
+  method *Driver[S].Resize(width int, height int) flatte.Frame
   method *Driver[S].Send(ev flatte.Event) flatte.Frame
   method *Driver[S].Settle() flatte.Frame
   method *Driver[S].State() *S
@@ -376,18 +396,26 @@ flatest package flatest
   field Driver.<unexported> flatte.App[S] [order=0]
   field Driver.<unexported> int [order=1]
   field Driver.<unexported> int [order=2]
-  field Driver.<unexported> map[string] layout.Rect [order=3]
-  field Driver.<unexported> layout.Composition [order=4]
-  field Driver.<unexported> flatte.MenuHost [order=5]
-  field Driver.<unexported> flatte.WindowHost [order=6]
-  field Driver.<unexported> []flatte.StateUpdate[S] [order=7]
-  field Driver.<unexported> *fakeClock [order=8]
-  field Driver.<unexported> []func() [order=9]
-  field Driver.<unexported> bool [order=10]
-  field Driver.<unexported> flatte.Effects[S] [order=11]
-  field Driver.<unexported> []pendingDialog [order=12]
-  field Driver.<unexported> []flatte.Notification [order=13]
-  struct Driver fields=14 comparable=false
+  field Driver.<unexported> bool [order=3]
+  field Driver.<unexported> flatte.Capabilities [order=4]
+  field Driver.<unexported> map[string] layout.Rect [order=5]
+  field Driver.<unexported> layout.Composition [order=6]
+  field Driver.<unexported> flatte.MenuHost [order=7]
+  field Driver.<unexported> flatte.WindowHost [order=8]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=9]
+  field Driver.<unexported> *fakeClock [order=10]
+  field Driver.<unexported> []func() [order=11]
+  field Driver.<unexported> bool [order=12]
+  field Driver.<unexported> flatte.Effects[S] [order=13]
+  field Driver.<unexported> []pendingDialog [order=14]
+  field Driver.<unexported> []flatte.Notification [order=15]
+  struct Driver fields=16 comparable=false
+  type Options struct
+  field Options.Width int [order=0]
+  field Options.Height int [order=1]
+  field Options.Graphical bool [order=2]
+  field Options.Capabilities flatte.Capabilities [order=3]
+  struct Options fields=4 comparable=true
   type Recorder struct
   field Recorder.Steps []Step [order=0]
   struct Recorder fields=1 comparable=false
@@ -480,6 +508,7 @@ flatui package flatui
   method *TextField.Edit(key flatte.KeyEvent) bool
   method *TextField.HandleMouse(id string, e flatte.MouseEvent) bool
   method *TextField.Insert(r rune)
+  method *TextField.InsertText(s string)
   method *TextField.MoveEnd()
   method *TextField.MoveEndSelecting()
   method *TextField.MoveLeft()

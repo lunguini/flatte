@@ -65,6 +65,27 @@ func TestDriverDeliversInitialResize(t *testing.T) {
 	}
 }
 
+func TestDriverResizeUpdatesHandleAndViewDimensions(t *testing.T) {
+	var handleW, handleH, viewW, viewH int
+	app := flatte.App[counter]{
+		State: &counter{},
+		Handle: func(_ *counter, ev flatte.Event, _ flatte.Effects[counter]) {
+			if r, ok := ev.(flatte.ResizeEvent); ok {
+				handleW, handleH = r.Width, r.Height
+			}
+		},
+		View: func(_ *counter, ctx flatte.RenderContext) flatte.Frame {
+			viewW, viewH = ctx.Width, ctx.Height
+			return flatte.Frame{Content: "x"}
+		},
+	}
+	d := StartWith(app, Options{Width: 30, Height: 12, Graphical: true, Capabilities: flatte.Capabilities{Drop: true}})
+	d.Resize(50, 18)
+	if handleW != 50 || handleH != 18 || viewW != 50 || viewH != 18 {
+		t.Fatalf("Handle=%dx%d View=%dx%d; want all dimensions 50x18", handleW, handleH, viewW, viewH)
+	}
+}
+
 func TestDriverRecordsNotifications(t *testing.T) {
 	type st struct{}
 	app := flatte.App[st]{

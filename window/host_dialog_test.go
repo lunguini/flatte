@@ -35,7 +35,7 @@ func dialogHost(t *testing.T) (*host[dialogState], *dialogState, *fakeBackend) {
 				case 'o':
 					flatte.OpenFile(fx, "open", flatte.OpenDialog{Title: "Open"}, func(s *dialogState, p []string, _ error) { s.paths = p })
 				case 'a':
-					flatte.Alert(fx, "alert", flatte.AlertDialog{Title: "Sure?"}, func(s *dialogState, b int) { s.button = b })
+					flatte.Alert(fx, "alert", flatte.AlertDialog{Title: "Sure?"}, func(s *dialogState, b int, _ error) { s.button = b })
 				}
 			case flatte.DropEvent:
 				s.drops = append(s.drops, e)

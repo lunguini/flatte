@@ -40,7 +40,7 @@ func TestDialogsWithoutAHost(t *testing.T) {
 	s := &dialogState{}
 	OpenFile(fx, "open", OpenDialog{}, func(s *dialogState, p []string, err error) { s.paths, s.err = p, err; s.folds++ })
 	SaveFile(fx, "save", SaveDialog{}, func(s *dialogState, p string, err error) { s.path, s.err = p, err; s.folds++ })
-	Alert(fx, "alert", AlertDialog{}, func(s *dialogState, b int) { s.button = b; s.folds++ })
+	Alert(fx, "alert", AlertDialog{}, func(s *dialogState, b int, err error) { s.button = b; s.err = err; s.folds++ })
 	apply(s)
 	if s.folds != 3 || s.paths != nil || s.path != "" || s.button != -1 || !errors.Is(s.err, ErrNoDialogs) {
 		t.Fatalf("%+v", s)
@@ -58,7 +58,7 @@ func TestDialogsThroughAHost(t *testing.T) {
 	s := &dialogState{}
 	OpenFile(fx, "open", OpenDialog{Title: "Pick", Multiple: true}, func(s *dialogState, p []string, err error) { s.paths, s.err = p, err })
 	SaveFile(fx, "save", SaveDialog{Name: "a.txt"}, func(s *dialogState, p string, err error) { s.path = p })
-	Alert(fx, "alert", AlertDialog{Buttons: []string{"Yes", "No"}}, func(s *dialogState, b int) { s.button = b })
+	Alert(fx, "alert", AlertDialog{Buttons: []string{"Yes", "No"}}, func(s *dialogState, b int, err error) { s.button = b; s.err = err })
 	if len(shown) != 3 || shown[0].Open.Title != "Pick" || shown[1].Save.Name != "a.txt" || shown[2].Alert.Buttons[1] != "No" {
 		t.Fatalf("shown %+v", shown)
 	}
@@ -325,7 +325,7 @@ func TestRunShowsDialogs(t *testing.T) {
 				}
 				switch k.Rune {
 				case 'a':
-					Alert(fx, "confirm", AlertDialog{Title: "Really?", Buttons: []string{"Yes", "No"}}, func(s *state, b int) {
+					Alert(fx, "confirm", AlertDialog{Title: "Really?", Buttons: []string{"Yes", "No"}}, func(s *state, b int, _ error) {
 						s.buttons = append(s.buttons, b)
 					})
 				case 'q':

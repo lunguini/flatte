@@ -15,6 +15,7 @@ const (
 
 type RenderContext struct {
 	Width        int
+	Height       int
 	ColorProfile colorprofile.Profile
 	// Window is the window being drawn: "" for the main window, or a
 	// secondary window's ID (App.Windows).
@@ -23,7 +24,16 @@ type RenderContext struct {
 	// Points sizes, images, and icon shapes show as themselves. False in a
 	// terminal, where they round up to whole cells and show their text, so
 	// a view can size generously for one and compactly for the other.
-	Graphical bool
+	Graphical    bool
+	Capabilities Capabilities
+}
+
+// Capabilities reports effect and input support provided by the current host.
+type Capabilities struct {
+	Exec, Suspend, Print                  bool
+	Alert, OpenFile, SaveFile             bool
+	Notifications, Clipboard, Drop, Mouse bool
+	Graphical, Quit                       bool
 }
 
 type fdWriter interface {
@@ -52,9 +62,11 @@ func terminalSize(out io.Writer) (width, height int) {
 // renderer color-profile detection so apps can pick theme styles without
 // owning terminal probing.
 func RenderContextFor(out io.Writer) RenderContext {
-	width, _ := terminalSize(out)
+	width, height := terminalSize(out)
 	return RenderContext{
 		Width:        width,
+		Height:       height,
 		ColorProfile: detectRendererColorProfile(out, os.Environ()),
+		Capabilities: Capabilities{Exec: true, Suspend: true, Print: true, Alert: true, OpenFile: true, SaveFile: true, Clipboard: true, Mouse: true, Quit: true},
 	}
 }

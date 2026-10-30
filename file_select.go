@@ -27,7 +27,16 @@ type FileSelection struct {
 // apps can plug in fzf, yazi, ranger, or another command while Flatte owns the
 // terminal handoff.
 func SelectFile[S any](fx Effects[S], name string, cmd *exec.Cmd, fold func(*S, FileSelection)) {
-	if fx.enqueue == nil || cmd == nil {
+	if fx.enqueue == nil {
+		Exec(fx, name, cmd, func(s *S, err error) { fold(s, FileSelection{Err: err}) })
+		return
+	}
+	if cmd == nil {
+		update := Named(name, func(s *S) { fold(s, FileSelection{Err: errors.New("flat: nil file selector command")}) })
+		if !fx.trySend(update) {
+			ctx := fx.Ctx()
+			go fx.send(ctx, update)
+		}
 		return
 	}
 	var stdout bytes.Buffer

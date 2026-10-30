@@ -59,6 +59,14 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	})
 	effects = WithHostClipboard(effects, host.writeClipboard, host.readClipboard)
 	effects = WithHostNotifications(effects, host.notify)
+	var dialogs termDialogs
+	effects = WithHostDialogs(effects, func(d Dialog, done func(DialogResult)) {
+		if d.Alert == nil {
+			done(DialogResult{Err: ErrNoDialogs})
+			return
+		}
+		dialogs.show(d, done)
+	})
 	defer cancel()
 	defer host.close()
 	defer func() {
@@ -84,6 +92,13 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	var lastComp layout.Composition
 	var lastLayout map[string]layout.Rect
 	deliver := func(ev Event) bool {
+		if dialogs.isOpen() {
+			routed, pass := dialogs.route(ev)
+			if !pass {
+				return true
+			}
+			ev = routed
+		}
 		if mouse, ok := ev.(MouseEvent); ok {
 			mouse.Target, mouse.TargetRect = lastComp.HitTest(mouse.X, mouse.Y)
 			mouse.Caret, mouse.HasCaret = lastComp.CaretAt(mouse.X, mouse.Y)
@@ -122,7 +137,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				return
 			}
 		}
-		renderContext := RenderContext{Width: width, ColorProfile: colorprofile.TrueColor, Graphical: false}
+		renderContext := RenderContext{Width: width, Height: height, ColorProfile: colorprofile.TrueColor, Graphical: false, Capabilities: Capabilities{Alert: true, Notifications: true, Clipboard: true, Mouse: cfg.mouse != MouseModeNone, Quit: true}}
 		var handleLayout func(LayoutEvent)
 		if app.Handle != nil {
 			handleLayout = func(ev LayoutEvent) {
@@ -142,6 +157,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		}
 		frame = PaintWindows(&windows, app, frame, handleLayout)
 		frame = menus.Paint(frame)
+		frame = dialogs.paint(frame, width, height)
 		host.render(frame)
 		if cfg.publishMedia != nil {
 			var snapshot *NowPlaying

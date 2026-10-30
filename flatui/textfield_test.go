@@ -23,6 +23,14 @@ func TestTextFieldInsertBackspaceDeleteAndCursorMovement(t *testing.T) {
 	}
 }
 
+func TestTextFieldInsertTextDropsNewlines(t *testing.T) {
+	field := TextField{Value: "abcd", Cursor: 1}
+	field.InsertText("X\r\nY")
+	if field.Value != "aXYbcd" || field.Cursor != 3 {
+		t.Fatalf("Value, Cursor = %q, %d; want aXYbcd, 3", field.Value, field.Cursor)
+	}
+}
+
 func TestTextFieldHandlesMultibyteRunes(t *testing.T) {
 	field := TextField{}
 

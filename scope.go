@@ -15,7 +15,7 @@ import (
 // Usage:
 //
 //	scope := flatte.NewScope(fx, "logs")
-//	scope.Stream(fx, func(ctx context.Context, send func(string)) { ... }, fold)
+//	flatte.ScopeStream(scope, fx, func(ctx context.Context, send func(string)) { ... }, fold)
 //	// On selection change or screen leave:
 //	scope.Cancel()
 //	scope = flatte.NewScope(fx, "logs")  // fresh scope for new selection

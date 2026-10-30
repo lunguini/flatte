@@ -2,6 +2,9 @@ package flatte
 
 import "errors"
 
+// ErrUnsupported reports that the current host cannot perform an effect.
+var ErrUnsupported = errors.New("flatte: effect unsupported by this host")
+
 // ErrNoDialogs is the error OpenFile and SaveFile answer with on a host
 // that cannot show dialogs (a zero Effects value, or a harness without
 // them).
@@ -58,6 +61,7 @@ type Dialog struct {
 type DialogResult struct {
 	Paths  []string
 	Button int
+	Err    error
 }
 
 // WithHostDialogs returns fx with dialogs shown by show: a host calls done
@@ -92,20 +96,19 @@ func SaveFile[S any](fx Effects[S], name string, d SaveDialog, fold func(s *S, p
 }
 
 // Alert shows a message with buttons and folds the chosen button's index
-// into state as one update named name: -1 when it was dismissed without a
-// choice, or on a host without dialogs. Call it from Init, Handle, or a
-// fold.
-func Alert[S any](fx Effects[S], name string, d AlertDialog, fold func(s *S, button int)) {
+// into state as one update named name. A dismissed alert has button -1; a
+// host without dialogs reports ErrNoDialogs. Call it from Init, Handle, or a fold.
+func Alert[S any](fx Effects[S], name string, d AlertDialog, fold func(s *S, button int, err error)) {
 	showDialog(fx, name, Dialog{Alert: &d}, func(s *S, r DialogResult, err error) {
-		if err != nil {
-			r.Button = -1
-		}
-		fold(s, r.Button)
+		fold(s, r.Button, err)
 	})
 }
 
 func showDialog[S any](fx Effects[S], name string, d Dialog, fold func(*S, DialogResult, error)) {
 	deliver := func(r DialogResult, err error) {
+		if err == nil {
+			err = r.Err
+		}
 		update := Named(name, func(s *S) { fold(s, r, err) })
 		if !fx.trySend(update) {
 			// A full update queue: spill instead of blocking the loop on

@@ -194,6 +194,7 @@ Flatte stands on a lot of excellent open-source work:
 ## Further Reading
 
 - [Quick Reference](quick-reference.md) maps common TUI needs to Flatte APIs.
+- [One app, three hosts](quick-reference.md#one-app-three-hosts) shows the terminal, native window, and browser setup.
 - [Examples](examples.md) maps every sample app to the capability it
   demonstrates.
 - [Contributing](CONTRIBUTING.md) covers Conventional Commits, the quality

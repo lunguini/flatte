@@ -152,7 +152,7 @@ func PaintWindows[S any](wh *WindowHost, app App[S], frame Frame, handle func(La
 			}
 		}
 		wf, comp, delivered := SettleFrame(func() Frame {
-			return app.View(app.State, RenderContext{Width: hw.w, Window: id})
+			return app.View(app.State, RenderContext{Width: hw.w, Height: hw.h, Window: id, Capabilities: Capabilities{Exec: true, Suspend: true, Print: true, Alert: true, OpenFile: true, SaveFile: true, Clipboard: true, Quit: true}})
 		}, deliver, hw.delivered, hw.w, hw.h)
 		hw.comp, hw.delivered, hw.title, hw.frame = comp, delivered, wf.Title, wf
 		frame.Content = layout.OverlayAt(frame.Content, hw.render(id == wh.focus), hw.x, hw.y)

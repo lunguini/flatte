@@ -233,7 +233,7 @@ func (fx Effects[S]) ReadClipboard() {
 // the terminal and repaints. On platforms without job control it is a
 // release/restore round trip. The framework never binds a key to this —
 // apps decide what (if anything) triggers it. Loop-goroutine-only, like
-// Quit. Safe on a zero Effects value.
+// Quit. No-op on window and browser hosts and on a zero Effects value.
 func (fx Effects[S]) Suspend() {
 	if fx.enqueue != nil {
 		fx.enqueue(action{suspend: true})
@@ -248,7 +248,7 @@ func (fx Effects[S]) Suspend() {
 // because the prepended lines would be overwritten by the next frame. The
 // content is the app's to format (no trailing newline is added). Newlines in s
 // produce multiple scrollback lines. Loop-goroutine-only, like Quit. Safe on a
-// zero Effects value.
+// zero Effects value. No-op on window and browser hosts.
 func (fx Effects[S]) Print(s string) {
 	if fx.enqueue != nil {
 		fx.enqueue(action{print: s})
@@ -726,6 +726,8 @@ func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr
 		}
 		renderCtx := RenderContextFor(out)
 		_, terminalHeight := terminalSize(out)
+		renderCtx.Height = terminalHeight
+		renderCtx.Capabilities.Mouse = cfg.mouse != MouseModeNone
 		var handleLayout func(LayoutEvent)
 		if app.Handle != nil {
 			handleLayout = func(ev LayoutEvent) {

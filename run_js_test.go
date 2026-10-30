@@ -118,6 +118,60 @@ func TestBrowserRunLifecycleInputRenderingAndCleanup(t *testing.T) {
 	}
 }
 
+func TestBrowserRunAlertUsesCellDialogAndFileDialogsAreUnsupported(t *testing.T) {
+	testDOM := jsTestDOM(t)
+	state := &struct {
+		button            int
+		alertErr, openErr error
+	}{button: -2}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, App[struct {
+			button            int
+			alertErr, openErr error
+		}]{
+			State: state,
+			Init: func(s *struct {
+				button            int
+				alertErr, openErr error
+			}, fx Effects[struct {
+				button            int
+				alertErr, openErr error
+			}]) {
+				Alert(fx, "alert", AlertDialog{Title: "Confirm", Message: "Save changes?", Buttons: []string{"Yes", "No"}}, func(s *struct {
+					button            int
+					alertErr, openErr error
+				}, button int, err error) {
+					s.button, s.alertErr = button, err
+				})
+				OpenFile(fx, "open", OpenDialog{}, func(s *struct {
+					button            int
+					alertErr, openErr error
+				}, _ []string, err error) {
+					s.openErr = err
+				})
+			},
+			View: func(*struct {
+				button            int
+				alertErr, openErr error
+			}, RenderContext) Frame {
+				return Frame{Content: "app"}
+			},
+		})
+	}()
+	waitJS(t, func() bool { return strings.Contains(testDOM.Get("text").String(), "Save changes?") })
+	if state.openErr != ErrNoDialogs {
+		t.Fatalf("OpenFile error = %v, want ErrNoDialogs", state.openErr)
+	}
+	testDOM.Get("input").Call("__emit", "keydown", map[string]any{"key": "Enter"})
+	waitJS(t, func() bool { return state.alertErr == nil && state.button == 0 })
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestBrowserRunRoutesCommandAndControlShortcutsAndPaste(t *testing.T) {
 	testDOM := jsTestDOM(t)
 	var keys []KeyEvent

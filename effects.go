@@ -89,6 +89,16 @@ func (fx Effects[S]) trySend(update StateUpdate[S]) bool {
 // a zero Effects value.
 func Exec[S any](fx Effects[S], name string, cmd *exec.Cmd, fold func(*S, error)) {
 	if fx.enqueue == nil {
+		update := Named(name, func(s *S) { fold(s, ErrUnsupported) })
+		if !fx.trySend(update) {
+			if fx.sendUpdate == nil && fx.updates == nil {
+				var zero S
+				fold(&zero, ErrUnsupported)
+			} else {
+				ctx := fx.Ctx()
+				go fx.send(ctx, update)
+			}
+		}
 		return
 	}
 	fx.enqueue(action{exec: &execAction{

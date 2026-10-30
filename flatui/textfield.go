@@ -36,6 +36,22 @@ func (f *TextField) Insert(r rune) {
 	f.Cursor += len(text)
 }
 
+// InsertText inserts s at the cursor, replacing the selection. Newlines and
+// carriage returns are dropped because TextField is single-line.
+func (f *TextField) InsertText(s string) {
+	f.clampCursor()
+	f.deleteSelection()
+	clean := make([]rune, 0, len(s))
+	for _, r := range s {
+		if r != '\n' && r != '\r' {
+			clean = append(clean, r)
+		}
+	}
+	text := string(clean)
+	f.Value = f.Value[:f.Cursor] + text + f.Value[f.Cursor:]
+	f.Cursor += len(text)
+}
+
 func (f *TextField) Backspace() {
 	f.clampCursor()
 	if f.deleteSelection() {

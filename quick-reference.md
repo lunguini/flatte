@@ -23,6 +23,81 @@ import (
 )
 ```
 
+## One app, three hosts
+
+Keep application state, `Handle`, and `View` in `app.go`; keep platform entry
+points thin:
+
+```text
+myapp/
+  app.go
+  main.go       # terminal or -gui on native builds
+  main_js.go    # browser bootstrap, js && wasm
+  index.html
+  go.mod
+```
+
+The `window` directory is a second Go module. A local checkout or workspace
+needs both module requirements (and a local `replace` for development):
+
+```go
+require (
+    github.com/lunguini/flatte v0.1.0
+    github.com/lunguini/flatte/window v0.1.0
+)
+replace github.com/lunguini/flatte => ../flatte
+replace github.com/lunguini/flatte/window => ../flatte/window
+```
+
+The native `main.go` can fall back to the terminal when a requested window is
+unsupported:
+
+```go
+err := window.Run(ctx, app, window.Options{Title: "My app"})
+if errors.Is(err, window.ErrUnsupported) {
+    err = flatte.Run(ctx, app)
+}
+```
+
+For an optional `-gui` flag, call `flatte.Run` when it is false and use the
+same fallback when it is true. `main_js.go` simply calls `flatte.Run`; the
+build tagged implementation mounts the browser surface.
+
+The browser page needs an element with `data-flatte`, a monospace font, a
+nonzero CSS size, and `tabindex="0"`. Load the `wasm_exec.js` supplied by the Go
+toolchain used to build the module, then instantiate and run the module with
+that same toolchain's loader:
+
+```html
+<div data-flatte tabindex="0"></div>
+<script src="./wasm_exec.js"></script>
+<script type="module">
+  const go = new Go();
+  const { instance } = await WebAssembly.instantiateStreaming(
+    fetch("./myapp.wasm"), go.importObject);
+  go.run(instance);
+</script>
+```
+
+TinyGo builds use the matching TinyGo runtime loader.
+
+| Support | Terminal | Native window | Browser cell grid |
+|---|---|---|---|
+| Alert / open / save | Cell dialog | Native panel | Cell alert; open/save fold `ErrNoDialogs` |
+| Exec / Suspend / Print | Supported (Print requires inline mode) | Unsupported | Unsupported |
+| Notifications | Best effort | Best effort | Best effort, existing permission only |
+| Clipboard | Terminal OSC 52 | Native clipboard when available | Browser permission/API dependent |
+| Mouse | Off until `WithMouse` | Always on | Off until `WithMouse` |
+| Drop / graphical point layout | No | Drop and point layout | No |
+| Default quit | Ctrl+C exits | `fx.Quit()` closes the window | `fx.Quit()` ends `Run` |
+| Run options | `WithInput`, `WithOutput`, `WithInline`, `WithMouse`, `WithReportFocus` honored | Configure `window.Options`; terminal options do not apply | `WithMouse` honored; `WithInline`, `WithInput`, `WithOutput`, `WithReportFocus` are ignored |
+
+`RenderContext.Capabilities` reports host support; `Graphical` means point-based
+native rendering. `flatest.StartWith` lets tests set width, height, Graphical,
+and capabilities, while `Driver.Resize(w, h)` updates both Handle and View.
+Use `flatest` for event and state behavior; native point metrics remain covered
+by `window.Snapshot` and window tests.
+
 ## Core Shape
 
 Use these names for every app:
