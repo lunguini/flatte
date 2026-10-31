@@ -143,6 +143,8 @@ $env:FLATTE_WINDOWS_RESIZE_TTY = "1"
   backends (`LayoutScene`).
 - `github.com/lunguini/flatte/flatest` - deterministic app driver, golden
   assertions, frame rendering, and replay helpers.
+- `github.com/lunguini/flatte/host` - the small host-session contract plus
+  adapters for host services, test Effects, and shared cell routing/layout.
 - `github.com/lunguini/flatte/window` (separate module) - runs the same app in
   a native window with real text and components; macOS, no cgo. Select it
   through the shared entry point: `flatte.Run(ctx, app, window.Options{})`.
@@ -216,9 +218,10 @@ Flatte's events, frames, and layout types rather than substrate types.
 The deprecated raw-channel `Async` bridge was removed in the 2026-08 breaking
 stabilization increment; use `Go` or off-loop `Effects.Send`.
 `NewHarnessEffects` and `NewHarnessEffectsQueue` are exported only so external
-deterministic harnesses can construct effects without a `flatte`/`flatest`
-import cycle. They are not application APIs and will be reviewed for relocation
-or consolidation before 1.0.
+deterministic host drivers can construct effects without a `flatte`/`flatest`
+import cycle. Prefer `host.NewHarnessEffects` and
+`host.NewHarnessEffectsQueue`; the root names remain deprecated compatibility
+shims. These are host-construction APIs, not application APIs.
 
 Public widget dimensions clamp to 0..65,536 cells. `SaveState` syncs the file
 before replacement and additionally syncs the containing directory on Unix;

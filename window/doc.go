@@ -6,6 +6,11 @@
 //	flatte.Run(ctx, app, window.Options{})                  // native window
 //	flatte.Run(ctx, app, window.Options{}, flatte.WithMouse(flatte.MouseModeCellMotion))
 //
+// The window driver receives a host.Session. Native callbacks send events and
+// frame requests through its non-blocking Step method; the driver keeps point
+// layout and AppKit painting on its main-thread surfaces. Custom hosts and
+// service adapters use github.com/lunguini/flatte/host.
+//
 // The window draws the app's Frame.Root as real components: Labels in the
 // theme's font by text role, Boxes as rounded strokes (an overlay's box as a
 // raised surface, a titled border's title in its stroke), Inputs as outlined
@@ -38,6 +43,8 @@
 // time through purego. On other platforms Options installs no host and
 // flatte.Run falls back to the native terminal or browser page. Use
 // Supported to show a native-window flag only where a window is available.
+// On macOS, Options and MediaControls each select a host; supplying both to
+// one Run returns flatte.ErrMultipleHosts.
 //
 // Menus: App.Menus is the native menu bar, between the application menu
 // (Quit, ⌘Q) and the Window menu (Close, ⌘W); an item's first ⌘ shortcut is
