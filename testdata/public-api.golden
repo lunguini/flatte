@@ -121,6 +121,7 @@ flatte package flatte
   method *Session.Updates() <-chan struct{}
   method *Session.UseHostServices(services HostServices)
   method *Session.View(ctx RenderContext) Frame
+  method *Session.WindowFrame(id string)(Frame, bool)
   method *Session.Windows()[]Window
   method *WindowHost.Focus() string
   method *WindowHost.Route(ev Event)[]Event
@@ -481,21 +482,18 @@ flatest package flatest
   method *Recorder.Updates()[]string
   type Driver[S any] struct
   field Driver.<unexported> flatte.App[S] [order=0]
-  field Driver.<unexported> int [order=1]
+  field Driver.<unexported> *flatte.Session [order=1]
   field Driver.<unexported> int [order=2]
-  field Driver.<unexported> bool [order=3]
-  field Driver.<unexported> map[string] layout.Rect [order=4]
-  field Driver.<unexported> layout.Composition [order=5]
-  field Driver.<unexported> flatte.MenuHost [order=6]
-  field Driver.<unexported> flatte.WindowHost [order=7]
-  field Driver.<unexported> []flatte.StateUpdate[S] [order=8]
-  field Driver.<unexported> *fakeClock [order=9]
-  field Driver.<unexported> []func() [order=10]
-  field Driver.<unexported> bool [order=11]
-  field Driver.<unexported> flatte.Effects[S] [order=12]
-  field Driver.<unexported> []pendingDialog [order=13]
-  field Driver.<unexported> []flatte.Notification [order=14]
-  struct Driver fields=15 comparable=false
+  field Driver.<unexported> int [order=3]
+  field Driver.<unexported> bool [order=4]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=5]
+  field Driver.<unexported> *fakeClock [order=6]
+  field Driver.<unexported> []func() [order=7]
+  field Driver.<unexported> bool [order=8]
+  field Driver.<unexported> flatte.Effects[S] [order=9]
+  field Driver.<unexported> []pendingDialog [order=10]
+  field Driver.<unexported> []flatte.Notification [order=11]
+  struct Driver fields=12 comparable=false
   type Options struct
   field Options.Width int [order=0]
   field Options.Height int [order=1]

@@ -276,6 +276,11 @@ func (s *Session) ContextMenu(target string) []MenuItem { return s.contextMenu(t
 // Windows returns the app's current secondary-window declarations.
 func (s *Session) Windows() []Window { return s.windows() }
 
+// WindowFrame returns the last settled cell frame for a secondary window.
+// It is used by deterministic host drivers; graphical hosts paint their own
+// native windows.
+func (s *Session) WindowFrame(id string) (Frame, bool) { return s.cell.windows.WindowFrame(id) }
+
 // HasNowPlaying reports whether the app provides a NowPlaying callback.
 func (s *Session) HasNowPlaying() bool { return s.hasNowPlaying }
 

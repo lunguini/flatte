@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lunguini/flatte"
-	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // Driver runs a flatte.App synchronously for tests. App-triggered async
@@ -18,23 +17,15 @@ import (
 // with Advance. The width is fixed so frames are deterministic.
 type Driver[S any] struct {
 	app       flatte.App[S]
+	session   *flatte.Session
 	width     int
 	height    int // from the last ResizeEvent; Root frames compose at width×height
 	graphical bool
-	// delivered is the rect set last delivered as a LayoutEvent; comp is the
-	// composition of the last rendered frame, which mouse events hit-test
-	// against — the frame "on screen", as in Run.
-	delivered map[string]layout.Rect
-	comp      layout.Composition
-	// menus routes shortcuts and context menus, and windows draws the
-	// app's secondary windows over the main frame, as Run does.
-	menus   flatte.MenuHost
-	windows flatte.WindowHost
-	updates []flatte.StateUpdate[S]
-	clock   *fakeClock
-	pending []func()
-	quit    bool
-	fx      flatte.Effects[S]
+	updates   []flatte.StateUpdate[S]
+	clock     *fakeClock
+	pending   []func()
+	quit      bool
+	fx        flatte.Effects[S]
 	// dialogs are the dialogs the app asked for that the test has not
 	// answered, oldest first.
 	dialogs []pendingDialog
@@ -90,10 +81,21 @@ func StartWith[S any](app flatte.App[S], opts Options) *Driver[S] {
 		d.notifications = append(d.notifications, n)
 	})
 	d.fx = flatte.WithHostCapabilities(d.fx, opts.Capabilities)
-	if app.Init != nil {
-		app.Init(app.State, d.fx)
+	sessionApp := app
+	sessionApp.Init = func(s *S, _ flatte.Effects[S]) {
+		if app.Init != nil {
+			app.Init(s, d.fx)
+		}
 	}
-	d.deliver(flatte.ResizeEvent{Width: opts.Width, Height: opts.Height})
+	sessionApp.Handle = func(s *S, ev flatte.Event, _ flatte.Effects[S]) {
+		if app.Handle != nil {
+			app.Handle(s, ev, d.fx)
+		}
+		d.drain()
+	}
+	d.session = flatte.NewSession(context.Background(), sessionApp)
+	d.session.UseHostServices(flatte.HostServices{Capabilities: opts.Capabilities, CellSurface: true})
+	d.session.Start(flatte.ResizeEvent{Width: opts.Width, Height: opts.Height})
 	d.render()
 	return d
 }
@@ -106,7 +108,7 @@ func (d *Driver[S]) Resize(width, height int) flatte.Frame {
 	if height > 0 {
 		d.height = height
 	}
-	d.deliver(flatte.ResizeEvent{Width: d.width, Height: d.height})
+	d.step(flatte.ResizeEvent{Width: d.width, Height: d.height})
 	return d.render()
 }
 
@@ -114,53 +116,23 @@ func (d *Driver[S]) Resize(width, height int) flatte.Frame {
 // and returns the rendered frame. Async results triggered by the event
 // are NOT applied here — call Settle.
 func (d *Driver[S]) Send(ev flatte.Event) flatte.Frame {
-	d.deliver(ev)
+	d.step(ev)
 	return d.render()
 }
 
-// render settles layout and renders, exactly as Run draws: LayoutEvents for a
-// Root frame are delivered (and their updates drained) before the frame is
-// returned, and the composition is kept for hit-testing the next mouse event.
+// render asks the shared session step core to settle and paint a cell frame.
 func (d *Driver[S]) render() flatte.Frame {
-	for _, ev := range flatte.SyncWindows(&d.windows, d.app, d.width, d.height) {
-		d.handle(ev)
-	}
-	frame, comp, delivered := flatte.SettleFrame(d.view, d.deliverLayout, d.delivered, d.width, d.height)
-	d.delivered, d.comp = delivered, comp
-	frame = flatte.PaintWindows(&d.windows, d.app, d.renderContext(), frame, d.deliverLayout)
-	return d.menus.Paint(frame)
+	result := d.session.Step(flatte.StepInput{FrameDue: true, RenderContext: d.renderContext()})
+	return result.Frame
 }
 
-func (d *Driver[S]) deliverLayout(ev flatte.LayoutEvent) { d.deliver(ev) }
-
-func (d *Driver[S]) deliver(ev flatte.Event) {
+func (d *Driver[S]) step(ev flatte.Event) {
 	switch e := ev.(type) {
 	case flatte.ResizeEvent:
 		d.width = e.Width
 		d.height = e.Height
-	case flatte.MouseEvent:
-		e.Target, e.TargetRect = d.comp.HitTest(e.X, e.Y)
-		e.Caret, e.HasCaret = d.comp.CaretAt(e.X, e.Y)
-		ev = e
 	}
-	if _, layout := ev.(flatte.LayoutEvent); layout {
-		d.handle(ev)
-		return
-	}
-	for _, ev := range flatte.RouteInput(&d.menus, &d.windows, d.app, ev, d.width, d.height) {
-		d.handle(ev)
-	}
-}
-
-// handle delivers one routed event and drains the updates it produced.
-func (d *Driver[S]) handle(ev flatte.Event) {
-	if d.app.Tracer != nil {
-		d.app.Tracer.Event(ev)
-	}
-	if d.app.Handle != nil {
-		d.app.Handle(d.app.State, ev, d.fx)
-	}
-	d.drain()
+	d.session.Step(flatte.StepInput{Events: []flatte.Event{ev}, RenderContext: d.renderContext()})
 }
 
 // drain applies every queued update to completion — the harness is
@@ -199,12 +171,10 @@ func (d *Driver[S]) Advance(by time.Duration) flatte.Frame {
 	return d.Settle()
 }
 
-// Frame renders the current state without changing it. A frame with a Root
-// is composed at the driver size, as Run composes it at the terminal size.
+// Frame renders the current state through the same settled cell-frame rules
+// as Send, Resize, and Run.
 func (d *Driver[S]) Frame() flatte.Frame {
-	frame, _ := flatte.ComposeFrame(d.view(), d.width, d.height)
-	frame = flatte.PaintWindows(&d.windows, d.app, d.renderContext(), frame, nil)
-	return d.menus.Paint(frame)
+	return d.render()
 }
 
 // WindowFrame is secondary window id's own frame as last rendered (composed
@@ -212,11 +182,7 @@ func (d *Driver[S]) Frame() flatte.Frame {
 // when the app does not declare it. Mouse events for it are sent in screen
 // cells, as a terminal reports them: over its box in Frame.
 func (d *Driver[S]) WindowFrame(id string) (frame flatte.Frame, ok bool) {
-	return d.windows.WindowFrame(id)
-}
-
-func (d *Driver[S]) view() flatte.Frame {
-	return d.app.View(d.app.State, d.renderContext())
+	return d.session.WindowFrame(id)
 }
 
 // Frames runs the driver through a sequence of steps and returns the

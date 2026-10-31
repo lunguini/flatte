@@ -2,9 +2,11 @@ package flatest
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type counter struct{ n int }
@@ -62,6 +64,66 @@ func TestDriverDeliversInitialResize(t *testing.T) {
 	Start(app, 55)
 	if sawWidth != 55 {
 		t.Fatalf("initial ResizeEvent width = %d, want 55", sawWidth)
+	}
+}
+
+func TestDriverSharedSessionKeepsSecondaryWindowFrames(t *testing.T) {
+	type state struct{ focused string }
+	s := &state{}
+	d := Start(flatte.App[state]{
+		State: s,
+		Handle: func(s *state, ev flatte.Event, _ flatte.Effects[state]) {
+			if w, ok := ev.(flatte.WindowEvent); ok && w.Kind == flatte.WindowFocused {
+				s.focused = w.Window
+			}
+		},
+		View: func(_ *state, ctx flatte.RenderContext) flatte.Frame {
+			if ctx.Window != "" {
+				return flatte.Frame{Content: "secondary"}
+			}
+			return flatte.Frame{Content: "main"}
+		},
+		Windows: func(*state) []flatte.Window {
+			return []flatte.Window{{ID: "secondary", Width: 20, Height: 5}}
+		},
+	}, 40)
+	if s.focused != "secondary" {
+		t.Fatalf("focused window = %q, want secondary", s.focused)
+	}
+	frame, ok := d.WindowFrame("secondary")
+	if !ok || frame.Content != "secondary" {
+		t.Fatalf("WindowFrame = (%+v, %t), want secondary frame", frame, ok)
+	}
+}
+
+func TestDriverFrameRunsCoreLayoutSettlement(t *testing.T) {
+	type state struct {
+		show   bool
+		layout bool
+	}
+	s := &state{}
+	d := Start(flatte.App[state]{
+		State: s,
+		Handle: func(s *state, ev flatte.Event, _ flatte.Effects[state]) {
+			if _, ok := ev.(flatte.LayoutEvent); ok {
+				s.layout = true
+			}
+		},
+		View: func(s *state, _ flatte.RenderContext) flatte.Frame {
+			if !s.show {
+				return flatte.Frame{Content: "hidden"}
+			}
+			text := "layout-pending"
+			if s.layout {
+				text = "layout-delivered"
+			}
+			return flatte.Frame{Root: layout.Label{NodeBase: layout.NodeBase{ID: "label"}, Text: text}}
+		},
+	}, 40)
+	s.show = true
+	frame := d.Frame()
+	if !s.layout || !strings.Contains(frame.Content, "layout-delivered") {
+		t.Fatalf("Frame = %q, layout delivered=%t; want settled layout", frame.Content, s.layout)
 	}
 }
 
