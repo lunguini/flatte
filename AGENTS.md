@@ -15,8 +15,10 @@ alternative** — software teams ship on and depend on, not a research spike.
 **This is not experimentation.** The phased roadmap and the "abstraction is
 found, not designed" rule are about *engineering rigor* (don't add surface
 ahead of evidence), **not** about hedging on whether to deliver. We are
-committed to carrying the roadmap through a 0.1 release, then to a 1.0 once
-community feedback and API stabilization justify it.
+committed to carrying the roadmap to a 1.0 once community feedback and API
+stabilization justify it. Check the current version before reasoning about
+compatibility (`git tag --sort=-v:refname | head -1`, or the GitHub
+releases); do not assume one from this file.
 
 What that means in practice, on every increment:
 
@@ -172,7 +174,11 @@ deterministic (no wall-clock, no randomness in `View`).
   when a useful scope exists, otherwise `type: subject`. Use standard
   release-driving types such as `feat`, `fix`, `docs`, `test`, `refactor`,
   `perf`, `build`, `ci`, and `chore`; mark breaking changes with `!` and/or a
-  `BREAKING CHANGE:` footer. Releases and `CHANGELOG.md` are automated from
+  `BREAKING CHANGE:` footer, with the `!` after the scope
+  (`refactor(run)!: subject`). Before 1.0, release-please bumps the minor
+  version for breaking changes (`bump-minor-pre-major`), so a breaking
+  change belongs in the next minor release; delete superseded API there
+  instead of keeping deprecated shims. Releases and `CHANGELOG.md` are automated from
   these messages by release-please (`.github/workflows/release-please.yml`);
   the public contributor-facing version of this rule lives in
   `CONTRIBUTING.md`.
