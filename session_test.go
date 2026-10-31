@@ -125,7 +125,7 @@ func TestSessionStepOwnsCellInputUpdatesFramesAndQuit(t *testing.T) {
 		t.Fatalf("initial step = %+v, want initial frame", initial)
 	}
 
-	stepped := session.Step(StepInput{Events: []Event{KeyEvent{Key: KeyCharacter, Rune: 'x'}}, RenderContext: renderContext})
+	stepped := session.Step(StepInput{Events: []Event{KeyEvent{Key: KeyCharacter, Rune: 'x'}}, FrameDue: true, RenderContext: renderContext})
 	if !stepped.Paint || stepped.Frame.Content != "menu=1 updates=0" || s.menuEvents != 1 {
 		t.Fatalf("menu step = %+v, menuEvents=%d", stepped, s.menuEvents)
 	}
@@ -134,16 +134,67 @@ func TestSessionStepOwnsCellInputUpdatesFramesAndQuit(t *testing.T) {
 		session.enqueue(func() { s.updates++ })
 	})
 	session.enqueue(func() { s.updates++ })
-	updated := session.Step(StepInput{UpdatesPending: true, RenderContext: renderContext})
+	updated := session.Step(StepInput{UpdatesPending: true, FrameDue: true, RenderContext: renderContext})
 	if !updated.Paint || updated.Frame.Content != "menu=1 updates=2" {
 		t.Fatalf("update step = %+v, state=%+v", updated, *s)
 	}
-	settled := session.Step(StepInput{UpdatesPending: true, RenderContext: renderContext})
+	settled := session.Step(StepInput{UpdatesPending: true, FrameDue: true, RenderContext: renderContext})
 	if !settled.Paint || settled.Frame.Content != "menu=1 updates=3" {
 		t.Fatalf("follow-up update step = %+v, state=%+v", settled, *s)
+	}
+	select {
+	case <-session.Updates():
+		t.Fatal("update notification remained after the pending batch was applied")
+	default:
 	}
 	quit := session.Step(StepInput{Events: []Event{KeyEvent{Key: KeyCtrlC}}, RenderContext: renderContext})
 	if !quit.Quit || s.ctrlC != 0 {
 		t.Fatalf("Ctrl+C step = %+v, ctrlC deliveries=%d", quit, s.ctrlC)
+	}
+}
+
+func TestSessionStepDefersPaintUntilFrameDue(t *testing.T) {
+	type state struct{ events int }
+	s := &state{}
+	session := NewSession(context.Background(), App[state]{
+		State: s,
+		Handle: func(s *state, ev Event, _ Effects[state]) {
+			if _, ok := ev.(KeyEvent); ok {
+				s.events++
+			}
+		},
+		View: func(s *state, _ RenderContext) Frame { return Frame{Content: fmt.Sprintf("events=%d", s.events)} },
+	})
+	session.UseHostServices(HostServices{CellSurface: true})
+	session.Start(ResizeEvent{Width: 40, Height: 12})
+	ctx := RenderContext{Width: 40, Height: 12}
+	step := session.Step(StepInput{Events: []Event{KeyEvent{Key: KeyEnter}}, RenderContext: ctx})
+	if step.Paint || !step.Dirty || s.events != 1 {
+		t.Fatalf("event step = %+v, state=%+v; want dirty without painting", step, *s)
+	}
+	frame := session.Step(StepInput{FrameDue: true, RenderContext: ctx})
+	if !frame.Paint || frame.Dirty || frame.Frame.Content != "events=1" {
+		t.Fatalf("frame step = %+v, state=%+v", frame, *s)
+	}
+}
+
+func TestCellDialogResizeRoutingPreservesHostMenuPolicy(t *testing.T) {
+	newCell := func(routeResize bool) *sessionCell {
+		cell := &sessionCell{dialogResizeRoutesThroughMenus: routeResize}
+		cell.menus.open([]MenuItem{{ID: "menu", Label: "Menu"}}, 0, 0, 20, 8, nil)
+		cell.dialogs.show(Dialog{Alert: &AlertDialog{Title: "Confirm"}}, func(DialogResult) {})
+		return cell
+	}
+	ctx := RenderContext{Width: 20, Height: 8}
+	resize := ResizeEvent{Width: 21, Height: 9}
+
+	terminal := newCell(false)
+	if got := routeCellEvent(terminal, App[struct{}]{}, resize, ctx); len(got) != 1 || got[0] != resize || !terminal.menus.IsOpen() {
+		t.Fatalf("terminal dialog resize route = %v, menu open=%t; want resize delivered and menu retained", got, terminal.menus.IsOpen())
+	}
+
+	browser := newCell(true)
+	if got := routeCellEvent(browser, App[struct{}]{}, resize, ctx); len(got) != 1 || got[0] != resize || browser.menus.IsOpen() {
+		t.Fatalf("browser dialog resize route = %v, menu open=%t; want resize delivered and menu closed", got, browser.menus.IsOpen())
 	}
 }

@@ -26,6 +26,11 @@ type HostServices struct {
 	CellSurface bool
 	// DefaultQuit makes Ctrl+C end the session before it reaches App.Handle.
 	DefaultQuit bool
+	// Inline makes cell root frames use their measured content height.
+	Inline bool
+	// DialogResizeRoutesThroughMenus preserves a host where a resize that
+	// passes through an open cell dialog also reaches open cell menus.
+	DialogResizeRoutesThroughMenus bool
 	// PublishMedia receives the app's current media snapshot after a painted
 	// frame. A nil snapshot clears the host's published item.
 	PublishMedia func(*NowPlaying)
@@ -48,6 +53,7 @@ type Session struct {
 	view          func(RenderContext) Frame
 	services      func(HostServices)
 	step          func(StepInput) StepResult
+	actionSink    func(func(action))
 	caps          func() Capabilities
 	onExit        func()
 	menus         func() []Menu
@@ -58,6 +64,8 @@ type Session struct {
 	runTerminal   func(context.Context, ...Option) error
 	cellSurface   bool
 	defaultQuit   bool
+	inline        bool
+	dirty         bool
 	publishMedia  func(*NowPlaying)
 	cell          *sessionCell
 }
@@ -82,9 +90,10 @@ func NewSession[S any](ctx context.Context, app App[S]) *Session {
 	fx := newEffects[S](runCtx, nil, func() {
 		s.mu.Lock()
 		s.quitting = true
-		s.mu.Unlock()
 		s.wake()
+		s.mu.Unlock()
 	})
+	s.actionSink = func(enqueue func(action)) { fx.enqueue = enqueue }
 	fx.sendUpdate = func(sendCtx context.Context, update StateUpdate[S]) bool {
 		if sendCtx != nil {
 			select {
@@ -141,6 +150,8 @@ func NewSession[S any](ctx context.Context, app App[S]) *Session {
 		}
 		s.cellSurface = host.CellSurface
 		s.defaultQuit = host.DefaultQuit
+		s.inline = host.Inline
+		s.cell.dialogResizeRoutesThroughMenus = host.DialogResizeRoutesThroughMenus
 		s.publishMedia = host.PublishMedia
 	}
 	s.caps = func() Capabilities { return fx.Capabilities() }
@@ -181,8 +192,8 @@ func NewSession[S any](ctx context.Context, app App[S]) *Session {
 func (s *Session) enqueue(update func()) {
 	s.mu.Lock()
 	s.pending = append(s.pending, update)
-	s.mu.Unlock()
 	s.wake()
+	s.mu.Unlock()
 }
 
 func (s *Session) wake() {
@@ -221,6 +232,8 @@ func (s *Session) ApplyPendingUpdates() int {
 // Updates returns a coalesced notification channel. Hosts select on it and
 // call ApplyPendingUpdates on their loop goroutine.
 func (s *Session) Updates() <-chan struct{} { return s.updates }
+
+func (s *Session) setActionSink(enqueue func(action)) { s.actionSink(enqueue) }
 
 // View evaluates the app's frame for the supplied host render context.
 func (s *Session) View(ctx RenderContext) Frame { return s.view(ctx) }

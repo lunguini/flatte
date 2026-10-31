@@ -15,8 +15,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
-
-	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type App[S any] struct {
@@ -492,15 +490,6 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		return err
 	}
 	var lastFrame Frame
-	// lastComp is the composition of the frame on screen; mouse events are
-	// hit-tested against it so Target matches what the user clicked.
-	var lastComp layout.Composition
-	// menus routes menu shortcuts and draws context menus (see MenuHost);
-	// windows draws the app's secondary windows (see WindowHost).
-	var menus MenuHost
-	var windows WindowHost
-	// lastLayout is the rect set last delivered as a LayoutEvent.
-	var lastLayout map[string]layout.Rect
 	drew := false
 	cursorShown := false
 	currentCursorShape := -1
@@ -598,6 +587,17 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	session := NewSession(runCtx, app)
+	session.setActionSink(func(a action) { pending = append(pending, a) })
+	session.cell.dialogs.home, _ = os.UserHomeDir()
+	session.UseHostServices(HostServices{
+		Capabilities: terminalCapabilities(cfg),
+		ShowDialog:   session.cell.dialogs.show,
+		CellSurface:  true,
+		DefaultQuit:  cfg.defaultQuit,
+		Inline:       cfg.inline,
+		PublishMedia: cfg.publishMedia,
+	})
 
 	// The input pipeline is restartable: suspend and exec stop it before
 	// handing the terminal away (the subprocess must own stdin) and start
@@ -720,37 +720,11 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	}()
 	resize, stopResize := notifyResize()
 	defer stopResize()
-	defer func() {
-		if app.OnExit != nil {
-			app.OnExit(app.State)
-		}
-	}()
-	updates := make(chan StateUpdate[S], 64)
-	quitRequested := false
-	// dialogs draws the dialogs the app asks for (see termDialogs).
-	dialogs := termDialogs{}
-	dialogs.home, _ = os.UserHomeDir()
-	effects := newEffects(runCtx, updates, func() { quitRequested = true })
-	effects = WithHostCapabilities(effects, terminalCapabilities(cfg))
-	effects.dialogs = dialogs.show
-	effects.enqueue = func(a action) { pending = append(pending, a) }
-	if app.Init != nil {
-		app.Init(app.State, effects)
-	}
-	if quitRequested {
-		return nil
-	}
-	if app.Tracer == nil {
-		app.Tracer = NoopTracer{}
-	}
+	defer session.OnExit()
 
 	width, height := terminalSize(out)
-	initialSize := Event(ResizeEvent{Width: width, Height: height})
-	app.Tracer.Event(initialSize)
-	if app.Handle != nil {
-		app.Handle(app.State, initialSize, effects)
-	}
-	if quitRequested {
+	session.Start(ResizeEvent{Width: width, Height: height})
+	if session.Quitting() {
 		return nil
 	}
 
@@ -772,64 +746,30 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	writeFrameOutput := func() {
 		_ = writePendingOutput(true)
 	}
+	terminalRenderContext := func() RenderContext {
+		ctx := RenderContextFor(out)
+		_, ctx.Height = terminalSize(out)
+		ctx.Capabilities = session.Capabilities()
+		return ctx
+	}
+	eventRenderContext := func() RenderContext {
+		ctx := terminalRenderContext()
+		if drew {
+			ctx.Width, ctx.Height = screenWidth, screenHeight
+		}
+		return ctx
+	}
 
 	draw := func() {
-		// Publish independently of visual frame equality. Playback may change
-		// while the visible terminal frame stays byte-identical.
-		defer func() {
-			if cfg.publishMedia != nil {
-				var snapshot *NowPlaying
-				if app.NowPlaying != nil {
-					if value := app.NowPlaying(app.State); value != nil {
-						copy := *value
-						snapshot = &copy
-					}
-				}
-				cfg.publishMedia(snapshot)
-			}
-		}()
-
 		if sink.err != nil {
 			return // terminal output failed; defer handles best-effort cleanup
 		}
-		renderCtx := RenderContextFor(out)
-		_, terminalHeight := terminalSize(out)
-		renderCtx.Height = terminalHeight
-		renderCtx.Capabilities = effects.caps
-		var handleLayout func(LayoutEvent)
-		if app.Handle != nil {
-			handleLayout = func(ev LayoutEvent) {
-				if quitRequested {
-					return
-				}
-				app.Tracer.Event(ev)
-				app.Handle(app.State, ev, effects)
-			}
+		renderCtx := terminalRenderContext()
+		step := session.Step(StepInput{FrameDue: true, RenderContext: renderCtx})
+		if step.Quit || !step.Paint {
+			return
 		}
-		// Adopt the declared windows first: focus changes reach the app
-		// before it draws.
-		for _, ev := range SyncWindows(&windows, app, renderCtx.Width, terminalHeight) {
-			app.Tracer.Event(ev)
-			if app.Handle != nil {
-				app.Handle(app.State, ev, effects)
-			}
-			if quitRequested {
-				return
-			}
-		}
-		frame, comp, delivered := settleFrame(
-			func() Frame { return app.View(app.State, renderCtx) },
-			handleLayout, lastLayout, renderCtx.Width,
-			func(root layout.Node) int { return rootHeight(root, terminalHeight, cfg.inline) },
-		)
-		lastLayout = delivered
-		if quitRequested {
-			return // a LayoutEvent handler quit: paint nothing more
-		}
-		lastComp = comp
-		frame = PaintWindows(&windows, app, renderCtx, frame, handleLayout)
-		frame = menus.Paint(frame)
-		frame = dialogs.paint(frame, renderCtx.Width, terminalHeight)
+		frame := step.Frame
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
 			if err := flushRenderer(); err == nil {
@@ -935,11 +875,8 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 		forceRepaint = true
 		width, height := terminalSize(out)
-		resizeEvent := Event(ResizeEvent{Width: width, Height: height})
-		app.Tracer.Event(resizeEvent)
-		if app.Handle != nil {
-			app.Handle(app.State, resizeEvent, effects)
-		}
+		resizeEvent := ResizeEvent{Width: width, Height: height}
+		session.Step(StepInput{Resize: &resizeEvent})
 	}
 
 	// insertAbove emits unmanaged lines into the terminal's scrollback above the
@@ -1063,11 +1000,11 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	// next loop turn, keeping render bounded.
 	render := func() {
 		draw()
-		if sink.err != nil || quitRequested || len(pending) == 0 {
+		if sink.err != nil || session.Quitting() || len(pending) == 0 {
 			return
 		}
 		processActions()
-		if sink.err == nil && !quitRequested {
+		if sink.err == nil && !session.Quitting() {
 			draw()
 		}
 	}
@@ -1076,14 +1013,14 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	if sink.err != nil {
 		return sink.err
 	}
-	if quitRequested {
+	if session.Quitting() {
 		return nil
 	}
 	render()
 	if sink.err != nil {
 		return sink.err
 	}
-	if quitRequested {
+	if session.Quitting() {
 		return nil
 	}
 	for {
@@ -1108,58 +1045,18 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 				// repaint, even when the frame content is unchanged.
 				forceRepaint = true
 			}
-			if mouse, ok := result.event.(MouseEvent); ok {
-				mouse.Target, mouse.TargetRect = lastComp.HitTest(mouse.X, mouse.Y)
-				mouse.Caret, mouse.HasCaret = lastComp.CaretAt(mouse.X, mouse.Y)
-				result.event = mouse
-			}
-			var events []Event
-			if dialogs.isOpen() {
-				if event, ok := dialogs.route(result.event); ok {
-					events = []Event{event}
-				}
-			} else {
-				events = RouteInput(&menus, &windows, app, result.event, screenWidth, screenHeight)
-			}
-			if len(events) == 0 {
-				// A dialog answered here queued its result: apply it now,
-				// before any input that follows.
-				drainUpdates(app, updates)
-				if quitRequested {
-					return nil
-				}
-				render()
-				if sink.err != nil {
-					return sink.err
-				}
-				continue
-			}
-			for _, event := range events {
-				// Trace before any exit decision so the recorder sees the
-				// exit-causing event too (incl. a default-quit Ctrl-C).
-				app.Tracer.Event(event)
-				if key, isKey := event.(KeyEvent); isKey && key.Key == KeyCtrlC && cfg.defaultQuit {
-					return nil
-				}
-				if app.Handle != nil {
-					app.Handle(app.State, event, effects)
-				}
-				// quitRequested flips synchronously inside Init, Handle, or
-				// a fold — all on the loop goroutine. The updates path is
-				// checked after drainUpdates below.
-				if quitRequested {
-					return nil
-				}
+			step := session.Step(StepInput{
+				Events: []Event{result.event}, UpdatesPending: true, RenderContext: eventRenderContext(),
+			})
+			if step.Quit {
+				return nil
 			}
 		case <-resize:
 			forceRepaint = true
 			width, height := terminalSize(out)
-			resizeEvent := Event(ResizeEvent{Width: width, Height: height})
-			app.Tracer.Event(resizeEvent)
-			if app.Handle != nil {
-				app.Handle(app.State, resizeEvent, effects)
-			}
-			if quitRequested {
+			resizeEvent := ResizeEvent{Width: width, Height: height}
+			step := session.Step(StepInput{Resize: &resizeEvent, UpdatesPending: true, RenderContext: eventRenderContext()})
+			if step.Quit {
 				return nil
 			}
 		case event, ok := <-cfg.mediaCommands:
@@ -1167,29 +1064,33 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 				cfg.mediaCommands = nil
 				continue
 			}
-			app.Tracer.Event(event)
-			if app.Handle != nil {
-				app.Handle(app.State, event, effects)
+			step := session.Step(StepInput{
+				Events: []Event{event}, UpdatesPending: true, RenderContext: eventRenderContext(),
+			})
+			if step.Quit {
+				return nil
 			}
-		case update := <-updates:
-			ApplyUpdate(app.State, app.Tracer, update)
+		case <-session.Updates():
+			step := session.Step(StepInput{UpdatesPending: true, RenderContext: eventRenderContext()})
+			if step.Quit {
+				return nil
+			}
 		}
-		drainUpdates(app, updates)
-		if quitRequested {
+		if session.Quitting() {
 			return nil
 		}
 		processActions()
 		if sink.err != nil {
 			return sink.err
 		}
-		if quitRequested {
+		if session.Quitting() {
 			return nil
 		}
 		render()
 		if sink.err != nil {
 			return sink.err
 		}
-		if quitRequested {
+		if session.Quitting() {
 			return nil
 		}
 	}
@@ -1229,21 +1130,6 @@ func resetModes(cfg runConfig) string {
 			ansi.ResetModeMouseExtSgr
 	}
 	return modes
-}
-
-// drainUpdates applies at most len(updates) pending updates without blocking,
-// so a burst of async results produces one redraw instead of one per update.
-// Capping at the snapshot length bounds latency to one frame's worth of work
-// even if a fast producer keeps the channel continuously non-empty.
-func drainUpdates[S any](app App[S], updates <-chan StateUpdate[S]) {
-	for n := len(updates); n > 0; n-- {
-		select {
-		case update := <-updates:
-			ApplyUpdate(app.State, app.Tracer, update)
-		default:
-			return
-		}
-	}
 }
 
 var detectRendererColorProfile = colorprofile.Detect

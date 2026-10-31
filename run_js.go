@@ -47,13 +47,14 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		}
 	})
 	session.UseHostServices(HostServices{
-		Capabilities:  browserCapabilities(cfg),
-		SetClipboard:  host.writeClipboard,
-		ReadClipboard: host.readClipboard,
-		Notify:        host.notify,
-		CellSurface:   true,
-		DefaultQuit:   cfg.defaultQuit,
-		PublishMedia:  cfg.publishMedia,
+		Capabilities:                   browserCapabilities(cfg),
+		SetClipboard:                   host.writeClipboard,
+		ReadClipboard:                  host.readClipboard,
+		Notify:                         host.notify,
+		CellSurface:                    true,
+		DefaultQuit:                    cfg.defaultQuit,
+		PublishMedia:                   cfg.publishMedia,
+		DialogResizeRoutesThroughMenus: true,
 		ShowDialog: func(d Dialog, done func(DialogResult)) {
 			if d.Alert == nil {
 				done(DialogResult{Err: ErrNoDialogs})
@@ -99,11 +100,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		case <-runCtx.Done():
 			return nil
 		case batch := <-events:
-			if !step(StepInput{Events: batch}) {
+			if !step(StepInput{Events: batch, UpdatesPending: true, FrameDue: true}) {
 				return nil
 			}
 		case <-session.Updates():
-			if !step(StepInput{UpdatesPending: true}) {
+			if !step(StepInput{UpdatesPending: true, FrameDue: true}) {
 				return nil
 			}
 		case event, ok := <-cfg.mediaCommands:
@@ -111,7 +112,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 				cfg.mediaCommands = nil
 				continue
 			}
-			if !step(StepInput{Events: []Event{event}}) {
+			if !step(StepInput{Events: []Event{event}, UpdatesPending: true, FrameDue: true}) {
 				return nil
 			}
 		}

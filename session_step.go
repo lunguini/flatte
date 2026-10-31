@@ -7,6 +7,7 @@ import "github.com/lunguini/flatte/flatui/layout"
 // and context cancellation as inputs; it never waits inside Step.
 type StepInput struct {
 	Events         []Event
+	Resize         *ResizeEvent
 	UpdatesPending bool
 	FrameDue       bool
 	Quit           bool
@@ -18,26 +19,35 @@ type StepInput struct {
 type StepResult struct {
 	Frame Frame
 	Paint bool
+	Dirty bool
 	Quit  bool
 }
 
 type sessionCell struct {
-	menus      MenuHost
-	windows    WindowHost
-	dialogs    termDialogs
-	lastComp   layout.Composition
-	lastLayout map[string]layout.Rect
+	menus                          MenuHost
+	windows                        WindowHost
+	dialogs                        termDialogs
+	dialogResizeRoutesThroughMenus bool
+	lastComp                       layout.Composition
+	lastLayout                     map[string]layout.Rect
 }
 
 func stepSession[S any](session *Session, app App[S], cell *sessionCell, input StepInput) StepResult {
 	if input.Quit {
 		return StepResult{Quit: true}
 	}
-	changed := false
+	if input.Resize != nil {
+		session.dirty = true
+		session.handle(*input.Resize)
+		if session.Quitting() {
+			return StepResult{Quit: true}
+		}
+	}
 	for _, event := range input.Events {
 		if session.Quitting() {
 			return StepResult{Quit: true}
 		}
+		session.dirty = true
 		events := []Event{event}
 		if session.cellSurface {
 			events = routeCellEvent(cell, app, event, input.RenderContext)
@@ -48,26 +58,22 @@ func stepSession[S any](session *Session, app App[S], cell *sessionCell, input S
 				return StepResult{Quit: true}
 			}
 			session.handle(routed)
-			changed = true
 			if session.Quitting() {
 				return StepResult{Quit: true}
 			}
 		}
 	}
 
-	if input.UpdatesPending || len(input.Events) > 0 {
+	if input.UpdatesPending {
 		if session.applyPendingBatch() > 0 {
-			changed = true
+			session.dirty = true
 		}
 	}
 	if session.Quitting() {
 		return StepResult{Quit: true}
 	}
-	if input.FrameDue {
-		changed = true
-	}
-	if !changed {
-		return StepResult{}
+	if !input.FrameDue {
+		return StepResult{Dirty: session.dirty}
 	}
 	result := StepResult{Paint: true}
 	if session.cellSurface {
@@ -76,6 +82,7 @@ func stepSession[S any](session *Session, app App[S], cell *sessionCell, input S
 			return StepResult{Quit: session.Quitting()}
 		}
 		result.Frame = frame
+		session.dirty = false
 		if session.publishMedia != nil {
 			var snapshot *NowPlaying
 			if value := session.NowPlaying(); value != nil {
@@ -84,6 +91,8 @@ func stepSession[S any](session *Session, app App[S], cell *sessionCell, input S
 			}
 			session.publishMedia(snapshot)
 		}
+	} else {
+		session.dirty = false
 	}
 	return result
 }
@@ -95,6 +104,9 @@ func routeCellEvent[S any](cell *sessionCell, app App[S], event Event, ctx Rende
 			return nil
 		}
 		event = routed
+		if _, resize := event.(ResizeEvent); resize && !cell.dialogResizeRoutesThroughMenus {
+			return []Event{event}
+		}
 	}
 	if mouse, ok := event.(MouseEvent); ok {
 		mouse.Target, mouse.TargetRect = cell.lastComp.HitTest(mouse.X, mouse.Y)
@@ -123,7 +135,7 @@ func cellFrame[S any](session *Session, app App[S], cell *sessionCell, ctx Rende
 		handleLayout,
 		cell.lastLayout,
 		ctx.Width,
-		func(layout.Node) int { return ctx.Height },
+		func(root layout.Node) int { return rootHeight(root, ctx.Height, session.inline) },
 	)
 	cell.lastLayout, cell.lastComp = delivered, comp
 	if session.Quitting() {
@@ -141,6 +153,12 @@ func (s *Session) applyPendingBatch() int {
 	s.mu.Lock()
 	pending := s.pending
 	s.pending = nil
+	if len(pending) > 0 {
+		select {
+		case <-s.updates:
+		default:
+		}
+	}
 	s.mu.Unlock()
 	for _, update := range pending {
 		update()
