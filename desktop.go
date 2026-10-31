@@ -31,6 +31,7 @@ type DesktopCommand struct {
 
 // WithHostDesktop routes Desktop effects to a host. Like WithHostClipboard,
 // it is host plumbing; applications use Effects.Desktop.
+// Deprecated: use host.WithHostDesktop.
 func WithHostDesktop[S any](fx Effects[S], command func(DesktopCommand)) Effects[S] {
 	fx.desktop = command
 	return fx

@@ -14,6 +14,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 var errNotMainThread = errors.New("window: Run must be called from the main goroutine")
@@ -68,7 +69,7 @@ func runPosted() {
 }
 
 // Options selects the native window host on macOS.
-func (o Options) ConfigureRun(config *flatte.RunConfig) {
+func (o Options) ConfigureRun(config *flattehost.RunConfig) {
 	config.UseHost(windowHost{options: o})
 }
 
@@ -76,12 +77,12 @@ func Supported() bool { return true }
 
 type windowHost struct{ options Options }
 
-func (h windowHost) Run(ctx context.Context, session *flatte.Session) error {
+func (h windowHost) Run(ctx context.Context, session flattehost.Session) error {
 	return run(ctx, session, h.options)
 }
 
 // run enters AppKit on the calling goroutine, which Run documents as main.
-func run(ctx context.Context, session *flatte.Session, opts Options) error {
+func run(ctx context.Context, session flattehost.Session, opts Options) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if err := loadFrameworks(); err != nil {
@@ -218,7 +219,7 @@ func (n nativeWindows) closeWindow(id string) {
 	}
 }
 
-func runWindow(ctx context.Context, session *flatte.Session, opts Options) error {
+func runWindow(ctx context.Context, session flattehost.Session, opts Options) error {
 	if running {
 		return errors.New("window: a window is already running")
 	}
@@ -275,7 +276,7 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	}()
 	h.text = windowText{th: func() theme { return st.th }}
 	h.clip = pasteboard{}
-	if session.HasNowPlaying() {
+	if flattehost.Snapshot(session).HasNowPlaying {
 		media, err := newNativeMedia(h.mediaCommand)
 		if err != nil {
 			return err
@@ -443,7 +444,7 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	cols, lines := opts.size()
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line
 	// The first frame only: async results are dropped, quitting is moot.
-	session := flatte.NewSession(context.Background(), app)
+	session := flattehost.NewSession(context.Background(), app)
 	h := newSessionHost(context.Background(), session, m, func(func()) {}, func() {}, func() {})
 	defer h.cancel()
 	defer session.Cancel()

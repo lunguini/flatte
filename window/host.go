@@ -12,17 +12,19 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 // maxLayoutPasses bounds how many LayoutEvents one render delivers, as in
-// the terminal host (flatte.SettleFrame).
+// the terminal host (host.SettleFrame).
 const maxLayoutPasses = 2
 
 // host drives a Session from window events. It runs on the UI thread only;
 // async updates arrive through post. Its embedded surface is the main window.
 type host struct {
 	*surface
-	session *flatte.Session
+	session flattehost.Session
+	state   flattehost.State
 	metrics layout.Metrics
 	cancel  context.CancelFunc
 
@@ -226,7 +228,7 @@ type clipboard interface {
 // newHost wires app to a backend. post runs a function on the UI thread
 // (from any goroutine); async updates reach the app through it; invalidate
 // redraws the main window.
-func newSessionHost(ctx context.Context, session *flatte.Session, m layout.Metrics, post func(func()), stop, invalidate func()) *host {
+func newSessionHost(ctx context.Context, session flattehost.Session, m layout.Metrics, post func(func()), stop, invalidate func()) *host {
 	ctx, cancel := context.WithCancel(ctx)
 	h := &host{session: session, metrics: m, cancel: cancel, stop: stop, post: post, open: map[string]*surface{}}
 	h.surface = &surface{h: h, invalidate: invalidate}
@@ -238,8 +240,8 @@ func newSessionHost(ctx context.Context, session *flatte.Session, m layout.Metri
 					if h.closed {
 						return
 					}
-					session.ApplyPendingUpdates()
-					h.after()
+					step := session.Step(flattehost.StepInput{UpdatesPending: true})
+					h.after(step)
 				})
 			case <-ctx.Done():
 				return
@@ -249,8 +251,8 @@ func newSessionHost(ctx context.Context, session *flatte.Session, m layout.Metri
 	return h
 }
 
-func (h *host) services() flatte.HostServices {
-	return flatte.HostServices{
+func (h *host) services() flattehost.Services {
+	return flattehost.Services{
 		Capabilities: h.capabilities(),
 		SetClipboard: func(text string) {
 			if h.clip != nil {
@@ -306,8 +308,9 @@ func (h *host) capabilities() flatte.Capabilities {
 func (h *host) start(width, height float64) {
 	h.surface.width, h.surface.height = width, height
 	h.session.UseHostServices(h.services())
-	h.session.Start(flatte.ResizeEvent{Width: h.cols(width), Height: h.lines(height)})
-	h.after()
+	resize := flatte.ResizeEvent{Width: h.cols(width), Height: h.lines(height)}
+	step := h.session.Step(flattehost.StepInput{Start: &resize})
+	h.after(step)
 }
 
 // close closes secondary windows and releases the host's goroutines. Run
@@ -335,19 +338,27 @@ func (h *host) handle(ev flatte.Event) {
 	for _, s := range h.surfaces() {
 		s.flushWheel()
 	}
-	h.session.Handle(ev)
-	h.after()
+	step := h.session.Step(flattehost.StepInput{Events: []flatte.Event{ev}})
+	if !step.Dirty && !step.Quit {
+		return
+	}
+	h.after(step)
 }
 
 // after reacts to a state change: stop on quit, else open and close windows
 // as declared and redraw them all.
-func (h *host) after() {
-	if h.session.Quitting() {
+func (h *host) after(step flatte.StepResult) {
+	if step.Quit {
 		h.quitting = true
 		h.stop()
 		return
 	}
-	h.syncWindows()
+	h.state = flattehost.Snapshot(h.session)
+	var declared []flatte.Window
+	if h.state.Windows != nil {
+		declared = h.state.Windows()
+	}
+	h.syncWindows(declared)
 	h.syncMedia()
 	if h.desktop != nil {
 		h.syncMenus()
@@ -361,10 +372,12 @@ func (h *host) after() {
 // syncMedia publishes app-owned metadata after each loop mutation, even
 // while the app is hidden or in the background.
 func (h *host) syncMedia() {
-	if h.media == nil || !h.session.HasNowPlaying() {
+	if h.media == nil || !h.state.HasNowPlaying {
 		return
 	}
-	h.media.update(h.session.NowPlaying())
+	if h.state.NowPlaying != nil {
+		h.media.update(h.state.NowPlaying())
+	}
 }
 
 // mediaCommand posts native commands back onto the UI loop. Callbacks never
@@ -389,11 +402,10 @@ func (h *host) surfaces() []*surface {
 
 // syncWindows opens the windows the app declares that are not open, and
 // closes the open ones it no longer declares.
-func (h *host) syncWindows() {
+func (h *host) syncWindows(declared []flatte.Window) {
 	if h.windows == nil {
 		return
 	}
-	declared := h.session.Windows()
 	keep := map[string]bool{}
 	for _, w := range declared {
 		if w.ID == "" || keep[w.ID] {
@@ -500,14 +512,6 @@ func (s *surface) key(ev flatte.KeyEvent) {
 	h := s.h
 	// ⌘C copies selected label text; with none it is the app's.
 	if ev == copyKey && s.copySelection() {
-		return
-	}
-	// A menu shortcut the menu bar did not take natively (one without ⌘,
-	// or a disabled item's) is routed here, as a terminal routes it.
-	if it, ok := flatte.MenuShortcut(h.session.Menus(), ev); ok {
-		if !it.Disabled {
-			h.handle(flatte.MenuEvent{ID: it.ID})
-		}
 		return
 	}
 	vertical := (ev.Key == flatte.KeyUp || ev.Key == flatte.KeyDown) && ev.Mod&^flatte.ModShift == 0
@@ -622,7 +626,13 @@ func (h *host) syncMenus() {
 	if h.menus == nil {
 		return
 	}
-	if bar := h.session.Menus(); !reflect.DeepEqual(bar, h.bar) {
+	state := flattehost.Snapshot(h.session)
+	h.state.Menus = state.Menus
+	var bar []flatte.Menu
+	if h.state.Menus != nil {
+		bar = h.state.Menus()
+	}
+	if !reflect.DeepEqual(bar, h.bar) {
 		h.bar = bar
 		h.menus.setBar(bar)
 	}
@@ -869,11 +879,14 @@ func (s *surface) mouseClicks(x, y float64, button flatte.MouseButton, action fl
 	// MenuEvent.
 	secondary := button == flatte.MouseRight || button == flatte.MouseLeft && mod.Contains(flatte.ModCtrl)
 	if secondary && action == flatte.MousePress && h.menus != nil {
-		if items := h.session.ContextMenu(id); len(items) > 0 {
-			if chosen := h.menus.popUp(s.id, items, x, y); chosen != "" {
-				h.handle(flatte.MenuEvent{ID: chosen, Target: id})
+		if h.state.ContextMenu != nil {
+			items := h.state.ContextMenu(id)
+			if len(items) > 0 {
+				if chosen := h.menus.popUp(s.id, items, x, y); chosen != "" {
+					h.handle(flatte.MenuEvent{ID: chosen, Target: id})
+				}
+				return
 			}
-			return
 		}
 	}
 	if op, ok := s.input(id); ok && h.text != nil {
@@ -975,13 +988,12 @@ func (s *surface) flushWheel() {
 	}
 	s.scroll = nil
 	h := s.h
-	for range p.n {
-		h.session.Handle(p.ev)
-		if h.quitting {
-			break
-		}
+	events := make([]flatte.Event, p.n)
+	for i := range events {
+		events[i] = p.ev
 	}
-	h.after()
+	step := h.session.Step(flattehost.StepInput{Events: events})
+	h.after(step)
 }
 
 // pointerAt is a pointer event at (x, y) points over target id with rect r
@@ -1037,8 +1049,9 @@ func (s *surface) render() layout.Scene {
 		s.delivered = rects
 		s.deliveredPoints = maps.Clone(s.scene.Rects)
 		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Window: s.id}
-		h.session.Handle(ev)
-		if h.session.Quitting() {
+		step := h.session.Step(flattehost.StepInput{Events: []flatte.Event{ev}})
+		h.state = flattehost.Snapshot(h.session)
+		if step.Quit {
 			h.quitting = true
 			h.stop()
 			return s.scene
@@ -1047,7 +1060,10 @@ func (s *surface) render() layout.Scene {
 }
 
 func (s *surface) view() flatte.Frame {
-	return s.h.session.View(flatte.RenderContext{Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor, Window: s.id, Graphical: true, Capabilities: s.h.session.Capabilities()})
+	return s.h.session.Step(flattehost.StepInput{FrameDue: true, RenderContext: flatte.RenderContext{
+		Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor,
+		Window: s.id, Graphical: true, Capabilities: s.h.state.Capabilities,
+	}}).Frame
 }
 
 // wheelAccumulator turns precise scroll deltas (trackpads, in points) into

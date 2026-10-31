@@ -8,6 +8,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 func driver() *flatest.Driver[State] {
@@ -80,7 +81,7 @@ func TestTimerQuit(t *testing.T) {
 		{Key: flatte.KeyEscape},
 	} {
 		var quit bool
-		fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+		fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 		Handle(NewState(), key, fx)
 		if !quit {
 			t.Fatalf("%+v did not request quit", key)

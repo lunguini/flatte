@@ -67,6 +67,7 @@ func terminalSize(out io.Writer) (width, height int) {
 // RenderContextFor reports the terminal facts available to View. It mirrors
 // renderer color-profile detection so apps can pick theme styles without
 // owning terminal probing.
+// Deprecated: use host.RenderContextFor in terminal host implementations.
 func RenderContextFor(out io.Writer) RenderContext {
 	width, height := terminalSize(out)
 	return RenderContext{

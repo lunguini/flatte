@@ -14,6 +14,8 @@ type Host interface {
 
 // HostServices is the set of optional services a host provides to a Session.
 // It is host plumbing; applications use Effects.
+//
+// Deprecated: use host.Services in host implementations.
 type HostServices struct {
 	Capabilities  Capabilities
 	SetClipboard  func(string)
@@ -36,9 +38,8 @@ type HostServices struct {
 	PublishMedia func(*NowPlaying)
 }
 
-// Session is the non-generic, host-facing wrapper for one App[S]. Hosts drive
-// its lifecycle, events, updates, and views without seeing application state
-// or generic Effects. Its methods are host plumbing, not application API.
+// Session is the non-generic, minimal host driver handle for one App[S].
+// Application state and generic Effects remain private to this package.
 type Session struct {
 	mu            sync.Mutex
 	pending       []func()
@@ -71,8 +72,11 @@ type Session struct {
 }
 
 // NewSession wraps an app for use by a Host. Run normally constructs sessions
-// itself; this constructor is also useful to a host's offscreen test adapter.
-func NewSession[S any](ctx context.Context, app App[S]) *Session {
+// itself; this constructor is also useful to offscreen host adapters.
+// Deprecated: use host.NewSession in host implementations.
+func NewSession[S any](ctx context.Context, app App[S]) *Session { return newSession(ctx, app) }
+
+func newSession[S any](ctx context.Context, app App[S]) *Session {
 	if app.State == nil {
 		panic("flat: App.State is nil")
 	}
@@ -116,8 +120,8 @@ func NewSession[S any](ctx context.Context, app App[S]) *Session {
 		if app.Init != nil {
 			app.Init(app.State, fx)
 		}
-		if !s.Quitting() {
-			s.Handle(size)
+		if !s.quittingNow() {
+			s.handle(size)
 		}
 	}
 	s.handle = func(ev Event) {
@@ -203,58 +207,24 @@ func (s *Session) wake() {
 	}
 }
 
-// Start runs Init, then sends the first ResizeEvent unless Init requested
-// Quit. Calling Start more than once has no effect.
-func (s *Session) Start(size ResizeEvent) { s.start(size) }
-
-// Handle delivers an event to the app and tracer.
-func (s *Session) Handle(ev Event) { s.handle(ev) }
-
-// ApplyPendingUpdates applies queued async updates on the host's loop
-// goroutine and returns the number applied.
-func (s *Session) ApplyPendingUpdates() int {
-	count := 0
-	for {
-		s.mu.Lock()
-		pending := s.pending
-		s.pending = nil
-		s.mu.Unlock()
-		if len(pending) == 0 {
-			return count
-		}
-		for _, update := range pending {
-			update()
-			count++
-		}
-	}
-}
-
 // Updates returns a coalesced notification channel. Hosts select on it and
-// call ApplyPendingUpdates on their loop goroutine.
 func (s *Session) Updates() <-chan struct{} { return s.updates }
 
 func (s *Session) setActionSink(enqueue func(action)) { s.actionSink(enqueue) }
 
-// View evaluates the app's frame for the supplied host render context.
-func (s *Session) View(ctx RenderContext) Frame { return s.view(ctx) }
-
-// Quitting reports whether Effects.Quit has been called.
-func (s *Session) Quitting() bool {
+func (s *Session) quittingNow() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.quitting
 }
 
 // UseHostServices installs the host's capabilities and optional callbacks.
-// Call it before Start.
+// Call it before the first StepInput.Start.
 func (s *Session) UseHostServices(services HostServices) { s.services(services) }
 
-// Capabilities reports the services installed through UseHostServices.
-func (s *Session) Capabilities() Capabilities { return s.caps() }
-
-// OnExit calls the app's cleanup hook once and cancels Effects work. Run owns
-// this call for selected hosts; direct host tests may call it explicitly.
-func (s *Session) OnExit() {
+// close calls the app's cleanup hook once and cancels Effects work. Run owns
+// this call for selected hosts.
+func (s *Session) close() {
 	s.exitOnce.Do(func() {
 		defer s.cancel()
 		if s.onExit != nil {
@@ -267,35 +237,21 @@ func (s *Session) OnExit() {
 // uses it after rendering a frame.
 func (s *Session) Cancel() { s.cancel() }
 
-// Menus returns the app's current menu bar.
-func (s *Session) Menus() []Menu { return s.menus() }
-
-// ContextMenu returns the app's current context menu for target.
-func (s *Session) ContextMenu(target string) []MenuItem { return s.contextMenu(target) }
-
-// Windows returns the app's current secondary-window declarations.
-func (s *Session) Windows() []Window { return s.windows() }
-
-// WindowFrame returns the last settled cell frame for a secondary window.
-// It is used by deterministic host drivers; graphical hosts paint their own
-// native windows.
-func (s *Session) WindowFrame(id string) (Frame, bool) { return s.cell.windows.WindowFrame(id) }
-
-// HasNowPlaying reports whether the app provides a NowPlaying callback.
-func (s *Session) HasNowPlaying() bool { return s.hasNowPlaying }
-
-// NowPlaying returns the app's current media snapshot, if any.
-func (s *Session) NowPlaying() *NowPlaying { return s.nowPlaying() }
-
-// RunTerminal asks the built-in terminal host to drive the wrapped app. It is
-// a host-plumbing hook used by window.MediaControls to preserve the terminal
-// loop while installing native media services.
-func (s *Session) RunTerminal(ctx context.Context, options ...Option) error {
+// RunTerminal is the terminal-only hook used by a host that wraps the terminal
+// driver with native services. It is kept as a free function so it is not part
+// of Session's common driver contract.
+// Deprecated: use host.RunTerminal.
+func RunTerminal(ctx context.Context, s *Session, options ...Option) error {
 	if s.runTerminal == nil {
 		return ErrUnsupported
 	}
 	return s.runTerminal(ctx, options...)
 }
+
+// CloseSession runs app cleanup and cancels Effects work for an offscreen
+// session. Run owns cleanup for selected hosts.
+// Deprecated: use host.CloseSession.
+func CloseSession(s *Session) { s.close() }
 
 func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool, error) {
 	if config.err != nil {
@@ -304,13 +260,13 @@ func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool
 	if config.host == nil {
 		return false, nil
 	}
-	session := NewSession(ctx, app)
+	session := newSession(ctx, app)
 	session.runTerminal = func(runCtx context.Context, options ...Option) error {
 		runConfig := applyRunOptions(config.config, options...).config
 		terminalApp := app
 		terminalApp.OnExit = nil // the outer Run owns the session's OnExit call
 		return runTerminalConfig(runCtx, terminalApp, runConfig)
 	}
-	defer session.OnExit()
+	defer session.close()
 	return true, config.host.Run(ctx, session)
 }

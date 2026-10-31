@@ -87,6 +87,7 @@ func sameKey(a, b KeyEvent) bool {
 // terminal runtime and flatest: it routes shortcuts, and it draws and drives
 // context menus itself, so apps handle menus the same way in every host. It
 // is host plumbing, not application API. The zero value is ready.
+// Deprecated: use host.MenuHost in host implementations.
 type MenuHost struct {
 	// levels are the open context menu and its open submenus, outermost
 	// first; target is the node it was opened on.
@@ -102,6 +103,7 @@ type menuLevel struct {
 }
 
 // RouteMenus is m.Route with app's menus for its current state.
+// Deprecated: use host.RouteMenus in host implementations.
 func RouteMenus[S any](m *MenuHost, app App[S], ev Event, width, height int) (Event, bool) {
 	var menus []Menu
 	if app.Menus != nil {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 func driver() *flatest.Driver[State] {
@@ -39,7 +40,7 @@ func TestViewShowsLabel(t *testing.T) {
 
 func TestQuitOnQ(t *testing.T) {
 	var quit bool
-	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(NewState(), flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")

@@ -5,6 +5,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 func key(k flatte.Key) flatte.KeyEvent { return flatte.KeyEvent{Key: k} }
@@ -59,7 +60,7 @@ func TestKeyboardDrivesEveryControl(t *testing.T) {
 func TestEscapeClosesTheDropdownBeforeQuitting(t *testing.T) {
 	s := NewState()
 	quit := false
-	fx := flatte.NewHarnessEffects[State](t.Context(), nil, func() { quit = true }, nil, nil)
+	fx := flattehost.NewHarnessEffects[State](t.Context(), nil, func() { quit = true }, nil, nil)
 	s.language.Open()
 	Handle(s, key(flatte.KeyEscape), fx)
 	if quit || s.language.IsOpen() {

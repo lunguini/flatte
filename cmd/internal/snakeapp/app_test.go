@@ -11,6 +11,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/cmd/internal/snakesim"
 	"github.com/lunguini/flatte/flatest"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 func stripAnsi(s string) string { return ansi.Strip(s) }
@@ -295,7 +296,7 @@ func TestRestartResetsButKeepsHighScore(t *testing.T) {
 func TestQuitKeys(t *testing.T) {
 	for _, key := range []flatte.KeyEvent{keyChar('q'), {Key: flatte.KeyEscape}} {
 		var quit bool
-		fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+		fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 		Handle(newGame(1), key, fx)
 		if !quit {
 			t.Fatalf("%+v did not request quit", key)
@@ -306,7 +307,7 @@ func TestQuitKeys(t *testing.T) {
 func TestGameOverIgnoresSteeringButAcceptsRestart(t *testing.T) {
 	s := newGame(1)
 	s.game.Over = true
-	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() {}, nil, nil)
+	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() {}, nil, nil)
 	Handle(s, keyChar('w'), fx) // steering ignored while over
 	if len(s.game.DirQueue) != 0 {
 		t.Fatal("steering should be ignored on the game-over screen")

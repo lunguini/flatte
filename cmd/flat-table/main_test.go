@@ -7,6 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 func ready() *State {
@@ -53,7 +54,7 @@ func TestGotoEndAndQuit(t *testing.T) {
 		t.Fatalf("G: Cursor() = %d, want 19", s.tb.Cursor())
 	}
 	var quit bool
-	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, key('q'), fx)
 	if !quit {
 		t.Fatal("q did not quit")

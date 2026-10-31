@@ -98,6 +98,8 @@ func (fx Effects[S]) Capabilities() Capabilities { return fx.caps }
 
 // WithHostCapabilities returns fx reporting c as the host's capabilities.
 // Like WithHostClipboard it is host plumbing, not application API.
+//
+// Deprecated: use host.WithHostCapabilities.
 func WithHostCapabilities[S any](fx Effects[S], c Capabilities) Effects[S] {
 	fx.caps = c
 	return fx
@@ -160,6 +162,8 @@ func newEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit 
 // deterministic tests and the window host for real ones; it is host
 // plumbing, not application API. Terminal-only effects (Print, Suspend,
 // Exec, clipboard) are no-ops on it.
+//
+// Deprecated: use host.NewHarnessEffects.
 func NewHarnessEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S] {
 	fx := newEffects[S](ctx, updates, quit)
 	fx.dispatch = dispatch
@@ -171,6 +175,8 @@ func NewHarnessEffects[S any](ctx context.Context, updates chan<- StateUpdate[S]
 // set and read: a host with a system clipboard of its own (a window) writes
 // it and answers read with a ClipboardEvent. Like NewHarnessEffects it is
 // host plumbing, not application API.
+//
+// Deprecated: use host.WithHostClipboard.
 func WithHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S] {
 	fx.setClipboard, fx.readClipboard = set, read
 	return fx
@@ -180,6 +186,8 @@ func WithHostClipboard[S any](fx Effects[S], set func(text string), read func())
 // an enqueue callback instead of a channel. It is intended for synchronous
 // harnesses such as flatest, where a burst of updates must not block a fake
 // clock or a controlled Stream worker on an arbitrary channel capacity.
+//
+// Deprecated: use host.NewHarnessEffectsQueue.
 func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(StateUpdate[S]) bool, quit func(), dispatch func(func()), clock Clock) Effects[S] {
 	fx := newEffects[S](ctx, nil, quit)
 	fx.sendUpdate = func(sendCtx context.Context, update StateUpdate[S]) bool {
@@ -376,6 +384,8 @@ func withSuspendProcess(fn func()) Option {
 // handled on the state loop. publish is called synchronously on that loop with
 // an owned snapshot (or nil), and must return promptly. It receives nil again
 // at shutdown. Closing commands disconnects it without ending Run.
+//
+// Deprecated: use host.WithHostMedia.
 func WithHostMedia(commands <-chan MediaEvent, publish func(*NowPlaying)) Option {
 	return optionFunc(func(c *runConfig) { c.mediaCommands, c.publishMedia = commands, publish })
 }
@@ -587,7 +597,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	session := NewSession(runCtx, app)
+	session := newSession(runCtx, app)
 	session.setActionSink(func(a action) { pending = append(pending, a) })
 	session.cell.dialogs.home, _ = os.UserHomeDir()
 	session.UseHostServices(HostServices{
@@ -720,11 +730,12 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	}()
 	resize, stopResize := notifyResize()
 	defer stopResize()
-	defer session.OnExit()
+	defer session.close()
 
 	width, height := terminalSize(out)
-	session.Start(ResizeEvent{Width: width, Height: height})
-	if session.Quitting() {
+	initialResize := ResizeEvent{Width: width, Height: height}
+	started := session.Step(StepInput{Start: &initialResize})
+	if started.Quit {
 		return nil
 	}
 
@@ -749,7 +760,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	terminalRenderContext := func() RenderContext {
 		ctx := RenderContextFor(out)
 		_, ctx.Height = terminalSize(out)
-		ctx.Capabilities = session.Capabilities()
+		ctx.Capabilities = session.caps()
 		return ctx
 	}
 	eventRenderContext := func() RenderContext {
@@ -1000,11 +1011,11 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	// next loop turn, keeping render bounded.
 	render := func() {
 		draw()
-		if sink.err != nil || session.Quitting() || len(pending) == 0 {
+		if sink.err != nil || session.quittingNow() || len(pending) == 0 {
 			return
 		}
 		processActions()
-		if sink.err == nil && !session.Quitting() {
+		if sink.err == nil && !session.quittingNow() {
 			draw()
 		}
 	}
@@ -1013,14 +1024,14 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	if sink.err != nil {
 		return sink.err
 	}
-	if session.Quitting() {
+	if session.quittingNow() {
 		return nil
 	}
 	render()
 	if sink.err != nil {
 		return sink.err
 	}
-	if session.Quitting() {
+	if session.quittingNow() {
 		return nil
 	}
 	for {
@@ -1076,21 +1087,21 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 				return nil
 			}
 		}
-		if session.Quitting() {
+		if session.quittingNow() {
 			return nil
 		}
 		processActions()
 		if sink.err != nil {
 			return sink.err
 		}
-		if session.Quitting() {
+		if session.quittingNow() {
 			return nil
 		}
 		render()
 		if sink.err != nil {
 			return sink.err
 		}
-		if session.Quitting() {
+		if session.quittingNow() {
 			return nil
 		}
 	}

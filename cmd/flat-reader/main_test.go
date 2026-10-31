@@ -7,6 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 // ready builds a state already laid out on an 80x24 terminal.
@@ -43,7 +44,7 @@ func TestHandleGotoBottomAndQuit(t *testing.T) {
 		t.Fatal("G did not reach bottom")
 	}
 	var quit bool
-	fx := flatte.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")

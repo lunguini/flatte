@@ -2,6 +2,6 @@
 
 package window
 
-import "github.com/lunguini/flatte"
+import flattehost "github.com/lunguini/flatte/host"
 
-func (MediaControls) ConfigureRun(*flatte.RunConfig) {}
+func (MediaControls) ConfigureRun(*flattehost.RunConfig) {}

@@ -10,17 +10,18 @@ import (
 
 	"github.com/ebitengine/purego/objc"
 	"github.com/lunguini/flatte"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
-func (MediaControls) ConfigureRun(config *flatte.RunConfig) {
+func (MediaControls) ConfigureRun(config *flattehost.RunConfig) {
 	config.UseHost(mediaControlsHost{})
 }
 
 type mediaControlsHost struct{}
 
-func (mediaControlsHost) Run(ctx context.Context, session *flatte.Session) error {
-	if !session.HasNowPlaying() {
-		return session.RunTerminal(ctx)
+func (mediaControlsHost) Run(ctx context.Context, session flattehost.Session) error {
+	if !flattehost.Snapshot(session).HasNowPlaying {
+		return runSessionTerminal(ctx, session)
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -35,9 +36,13 @@ func (mediaControlsHost) Run(ctx context.Context, session *flatte.Session) error
 	return runErr
 }
 
+func runSessionTerminal(ctx context.Context, session flattehost.Session, options ...flatte.Option) error {
+	return flattehost.RunTerminal(ctx, session, options...)
+}
+
 // runTerminalMain pumps AppKit's main queue while the terminal loop runs on a
 // worker goroutine. AppKit and MediaPlayer remain isolated in this module.
-func runTerminalMain(ctx context.Context, session *flatte.Session) error {
+func runTerminalMain(ctx context.Context, session flattehost.Session, options ...flatte.Option) error {
 	if running {
 		return errors.New("window: a window or terminal host is already running")
 	}
@@ -94,7 +99,7 @@ func runTerminalMain(ctx context.Context, session *flatte.Session) error {
 
 	done := make(chan error, 1)
 	go func() {
-		err := session.RunTerminal(ctx, flatte.WithHostMedia(commands, publish))
+		err := flattehost.RunTerminal(ctx, session, append(options, flattehost.WithHostMedia(commands, publish))...)
 		done <- err
 		post(func() { stop() })
 	}()

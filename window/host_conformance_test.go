@@ -80,7 +80,7 @@ func (d *windowConformanceDriver) Close() { d.Finish() }
 func (d *windowConformanceDriver) Finish() {
 	d.once.Do(func() {
 		d.host.close()
-		d.host.session.OnExit()
+		closeTestSession(d.host.session)
 		d.finished = true
 	})
 }

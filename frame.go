@@ -85,6 +85,7 @@ const maxLayoutPasses = 2
 // (for hit-testing), and the rects last delivered, to pass back as last on
 // the next render. Frames without Root, or a nil handle, deliver nothing.
 // Hosts and test harnesses use it so every host settles layout identically.
+// Deprecated: use host.SettleFrame in host and test-driver code.
 func SettleFrame(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width, height int) (Frame, layout.Composition, map[string]layout.Rect) {
 	return settleFrame(view, handle, last, width, func(layout.Node) int { return height })
 }

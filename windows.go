@@ -60,6 +60,7 @@ func (WindowEvent) isEvent() {}
 // declared window as a bordered box over the main frame, tracks which one
 // has focus, and locates mouse events in them. Host plumbing, not
 // application API. The zero value is ready.
+// Deprecated: use host.WindowHost in host implementations.
 type WindowHost struct {
 	open  []*hostWindow // in declaration order: later ones are on top
 	focus string
@@ -82,6 +83,7 @@ func (wh *WindowHost) Focus() string { return wh.focus }
 // returns the WindowEvents that result: a newly declared window takes
 // focus; when the focused one goes, focus falls to the topmost left (or the
 // main window).
+// Deprecated: use host.SyncWindows in host implementations.
 func SyncWindows[S any](wh *WindowHost, app App[S], width, height int) []Event {
 	var declared []Window
 	if app.Windows != nil {
@@ -136,6 +138,7 @@ func SyncWindows[S any](wh *WindowHost, app App[S], width, height int) []Event {
 // bordered box titled by its Frame.Title. The focused window's cursor
 // shows; the main frame's shows only while it has focus. Each View gets
 // base with its own Window, Width and Height.
+// Deprecated: use host.PaintWindows in host implementations.
 func PaintWindows[S any](wh *WindowHost, app App[S], base RenderContext, frame Frame, handle func(LayoutEvent)) Frame {
 	if len(wh.open) == 0 {
 		return frame
@@ -279,6 +282,7 @@ func (wh *WindowHost) origin(id string) (x, y int) {
 // focusing on press), then the menus (shortcuts, context menus at the
 // pointer's screen position). It returns the events to deliver, in order.
 // Host plumbing, not application API.
+// Deprecated: use host.RouteInput in host implementations.
 func RouteInput[S any](menus *MenuHost, windows *WindowHost, app App[S], ev Event, width, height int) []Event {
 	var out []Event
 	for _, ev := range windows.Route(ev) {

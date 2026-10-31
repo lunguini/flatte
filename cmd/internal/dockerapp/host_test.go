@@ -3,12 +3,13 @@ package dockerapp
 import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	flattehost "github.com/lunguini/flatte/host"
 )
 
 // testHost mirrors the runtime for tests that drive Handle directly: every
 // event is followed by a layout settle (LayoutEvents delivered before the
 // "paint"), and mouse events are hit-tested against the frame on screen. It
-// goes through flatte.SettleFrame, the same function Run uses.
+// goes through host.SettleFrame, the same function Run uses.
 type testHost struct {
 	delivered map[string]layout.Rect
 	comp      layout.Composition
@@ -43,7 +44,7 @@ func (s *State) testSize() (int, int) {
 
 func (h *testHost) settle(s *State, fx flatte.Effects[State]) {
 	w, ht := s.testSize()
-	h.frame, h.comp, h.delivered = flatte.SettleFrame(
+	h.frame, h.comp, h.delivered = flattehost.SettleFrame(
 		func() flatte.Frame { return View(s, flatte.RenderContext{Width: w}) },
 		func(ev flatte.LayoutEvent) { h.layouts++; Handle(s, ev, fx) },
 		h.delivered, w, ht,

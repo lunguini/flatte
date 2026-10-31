@@ -39,7 +39,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 
 	runCtx, cancel := context.WithCancel(ctx)
 	events := make(chan []Event, 256)
-	session := NewSession(runCtx, app)
+	session := newSession(runCtx, app)
 	host := newBrowserHost(runCtx, doc, surface, cfg, func(ev []Event) {
 		select {
 		case events <- ev:
@@ -65,7 +65,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	})
 	defer cancel()
 	defer host.close()
-	defer session.OnExit()
+	defer session.close()
 	defer func() {
 		if cfg.publishMedia != nil {
 			cfg.publishMedia(nil)
@@ -73,14 +73,14 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 	}()
 
 	initialResize := ResizeEvent{Width: host.columns(), Height: host.rows()}
-	session.Start(initialResize)
-	if session.Quitting() {
+	started := session.Step(StepInput{Start: &initialResize})
+	if started.Quit {
 		return nil
 	}
 	renderContext := func() RenderContext {
 		return RenderContext{
 			Width: host.columns(), Height: host.rows(), ColorProfile: colorprofile.TrueColor,
-			Capabilities: session.Capabilities(),
+			Capabilities: session.caps(),
 		}
 	}
 	step := func(input StepInput) bool {

@@ -18,6 +18,7 @@ type Notification struct {
 // WithHostNotifications returns fx with Notify routed to show: a host with
 // system notifications of its own (a window) posts them. Like
 // WithHostClipboard it is host plumbing, not application API.
+// Deprecated: use host.WithHostNotifications.
 func WithHostNotifications[S any](fx Effects[S], show func(Notification)) Effects[S] {
 	fx.notify = show
 	return fx

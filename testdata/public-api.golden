@@ -57,6 +57,7 @@ flatte package flatte
   func Alert[S any](fx Effects[S], name string, d AlertDialog, fold func(s*S, button int, err error))
   func ApplyUpdate[S any](s*S, tracer Tracer, update StateUpdate[S])
   func Cancel[S any](fx Effects[S], name string)
+  func CloseSession(s*Session)
   func ComposeFrame(frame Frame, width int, height int)(Frame, layout.Composition)
   func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) error
   func Exec[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, error))
@@ -76,6 +77,7 @@ flatte package flatte
   func RouteInput[S any](menus*MenuHost, windows*WindowHost, app App[S], ev Event, width int, height int)[]Event
   func RouteMenus[S any](m*MenuHost, app App[S], ev Event, width int, height int)(Event, bool)
   func Run[S any](ctx context.Context, app App[S], opts ... Option)(runErr error)
+  func RunTerminal(ctx context.Context, s*Session, options ... Option) error
   func SaveFile[S any](fx Effects[S], name string, d SaveDialog, fold func(s*S, path string, err error))
   func SaveState[S any](path string, state S) error
   func ScopeEvery[S any](scope*Scope, fx Effects[S], interval time.Duration, fold func(*S, time.Time)) error
@@ -105,24 +107,11 @@ flatte package flatte
   method *RunConfig.UseHost(host Host)
   method *Scope.Cancel()
   method *Scope.Ctx() context.Context
-  method *Session.ApplyPendingUpdates() int
   method *Session.Cancel()
-  method *Session.Capabilities() Capabilities
-  method *Session.ContextMenu(target string)[]MenuItem
-  method *Session.Handle(ev Event)
-  method *Session.HasNowPlaying() bool
-  method *Session.Menus()[]Menu
-  method *Session.NowPlaying() *NowPlaying
-  method *Session.OnExit()
-  method *Session.Quitting() bool
-  method *Session.RunTerminal(ctx context.Context, options ... Option) error
-  method *Session.Start(size ResizeEvent)
+  method *Session.State() HostState
   method *Session.Step(input StepInput) StepResult
   method *Session.Updates() <-chan struct{}
   method *Session.UseHostServices(services HostServices)
-  method *Session.View(ctx RenderContext) Frame
-  method *Session.WindowFrame(id string)(Frame, bool)
-  method *Session.Windows()[]Window
   method *WindowHost.Focus() string
   method *WindowHost.Route(ev Event)[]Event
   method *WindowHost.WindowFrame(id string)(Frame, bool)
@@ -268,6 +257,15 @@ flatte package flatte
   field HostServices.DialogResizeRoutesThroughMenus bool [order=9]
   field HostServices.PublishMedia func(*NowPlaying) [order=10]
   struct HostServices fields=11 comparable=false
+  type HostState struct
+  field HostState.Capabilities Capabilities [order=0]
+  field HostState.Menus func()[]Menu [order=1]
+  field HostState.Windows func()[]Window [order=2]
+  field HostState.NowPlaying func() *NowPlaying [order=3]
+  field HostState.HasNowPlaying bool [order=4]
+  field HostState.ContextMenu func(string)[]MenuItem [order=5]
+  field HostState.WindowFrame func(string)(Frame, bool) [order=6]
+  struct HostState fields=7 comparable=false
   type Key int
   type KeyEvent struct
   field KeyEvent.Key Key [order=0]
@@ -416,11 +414,12 @@ flatte package flatte
   type StepInput struct
   field StepInput.Events []Event [order=0]
   field StepInput.Resize *ResizeEvent [order=1]
-  field StepInput.UpdatesPending bool [order=2]
-  field StepInput.FrameDue bool [order=3]
-  field StepInput.Quit bool [order=4]
-  field StepInput.RenderContext RenderContext [order=5]
-  struct StepInput fields=6 comparable=false
+  field StepInput.Start *ResizeEvent [order=2]
+  field StepInput.UpdatesPending bool [order=3]
+  field StepInput.FrameDue bool [order=4]
+  field StepInput.Quit bool [order=5]
+  field StepInput.RenderContext RenderContext [order=6]
+  struct StepInput fields=7 comparable=false
   type StepResult struct
   field StepResult.Frame Frame [order=0]
   field StepResult.Paint bool [order=1]
@@ -482,18 +481,19 @@ flatest package flatest
   method *Recorder.Updates()[]string
   type Driver[S any] struct
   field Driver.<unexported> flatte.App[S] [order=0]
-  field Driver.<unexported> *flatte.Session [order=1]
-  field Driver.<unexported> int [order=2]
+  field Driver.<unexported> host.Session [order=1]
+  field Driver.<unexported> host.State [order=2]
   field Driver.<unexported> int [order=3]
-  field Driver.<unexported> bool [order=4]
-  field Driver.<unexported> []flatte.StateUpdate[S] [order=5]
-  field Driver.<unexported> *fakeClock [order=6]
-  field Driver.<unexported> []func() [order=7]
-  field Driver.<unexported> bool [order=8]
-  field Driver.<unexported> flatte.Effects[S] [order=9]
-  field Driver.<unexported> []pendingDialog [order=10]
-  field Driver.<unexported> []flatte.Notification [order=11]
-  struct Driver fields=12 comparable=false
+  field Driver.<unexported> int [order=4]
+  field Driver.<unexported> bool [order=5]
+  field Driver.<unexported> []flatte.StateUpdate[S] [order=6]
+  field Driver.<unexported> *fakeClock [order=7]
+  field Driver.<unexported> []func() [order=8]
+  field Driver.<unexported> bool [order=9]
+  field Driver.<unexported> flatte.Effects[S] [order=10]
+  field Driver.<unexported> []pendingDialog [order=11]
+  field Driver.<unexported> []flatte.Notification [order=12]
+  struct Driver fields=13 comparable=false
   type Options struct
   field Options.Width int [order=0]
   field Options.Height int [order=1]
@@ -1426,3 +1426,33 @@ flatui/layout package layout
   field Toggle.Focused bool [order=6]
   struct Toggle fields=7 comparable=false
   type ToggleKind int
+host package host
+  func CloseSession(session Session)
+  func MenuShortcut(menus[]flatte.Menu, key flatte.KeyEvent)(flatte.MenuItem, bool)
+  func NewHarnessEffects[S any](ctx context.Context, updates chan<-flatte.StateUpdate[S], quit func(), dispatch func(func()), clock flatte.Clock) flatte.Effects[S]
+  func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(flatte.StateUpdate[S]) bool, quit func(), dispatch func(func()), clock flatte.Clock) flatte.Effects[S]
+  func NewSession[S any](ctx context.Context, app flatte.App[S]) Session
+  func PaintWindows[S any](windows*WindowHost, app flatte.App[S], base flatte.RenderContext, frame flatte.Frame, handle func(flatte.LayoutEvent)) flatte.Frame
+  func RenderContextFor(out io.Writer) flatte.RenderContext
+  func RouteInput[S any](menus*MenuHost, windows*WindowHost, app flatte.App[S], event flatte.Event, width int, height int)[]flatte.Event
+  func RouteMenus[S any](menus*MenuHost, app flatte.App[S], event flatte.Event, width int, height int)(flatte.Event, bool)
+  func RunTerminal(ctx context.Context, session Session, options ... Option) error
+  func SettleFrame(view func() flatte.Frame, handle func(flatte.LayoutEvent), last map[string] layout.Rect, width int, height int)(flatte.Frame, layout.Composition, map[string] layout.Rect)
+  func Snapshot(session Session) State
+  func SyncWindows[S any](windows*WindowHost, app flatte.App[S], width int, height int)[]flatte.Event
+  func WithHostCapabilities[S any](fx flatte.Effects[S], c flatte.Capabilities) flatte.Effects[S]
+  func WithHostClipboard[S any](fx flatte.Effects[S], set func(string), read func()) flatte.Effects[S]
+  func WithHostDesktop[S any](fx flatte.Effects[S], command func(flatte.DesktopCommand)) flatte.Effects[S]
+  func WithHostDialogs[S any](fx flatte.Effects[S], show func(flatte.Dialog, func(flatte.DialogResult))) flatte.Effects[S]
+  func WithHostMedia(commands<-chan flatte.MediaEvent, publish func(*flatte.NowPlaying)) Option
+  func WithHostNotifications[S any](fx flatte.Effects[S], show func(flatte.Notification)) flatte.Effects[S]
+  type Host = flatte.Host
+  type MenuHost = flatte.MenuHost
+  type Option = flatte.Option
+  type RunConfig = flatte.RunConfig
+  type Services = flatte.HostServices
+  type Session = *flatte.Session
+  type State = flatte.HostState
+  type StepInput = flatte.StepInput
+  type StepResult = flatte.StepResult
+  type WindowHost = flatte.WindowHost

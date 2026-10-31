@@ -62,7 +62,7 @@ func TestDesktopMenusFollowStateWhileHidden(t *testing.T) {
 	h.desktop = &fakeDesktop{}
 	before := len(m.bars)
 	s.content = "Updated from background"
-	h.after()
+	h.after(h.session.Step(flatte.StepInput{}))
 	if len(m.bars) != before+1 || m.bars[len(m.bars)-1][0].Items[0].Label != s.content {
 		t.Fatalf("bars %#v", m.bars)
 	}

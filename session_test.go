@@ -19,25 +19,29 @@ type sessionTestHost struct{}
 func (h sessionTestHost) Run(_ context.Context, session *Session) error {
 	want := Capabilities{Alert: true, Clipboard: true, Mouse: true, Quit: true}
 	session.UseHostServices(HostServices{Capabilities: want})
-	session.Start(ResizeEvent{Width: 40, Height: 12})
+	started := session.Step(StepInput{Start: &ResizeEvent{Width: 40, Height: 12}})
+	if started.Quit {
+		return fmt.Errorf("session quit during startup")
+	}
 	select {
 	case <-session.Updates():
 	case <-time.After(time.Second):
 		return fmt.Errorf("async update was not queued")
 	}
-	if n := session.ApplyPendingUpdates(); n != 1 {
-		return fmt.Errorf("ApplyPendingUpdates applied %d updates, want 1", n)
+	updated := session.Step(StepInput{UpdatesPending: true})
+	if !updated.Dirty {
+		return fmt.Errorf("update step did not report dirty state")
 	}
-	if got := session.Capabilities(); got != want {
+	if got := session.State().Capabilities; got != want {
 		return fmt.Errorf("session capabilities = %+v, want %+v", got, want)
 	}
-	session.Handle(KeyEvent{Key: KeyCharacter, Rune: 'q'})
-	if !session.Quitting() {
-		return fmt.Errorf("Quit did not reach the session")
+	frame := session.Step(StepInput{FrameDue: true, RenderContext: RenderContext{Width: 40, Height: 12, Graphical: true}})
+	if frame.Frame.Content != "complete" {
+		return fmt.Errorf("View content = %q, want complete", frame.Frame.Content)
 	}
-	frame := session.View(RenderContext{Width: 40, Height: 12, Graphical: true, Capabilities: session.Capabilities()})
-	if frame.Content != "complete" {
-		return fmt.Errorf("View content = %q, want complete", frame.Content)
+	quit := session.Step(StepInput{Events: []Event{KeyEvent{Key: KeyCharacter, Rune: 'q'}}})
+	if !quit.Quit {
+		return fmt.Errorf("Quit did not reach the session")
 	}
 	return nil
 }
@@ -116,9 +120,9 @@ func TestSessionStepOwnsCellInputUpdatesFramesAndQuit(t *testing.T) {
 			return Frame{Content: fmt.Sprintf("menu=%d updates=%d", s.menuEvents, s.updates)}
 		},
 	}
-	session := NewSession(context.Background(), app)
+	session := newSession(context.Background(), app)
 	session.UseHostServices(HostServices{CellSurface: true, DefaultQuit: true})
-	session.Start(ResizeEvent{Width: 40, Height: 12})
+	session.Step(StepInput{Start: &ResizeEvent{Width: 40, Height: 12}})
 	renderContext := RenderContext{Width: 40, Height: 12}
 	initial := session.Step(StepInput{FrameDue: true, RenderContext: renderContext})
 	if !initial.Paint || initial.Frame.Content != "menu=0 updates=0" {
@@ -165,8 +169,9 @@ func TestSessionStepDefersPaintUntilFrameDue(t *testing.T) {
 		},
 		View: func(s *state, _ RenderContext) Frame { return Frame{Content: fmt.Sprintf("events=%d", s.events)} },
 	})
+	defer session.Cancel()
 	session.UseHostServices(HostServices{CellSurface: true})
-	session.Start(ResizeEvent{Width: 40, Height: 12})
+	session.Step(StepInput{Start: &ResizeEvent{Width: 40, Height: 12}})
 	ctx := RenderContext{Width: 40, Height: 12}
 	step := session.Step(StepInput{Events: []Event{KeyEvent{Key: KeyEnter}}, RenderContext: ctx})
 	if step.Paint || !step.Dirty || s.events != 1 {
