@@ -1,4 +1,6 @@
-package window
+//go:build darwin && !wasm
+
+package appkit
 
 import (
 	"testing"
@@ -12,12 +14,12 @@ func TestNativeMediaSelectorsAndMetadataSmoke(t *testing.T) {
 	if mediaCommandFailed != 200 || mediaCommandNoActionableItem != 110 {
 		t.Fatal("Media command statuses differ from the SDK contract")
 	}
-	if err := loadFrameworks(); err != nil {
+	if err := load(); err != nil {
 		t.Fatal(err)
 	}
 	withPool(func() {
 		var delivered []flatte.MediaCommand
-		media, err := newNativeMedia(func(command flatte.MediaCommand) { delivered = append(delivered, command) })
+		media, err := NewMedia(func(command flatte.MediaCommand) { delivered = append(delivered, command) })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +75,7 @@ func TestNativeMediaSelectorsAndMetadataSmoke(t *testing.T) {
 		oldTarget := media.target
 		oldTarget.Send(sel("retain"))
 		media.detach(false)
-		next, err := newNativeMedia(func(flatte.MediaCommand) {})
+		next, err := NewMedia(func(flatte.MediaCommand) {})
 		if err != nil {
 			oldTarget.Send(sel("release"))
 			t.Fatal(err)
@@ -87,4 +89,19 @@ func TestNativeMediaSelectorsAndMetadataSmoke(t *testing.T) {
 		}
 		oldTarget.Send(sel("release"))
 	})
+}
+
+func TestAppKitRunSlotIsSharedByHosts(t *testing.T) {
+	if err := BeginRun(); err != nil {
+		t.Fatal(err)
+	}
+	if err := BeginRun(); err == nil {
+		EndRun()
+		t.Fatal("a second native host claimed the AppKit run slot")
+	}
+	EndRun()
+	if err := BeginRun(); err != nil {
+		t.Fatalf("released AppKit run slot: %v", err)
+	}
+	EndRun()
 }

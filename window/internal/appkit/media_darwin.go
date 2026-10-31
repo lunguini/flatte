@@ -1,4 +1,6 @@
-package window
+//go:build darwin && !wasm
+
+package appkit
 
 import (
 	"errors"
@@ -31,16 +33,16 @@ var (
 	mediaTargetErr   error
 
 	mediaCurrentMu sync.Mutex
-	mediaCurrent   *nativeMedia
+	mediaCurrent   *Media
 )
 
 type nowPlayingKeys struct {
 	title, artist, album, duration, elapsed, rate objc.ID
 }
 
-// nativeMedia is owned by one macOS window host and used on its UI thread.
+// Media is owned by one macOS host and used on its UI thread.
 // Only command eligibility and lifecycle are read from the remote callback.
-type nativeMedia struct {
+type Media struct {
 	mu         sync.Mutex
 	infoCenter objc.ID
 	target     objc.ID
@@ -107,9 +109,12 @@ func loadNowPlayingKeys() (nowPlayingKeys, error) {
 	return keys, nil
 }
 
-func newNativeMedia(send func(flatte.MediaCommand)) (*nativeMedia, error) {
+func NewMedia(send func(flatte.MediaCommand)) (*Media, error) {
+	if err := load(); err != nil {
+		return nil, err
+	}
 	if send == nil {
-		return nil, errors.New("window: media command callback is nil")
+		return nil, errors.New("appkit: media command callback is nil")
 	}
 	keys, err := loadNowPlayingKeys()
 	if err != nil {
@@ -129,23 +134,23 @@ func newNativeMedia(send func(flatte.MediaCommand)) (*nativeMedia, error) {
 		})
 	})
 	if mediaTargetErr != nil {
-		return nil, fmt.Errorf("window: register media command target: %w", mediaTargetErr)
+		return nil, fmt.Errorf("appkit: register media command target: %w", mediaTargetErr)
 	}
 	centerClass := objc.GetClass("MPRemoteCommandCenter")
 	infoClass := objc.GetClass("MPNowPlayingInfoCenter")
 	if centerClass == 0 || infoClass == 0 {
-		return nil, errors.New("window: MediaPlayer classes unavailable")
+		return nil, errors.New("appkit: MediaPlayer classes unavailable")
 	}
 	center := objc.ID(centerClass).Send(sel("sharedCommandCenter"))
 	infoCenter := objc.ID(infoClass).Send(sel("defaultCenter"))
 	if center == 0 || infoCenter == 0 {
-		return nil, errors.New("window: MediaPlayer centers unavailable")
+		return nil, errors.New("appkit: MediaPlayer centers unavailable")
 	}
 	target := objc.ID(mediaTargetClass).Send(sel("new"))
 	if target == 0 {
-		return nil, errors.New("window: create media command target")
+		return nil, errors.New("appkit: create media command target")
 	}
-	m := &nativeMedia{
+	m := &Media{
 		infoCenter: infoCenter, target: target, keys: keys, send: send,
 		commands: map[flatte.MediaCommand]objc.ID{
 			flatte.MediaPlay:            center.Send(sel("playCommand")),
@@ -166,14 +171,14 @@ func newNativeMedia(send func(flatte.MediaCommand)) (*nativeMedia, error) {
 	for command, remote := range m.commands {
 		if remote == 0 {
 			target.Send(sel("release"))
-			return nil, fmt.Errorf("window: MediaPlayer command %d unavailable", command)
+			return nil, fmt.Errorf("appkit: MediaPlayer command %d unavailable", command)
 		}
 	}
 	mediaCurrentMu.Lock()
 	if mediaCurrent != nil {
 		mediaCurrentMu.Unlock()
 		target.Send(sel("release"))
-		return nil, errors.New("window: media controls already owned")
+		return nil, errors.New("appkit: media controls already owned")
 	}
 	mediaCurrent = m
 	mediaCurrentMu.Unlock()
@@ -209,7 +214,7 @@ func deliverMediaCommand(target objc.ID, command flatte.MediaCommand) int {
 	return mediaCommandOK
 }
 
-func (m *nativeMedia) update(item *flatte.NowPlaying) {
+func (m *Media) Update(item *flatte.NowPlaying) {
 	m.mu.Lock()
 	if m.closed || m.updated && sameNowPlaying(m.last, item) {
 		m.mu.Unlock()
@@ -315,17 +320,17 @@ func mediaCommandStates(item *flatte.NowPlaying) map[flatte.MediaCommand]bool {
 	return states
 }
 
-func (m *nativeMedia) setCommandEnabled(changed []flatte.MediaCommand, states map[flatte.MediaCommand]bool) {
+func (m *Media) setCommandEnabled(changed []flatte.MediaCommand, states map[flatte.MediaCommand]bool) {
 	for _, command := range changed {
 		m.commands[command].Send(sel("setEnabled:"), states[command])
 	}
 }
 
-func (m *nativeMedia) close() { m.detach(true) }
+func (m *Media) Close() { m.detach(true) }
 
 // detach removes only this backend's command targets. Tests use clearInfo=false
 // so they never claim or clear the user's current Now Playing item.
-func (m *nativeMedia) detach(clearInfo bool) {
+func (m *Media) detach(clearInfo bool) {
 	mediaCurrentMu.Lock()
 	if mediaCurrent == m {
 		mediaCurrent = nil

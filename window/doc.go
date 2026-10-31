@@ -5,6 +5,7 @@
 //	flatte.Run(ctx, app)                                    // terminal
 //	flatte.Run(ctx, app, window.Options{})                  // native window
 //	flatte.Run(ctx, app, window.Options{}, flatte.WithMouse(flatte.MouseModeCellMotion))
+//	flatte.Run(ctx, app, media.Controls{})                  // macOS terminal media controls
 //
 // The window driver receives a host.Session. Native callbacks send events and
 // frame requests through its non-blocking Step method; the driver keeps point
@@ -43,8 +44,11 @@
 // time through purego. On other platforms Options installs no host and
 // flatte.Run falls back to the native terminal or browser page. Use
 // Supported to show a native-window flag only where a window is available.
-// On macOS, Options and MediaControls each select a host; supplying both to
-// one Run returns flatte.ErrMultipleHosts.
+// The separate github.com/lunguini/flatte/window/media package provides
+// media.Controls for terminal runs. It is a fallback host, so it can be
+// passed with Options; the window host already connects media when
+// App.NowPlaying is set. Other genuinely conflicting hosts return
+// flatte.ErrMultipleHosts.
 //
 // Menus: App.Menus is the native menu bar, between the application menu
 // (Quit, ⌘Q) and the Window menu (Close, ⌘W); an item's first ⌘ shortcut is

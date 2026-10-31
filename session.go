@@ -257,7 +257,8 @@ func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool
 	if config.err != nil {
 		return true, config.err
 	}
-	if config.host == nil {
+	host := config.selectedHost()
+	if host == nil {
 		return false, nil
 	}
 	session := newSession(ctx, app)
@@ -268,5 +269,5 @@ func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool
 		return runTerminalConfig(runCtx, terminalApp, runConfig)
 	}
 	defer session.close()
-	return true, config.host.Run(ctx, session)
+	return true, host.Run(ctx, session)
 }

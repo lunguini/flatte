@@ -109,8 +109,8 @@ type desktopBackend interface{ command(flatte.DesktopCommand) }
 
 // mediaBackend owns one app run's native system media controls.
 type mediaBackend interface {
-	update(*flatte.NowPlaying)
-	close()
+	Update(*flatte.NowPlaying)
+	Close()
 }
 
 // dialogBackend is a backend's native dialogs.
@@ -321,7 +321,7 @@ func (h *host) close() {
 	}
 	h.closed = true
 	if h.media != nil {
-		h.media.close()
+		h.media.Close()
 		h.media = nil
 	}
 	for id := range h.open {
@@ -376,7 +376,7 @@ func (h *host) syncMedia() {
 		return
 	}
 	if h.state.NowPlaying != nil {
-		h.media.update(h.state.NowPlaying())
+		h.media.Update(h.state.NowPlaying())
 	}
 }
 

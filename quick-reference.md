@@ -77,10 +77,11 @@ if gui {
 err := flatte.Run(ctx, app, options...)
 ```
 
-`window.MediaControls{}` opts a terminal run into the macOS media host. Use it
-when choosing terminal mode; `window.Options` selects the window host. Supplying
-more than one host-installing option returns `flatte.ErrMultipleHosts`. A native
-window must be started from the main goroutine.
+`window/media.Controls{}` opts a macOS terminal run into native media controls.
+It is a fallback option: passing it with `window.Options` is allowed, and the
+window host connects media whenever `App.NowPlaying` is set. On other platforms
+`media.Controls{}` has no effect. Conflicting window-host options still return
+`flatte.ErrMultipleHosts`. A native window must be started from the main goroutine.
 
 Host authors implement `host.Host` and `host.Option`; the host-facing aliases
 and helpers live in `github.com/lunguini/flatte/host`. `host.RunConfig` is
@@ -1008,10 +1009,11 @@ selected text arrives as `DesktopEvent`, and `fx.Desktop` controls showing,
 hiding, capture permission and the global shortcut. See
 [window/desktop.md](window/desktop.md) for bundle declarations and verification.
 
-Terminal applications can opt into the native media host with
-`flatte.Run(ctx, app, window.MediaControls{}, terminalOptions...)`. It uses
+Terminal applications can opt into native media controls with
+`flatte.Run(ctx, app, media.Controls{}, terminalOptions...)`. It uses
 `App.NowPlaying` and `MediaEvent` without opening a window. On macOS call it
-from the main goroutine; on other platforms the option is ignored. Choose
-`window.MediaControls` or `window.Options` for a run. Custom hosts can connect
+from the main goroutine; on other platforms the option is ignored. Passing
+`media.Controls{}` with `window.Options` is also allowed; the window host
+connects media when `App.NowPlaying` is set. Custom hosts can connect
 `host.WithHostMedia(commands, publish)`; publishing runs on the state loop
 and must return promptly.

@@ -390,7 +390,7 @@ type captureMedia struct {
 	closed  int
 }
 
-func (m *captureMedia) update(item *flatte.NowPlaying) {
+func (m *captureMedia) Update(item *flatte.NowPlaying) {
 	if item == nil {
 		m.updates = append(m.updates, nil)
 		return
@@ -398,7 +398,7 @@ func (m *captureMedia) update(item *flatte.NowPlaying) {
 	copy := *item
 	m.updates = append(m.updates, &copy)
 }
-func (m *captureMedia) close() { m.closed++ }
+func (m *captureMedia) Close() { m.closed++ }
 
 func TestHostNowPlayingSnapshotAndMediaCommandLifecycle(t *testing.T) {
 	s := &testState{content: "x"}

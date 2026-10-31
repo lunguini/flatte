@@ -150,6 +150,9 @@ $env:FLATTE_WINDOWS_RESIZE_TTY = "1"
   through the shared entry point: `flatte.Run(ctx, app, window.Options{})`.
   On unsupported platforms `window.Options` installs no host; use
   `window.Supported()` to show a native-window flag only where available.
+- `github.com/lunguini/flatte/window/media` - `media.Controls{}` opts a macOS
+  terminal run into system Now Playing controls. It is safe alongside
+  `window.Options`; the window host connects media when `App.NowPlaying` is set.
 
 ## Navigation Patterns
 

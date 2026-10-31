@@ -104,6 +104,7 @@ flatte package flatte
   method *MenuHost.IsOpen() bool
   method *MenuHost.Paint(frame Frame) Frame
   method *MenuHost.Route(ev Event, menus[]Menu, contextMenu func(target string)[]MenuItem, width int, height int)(Event, bool)
+  method *RunConfig.UseFallbackHost(host Host)
   method *RunConfig.UseHost(host Host)
   method *Scope.Cancel()
   method *Scope.Ctx() context.Context
@@ -365,8 +366,9 @@ flatte package flatte
   type RunConfig struct
   field RunConfig.<unexported> runConfig [order=0]
   field RunConfig.<unexported> Host [order=1]
-  field RunConfig.<unexported> error [order=2]
-  struct RunConfig fields=3 comparable=false
+  field RunConfig.<unexported> Host [order=2]
+  field RunConfig.<unexported> error [order=3]
+  struct RunConfig fields=4 comparable=false
   type SaveDialog struct
   field SaveDialog.Title string [order=0]
   field SaveDialog.Directory string [order=1]

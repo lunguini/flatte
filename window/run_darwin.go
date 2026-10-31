@@ -15,6 +15,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
 	flattehost "github.com/lunguini/flatte/host"
+	"github.com/lunguini/flatte/window/internal/appkit"
 )
 
 var errNotMainThread = errors.New("window: Run must be called from the main goroutine")
@@ -98,9 +99,6 @@ func run(ctx context.Context, session flattehost.Session, opts Options) error {
 	withPool(func() { err = runWindow(ctx, session, opts) })
 	return err
 }
-
-// running is set while Run runs: one app per process.
-var running bool
 
 // chrome is how a window's frame looks: Options.HideTitleBar and
 // Translucent, and dark for the blur's appearance.
@@ -220,11 +218,10 @@ func (n nativeWindows) closeWindow(id string) {
 }
 
 func runWindow(ctx context.Context, session flattehost.Session, opts Options) error {
-	if running {
-		return errors.New("window: a window is already running")
+	if err := appkit.BeginRun(); err != nil {
+		return err
 	}
-	running = true
-	defer func() { running = false }()
+	defer appkit.EndRun()
 	cols, lines := opts.size()
 	nsApp := class("NSApplication").Send(sel("sharedApplication"))
 	policy := nsActivationPolicyRegular
@@ -277,12 +274,12 @@ func runWindow(ctx context.Context, session flattehost.Session, opts Options) er
 	h.text = windowText{th: func() theme { return st.th }}
 	h.clip = pasteboard{}
 	if flattehost.Snapshot(session).HasNowPlaying {
-		media, err := newNativeMedia(h.mediaCommand)
+		media, err := appkit.NewMedia(h.mediaCommand)
 		if err != nil {
 			return err
 		}
 		h.media = media
-		defer media.close()
+		defer media.Close()
 	}
 
 	delegate, err := newDelegate(stop)

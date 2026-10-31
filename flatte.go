@@ -301,7 +301,11 @@ type Option interface {
 type RunConfig struct {
 	config runConfig
 	host   Host
-	err    error
+	// defaultHost is selected only when no host-installing option is present.
+	// Optional services such as terminal media controls use this slot so a
+	// window host can take precedence without creating a host conflict.
+	defaultHost Host
+	err         error
 }
 
 // ErrMultipleHosts reports that more than one host-installing option was
@@ -316,6 +320,22 @@ func (c *RunConfig) UseHost(host Host) {
 		return
 	}
 	c.host = host
+}
+
+// UseFallbackHost selects a host only when no ordinary host option selects
+// one. Repeating the same optional host is harmless; ordinary hosts still
+// conflict with one another through UseHost.
+func (c *RunConfig) UseFallbackHost(host Host) {
+	if c.host == nil && c.defaultHost == nil {
+		c.defaultHost = host
+	}
+}
+
+func (c RunConfig) selectedHost() Host {
+	if c.host != nil {
+		return c.host
+	}
+	return c.defaultHost
 }
 
 type optionFunc func(*runConfig)

@@ -14,6 +14,11 @@ Custom host adapters and deterministic Effects construction use
 `github.com/lunguini/flatte/host`; ordinary app samples continue to use the
 root `flatte.Run` entry point.
 
+For native media controls in a macOS terminal, add
+`github.com/lunguini/flatte/window/media` and pass `media.Controls{}`. It can
+also accompany `window.Options`; the window host connects media from
+`App.NowPlaying` itself.
+
 ## Core Runtime And Async
 
 | Sample | Demonstrates |
