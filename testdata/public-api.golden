@@ -360,7 +360,8 @@ flatte package flatte
   type RunConfig struct
   field RunConfig.<unexported> runConfig [order=0]
   field RunConfig.<unexported> Host [order=1]
-  struct RunConfig fields=2 comparable=false
+  field RunConfig.<unexported> error [order=2]
+  struct RunConfig fields=3 comparable=false
   type SaveDialog struct
   field SaveDialog.Title string [order=0]
   field SaveDialog.Directory string [order=1]
@@ -419,6 +420,7 @@ flatte package flatte
   struct WindowHost fields=2 comparable=false
   var ErrInlineMouseUnsupported error
   var ErrInvalidInterval error
+  var ErrMultipleHosts error
   var ErrNoDialogs error
   var ErrNoSelection error
   var ErrUnsupported error

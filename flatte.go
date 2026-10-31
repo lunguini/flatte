@@ -295,11 +295,22 @@ type Option interface {
 type RunConfig struct {
 	config runConfig
 	host   Host
+	err    error
 }
 
-// UseHost selects a host driver for Run. If more than one option installs a
-// host, the last one is used.
-func (c *RunConfig) UseHost(host Host) { c.host = host }
+// ErrMultipleHosts reports that more than one host-installing option was
+// supplied to Run.
+var ErrMultipleHosts = errors.New("flatte: multiple host options selected")
+
+// UseHost selects a host driver for Run. Supplying multiple host-installing
+// options makes Run return ErrMultipleHosts.
+func (c *RunConfig) UseHost(host Host) {
+	if c.host != nil {
+		c.err = ErrMultipleHosts
+		return
+	}
+	c.host = host
+}
 
 type optionFunc func(*runConfig)
 

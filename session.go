@@ -261,6 +261,9 @@ func (s *Session) RunTerminal(ctx context.Context, options ...Option) error {
 }
 
 func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool, error) {
+	if config.err != nil {
+		return true, config.err
+	}
 	if config.host == nil {
 		return false, nil
 	}

@@ -59,7 +59,7 @@ func TestPublicAPISnapshotIncludesContracts(t *testing.T) {
 		"struct Effects fields=14 comparable=false",
 		"field Effects.<unexported> context.Context [order=0]",
 		"interface Option method ConfigureRun(*RunConfig)",
-		"struct RunConfig fields=2 comparable=false",
+			"struct RunConfig fields=3 comparable=false",
 		"method *RunConfig.UseHost(host Host)",
 		"interface Host method Run(context.Context, *Session) error",
 		"field KeyEvent.Rune rune [order=1]",
