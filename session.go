@@ -21,6 +21,14 @@ type HostServices struct {
 	ShowDialog    func(Dialog, func(DialogResult))
 	Notify        func(Notification)
 	Desktop       func(DesktopCommand)
+	// CellSurface enables the shared cell input, layout, dialog, menu, and
+	// secondary-window rules. Native graphical hosts leave it false.
+	CellSurface bool
+	// DefaultQuit makes Ctrl+C end the session before it reaches App.Handle.
+	DefaultQuit bool
+	// PublishMedia receives the app's current media snapshot after a painted
+	// frame. A nil snapshot clears the host's published item.
+	PublishMedia func(*NowPlaying)
 }
 
 // Session is the non-generic, host-facing wrapper for one App[S]. Hosts drive
@@ -36,8 +44,10 @@ type Session struct {
 	cancel        context.CancelFunc
 	start         func(ResizeEvent)
 	handle        func(Event)
+	trace         func(Event)
 	view          func(RenderContext) Frame
 	services      func(HostServices)
+	step          func(StepInput) StepResult
 	caps          func() Capabilities
 	onExit        func()
 	menus         func() []Menu
@@ -46,6 +56,10 @@ type Session struct {
 	nowPlaying    func() *NowPlaying
 	hasNowPlaying bool
 	runTerminal   func(context.Context, ...Option) error
+	cellSurface   bool
+	defaultQuit   bool
+	publishMedia  func(*NowPlaying)
+	cell          *sessionCell
 }
 
 // NewSession wraps an app for use by a Host. Run normally constructs sessions
@@ -64,7 +78,7 @@ func NewSession[S any](ctx context.Context, app App[S]) *Session {
 	if app.Tracer == nil {
 		app.Tracer = NoopTracer{}
 	}
-	s := &Session{updates: make(chan struct{}, 1), cancel: cancel}
+	s := &Session{updates: make(chan struct{}, 1), cancel: cancel, cell: &sessionCell{}}
 	fx := newEffects[S](runCtx, nil, func() {
 		s.mu.Lock()
 		s.quitting = true
@@ -106,11 +120,12 @@ func NewSession[S any](ctx context.Context, app App[S]) *Session {
 				Window:     layout.Window,
 			}
 		}
-		app.Tracer.Event(ev)
+		s.trace(ev)
 		if app.Handle != nil {
 			app.Handle(app.State, handlerEvent, fx)
 		}
 	}
+	s.trace = func(ev Event) { app.Tracer.Event(ev) }
 	s.view = func(ctx RenderContext) Frame { return app.View(app.State, ctx) }
 	s.services = func(host HostServices) {
 		fx = WithHostCapabilities(fx, host.Capabilities)
@@ -124,6 +139,9 @@ func NewSession[S any](ctx context.Context, app App[S]) *Session {
 		if host.Desktop != nil {
 			fx = WithHostDesktop(fx, host.Desktop)
 		}
+		s.cellSurface = host.CellSurface
+		s.defaultQuit = host.DefaultQuit
+		s.publishMedia = host.PublishMedia
 	}
 	s.caps = func() Capabilities { return fx.Capabilities() }
 	s.onExit = func() {
@@ -156,6 +174,7 @@ func NewSession[S any](ctx context.Context, app App[S]) *Session {
 		}
 		return app.NowPlaying(app.State)
 	}
+	s.step = func(input StepInput) StepResult { return stepSession(s, app, s.cell, input) }
 	return s
 }
 

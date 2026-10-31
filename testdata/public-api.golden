@@ -117,6 +117,7 @@ flatte package flatte
   method *Session.Quitting() bool
   method *Session.RunTerminal(ctx context.Context, options ... Option) error
   method *Session.Start(size ResizeEvent)
+  method *Session.Step(input StepInput) StepResult
   method *Session.Updates() <-chan struct{}
   method *Session.UseHostServices(services HostServices)
   method *Session.View(ctx RenderContext) Frame
@@ -260,7 +261,10 @@ flatte package flatte
   field HostServices.ShowDialog func(Dialog, func(DialogResult)) [order=3]
   field HostServices.Notify func(Notification) [order=4]
   field HostServices.Desktop func(DesktopCommand) [order=5]
-  struct HostServices fields=6 comparable=false
+  field HostServices.CellSurface bool [order=6]
+  field HostServices.DefaultQuit bool [order=7]
+  field HostServices.PublishMedia func(*NowPlaying) [order=8]
+  struct HostServices fields=9 comparable=false
   type Key int
   type KeyEvent struct
   field KeyEvent.Key Key [order=0]
@@ -383,20 +387,38 @@ flatte package flatte
   field Session.<unexported> context.CancelFunc [order=6]
   field Session.<unexported> func(ResizeEvent) [order=7]
   field Session.<unexported> func(Event) [order=8]
-  field Session.<unexported> func(RenderContext) Frame [order=9]
-  field Session.<unexported> func(HostServices) [order=10]
-  field Session.<unexported> func() Capabilities [order=11]
-  field Session.<unexported> func() [order=12]
-  field Session.<unexported> func()[]Menu [order=13]
-  field Session.<unexported> func(string)[]MenuItem [order=14]
-  field Session.<unexported> func()[]Window [order=15]
-  field Session.<unexported> func() *NowPlaying [order=16]
-  field Session.<unexported> bool [order=17]
-  field Session.<unexported> func(context.Context, ... Option) error [order=18]
-  struct Session fields=19 comparable=false
+  field Session.<unexported> func(Event) [order=9]
+  field Session.<unexported> func(RenderContext) Frame [order=10]
+  field Session.<unexported> func(HostServices) [order=11]
+  field Session.<unexported> func(StepInput) StepResult [order=12]
+  field Session.<unexported> func() Capabilities [order=13]
+  field Session.<unexported> func() [order=14]
+  field Session.<unexported> func()[]Menu [order=15]
+  field Session.<unexported> func(string)[]MenuItem [order=16]
+  field Session.<unexported> func()[]Window [order=17]
+  field Session.<unexported> func() *NowPlaying [order=18]
+  field Session.<unexported> bool [order=19]
+  field Session.<unexported> func(context.Context, ... Option) error [order=20]
+  field Session.<unexported> bool [order=21]
+  field Session.<unexported> bool [order=22]
+  field Session.<unexported> func(*NowPlaying) [order=23]
+  field Session.<unexported> *sessionCell [order=24]
+  struct Session fields=25 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string
+  type StepInput struct
+  field StepInput.Events []Event [order=0]
+  field StepInput.UpdatesPending bool [order=1]
+  field StepInput.FrameDue bool [order=2]
+  field StepInput.Quit bool [order=3]
+  field StepInput.RenderContext RenderContext [order=4]
+  struct StepInput fields=5 comparable=false
+  type StepResult struct
+  field StepResult.Frame Frame [order=0]
+  field StepResult.Paint bool [order=1]
+  field StepResult.Quit bool [order=2]
+  struct StepResult fields=3 comparable=true
   type Tracer interface
   interface Tracer method Event(Event)
   interface Tracer method Update(string)

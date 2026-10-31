@@ -11,7 +11,6 @@ import (
 	"syscall/js"
 
 	"github.com/charmbracelet/colorprofile"
-	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // Run uses the browser page by default on js/wasm, mounting the first element
@@ -40,135 +39,58 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 
 	runCtx, cancel := context.WithCancel(ctx)
 	events := make(chan []Event, 256)
-	updates := make(chan StateUpdate[S], 64)
-	quitRequested := false
-	effects := newEffects(runCtx, updates, func() { quitRequested = true })
-	if app.Tracer == nil {
-		app.Tracer = NoopTracer{}
-	}
-
+	session := NewSession(runCtx, app)
 	host := newBrowserHost(runCtx, doc, surface, cfg, func(ev []Event) {
 		select {
 		case events <- ev:
 		case <-runCtx.Done():
 		}
 	})
-	effects = WithHostClipboard(effects, host.writeClipboard, host.readClipboard)
-	effects = WithHostNotifications(effects, host.notify)
-	effects = WithHostCapabilities(effects, browserCapabilities(cfg))
-	var dialogs termDialogs
-	effects = WithHostDialogs(effects, func(d Dialog, done func(DialogResult)) {
-		if d.Alert == nil {
-			done(DialogResult{Err: ErrNoDialogs})
-			return
-		}
-		dialogs.show(d, done)
+	session.UseHostServices(HostServices{
+		Capabilities:  browserCapabilities(cfg),
+		SetClipboard:  host.writeClipboard,
+		ReadClipboard: host.readClipboard,
+		Notify:        host.notify,
+		CellSurface:   true,
+		DefaultQuit:   cfg.defaultQuit,
+		PublishMedia:  cfg.publishMedia,
+		ShowDialog: func(d Dialog, done func(DialogResult)) {
+			if d.Alert == nil {
+				done(DialogResult{Err: ErrNoDialogs})
+				return
+			}
+			session.cell.dialogs.show(d, done)
+		},
 	})
 	defer cancel()
 	defer host.close()
-	defer func() {
-		if app.OnExit != nil {
-			app.OnExit(app.State)
-		}
-	}()
+	defer session.OnExit()
 	defer func() {
 		if cfg.publishMedia != nil {
 			cfg.publishMedia(nil)
 		}
 	}()
 
-	if app.Init != nil {
-		app.Init(app.State, effects)
-	}
-	if quitRequested {
-		return nil
-	}
-
-	var menus MenuHost
-	var windows WindowHost
-	var lastComp layout.Composition
-	var lastLayout map[string]layout.Rect
-	deliver := func(ev Event) bool {
-		if dialogs.isOpen() {
-			routed, pass := dialogs.route(ev)
-			if !pass {
-				return true
-			}
-			ev = routed
-		}
-		if mouse, ok := ev.(MouseEvent); ok {
-			mouse.Target, mouse.TargetRect = lastComp.HitTest(mouse.X, mouse.Y)
-			mouse.Caret, mouse.HasCaret = lastComp.CaretAt(mouse.X, mouse.Y)
-			ev = mouse
-		}
-		for _, routed := range RouteInput(&menus, &windows, app, ev, host.columns(), host.rows()) {
-			app.Tracer.Event(routed)
-			if key, ok := routed.(KeyEvent); ok && key.Key == KeyCtrlC && cfg.defaultQuit {
-				return false
-			}
-			if app.Handle != nil {
-				app.Handle(app.State, routed, effects)
-			}
-			if quitRequested {
-				return false
-			}
-		}
-		return true
-	}
 	initialResize := ResizeEvent{Width: host.columns(), Height: host.rows()}
-	app.Tracer.Event(initialResize)
-	if app.Handle != nil {
-		app.Handle(app.State, initialResize, effects)
-	}
-	if quitRequested {
+	session.Start(initialResize)
+	if session.Quitting() {
 		return nil
 	}
-	draw := func() {
-		width, height := host.columns(), host.rows()
-		for _, ev := range SyncWindows(&windows, app, width, height) {
-			app.Tracer.Event(ev)
-			if app.Handle != nil {
-				app.Handle(app.State, ev, effects)
-			}
-			if quitRequested {
-				return
-			}
-		}
-		renderContext := RenderContext{Width: width, Height: height, ColorProfile: colorprofile.TrueColor, Capabilities: effects.caps}
-		var handleLayout func(LayoutEvent)
-		if app.Handle != nil {
-			handleLayout = func(ev LayoutEvent) {
-				app.Tracer.Event(ev)
-				app.Handle(app.State, ev, effects)
-			}
-		}
-		frame, comp, delivered := settleFrame(
-			func() Frame { return app.View(app.State, renderContext) },
-			handleLayout, lastLayout, width,
-			func(layout.Node) int { return height },
-		)
-		lastLayout = delivered
-		lastComp = comp
-		if quitRequested {
-			return
-		}
-		frame = PaintWindows(&windows, app, renderContext, frame, handleLayout)
-		frame = menus.Paint(frame)
-		frame = dialogs.paint(frame, width, height)
-		host.render(frame)
-		if cfg.publishMedia != nil {
-			var snapshot *NowPlaying
-			if app.NowPlaying != nil {
-				if value := app.NowPlaying(app.State); value != nil {
-					copy := *value
-					snapshot = &copy
-				}
-			}
-			cfg.publishMedia(snapshot)
+	renderContext := func() RenderContext {
+		return RenderContext{
+			Width: host.columns(), Height: host.rows(), ColorProfile: colorprofile.TrueColor,
+			Capabilities: session.Capabilities(),
 		}
 	}
-	draw()
-	if quitRequested {
+	step := func(input StepInput) bool {
+		input.RenderContext = renderContext()
+		result := session.Step(input)
+		if result.Paint {
+			host.render(result.Frame)
+		}
+		return !result.Quit
+	}
+	if !step(StepInput{FrameDue: true}) {
 		return nil
 	}
 
@@ -177,30 +99,21 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		case <-runCtx.Done():
 			return nil
 		case batch := <-events:
-			for _, ev := range batch {
-				if !deliver(ev) {
-					return nil
-				}
+			if !step(StepInput{Events: batch}) {
+				return nil
 			}
-		case update := <-updates:
-			ApplyUpdate(app.State, app.Tracer, update)
+		case <-session.Updates():
+			if !step(StepInput{UpdatesPending: true}) {
+				return nil
+			}
 		case event, ok := <-cfg.mediaCommands:
 			if !ok {
 				cfg.mediaCommands = nil
 				continue
 			}
-			app.Tracer.Event(event)
-			if app.Handle != nil {
-				app.Handle(app.State, event, effects)
+			if !step(StepInput{Events: []Event{event}}) {
+				return nil
 			}
-		}
-		drainUpdates(app, updates)
-		if quitRequested {
-			return nil
-		}
-		draw()
-		if quitRequested {
-			return nil
 		}
 	}
 }
