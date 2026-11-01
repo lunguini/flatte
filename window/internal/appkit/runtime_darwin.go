@@ -13,6 +13,13 @@ import (
 	"github.com/ebitengine/purego/objc"
 )
 
+// AppKit must run on the process's main thread. Go keeps main on that
+// thread only when it is locked during package initialization: by the time
+// a program reaches Run it may have started goroutines and done I/O, and
+// the scheduler can have moved main to another thread. Importing window or
+// window/media therefore locks it here.
+func init() { runtime.LockOSThread() }
+
 const (
 	frameworkCocoa = "/System/Library/Frameworks/Cocoa.framework/Cocoa"
 	libSystem      = "/usr/lib/libSystem.B.dylib"

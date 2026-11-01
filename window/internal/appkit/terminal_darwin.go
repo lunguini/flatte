@@ -5,7 +5,6 @@ package appkit
 import (
 	"context"
 	"errors"
-	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -31,8 +30,6 @@ func RunTerminalMedia(ctx context.Context, session *flatte.Session) error {
 	if !session.UsesNowPlaying() {
 		return sessionaccess.RunTerminal(ctx, session, sessionaccess.Media{})
 	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	if err := load(); err != nil {
 		return err
 	}

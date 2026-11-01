@@ -5,7 +5,6 @@ import (
 	"errors"
 	"image"
 	"math"
-	"runtime"
 	"sync"
 	"unsafe"
 
@@ -81,10 +80,9 @@ func (h windowHost) Run(ctx context.Context, session *flatte.Session) error {
 	return run(ctx, session, h.options)
 }
 
-// run enters AppKit on the calling goroutine, which Run documents as main.
+// run enters AppKit on the calling goroutine, which Run documents as main;
+// the main thread is locked at init (internal/appkit).
 func run(ctx context.Context, session *flatte.Session, opts Options) error {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 	if err := loadFrameworks(); err != nil {
 		return err
 	}
