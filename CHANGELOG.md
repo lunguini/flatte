@@ -4,6 +4,14 @@ Generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [release-please](https://github.com/googleapis/release-please); entries
 below the first release are automated.
 
+## [0.1.2](https://github.com/lunguini/flatte/compare/v0.1.1...v0.1.2) (2026-08-16)
+
+
+### Build System
+
+* **deps:** refresh Go modules and CI actions ([5362e69](https://github.com/lunguini/flatte/commit/5362e6956f8af5b12fabde60bb1a261e14298444))
+* make dependency bumps release-driving ([#14](https://github.com/lunguini/flatte/issues/14)) ([a40ec67](https://github.com/lunguini/flatte/commit/a40ec67a1dbc0b951c4b2438e4f99bfe9c14cc27))
+
 ## [0.1.1](https://github.com/lunguini/flatte/compare/v0.1.0...v0.1.1) (2026-08-10)
 
 
