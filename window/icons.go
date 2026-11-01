@@ -90,7 +90,7 @@ func symbol(name layout.IconName, cx, cy, s float64) (cellShape, bool) {
 			line(at(-0.22, 0.12), at(-0.38, 0.26), at(-0.22, 0.4)),
 		}}
 		if name == layout.IconRepeatOne {
-			g.polys = append(g.polys, line(at(-0.08, -0.06), at(0.02, -0.14), at(0.02, 0.14)))
+			g.polys = append(g.polys, line(at(-0.12, -0.08), at(0.04, -0.21), at(0.04, 0.21)))
 		}
 		return g, true
 	case layout.IconSpeaker:
