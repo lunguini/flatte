@@ -34,6 +34,24 @@ identifier:
 import "github.com/lunguini/flatte"
 ```
 
+## Where it runs
+
+One `App[S]` runs in every host below; the host is chosen when you call
+`flatte.Run`, not in your app code.
+
+| Host | How to select it | Status |
+|---|---|---|
+| Terminal (macOS, Linux) | `flatte.Run(ctx, app)` | Supported |
+| Terminal (Windows) | `flatte.Run(ctx, app)` | Tested in CI; a real-console check is still recommended |
+| macOS window | `flatte.Run(ctx, app, window.Options{})` | Supported, no cgo |
+| Browser, terminal look | `flatte.Run` built with `GOOS=js GOARCH=wasm` | Supported (Go and TinyGo) |
+| Browser, GUI look on a canvas | `window.Options` built for js/wasm | Supported; no menu bar, context menus, extra windows, or file dialogs yet |
+| Windows and Linux windows | `window.Options` | Not yet: falls back to the terminal |
+
+`window.Supported()` reports whether the GUI host is available in the
+current build. See [One app, three hosts](quick-reference.md#one-app-three-hosts)
+for the setup of each.
+
 ## Minimal App
 
 ```go
@@ -144,7 +162,8 @@ $env:FLATTE_WINDOWS_RESIZE_TTY = "1"
 - `github.com/lunguini/flatte/flatest` - deterministic app driver, golden
   assertions, frame rendering, and replay helpers.
 - `github.com/lunguini/flatte/window` (separate module) - runs the same app in
-  a native window with real text and components; macOS, no cgo. Select it
+  a native window with real text and components (macOS, no cgo), or with the
+  same look on a browser canvas in js/wasm builds. Select it
   through the shared entry point: `flatte.Run(ctx, app, window.Options{})`.
   On unsupported platforms `window.Options` installs no host; use
   `window.Supported()` to show a native-window flag only where available.
@@ -210,6 +229,22 @@ Flatte stands on a lot of excellent open-source work:
   bar, and the golden-snapshot policy.
 - [Changelog](CHANGELOG.md) is generated from commit messages on each
   release.
+
+## Roadmap
+
+Flatte is pre-1.0. Planned work, roughly in order:
+
+- **Windows and Linux windows.** `window.Options` currently opens a window
+  only on macOS; elsewhere it falls back to the terminal. Native hosts for
+  Windows and Linux are planned; until then, treat the GUI as macOS and
+  browser only.
+- **Windows terminal verification.** The Windows build runs the test suite in
+  CI, but resize and input are still to be checked in a real Windows console
+  (see [Current terminal input scope](#current-terminal-input-scope)).
+- **Browser canvas parity.** Menu bar, context menus, secondary windows, and
+  file dialogs on the canvas host, and a smaller wasm download.
+- **API stabilization toward 1.0,** driven by feedback from apps built on
+  Flatte.
 
 ## Compatibility and current limits
 
