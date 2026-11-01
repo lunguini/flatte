@@ -45,27 +45,11 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 		}
 	default:
 		// Keep the chat's readline aliases ahead of TextField's native editing.
-		if handleWordDeleteKey(key, s.input.DeleteWordLeft, s.input.DeleteWordRight) ||
-			handleAltWordKey(key, s.input.MoveWordLeft, s.input.MoveWordRight) {
+		if handleWordDeleteKey(key, s.input.DeleteWordLeft, s.input.DeleteWordRight) {
 			return
 		}
 		s.input.Edit(key)
 	}
-}
-
-func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatte.ModAlt) {
-		return false
-	}
-	switch key.Rune {
-	case 'b', 'B':
-		moveLeft()
-		return true
-	case 'f', 'F':
-		moveRight()
-		return true
-	}
-	return false
 }
 
 func handleWordDeleteKey(key flatte.KeyEvent, deleteLeft, deleteRight func()) bool {

@@ -120,3 +120,15 @@ func TestTextareaEditLeavesAppKeysAlone(t *testing.T) {
 		t.Fatalf("unhandled keys changed value to %q", area.Value())
 	}
 }
+
+func TestTextareaEditReadlineAltKeys(t *testing.T) {
+	alt := func(r rune) flatte.KeyEvent { return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModAlt} }
+	var ta Textarea
+	ta.InsertText("one two")
+	if !ta.Edit(alt('b')) || ta.Edit(alt('x')) {
+		t.Fatal("Alt+B not handled, or an unbound Alt key was claimed")
+	}
+	if !ta.Edit(alt('d')) || ta.Value() != "one " {
+		t.Fatalf("Alt+D: %q", ta.Value())
+	}
+}

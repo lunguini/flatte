@@ -193,7 +193,8 @@ func (f *TextField) DeleteToEnd() {
 // whether it was an editing key. It handles typing (replacing the
 // selection), ←/→ (Shift selects, ⌥ or Ctrl by word, ⌘ to the start or
 // end), Home/End (a window's ⌘←/⌘→), ⌫ and ⌦ (⌥ or Ctrl a word, ⌘ to the
-// start or end), ⌘A, and the terminal's Ctrl+A/E/U/K/W. Everything else is
+// start or end), ⌘A, and the terminal's Ctrl+A/E/U/K/W and Alt+B/F/D.
+// Everything else is
 // the app's — Enter, Esc, Tab, ↑/↓, and copy, cut, and paste, which need
 // the clipboard (SelectedText gives what to copy).
 func (f *TextField) Edit(key flatte.KeyEvent) bool {
@@ -219,6 +220,19 @@ func (f *TextField) Edit(key flatte.KeyEvent) bool {
 				f.DeleteToEnd()
 			case 'w':
 				f.DeleteWordLeft()
+			default:
+				return false
+			}
+		case key.Mod == flatte.ModAlt:
+			// Readline's word keys; macOS terminals send Option+Left and
+			// Option+Right as Alt+B and Alt+F by default.
+			switch key.Rune {
+			case 'b':
+				f.MoveWordLeft()
+			case 'f':
+				f.MoveWordRight()
+			case 'd':
+				f.DeleteWordRight()
 			default:
 				return false
 			}

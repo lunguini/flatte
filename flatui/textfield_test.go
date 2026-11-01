@@ -3,6 +3,8 @@ package flatui
 import (
 	"testing"
 
+	"github.com/lunguini/flatte"
+
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -248,5 +250,30 @@ func TestTextFieldLayoutShowsValueAndCaret(t *testing.T) {
 	f.Cursor = 99
 	if got := f.Layout("name", false); got.Caret != len(f.Value) || got.Focused {
 		t.Fatalf("clamped Layout = %+v", got)
+	}
+}
+
+// Terminals send Option+Left/Right as Alt+B/F on macOS by default, and
+// Alt+D is readline's delete-word-forward.
+func TestTextFieldEditReadlineAltKeys(t *testing.T) {
+	alt := func(r rune) flatte.KeyEvent {
+		return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModAlt}
+	}
+	f := TextField{Value: "one two three", Cursor: len("one two three")}
+	if !f.Edit(alt('b')) || f.Cursor != len("one two ") {
+		t.Fatalf("Alt+B: cursor %d", f.Cursor)
+	}
+	if !f.Edit(alt('b')) || f.Cursor != len("one ") {
+		t.Fatalf("second Alt+B: cursor %d", f.Cursor)
+	}
+	if !f.Edit(alt('f')) || f.Cursor != len("one two") {
+		t.Fatalf("Alt+F: cursor %d", f.Cursor)
+	}
+	f.Cursor = len("one ")
+	if !f.Edit(alt('d')) || f.Value != "one  three" {
+		t.Fatalf("Alt+D: %q", f.Value)
+	}
+	if f.Edit(alt('x')) {
+		t.Fatal("Edit claimed an unbound Alt key")
 	}
 }

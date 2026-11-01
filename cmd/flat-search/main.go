@@ -64,30 +64,10 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 		s.focused = false
 		return
 	}
-	// Keep the terminal's Alt+B/F word-movement convention; native word
-	// movement and all other editing are handled by TextField.Edit.
-	if key.Key == flatte.KeyCharacter && handleAltWordKey(key, s.query.MoveWordLeft, s.query.MoveWordRight) {
-		return
-	}
 	before := s.query.Value
 	if s.query.Edit(key) && s.query.Value != before {
 		startSearch(s, fx)
 	}
-}
-
-func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatte.ModAlt) {
-		return false
-	}
-	switch key.Rune {
-	case 'b', 'B':
-		moveLeft()
-		return true
-	case 'f', 'F':
-		moveRight()
-		return true
-	}
-	return false
 }
 
 func startSearch(s *State, fx flatte.Effects[State]) {

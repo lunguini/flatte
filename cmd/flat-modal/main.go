@@ -76,26 +76,8 @@ func handleModal(s *State, key flatte.KeyEvent) {
 		s.waiting = false
 		s.modalResult = "cancelled"
 	default:
-		// Terminals send Alt+B/F for word moves; the rest is TextField's.
-		if !handleAltWordKey(key, s.modalInput.MoveWordLeft, s.modalInput.MoveWordRight) {
-			s.modalInput.Edit(key)
-		}
+		s.modalInput.Edit(key)
 	}
-}
-
-func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatte.ModAlt) {
-		return false
-	}
-	switch key.Rune {
-	case 'b', 'B':
-		moveLeft()
-		return true
-	case 'f', 'F':
-		moveRight()
-		return true
-	}
-	return false
 }
 
 var (

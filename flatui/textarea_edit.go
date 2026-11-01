@@ -34,6 +34,18 @@ func (t *Textarea) Edit(key flatte.KeyEvent) bool {
 			default:
 				return false
 			}
+		case key.Mod == flatte.ModAlt:
+			// Readline's word keys, as TextField.Edit.
+			switch key.Rune {
+			case 'b':
+				t.MoveWordLeft()
+			case 'f':
+				t.MoveWordRight()
+			case 'd':
+				t.DeleteWordRight()
+			default:
+				return false
+			}
 		default:
 			return false
 		}
