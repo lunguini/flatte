@@ -729,9 +729,11 @@ func TestFileDropAndErrors(t *testing.T) {
 	if s.path != note {
 		t.Fatal("cancel changed the file")
 	}
-	d.Send(flatte.DropEvent{Paths: []string{filepath.Join(dir, "missing.txt")}})
+	missing := filepath.Join(dir, "missing.txt")
+	d.Send(flatte.DropEvent{Paths: []string{missing}})
 	d.Settle()
-	if s.path != note || !strings.Contains(s.status, "no such file") {
+	_, openErr := os.Open(missing)
+	if s.path != note || !strings.Contains(s.status, openErr.Error()) {
 		t.Fatalf("missing: path %q status %q", s.path, s.status)
 	}
 }
