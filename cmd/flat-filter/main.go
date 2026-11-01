@@ -74,6 +74,12 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		}
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
+	case flatte.PasteEvent:
+		before := s.query.Value
+		s.query.InsertText(e.Text)
+		if s.query.Value != before {
+			s.syncFiltered()
+		}
 	}
 }
 
@@ -81,26 +87,32 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
 	case flatte.KeyEscape:
 		fx.Quit()
+		return
 	case flatte.KeyUp:
 		s.list.MoveUp()
+		return
 	case flatte.KeyDown:
 		s.list.MoveDown()
+		return
 	case flatte.KeyLeft:
-		s.pages.PrevPage()
-		s.list.Select(0)
-		s.syncCurrentPage()
+		if key.Mod == 0 {
+			s.pages.PrevPage()
+			s.list.Select(0)
+			s.syncCurrentPage()
+			return
+		}
 	case flatte.KeyRight:
-		s.pages.NextPage()
-		s.list.Select(0)
-		s.syncCurrentPage()
-	case flatte.KeyBackspace:
-		s.query.Backspace()
-		s.syncFiltered()
-	case flatte.KeyDelete:
-		s.query.Delete()
-		s.syncFiltered()
-	case flatte.KeyCharacter:
-		s.query.Insert(key.Rune)
+		if key.Mod == 0 {
+			s.pages.NextPage()
+			s.list.Select(0)
+			s.syncCurrentPage()
+			return
+		}
+	}
+
+	before := s.query.Value
+	s.query.Edit(key)
+	if s.query.Value != before {
 		s.syncFiltered()
 	}
 }

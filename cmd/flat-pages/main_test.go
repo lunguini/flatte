@@ -74,6 +74,30 @@ func TestSettingsOwnsTextInputState(t *testing.T) {
 	}
 }
 
+func TestSettingsInputUsesTextFieldEditingAndPaste(t *testing.T) {
+	state := NewState()
+	state.screen = screenSettings
+	state.settingsName.Value, state.settingsName.Cursor = "Hello World", len("Hello")
+
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
+	if got, want := state.settingsName.Cursor, len("Hello World"); got != want {
+		t.Fatalf("End cursor = %d, want %d", got, want)
+	}
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, flatte.Effects[State]{})
+	if got := state.settingsName.Cursor; got != 0 {
+		t.Fatalf("Cmd+Left cursor = %d, want 0", got)
+	}
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, flatte.Effects[State]{})
+	if got, want := state.settingsName.Cursor, len("Hello"); got != want {
+		t.Fatalf("Alt+Right cursor = %d, want %d", got, want)
+	}
+
+	Handle(state, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if got, want := state.settingsName.Value, "Helloab World"; got != want {
+		t.Fatalf("pasted value = %q, want %q", got, want)
+	}
+}
+
 func TestQQuitsOnlyFromHome(t *testing.T) {
 	state := NewState()
 	state.screen = screenDetails

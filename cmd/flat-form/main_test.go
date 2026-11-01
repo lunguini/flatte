@@ -39,6 +39,29 @@ func TestTabMovesFocusBetweenFields(t *testing.T) {
 	}
 }
 
+func TestFocusedFieldUsesTextFieldEditing(t *testing.T) {
+	state := NewState()
+	state.fields[0].Input.Value, state.fields[0].Input.Cursor = "hello world", 5
+
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
+	if state.fields[0].Input.Cursor != len("hello world") {
+		t.Fatalf("End cursor = %d, want %d", state.fields[0].Input.Cursor, len("hello world"))
+	}
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, flatte.Effects[State]{})
+	if state.fields[0].Input.Cursor != 0 {
+		t.Fatalf("Cmd+Left cursor = %d, want 0", state.fields[0].Input.Cursor)
+	}
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, flatte.Effects[State]{})
+	if state.fields[0].Input.Cursor != len("hello") {
+		t.Fatalf("Alt+Right cursor = %d, want %d", state.fields[0].Input.Cursor, len("hello"))
+	}
+	state.fields[0].Input.Value, state.fields[0].Input.Cursor = "", 0
+	Handle(state, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if state.fields[0].Input.Value != "ab" {
+		t.Fatalf("pasted value = %q, want single-line text %q", state.fields[0].Input.Value, "ab")
+	}
+}
+
 func TestCursorMovementBackspaceAndDeleteAreFieldLocal(t *testing.T) {
 	state := NewState()
 	state.fields[0].Input.Value = "abcd"

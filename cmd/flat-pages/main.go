@@ -33,6 +33,12 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	if paste, ok := ev.(flatte.PasteEvent); ok {
+		if s.screen == screenSettings {
+			s.settingsName.InsertText(paste.Text)
+		}
+		return
+	}
 	key, ok := ev.(flatte.KeyEvent)
 	if !ok {
 		return
@@ -123,20 +129,11 @@ func detailsCursorUp(s *State) {
 }
 
 func handleSettings(s *State, key flatte.KeyEvent) {
-	switch key.Key {
-	case flatte.KeyCharacter:
-		s.settingsName.Insert(key.Rune)
-	case flatte.KeyBackspace:
-		s.settingsName.Backspace()
-	case flatte.KeyDelete:
-		s.settingsName.Delete()
-	case flatte.KeyLeft:
-		s.settingsName.MoveLeft()
-	case flatte.KeyRight:
-		s.settingsName.MoveRight()
-	case flatte.KeyEscape, flatte.KeyEnter:
+	if key.Key == flatte.KeyEscape || key.Key == flatte.KeyEnter {
 		s.screen = screenHome
+		return
 	}
+	s.settingsName.Edit(key)
 }
 
 var (

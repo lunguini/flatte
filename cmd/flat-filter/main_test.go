@@ -7,6 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui"
 	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
@@ -88,6 +89,36 @@ func TestPrintableQEditsAndEscapeQuits(t *testing.T) {
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, fx)
 	if !quit {
 		t.Fatal("escape should request quit")
+	}
+}
+
+func TestQueryUsesTextFieldEditing(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		key   flatte.KeyEvent
+		start int
+		want  int
+	}{
+		{"End", flatte.KeyEvent{Key: flatte.KeyEnd}, 5, len("Hello World")},
+		{"Cmd+Left", flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, 5, 0},
+		{"Alt+Right", flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, 0, len("Hello")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewState()
+			s.query = flatui.TextField{Value: "Hello World", Cursor: tc.start}
+			Handle(s, tc.key, flatte.Effects[State]{})
+			if s.query.Cursor != tc.want {
+				t.Fatalf("cursor = %d, want %d", s.query.Cursor, tc.want)
+			}
+		})
+	}
+}
+
+func TestQueryPastesAsSingleLine(t *testing.T) {
+	s := NewState()
+	Handle(s, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if s.query.Value != "ab" {
+		t.Fatalf("pasted query = %q, want single-line %q", s.query.Value, "ab")
 	}
 }
 

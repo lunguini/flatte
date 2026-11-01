@@ -34,10 +34,17 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	key, ok := ev.(flatte.KeyEvent)
-	if !ok {
-		return
+	switch ev := ev.(type) {
+	case flatte.PasteEvent:
+		if s.editing {
+			s.fields[s.focused].Input.InsertText(ev.Text)
+		}
+	case flatte.KeyEvent:
+		handleKey(s, ev, fx)
 	}
+}
+
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	if !s.editing {
 		handleBlurred(s, key, fx)
 		return
@@ -51,32 +58,13 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		s.editing = false
 	case flatte.KeyEnter:
 		s.submitted = fmt.Sprintf("name=%s filter=%s", s.fields[0].Input.Value, s.fields[1].Input.Value)
-	case flatte.KeyLeft:
-		if wordMove(key.Mod) {
-			field.Input.MoveWordLeft()
-		} else {
-			field.Input.MoveLeft()
-		}
-	case flatte.KeyRight:
-		if wordMove(key.Mod) {
-			field.Input.MoveWordRight()
-		} else {
-			field.Input.MoveRight()
-		}
-	case flatte.KeyBackspace:
-		field.Input.Backspace()
-	case flatte.KeyDelete:
-		field.Input.Delete()
-	case flatte.KeyCharacter:
+	default:
+		// Preserve the sample's Alt+B/F aliases before native TextField editing.
 		if handleAltWordKey(key, field.Input.MoveWordLeft, field.Input.MoveWordRight) {
 			return
 		}
-		field.Input.Insert(key.Rune)
+		field.Input.Edit(key)
 	}
-}
-
-func wordMove(mod flatte.Mod) bool {
-	return mod.Contains(flatte.ModAlt) || mod.Contains(flatte.ModCtrl)
 }
 
 func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {

@@ -581,6 +581,7 @@ flatui package flatui
   method *Textarea.Delete()
   method *Textarea.DeleteWordLeft()
   method *Textarea.DeleteWordRight()
+  method *Textarea.Edit(key flatte.KeyEvent) bool
   method *Textarea.Insert(r rune)
   method *Textarea.InsertNewline()
   method *Textarea.InsertText(s string)

@@ -497,3 +497,45 @@ func TestUITextPreviewsEdit(t *testing.T) {
 		t.Fatalf("catalog click left editing %q", s.demo.editing)
 	}
 }
+
+func TestUITextPreviewsUseWidgetEditing(t *testing.T) {
+	s, host := shellState(tabUI)
+	pick(t, s, host, "TextField")
+	clickAt(s, host, demoFieldID, 3)
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyEnd})
+	if s.demo.field.Cursor != len(s.demo.field.Value) {
+		t.Fatalf("field End cursor = %d, want %d", s.demo.field.Cursor, len(s.demo.field.Value))
+	}
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper})
+	if s.demo.field.Cursor != 0 {
+		t.Fatalf("field Cmd+Left cursor = %d, want 0", s.demo.field.Cursor)
+	}
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt})
+	if s.demo.field.Cursor != len("Ada") {
+		t.Fatalf("field Alt+Right cursor = %d, want %d", s.demo.field.Cursor, len("Ada"))
+	}
+
+	pick(t, s, host, "Textarea")
+	clickAt(s, host, demoTextareaID, 0)
+	s.demo.area.SetValue("hello world")
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyEnd})
+	if s.demo.area.Col() != len("hello world") {
+		t.Fatalf("textarea End col = %d, want %d", s.demo.area.Col(), len("hello world"))
+	}
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper})
+	if s.demo.area.Col() != 0 {
+		t.Fatalf("textarea Cmd+Left col = %d, want 0", s.demo.area.Col())
+	}
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt})
+	if s.demo.area.Col() != len("hello") {
+		t.Fatalf("textarea Alt+Right col = %d, want %d", s.demo.area.Col(), len("hello"))
+	}
+	send(s, host, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'u', Mod: flatte.ModCtrl})
+	if s.demo.area.Value() != " world" || s.demo.area.Col() != 0 {
+		t.Fatalf("textarea Ctrl+U = %q at %d, want %q at 0", s.demo.area.Value(), s.demo.area.Col(), " world")
+	}
+	send(s, host, flatte.PasteEvent{Text: "first\nsecond"})
+	if s.demo.area.Value() != "first\nsecond world" {
+		t.Fatalf("textarea paste = %q", s.demo.area.Value())
+	}
+}

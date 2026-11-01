@@ -131,6 +131,14 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		s.layout(e.Width, e.Height)
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
+	case flatte.PasteEvent:
+		if s.focus.Focused(int(focusSearch)) {
+			before := s.search.Value
+			s.search.InsertText(e.Text)
+			if s.search.Value != before {
+				s.syncResults()
+			}
+		}
 	case flatte.MouseEvent:
 		handleMouse(s, e)
 	}
@@ -202,44 +210,48 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
 	case flatte.KeyEscape:
 		fx.Quit()
+		return
 	case flatte.KeyTab:
 		if key.Mod.Contains(flatte.ModShift) {
 			s.focus.Prev()
 		} else {
 			s.focus.Next()
 		}
+		return
 	case flatte.KeyUp:
 		handleVertical(s, -1)
+		return
 	case flatte.KeyDown:
 		handleVertical(s, 1)
+		return
 	case flatte.KeyEnter:
 		if s.focus.Focused(int(focusTree)) {
 			s.tree.Toggle(s.tree.CursorID())
 		}
-	case flatte.KeyBackspace:
-		if s.focus.Focused(int(focusSearch)) {
-			s.search.Backspace()
-			s.syncResults()
-		}
-	case flatte.KeyDelete:
-		if s.focus.Focused(int(focusSearch)) {
-			s.search.Delete()
-			s.syncResults()
-		}
-	case flatte.KeyLeft:
-		if s.focus.Focused(int(focusTree)) {
+		return
+	}
+
+	if s.focus.Focused(int(focusTree)) {
+		switch key.Key {
+		case flatte.KeyLeft:
 			collapseSelectedTreeRow(s)
-		} else if s.focus.Focused(int(focusSearch)) {
-			s.search.MoveLeft()
-		}
-	case flatte.KeyRight:
-		if s.focus.Focused(int(focusTree)) {
+		case flatte.KeyRight:
 			expandSelectedTreeRow(s)
-		} else if s.focus.Focused(int(focusSearch)) {
-			s.search.MoveRight()
 		}
-	case flatte.KeyCharacter:
-		handleCharacter(s, key)
+		return
+	}
+
+	if s.focus.Focused(int(focusSearch)) {
+		before := s.search.Value
+		s.search.Edit(key)
+		if s.search.Value != before {
+			s.syncResults()
+		}
+		return
+	}
+
+	if s.focus.Focused(int(focusDetails)) && key.Key == flatte.KeyCharacter {
+		handleDetailsCharacter(s, key)
 	}
 }
 
@@ -291,19 +303,12 @@ func handleVertical(s *State, delta int) {
 	}
 }
 
-func handleCharacter(s *State, key flatte.KeyEvent) {
-	if s.focus.Focused(int(focusSearch)) {
-		s.search.Insert(key.Rune)
-		s.syncResults()
-		return
-	}
-	if s.focus.Focused(int(focusDetails)) {
-		switch key.Rune {
-		case 'j', 'J':
-			s.details.LineDown(1)
-		case 'k', 'K':
-			s.details.LineUp(1)
-		}
+func handleDetailsCharacter(s *State, key flatte.KeyEvent) {
+	switch key.Rune {
+	case 'j', 'J':
+		s.details.LineDown(1)
+	case 'k', 'K':
+		s.details.LineUp(1)
 	}
 }
 

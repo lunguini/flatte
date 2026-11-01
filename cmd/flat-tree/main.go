@@ -82,6 +82,12 @@ const (
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
+	case flatte.PasteEvent:
+		if s.focus.Focused(int(focusSearch)) {
+			s.search.InsertText(ev.Text)
+			s.syncSearch()
+			s.syncDetails()
+		}
 	case flatte.LayoutEvent:
 		if r, ok := ev.Rects[treeBodyID]; ok {
 			s.rows = max(r.H, 1)
@@ -194,18 +200,7 @@ func collapseOrParent(t *flatui.Tree) {
 }
 
 func handleSearchKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
-	switch key.Key {
-	case flatte.KeyLeft:
-		s.search.MoveLeft()
-	case flatte.KeyRight:
-		s.search.MoveRight()
-	case flatte.KeyBackspace:
-		s.search.Backspace()
-	case flatte.KeyDelete:
-		s.search.Delete()
-	case flatte.KeyCharacter:
-		s.search.Insert(key.Rune)
-	}
+	s.search.Edit(key)
 	s.syncSearch()
 	s.syncDetails()
 }

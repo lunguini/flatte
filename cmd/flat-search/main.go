@@ -33,10 +33,22 @@ type State struct {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	key, ok := ev.(flatte.KeyEvent)
-	if !ok {
+	switch e := ev.(type) {
+	case flatte.PasteEvent:
+		if s.focused {
+			before := s.query.Value
+			s.query.InsertText(e.Text)
+			if s.query.Value != before {
+				startSearch(s, fx)
+			}
+		}
 		return
+	case flatte.KeyEvent:
+		handleKey(s, e, fx)
 	}
+}
+
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	if !s.focused {
 		if key.Key == flatte.KeyCharacter && (key.Rune == 'q' || key.Rune == 'Q') {
 			fx.Quit()
@@ -48,25 +60,18 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		return
 	}
 
-	switch key.Key {
-	case flatte.KeyCharacter:
-		if handleAltWordKey(key, s.query.MoveWordLeft, s.query.MoveWordRight) {
-			return
-		}
-		s.query.Insert(key.Rune)
-		startSearch(s, fx)
-	case flatte.KeyBackspace:
-		s.query.Backspace()
-		startSearch(s, fx)
-	case flatte.KeyDelete:
-		s.query.Delete()
-		startSearch(s, fx)
-	case flatte.KeyLeft:
-		s.query.MoveLeft()
-	case flatte.KeyRight:
-		s.query.MoveRight()
-	case flatte.KeyEnter:
+	if key.Key == flatte.KeyEnter {
 		s.focused = false
+		return
+	}
+	// Keep the terminal's Alt+B/F word-movement convention; native word
+	// movement and all other editing are handled by TextField.Edit.
+	if key.Key == flatte.KeyCharacter && handleAltWordKey(key, s.query.MoveWordLeft, s.query.MoveWordRight) {
+		return
+	}
+	before := s.query.Value
+	if s.query.Edit(key) && s.query.Value != before {
+		startSearch(s, fx)
 	}
 }
 

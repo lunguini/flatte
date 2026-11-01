@@ -24,10 +24,16 @@ func newCommand() *commandModel {
 }
 
 func (m *commandModel) Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	key, ok := ev.(flatte.KeyEvent)
-	if !ok {
+	switch e := ev.(type) {
+	case flatte.PasteEvent:
+		m.input.InsertText(e.Text)
 		return
+	case flatte.KeyEvent:
+		m.handleKey(s, e, fx)
 	}
+}
+
+func (m *commandModel) handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
 	case flatte.KeyEscape:
 		s.commandModal = nil
@@ -38,20 +44,12 @@ func (m *commandModel) Handle(s *State, ev flatte.Event, fx flatte.Effects[State
 		}
 		m.execute(s, fx, line)
 		s.commandModal = nil
-	case flatte.KeyBackspace:
-		m.input.Backspace()
-	case flatte.KeyDelete:
-		m.input.Delete()
-	case flatte.KeyLeft:
-		m.input.MoveLeft()
-	case flatte.KeyRight:
-		m.input.MoveRight()
 	case flatte.KeyUp:
 		m.browseHistory(s, -1)
 	case flatte.KeyDown:
 		m.browseHistory(s, 1)
-	case flatte.KeyCharacter:
-		m.input.Insert(key.Rune)
+	default:
+		m.input.Edit(key)
 	}
 }
 

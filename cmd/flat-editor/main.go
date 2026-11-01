@@ -340,34 +340,14 @@ func nameOr(path, fallback string) string {
 
 func displayName(path string) string { return nameOr(path, "this untitled file") }
 
-// handleSuper is the ⌘ (Super) chords that are not menu commands (those
-// arrive as MenuEvents): the platform's line and document moves (⌘←/→ line start/end, ⌘↑/↓ the start
-// or end of the text, with Shift to select; ⌘⌫ deletes to the line start).
-// A window delivers ⌘←/→ as Home/End already; a terminal that reports
-// Super delivers them as arrows with ModSuper. It reports whether key was
-// one.
+// handleSuper keeps document-boundary shortcuts, which are beyond
+// Textarea.Edit's line-level editing. Menu commands arrive as MenuEvents.
 func handleSuper(s *State, key flatte.KeyEvent) bool {
 	if !key.Mod.Contains(flatte.ModSuper) {
 		return false
 	}
 	selecting := key.Mod.Contains(flatte.ModShift)
 	switch key.Key {
-	case flatte.KeyLeft:
-		s.lastAction = "move-line-start"
-		if selecting {
-			s.ta.MoveLineStartSelecting()
-		} else {
-			s.ta.MoveLineStart()
-		}
-		return true
-	case flatte.KeyRight:
-		s.lastAction = "move-line-end"
-		if selecting {
-			s.ta.MoveLineEndSelecting()
-		} else {
-			s.ta.MoveLineEnd()
-		}
-		return true
 	case flatte.KeyUp, flatte.KeyDown:
 		to := 0
 		s.lastAction = "move-text-start"
@@ -379,13 +359,6 @@ func handleSuper(s *State, key flatte.KeyEvent) bool {
 		} else {
 			s.ta.MoveTo(to)
 		}
-		return true
-	case flatte.KeyBackspace:
-		s.lastAction = "delete-line-start"
-		if _, sel := s.ta.Selection(); !sel {
-			s.ta.MoveLineStartSelecting()
-		}
-		s.ta.Backspace()
 		return true
 	}
 	return false
@@ -450,66 +423,6 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	case flatte.KeyEnter:
 		s.lastAction = "newline"
 		s.ta.InsertNewline()
-	case flatte.KeyBackspace:
-		if wordMove(key.Mod) {
-			s.lastAction = "delete-word-left"
-			s.ta.DeleteWordLeft()
-		} else {
-			s.lastAction = "backspace"
-			s.ta.Backspace()
-		}
-	case flatte.KeyDelete:
-		if wordMove(key.Mod) {
-			s.lastAction = "delete-word-right"
-			s.ta.DeleteWordRight()
-		} else {
-			s.lastAction = "delete"
-			s.ta.Delete()
-		}
-	case flatte.KeyLeft:
-		if key.Mod.Contains(flatte.ModShift) && wordMove(key.Mod) {
-			s.lastAction = "select-word-left"
-			s.ta.MoveWordLeftSelecting()
-		} else if key.Mod.Contains(flatte.ModShift) {
-			s.lastAction = "select-left"
-			s.ta.MoveLeftSelecting()
-		} else if wordMove(key.Mod) {
-			s.lastAction = "move-word-left"
-			s.ta.MoveWordLeft()
-		} else {
-			s.lastAction = "move-left"
-			s.ta.MoveLeft()
-		}
-	case flatte.KeyRight:
-		if key.Mod.Contains(flatte.ModShift) && wordMove(key.Mod) {
-			s.lastAction = "select-word-right"
-			s.ta.MoveWordRightSelecting()
-		} else if key.Mod.Contains(flatte.ModShift) {
-			s.lastAction = "select-right"
-			s.ta.MoveRightSelecting()
-		} else if wordMove(key.Mod) {
-			s.lastAction = "move-word-right"
-			s.ta.MoveWordRight()
-		} else {
-			s.lastAction = "move-right"
-			s.ta.MoveRight()
-		}
-	case flatte.KeyHome:
-		if key.Mod.Contains(flatte.ModShift) {
-			s.lastAction = "select-line-start"
-			s.ta.MoveLineStartSelecting()
-		} else {
-			s.lastAction = "move-line-start"
-			s.ta.MoveLineStart()
-		}
-	case flatte.KeyEnd:
-		if key.Mod.Contains(flatte.ModShift) {
-			s.lastAction = "select-line-end"
-			s.ta.MoveLineEndSelecting()
-		} else {
-			s.lastAction = "move-line-end"
-			s.ta.MoveLineEnd()
-		}
 	case flatte.KeyUp:
 		s.lastAction = "move-up"
 		if key.Mod.Contains(flatte.ModShift) {
@@ -542,13 +455,10 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 			}
 			return
 		}
-		s.lastAction = "insert"
-		s.ta.Insert(key.Rune)
 	}
-}
-
-func wordMove(mod flatte.Mod) bool {
-	return mod.Contains(flatte.ModAlt) || mod.Contains(flatte.ModCtrl)
+	if s.ta.Edit(key) {
+		s.lastAction = "edit"
+	}
 }
 
 // handleCtrlKey is the Control letter chords: ctrl+a / ctrl+e move to the

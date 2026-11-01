@@ -193,6 +193,38 @@ func TestSearchCursorTracksTypedText(t *testing.T) {
 	}
 }
 
+func TestWorkspaceSearchUsesTextFieldEditing(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		key   flatte.KeyEvent
+		start int
+		want  int
+	}{
+		{"End", flatte.KeyEvent{Key: flatte.KeyEnd}, 5, len("Hello World")},
+		{"Cmd+Left", flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, 5, 0},
+		{"Alt+Right", flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, 0, len("Hello")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := ready()
+			s.focus.Next() // search
+			s.search = flatui.TextField{Value: "Hello World", Cursor: tc.start}
+			Handle(s, tc.key, flatte.Effects[State]{})
+			if s.search.Cursor != tc.want {
+				t.Fatalf("cursor = %d, want %d", s.search.Cursor, tc.want)
+			}
+		})
+	}
+}
+
+func TestWorkspaceSearchPastesAsSingleLine(t *testing.T) {
+	s := ready()
+	s.focus.Next() // search
+	Handle(s, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if s.search.Value != "ab" {
+		t.Fatalf("pasted search = %q, want single-line %q", s.search.Value, "ab")
+	}
+}
+
 func TestFocusDetailsIsVisibleAndDescribesScroll(t *testing.T) {
 	s := ready()
 	for range 2 {

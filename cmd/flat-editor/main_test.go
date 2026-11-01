@@ -126,6 +126,36 @@ func TestHomeEndMoveToLineBoundaries(t *testing.T) {
 	}
 }
 
+func TestEditorUsesTextareaEditing(t *testing.T) {
+	s := emptyState()
+	s.ta.SetValue("hello world")
+	s.ta.MoveTo(len("hello"))
+	edit := func(key flatte.KeyEvent) {
+		Handle(s, key, flatte.Effects[State]{})
+	}
+
+	edit(flatte.KeyEvent{Key: flatte.KeyEnd})
+	if s.ta.Col() != len("hello world") {
+		t.Fatalf("End col = %d, want %d", s.ta.Col(), len("hello world"))
+	}
+	edit(flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper})
+	if s.ta.Col() != 0 {
+		t.Fatalf("Cmd+Left col = %d, want 0", s.ta.Col())
+	}
+	edit(flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt})
+	if s.ta.Col() != len("hello") {
+		t.Fatalf("Alt+Right col = %d, want %d", s.ta.Col(), len("hello"))
+	}
+	edit(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'u', Mod: flatte.ModCtrl})
+	if s.ta.Value() != " world" || s.ta.Col() != 0 {
+		t.Fatalf("Ctrl+U value = %q col = %d, want %q at 0", s.ta.Value(), s.ta.Col(), " world")
+	}
+	edit(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'k', Mod: flatte.ModCtrl})
+	if s.ta.Value() != "" || s.ta.Col() != 0 {
+		t.Fatalf("Ctrl+K value = %q col = %d, want empty at 0", s.ta.Value(), s.ta.Col())
+	}
+}
+
 func TestShiftHomeEndSelectLineRanges(t *testing.T) {
 	s := emptyState()
 	typeRunes(s, "hello world")

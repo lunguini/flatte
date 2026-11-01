@@ -173,44 +173,12 @@ func (d *demo) key(key flatte.KeyEvent) bool {
 		return true
 	}
 	if d.editing == demoFieldID {
-		switch key.Key {
-		case flatte.KeyCharacter:
-			d.field.Insert(key.Rune)
-		case flatte.KeyBackspace:
-			d.field.Backspace()
-		case flatte.KeyDelete:
-			d.field.Delete()
-		case flatte.KeyLeft:
-			d.field.MoveLeft()
-		case flatte.KeyRight:
-			d.field.MoveRight()
-		default:
-			return false
-		}
-		return true
+		return d.field.Edit(key)
 	}
 	selecting := key.Mod.Contains(flatte.ModShift)
 	switch key.Key {
-	case flatte.KeyCharacter:
-		d.area.Insert(key.Rune)
 	case flatte.KeyEnter:
 		d.area.InsertNewline()
-	case flatte.KeyBackspace:
-		d.area.Backspace()
-	case flatte.KeyDelete:
-		d.area.Delete()
-	case flatte.KeyLeft:
-		if selecting {
-			d.area.MoveLeftSelecting()
-		} else {
-			d.area.MoveLeft()
-		}
-	case flatte.KeyRight:
-		if selecting {
-			d.area.MoveRightSelecting()
-		} else {
-			d.area.MoveRight()
-		}
 	case flatte.KeyUp, flatte.KeyDown:
 		switch {
 		case key.HasCaret && selecting:
@@ -222,8 +190,9 @@ func (d *demo) key(key flatte.KeyEvent) bool {
 		default:
 			d.area.MoveDown()
 		}
+		return true
 	default:
-		return false
+		return d.area.Edit(key)
 	}
 	return true
 }
@@ -232,11 +201,7 @@ func (d *demo) key(key flatte.KeyEvent) bool {
 func (d *demo) paste(text string) {
 	switch d.editing {
 	case demoFieldID:
-		for _, r := range text {
-			if r != '\n' && r != '\r' {
-				d.field.Insert(r)
-			}
-		}
+		d.field.InsertText(text)
 	case demoTextareaID:
 		d.area.InsertText(text)
 	}

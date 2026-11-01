@@ -692,6 +692,33 @@ func TestCommandBarCapturesKeysUntilClosed(t *testing.T) {
 	}
 }
 
+func TestCommandBarUsesTextFieldEditingAndPaste(t *testing.T) {
+	s := resizedState(80, 24)
+	send(s, keyChar(':'), flatte.Effects[State]{})
+	if s.commandModal == nil {
+		t.Fatal("command bar not opened")
+	}
+	s.commandModal.input.Value, s.commandModal.input.Cursor = "Hello World", len("Hello")
+
+	send(s, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
+	if got, want := s.commandModal.input.Cursor, len("Hello World"); got != want {
+		t.Fatalf("End cursor = %d, want %d", got, want)
+	}
+	send(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, flatte.Effects[State]{})
+	if got := s.commandModal.input.Cursor; got != 0 {
+		t.Fatalf("Cmd+Left cursor = %d, want 0", got)
+	}
+	send(s, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, flatte.Effects[State]{})
+	if got, want := s.commandModal.input.Cursor, len("Hello"); got != want {
+		t.Fatalf("Alt+Right cursor = %d, want %d", got, want)
+	}
+
+	send(s, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if got, want := s.commandModal.input.Value, "Helloab World"; got != want {
+		t.Fatalf("pasted value = %q, want %q", got, want)
+	}
+}
+
 func TestEscClosesCommandBar(t *testing.T) {
 	s := resizedState(80, 24)
 	send(s, keyChar(':'), flatte.Effects[State]{})

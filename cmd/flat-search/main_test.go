@@ -83,6 +83,35 @@ func TestFocusedSearchUsesAltBFForWordMovement(t *testing.T) {
 	}
 }
 
+func TestFocusedSearchUsesTextFieldEditing(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		key   flatte.KeyEvent
+		start int
+		want  int
+	}{
+		{"End", flatte.KeyEvent{Key: flatte.KeyEnd}, 5, len("Hello World")},
+		{"Cmd+Left", flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, 5, 0},
+		{"Alt+Right", flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, 0, len("Hello")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := State{focused: true, query: flatui.TextField{Value: "Hello World", Cursor: tc.start}}
+			Handle(&state, tc.key, flatte.Effects[State]{})
+			if state.query.Cursor != tc.want {
+				t.Fatalf("cursor = %d, want %d", state.query.Cursor, tc.want)
+			}
+		})
+	}
+}
+
+func TestFocusedSearchPastesAsSingleLine(t *testing.T) {
+	state := State{focused: true}
+	Handle(&state, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if state.query.Value != "ab" {
+		t.Fatalf("pasted query = %q, want single-line %q", state.query.Value, "ab")
+	}
+}
+
 func TestUnfocusedSearchUsesQToQuit(t *testing.T) {
 	state := State{focused: false}
 	var quit bool

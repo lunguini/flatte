@@ -25,10 +25,15 @@ type State struct {
 func NewState() *State { return &State{} }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	key, ok := ev.(flatte.KeyEvent)
-	if !ok {
-		return
+	switch ev := ev.(type) {
+	case flatte.PasteEvent:
+		s.input.InsertText(ev.Text)
+	case flatte.KeyEvent:
+		handleKey(s, ev, fx)
 	}
+}
+
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
 	case flatte.KeyEscape:
 		fx.Quit()
@@ -38,43 +43,14 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 			s.input = flatui.TextField{}
 			s.sent++
 		}
-	case flatte.KeyBackspace:
-		if wordMove(key.Mod) {
-			s.input.DeleteWordLeft()
-		} else {
-			s.input.Backspace()
-		}
-	case flatte.KeyDelete:
-		if wordMove(key.Mod) {
-			s.input.DeleteWordRight()
-		} else {
-			s.input.Delete()
-		}
-	case flatte.KeyLeft:
-		if wordMove(key.Mod) {
-			s.input.MoveWordLeft()
-		} else {
-			s.input.MoveLeft()
-		}
-	case flatte.KeyRight:
-		if wordMove(key.Mod) {
-			s.input.MoveWordRight()
-		} else {
-			s.input.MoveRight()
-		}
-	case flatte.KeyCharacter:
-		if handleWordDeleteKey(key, s.input.DeleteWordLeft, s.input.DeleteWordRight) {
+	default:
+		// Keep the chat's readline aliases ahead of TextField's native editing.
+		if handleWordDeleteKey(key, s.input.DeleteWordLeft, s.input.DeleteWordRight) ||
+			handleAltWordKey(key, s.input.MoveWordLeft, s.input.MoveWordRight) {
 			return
 		}
-		if handleAltWordKey(key, s.input.MoveWordLeft, s.input.MoveWordRight) {
-			return
-		}
-		s.input.Insert(key.Rune)
+		s.input.Edit(key)
 	}
-}
-
-func wordMove(mod flatte.Mod) bool {
-	return mod.Contains(flatte.ModAlt) || mod.Contains(flatte.ModCtrl)
 }
 
 func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {

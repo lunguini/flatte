@@ -167,6 +167,30 @@ func TestSearchInputOnlyWhenFocused(t *testing.T) {
 	}
 }
 
+func TestSearchUsesTextFieldEditing(t *testing.T) {
+	s := NewState()
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyTab}, flatte.Effects[State]{})
+	s.search.Value, s.search.Cursor = "hello world", 5
+
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
+	if s.search.Cursor != len("hello world") {
+		t.Fatalf("End cursor = %d, want %d", s.search.Cursor, len("hello world"))
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, flatte.Effects[State]{})
+	if s.search.Cursor != 0 {
+		t.Fatalf("Cmd+Left cursor = %d, want 0", s.search.Cursor)
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, flatte.Effects[State]{})
+	if s.search.Cursor != len("hello") {
+		t.Fatalf("Alt+Right cursor = %d, want %d", s.search.Cursor, len("hello"))
+	}
+	s.search.Value, s.search.Cursor = "", 0
+	Handle(s, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if s.search.Value != "ab" {
+		t.Fatalf("pasted value = %q, want single-line text %q", s.search.Value, "ab")
+	}
+}
+
 func TestTreeViewMatchesSnapshot(t *testing.T) {
 	s := NewState()
 	settle(s, 72, 18)

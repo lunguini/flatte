@@ -39,6 +39,29 @@ func TestEnterOnEmptyInputDoesNothing(t *testing.T) {
 	}
 }
 
+func TestInputUsesTextFieldEditing(t *testing.T) {
+	s := NewState()
+	s.input.Value, s.input.Cursor = "hello world", 5
+
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
+	if s.input.Cursor != len("hello world") {
+		t.Fatalf("End cursor = %d, want %d", s.input.Cursor, len("hello world"))
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, flatte.Effects[State]{})
+	if s.input.Cursor != 0 {
+		t.Fatalf("Cmd+Left cursor = %d, want 0", s.input.Cursor)
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, flatte.Effects[State]{})
+	if s.input.Cursor != len("hello") {
+		t.Fatalf("Alt+Right cursor = %d, want %d", s.input.Cursor, len("hello"))
+	}
+	s.input.Value, s.input.Cursor = "", 0
+	Handle(s, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if s.input.Value != "ab" {
+		t.Fatalf("pasted value = %q, want single-line text %q", s.input.Value, "ab")
+	}
+}
+
 func TestModifiedArrowsMoveInputByWord(t *testing.T) {
 	s := NewState()
 	typeRunes(s, "hello world")
