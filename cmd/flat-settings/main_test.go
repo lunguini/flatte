@@ -145,3 +145,25 @@ func TestNameFieldNativeMouseSelectionAndClear(t *testing.T) {
 		t.Fatal("clear did not edit the form draft")
 	}
 }
+
+func TestNameFieldUsesTextFieldEditing(t *testing.T) {
+	s := NewState()
+	s.focus.Select(fieldName)
+	s.name.Value, s.name.Cursor = "Hello World", 5
+	send(s, key(flatte.KeyEnd)) // a window sends Cmd+Right as End
+	if s.name.Cursor != len("Hello World") {
+		t.Fatalf("End left the cursor at %d", s.name.Cursor)
+	}
+	send(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper})
+	if s.name.Cursor != 0 {
+		t.Fatalf("Cmd+Left left the cursor at %d", s.name.Cursor)
+	}
+	send(s, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt})
+	if s.name.Cursor != len("Hello") {
+		t.Fatalf("Alt+Right left the cursor at %d", s.name.Cursor)
+	}
+	send(s, flatte.PasteEvent{Text: "a\nb"})
+	if s.name.Value != "Helloab World" {
+		t.Fatalf("paste put a newline in the field: %q", s.name.Value)
+	}
+}

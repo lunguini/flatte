@@ -105,9 +105,7 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		handleMouse(s, e)
 	case flatte.PasteEvent:
 		if s.focus.Focused(fieldName) {
-			for _, r := range strings.ReplaceAll(e.Text, "\n", " ") {
-				s.name.Insert(r)
-			}
+			s.name.InsertText(e.Text)
 		}
 	}
 }
@@ -184,22 +182,14 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
-// editName is the name field's editing keys.
+// editName is the name field's editing keys: TextField's own editing
+// (line start/end, words, selection), with Enter and Down moving on.
 func editName(s *State, key flatte.KeyEvent) {
-	switch key.Key {
-	case flatte.KeyCharacter:
-		s.name.Insert(key.Rune)
-	case flatte.KeyBackspace:
-		s.name.Backspace()
-	case flatte.KeyDelete:
-		s.name.Delete()
-	case flatte.KeyLeft:
-		s.name.MoveLeft()
-	case flatte.KeyRight:
-		s.name.MoveRight()
-	case flatte.KeyEnter, flatte.KeyDown:
+	if key.Key == flatte.KeyEnter || key.Key == flatte.KeyDown {
 		s.focus.Next()
+		return
 	}
+	s.name.Edit(key)
 }
 
 // activate is Enter or Space on the focused control.

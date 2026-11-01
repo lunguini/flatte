@@ -67,19 +67,6 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 
 func handleModal(s *State, key flatte.KeyEvent) {
 	switch key.Key {
-	case flatte.KeyCharacter:
-		if handleAltWordKey(key, s.modalInput.MoveWordLeft, s.modalInput.MoveWordRight) {
-			return
-		}
-		s.modalInput.Insert(key.Rune)
-	case flatte.KeyBackspace:
-		s.modalInput.Backspace()
-	case flatte.KeyDelete:
-		s.modalInput.Delete()
-	case flatte.KeyLeft:
-		s.modalInput.MoveLeft()
-	case flatte.KeyRight:
-		s.modalInput.MoveRight()
 	case flatte.KeyEnter:
 		s.modalOpen = false
 		s.waiting = false
@@ -88,6 +75,11 @@ func handleModal(s *State, key flatte.KeyEvent) {
 		s.modalOpen = false
 		s.waiting = false
 		s.modalResult = "cancelled"
+	default:
+		// Terminals send Alt+B/F for word moves; the rest is TextField's.
+		if !handleAltWordKey(key, s.modalInput.MoveWordLeft, s.modalInput.MoveWordRight) {
+			s.modalInput.Edit(key)
+		}
 	}
 }
 
