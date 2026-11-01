@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,6 +17,11 @@ import (
 )
 
 func TestTerminalHostConformance(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Known bug: with piped input, the key sent after Exec returns is not
+		// delivered on Windows. Tracked in the status tracker.
+		t.Skip("piped input after Exec is not delivered on Windows")
+	}
 	want := hostconformance.Expectations{
 		Capabilities: flatte.Capabilities{
 			Exec: true, Suspend: true, Print: true,

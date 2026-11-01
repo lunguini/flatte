@@ -151,12 +151,15 @@ func names(td *termDialog) string {
 	for _, e := range td.entries {
 		n := e.name
 		if e.dir {
-			n += "/"
+			n += sep
 		}
 		out = append(out, n)
 	}
 	return strings.Join(out, " ")
 }
+
+// sep is the separator the dialog shows and types.
+var sep = string(filepath.Separator)
 
 func typeText(d *termDialogs, s string) {
 	for _, r := range s {
@@ -170,11 +173,11 @@ func TestTermOpenFile(t *testing.T) {
 	var d termDialogs
 	d.show(Dialog{Open: &OpenDialog{Directory: root, Types: []string{"txt", ".md"}}}, func(r DialogResult) { got = append(got, r.Paths) })
 	td := d.cur
-	if td.input != root+"/" {
+	if td.input != root+sep {
 		t.Fatalf("input %q", td.input)
 	}
 	// Directories first; no hidden files; only .txt and .md files.
-	if n := names(td); n != "src/ zz/ Notebook.md notes.txt readme.md" {
+	if n := names(td); n != "src"+sep+" zz"+sep+" Notebook.md notes.txt readme.md" {
 		t.Fatalf("listing %q", n)
 	}
 	typeText(&d, "no")
@@ -182,16 +185,16 @@ func TestTermOpenFile(t *testing.T) {
 		t.Fatalf("prefix (any case) %q", n)
 	}
 	d.route(KeyEvent{Key: KeyTab}) // Notebook / notes share "note"; "no" stays as typed
-	if td.input != root+"/note" {
+	if td.input != root+sep+"note" {
 		t.Fatalf("tab on a shared prefix: %q", td.input)
 	}
 	typeText(&d, "s")
 	d.route(KeyEvent{Key: KeyTab}) // unique → notes.txt
-	if td.input != root+"/notes.txt" {
+	if td.input != root+sep+"notes.txt" {
 		t.Fatalf("tab on a unique match: %q", td.input)
 	}
 	d.route(KeyEvent{Key: KeyBackspace, Mod: ModAlt}) // back to the directory
-	if td.input != root+"/" {
+	if td.input != root+sep {
 		t.Fatalf("alt+backspace: %q", td.input)
 	}
 	typeText(&d, ".")
@@ -201,7 +204,7 @@ func TestTermOpenFile(t *testing.T) {
 	d.route(KeyEvent{Key: KeyBackspace})
 	d.route(KeyEvent{Key: KeyDown}) // src/
 	d.route(KeyEvent{Key: KeyEnter})
-	if td.input != root+"/src/" || td.hi != -1 {
+	if td.input != root+sep+"src"+sep || td.hi != -1 {
 		t.Fatalf("enter on a directory: %q hi %d", td.input, td.hi)
 	}
 	if n := names(td); n != "" { // main.go is not of the types
@@ -231,7 +234,7 @@ func TestTermOpenFolderAndSave(t *testing.T) {
 	var got []string
 	var d termDialogs
 	d.show(Dialog{Open: &OpenDialog{Directory: root, Folders: true}}, func(r DialogResult) { got = append(got, r.Paths...) })
-	if n := names(d.cur); n != "docs/" {
+	if n := names(d.cur); n != "docs"+sep {
 		t.Fatalf("folders only: %q", n)
 	}
 	d.route(KeyEvent{Key: KeyDown})
@@ -241,7 +244,7 @@ func TestTermOpenFolderAndSave(t *testing.T) {
 		t.Fatalf("folder: %q", got)
 	}
 	d.show(Dialog{Save: &SaveDialog{Directory: root, Name: "new.txt"}}, func(r DialogResult) { got = append(got, r.Paths...) })
-	if d.cur.input != root+"/new.txt" {
+	if d.cur.input != root+sep+"new.txt" {
 		t.Fatalf("save input %q", d.cur.input)
 	}
 	d.route(KeyEvent{Key: KeyEnter})
@@ -264,7 +267,7 @@ func TestTermFilePromptPaint(t *testing.T) {
 	d.route(KeyEvent{Key: KeyDown})
 	f := d.paint(Frame{Content: strings.Repeat(" \n", 23)}, 80, 24)
 	plain := ansi.Strip(f.Content)
-	for _, want := range []string{"Open a note", "sub/", "one.txt", "two.txt", "enter open"} {
+	for _, want := range []string{"Open a note", "sub" + sep, "one.txt", "two.txt", "enter open"} {
 		if !strings.Contains(plain, want) {
 			t.Errorf("prompt missing %q:\n%s", want, plain)
 		}
@@ -280,13 +283,13 @@ func TestTermFilePromptPaint(t *testing.T) {
 		t.Fatalf("click highlighted %d", d.cur.hi)
 	}
 	d.route(click)
-	if d.cur.input != root+"/sub/" {
+	if d.cur.input != root+sep+"sub"+sep {
 		t.Fatalf("second click: %q", d.cur.input)
 	}
 }
 
 func TestExpandHome(t *testing.T) {
-	if got := expandHome("~/x", "/home/me"); got != "/home/me/x" {
+	if got := expandHome("~"+sep+"x", "/home/me"); got != "/home/me"+sep+"x" {
 		t.Error(got)
 	}
 	if got := expandHome("~x", "/home/me"); got != "~x" {

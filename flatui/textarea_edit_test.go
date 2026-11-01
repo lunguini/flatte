@@ -122,7 +122,9 @@ func TestTextareaEditLeavesAppKeysAlone(t *testing.T) {
 }
 
 func TestTextareaEditReadlineAltKeys(t *testing.T) {
-	alt := func(r rune) flatte.KeyEvent { return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModAlt} }
+	alt := func(r rune) flatte.KeyEvent {
+		return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModAlt}
+	}
 	var ta Textarea
 	ta.InsertText("one two")
 	if !ta.Edit(alt('b')) || ta.Edit(alt('x')) {
