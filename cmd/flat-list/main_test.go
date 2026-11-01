@@ -8,7 +8,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
 	"github.com/lunguini/flatte/flatui/layout"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 // ready builds a state laid out on a 72x24 terminal (list height 17).
@@ -21,7 +21,7 @@ func ready() *State {
 // settle composes the view at width×height and delivers the solved rects as
 // the runtime does before painting.
 func settle(s *State, width, height int) {
-	flattehost.SettleFrame(func() flatte.Frame { return View(s, flatte.RenderContext{Width: width}) }, func(e flatte.LayoutEvent) { Handle(s, e, flatte.Effects[State]{}) }, nil, width, height)
+	testkit.SettleFrame(func() flatte.Frame { return View(s, flatte.RenderContext{Width: width}) }, func(e flatte.LayoutEvent) { Handle(s, e, flatte.Effects[State]{}) }, nil, width, height)
 }
 
 // composed is View's frame as the runtime paints it at 72×24.
@@ -91,7 +91,7 @@ func TestGotoEndAndQuit(t *testing.T) {
 		t.Fatalf("G: Cursor() = %d, want 29", s.list.Cursor())
 	}
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, key('q'), fx)
 	if !quit {
 		t.Fatal("q did not request quit")

@@ -8,7 +8,7 @@ import (
 func TestDispatchSeamRunsWorkThroughInjectedRunner(t *testing.T) {
 	updates := make(chan StateUpdate[testState], 1)
 	var ran []func()
-	fx := NewHarnessEffects[testState](
+	fx := newHarnessEffectsForTest[testState](
 		context.Background(), updates, func() {},
 		func(f func()) { ran = append(ran, f) }, // capture, don't run
 		nil,                                     // real clock unused here

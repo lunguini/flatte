@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/lunguini/flatte"
-	flattehost "github.com/lunguini/flatte/host"
 	"github.com/lunguini/flatte/window/media"
 )
 
@@ -48,14 +47,14 @@ func TestRunAllowsWindowAndMediaControlsTogether(t *testing.T) {
 
 type optionTestHost struct{ ran *bool }
 
-func (h optionTestHost) Run(context.Context, flattehost.Session) error {
+func (h optionTestHost) Run(context.Context, *flatte.Session) error {
 	*h.ran = true
 	return nil
 }
 
-type optionTestHostOption struct{ host flattehost.Host }
+type optionTestHostOption struct{ host flatte.Host }
 
-func (o optionTestHostOption) ConfigureRun(config *flattehost.RunConfig) { config.UseHost(o.host) }
+func (o optionTestHostOption) ConfigureRun(config *flatte.RunConfig) { config.UseHost(o.host) }
 
 func TestMediaControlsYieldsToAnOrdinaryHost(t *testing.T) {
 	app := flatte.App[struct{}]{

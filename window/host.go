@@ -12,19 +12,18 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
-	flattehost "github.com/lunguini/flatte/host"
 )
 
 // maxLayoutPasses bounds how many LayoutEvents one render delivers, as in
-// the terminal host (host.SettleFrame).
+// the terminal cell host.
 const maxLayoutPasses = 2
 
 // host drives a Session from window events. It runs on the UI thread only;
 // async updates arrive through post. Its embedded surface is the main window.
 type host struct {
 	*surface
-	session flattehost.Session
-	state   flattehost.State
+	session *flatte.Session
+	state   flatte.HostState
 	metrics layout.Metrics
 	cancel  context.CancelFunc
 
@@ -228,7 +227,7 @@ type clipboard interface {
 // newHost wires app to a backend. post runs a function on the UI thread
 // (from any goroutine); async updates reach the app through it; invalidate
 // redraws the main window.
-func newSessionHost(ctx context.Context, session flattehost.Session, m layout.Metrics, post func(func()), stop, invalidate func()) *host {
+func newSessionHost(ctx context.Context, session *flatte.Session, m layout.Metrics, post func(func()), stop, invalidate func()) *host {
 	ctx, cancel := context.WithCancel(ctx)
 	h := &host{session: session, metrics: m, cancel: cancel, stop: stop, post: post, open: map[string]*surface{}}
 	h.surface = &surface{h: h, invalidate: invalidate}
@@ -240,7 +239,7 @@ func newSessionHost(ctx context.Context, session flattehost.Session, m layout.Me
 					if h.closed {
 						return
 					}
-					step := session.Step(flattehost.StepInput{UpdatesPending: true})
+					step := session.Step(flatte.StepInput{UpdatesPending: true})
 					h.after(step)
 				})
 			case <-ctx.Done():
@@ -251,8 +250,8 @@ func newSessionHost(ctx context.Context, session flattehost.Session, m layout.Me
 	return h
 }
 
-func (h *host) services() flattehost.Services {
-	return flattehost.Services{
+func (h *host) services() flatte.HostServices {
+	return flatte.HostServices{
 		Capabilities: h.capabilities(),
 		SetClipboard: func(text string) {
 			if h.clip != nil {
@@ -309,7 +308,7 @@ func (h *host) start(width, height float64) {
 	h.surface.width, h.surface.height = width, height
 	h.session.UseHostServices(h.services())
 	resize := flatte.ResizeEvent{Width: h.cols(width), Height: h.lines(height)}
-	step := h.session.Step(flattehost.StepInput{Start: &resize})
+	step := h.session.Step(flatte.StepInput{Start: &resize})
 	h.after(step)
 }
 
@@ -331,14 +330,13 @@ func (h *host) close() {
 		delete(h.open, id)
 	}
 	h.cancel()
-	h.session.Cancel()
 }
 
 func (h *host) handle(ev flatte.Event) {
 	for _, s := range h.surfaces() {
 		s.flushWheel()
 	}
-	step := h.session.Step(flattehost.StepInput{Events: []flatte.Event{ev}})
+	step := h.session.Step(flatte.StepInput{Events: []flatte.Event{ev}})
 	if !step.Dirty && !step.Quit {
 		return
 	}
@@ -353,12 +351,8 @@ func (h *host) after(step flatte.StepResult) {
 		h.stop()
 		return
 	}
-	h.state = flattehost.Snapshot(h.session)
-	var declared []flatte.Window
-	if h.state.Windows != nil {
-		declared = h.state.Windows()
-	}
-	h.syncWindows(declared)
+	h.state = h.session.State()
+	h.syncWindows(h.state.Windows)
 	h.syncMedia()
 	if h.desktop != nil {
 		h.syncMenus()
@@ -372,12 +366,10 @@ func (h *host) after(step flatte.StepResult) {
 // syncMedia publishes app-owned metadata after each loop mutation, even
 // while the app is hidden or in the background.
 func (h *host) syncMedia() {
-	if h.media == nil || !h.state.HasNowPlaying {
+	if h.media == nil || !h.session.UsesNowPlaying() {
 		return
 	}
-	if h.state.NowPlaying != nil {
-		h.media.Update(h.state.NowPlaying())
-	}
+	h.media.Update(h.state.NowPlaying)
 }
 
 // mediaCommand posts native commands back onto the UI loop. Callbacks never
@@ -626,11 +618,11 @@ func (h *host) syncMenus() {
 	if h.menus == nil {
 		return
 	}
-	state := flattehost.Snapshot(h.session)
+	state := h.session.State()
 	h.state.Menus = state.Menus
 	var bar []flatte.Menu
 	if h.state.Menus != nil {
-		bar = h.state.Menus()
+		bar = h.state.Menus
 	}
 	if !reflect.DeepEqual(bar, h.bar) {
 		h.bar = bar
@@ -879,14 +871,12 @@ func (s *surface) mouseClicks(x, y float64, button flatte.MouseButton, action fl
 	// MenuEvent.
 	secondary := button == flatte.MouseRight || button == flatte.MouseLeft && mod.Contains(flatte.ModCtrl)
 	if secondary && action == flatte.MousePress && h.menus != nil {
-		if h.state.ContextMenu != nil {
-			items := h.state.ContextMenu(id)
-			if len(items) > 0 {
-				if chosen := h.menus.popUp(s.id, items, x, y); chosen != "" {
-					h.handle(flatte.MenuEvent{ID: chosen, Target: id})
-				}
-				return
+		items := h.session.ContextMenu(id)
+		if len(items) > 0 {
+			if chosen := h.menus.popUp(s.id, items, x, y); chosen != "" {
+				h.handle(flatte.MenuEvent{ID: chosen, Target: id})
 			}
+			return
 		}
 	}
 	if op, ok := s.input(id); ok && h.text != nil {
@@ -992,7 +982,7 @@ func (s *surface) flushWheel() {
 	for i := range events {
 		events[i] = p.ev
 	}
-	step := h.session.Step(flattehost.StepInput{Events: events})
+	step := h.session.Step(flatte.StepInput{Events: events})
 	h.after(step)
 }
 
@@ -1049,8 +1039,8 @@ func (s *surface) render() layout.Scene {
 		s.delivered = rects
 		s.deliveredPoints = maps.Clone(s.scene.Rects)
 		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Window: s.id}
-		step := h.session.Step(flattehost.StepInput{Events: []flatte.Event{ev}})
-		h.state = flattehost.Snapshot(h.session)
+		step := h.session.Step(flatte.StepInput{Events: []flatte.Event{ev}})
+		h.state = h.session.State()
 		if step.Quit {
 			h.quitting = true
 			h.stop()
@@ -1060,7 +1050,7 @@ func (s *surface) render() layout.Scene {
 }
 
 func (s *surface) view() flatte.Frame {
-	return s.h.session.Step(flattehost.StepInput{FrameDue: true, RenderContext: flatte.RenderContext{
+	return s.h.session.Step(flatte.StepInput{FrameDue: true, RenderContext: flatte.RenderContext{
 		Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor,
 		Window: s.id, Graphical: true, Capabilities: s.h.state.Capabilities,
 	}}).Frame

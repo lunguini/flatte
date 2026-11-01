@@ -6,7 +6,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
-	flattehost "github.com/lunguini/flatte/host"
+	"github.com/lunguini/flatte/internal/testkit"
 )
 
 func TestListAdoptMeasuresTerminalRowsAndInitialProbe(t *testing.T) {
@@ -97,7 +97,7 @@ func TestListAdoptSettlesFromZeroHeight(t *testing.T) {
 		return flatte.Frame{Root: rows}
 	}
 	delivered := 0
-	frame, _, _ := flattehost.SettleFrame(view, func(event flatte.LayoutEvent) { delivered++; list.Adopt(event, "songs") }, nil, 20, 9)
+	frame, _, _ := testkit.SettleFrame(view, func(event flatte.LayoutEvent) { delivered++; list.Adopt(event, "songs") }, nil, 20, 9)
 	if list.Height() != 4 || delivered != 2 {
 		t.Fatalf("height %d delivered %d frame %q", list.Height(), delivered, frame.Content)
 	}

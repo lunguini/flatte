@@ -7,7 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 // A zero-enqueue Effects makes SetClipboard/ReadClipboard/Suspend/Exec
@@ -50,7 +50,7 @@ func TestCtrlZRequestsSuspend(t *testing.T) {
 func TestModifiedPlainCommandsAreIgnored(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'z', Mod: flatte.ModAlt}, fx)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'y', Mod: flatte.ModCtrl}, fx)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q', Mod: flatte.ModAlt}, fx)
@@ -79,7 +79,7 @@ func TestClipboardEventStoresContent(t *testing.T) {
 func TestQuitKeyRequestsQuit(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {

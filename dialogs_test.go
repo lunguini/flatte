@@ -23,7 +23,7 @@ type dialogState struct {
 // queueFx is an Effects whose updates are applied by apply.
 func queueFx() (Effects[dialogState], func(*dialogState)) {
 	var queued []StateUpdate[dialogState]
-	fx := NewHarnessEffectsQueue(context.Background(), func(u StateUpdate[dialogState]) bool {
+	fx := newHarnessEffectsQueueForTest(context.Background(), func(u StateUpdate[dialogState]) bool {
 		queued = append(queued, u)
 		return true
 	}, nil, nil, nil)
@@ -51,7 +51,7 @@ func TestDialogsThroughAHost(t *testing.T) {
 	fx, apply := queueFx()
 	var shown []Dialog
 	var answers []func(DialogResult)
-	fx = WithHostDialogs(fx, func(d Dialog, done func(DialogResult)) {
+	fx = withHostDialogs(fx, func(d Dialog, done func(DialogResult)) {
 		shown = append(shown, d)
 		answers = append(answers, done)
 	})

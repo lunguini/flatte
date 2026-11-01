@@ -12,7 +12,7 @@ import (
 	"github.com/ebitengine/purego"
 	"github.com/ebitengine/purego/objc"
 	"github.com/lunguini/flatte"
-	"github.com/lunguini/flatte/host"
+	"github.com/lunguini/flatte/internal/sessionaccess"
 )
 
 var errNotMainThread = errors.New("window: Run must be called from the main goroutine")
@@ -27,9 +27,9 @@ var (
 // RunTerminalMedia keeps the terminal driver on a worker goroutine while the
 // main thread pumps AppKit and MediaPlayer callbacks. It is used by the
 // terminal media option; window hosts use NewMedia directly on their UI loop.
-func RunTerminalMedia(ctx context.Context, session host.Session) error {
-	if !host.Snapshot(session).HasNowPlaying {
-		return host.RunTerminal(ctx, session)
+func RunTerminalMedia(ctx context.Context, session *flatte.Session) error {
+	if !session.UsesNowPlaying() {
+		return sessionaccess.RunTerminal(ctx, session, sessionaccess.Media{})
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -48,7 +48,7 @@ func RunTerminalMedia(ctx context.Context, session host.Session) error {
 	return runErr
 }
 
-func runTerminalMain(ctx context.Context, session host.Session) error {
+func runTerminalMain(ctx context.Context, session *flatte.Session) error {
 	commands := make(chan flatte.MediaEvent, 16)
 	active := atomic.Bool{}
 	active.Store(true)
@@ -93,8 +93,9 @@ func runTerminalMain(ctx context.Context, session host.Session) error {
 	}
 
 	done := make(chan error, 1)
+	var commandSource <-chan flatte.MediaEvent = commands
 	go func() {
-		err := host.RunTerminal(ctx, session, host.WithHostMedia(commands, publish))
+		err := sessionaccess.RunTerminal(ctx, session, sessionaccess.Media{Commands: commandSource, Publish: publish})
 		done <- err
 		post(stop)
 	}()

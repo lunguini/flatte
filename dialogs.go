@@ -64,11 +64,10 @@ type DialogResult struct {
 	Err    error
 }
 
-// WithHostDialogs returns fx with dialogs shown by show: a host calls done
+// withHostDialogs returns fx with dialogs shown by show: a host calls done
 // once, on the loop goroutine, with the user's answer. Like
-// WithHostClipboard it is host plumbing, not application API.
-// Deprecated: use host.WithHostDialogs.
-func WithHostDialogs[S any](fx Effects[S], show func(d Dialog, done func(DialogResult))) Effects[S] {
+// withHostClipboard it is host plumbing, not application API.
+func withHostDialogs[S any](fx Effects[S], show func(d Dialog, done func(DialogResult))) Effects[S] {
 	fx.dialogs = show
 	return fx
 }

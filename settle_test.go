@@ -35,7 +35,7 @@ func (p *settleProbe) view() Frame { p.views++; return sized(p.rows) }
 func TestSettleFrameWithoutRoot(t *testing.T) {
 	views, events := 0, 0
 	last := map[string]layout.Rect{"keep": {W: 1}}
-	frame, comp, gotLast := SettleFrame(func() Frame { views++; return Frame{Content: "plain"} },
+	frame, comp, gotLast := settleFrame(func() Frame { views++; return Frame{Content: "plain"} },
 		func(LayoutEvent) { events++ }, last, 10, 4)
 	if frame.Content != "plain" || views != 1 || events != 0 {
 		t.Fatalf("frame=%q views=%d events=%d", frame.Content, views, events)
@@ -48,7 +48,7 @@ func TestSettleFrameWithoutRoot(t *testing.T) {
 func TestSettleFrameDeliversBeforePaintThenStabilizes(t *testing.T) {
 	p := &settleProbe{rows: 1}
 	var got []LayoutEvent
-	frame, comp, last := SettleFrame(p.view, func(ev LayoutEvent) { got = append(got, ev) }, nil, 10, 6)
+	frame, comp, last := settleFrame(p.view, func(ev LayoutEvent) { got = append(got, ev) }, nil, 10, 6)
 	if p.views != 2 || len(got) != 1 {
 		t.Fatalf("views=%d events=%d, want 2 and 1", p.views, len(got))
 	}
@@ -60,7 +60,7 @@ func TestSettleFrameDeliversBeforePaintThenStabilizes(t *testing.T) {
 	}
 
 	p.views = 0
-	_, _, _ = SettleFrame(p.view, func(ev LayoutEvent) { got = append(got, ev) }, last, 10, 6)
+	_, _, _ = settleFrame(p.view, func(ev LayoutEvent) { got = append(got, ev) }, last, 10, 6)
 	if p.views != 1 || len(got) != 1 {
 		t.Fatalf("stable render: views=%d events=%d, want 1 and still 1", p.views, len(got))
 	}
@@ -75,7 +75,7 @@ func TestSettleFrameFollowsAdoptionChain(t *testing.T) {
 		p.events++
 		p.rows = min(ev.Rects["body"].H, 2) // adopt: list takes up to 2 rows of body
 	}
-	frame, _, last := SettleFrame(p.view, handle, nil, 10, 6)
+	frame, _, last := settleFrame(p.view, handle, nil, 10, 6)
 	if p.events != 2 || p.views != 3 {
 		t.Fatalf("events=%d views=%d, want 2 and 3", p.events, p.views)
 	}
@@ -87,7 +87,7 @@ func TestSettleFrameFollowsAdoptionChain(t *testing.T) {
 func TestSettleFrameBoundsNonConvergingLayout(t *testing.T) {
 	p := &settleProbe{rows: 1}
 	handle := func(LayoutEvent) { p.events++; p.rows++ } // never converges
-	frame, comp, last := SettleFrame(p.view, handle, nil, 10, 10)
+	frame, comp, last := settleFrame(p.view, handle, nil, 10, 10)
 	if p.events != maxLayoutPasses || p.views != maxLayoutPasses+1 {
 		t.Fatalf("events=%d views=%d, want %d and %d", p.events, p.views, maxLayoutPasses, maxLayoutPasses+1)
 	}
@@ -97,7 +97,7 @@ func TestSettleFrameBoundsNonConvergingLayout(t *testing.T) {
 		t.Fatalf("frame=%q last=%+v comp=%+v", frame.Content, last["list"], comp.Rects["list"])
 	}
 	p.events = 0
-	_, _, _ = SettleFrame(p.view, handle, last, 10, 10)
+	_, _, _ = settleFrame(p.view, handle, last, 10, 10)
 	if p.events == 0 {
 		t.Fatal("unsettled geometry was not re-delivered on the next render")
 	}
@@ -105,12 +105,12 @@ func TestSettleFrameBoundsNonConvergingLayout(t *testing.T) {
 
 func TestSettleFrameDeliversACopy(t *testing.T) {
 	p := &settleProbe{rows: 1}
-	_, _, last := SettleFrame(p.view, func(ev LayoutEvent) { clear(ev.Rects) }, nil, 10, 6)
+	_, _, last := settleFrame(p.view, func(ev LayoutEvent) { clear(ev.Rects) }, nil, 10, 6)
 	if len(last) != 2 {
 		t.Fatalf("handler mutation reached the host's copy: %v", last)
 	}
 	events := 0
-	_, _, _ = SettleFrame(p.view, func(LayoutEvent) { events++ }, last, 10, 6)
+	_, _, _ = settleFrame(p.view, func(LayoutEvent) { events++ }, last, 10, 6)
 	if events != 0 {
 		t.Fatalf("unchanged layout re-delivered %d times", events)
 	}
@@ -118,7 +118,7 @@ func TestSettleFrameDeliversACopy(t *testing.T) {
 
 func TestSettleFrameNilHandle(t *testing.T) {
 	p := &settleProbe{rows: 1}
-	frame, _, last := SettleFrame(p.view, nil, nil, 10, 6)
+	frame, _, last := settleFrame(p.view, nil, nil, 10, 6)
 	if p.views != 1 || !strings.Contains(frame.Content, "rows=1") || last != nil {
 		t.Fatalf("views=%d frame=%q last=%v", p.views, frame.Content, last)
 	}

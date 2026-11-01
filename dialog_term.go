@@ -15,7 +15,7 @@ import (
 )
 
 // termDialogs is the terminal runtime's dialogs: drawn over the frame and
-// modal while one shows (host presentation, like MenuHost). Dialogs asked
+// modal while one shows (host presentation, like menuHost). Dialogs asked
 // for while one shows wait their turn.
 type termDialogs struct {
 	cur   *termDialog

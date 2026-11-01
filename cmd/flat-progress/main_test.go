@@ -8,7 +8,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
 	"github.com/lunguini/flatte/flatui/layout"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func TestProgressTickAdvancesUntilComplete(t *testing.T) {
@@ -49,7 +49,7 @@ func TestHandleTogglesPauseResetsAndQuits(t *testing.T) {
 	}
 
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](t.Context(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](t.Context(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q should request quit")

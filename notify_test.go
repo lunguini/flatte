@@ -53,13 +53,13 @@ func TestNotificationTextIsOneSafeLine(t *testing.T) {
 
 func TestWithHostNotificationsRoutesNotify(t *testing.T) {
 	var got []Notification
-	fx := WithHostNotifications(NewHarnessEffects[struct{}](context.Background(), nil, nil, nil, nil), func(n Notification) { got = append(got, n) })
+	fx := withHostNotifications(newHarnessEffectsForTest[struct{}](context.Background(), nil, nil, nil, nil), func(n Notification) { got = append(got, n) })
 	fx.Notify(Notification{Title: "t", Body: "b"})
 	if len(got) != 1 || got[0] != (Notification{Title: "t", Body: "b"}) {
 		t.Fatalf("got %v", got)
 	}
 	// Without a host, harness and zero effects stay no-ops.
-	NewHarnessEffects[struct{}](context.Background(), nil, nil, nil, nil).Notify(Notification{Body: "x"})
+	newHarnessEffectsForTest[struct{}](context.Background(), nil, nil, nil, nil).Notify(Notification{Body: "x"})
 	Effects[struct{}]{}.Notify(Notification{Body: "x"})
 }
 

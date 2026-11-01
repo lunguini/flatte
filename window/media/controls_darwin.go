@@ -6,18 +6,17 @@ import (
 	"context"
 
 	"github.com/lunguini/flatte"
-	"github.com/lunguini/flatte/host"
 	"github.com/lunguini/flatte/window/internal/appkit"
 )
 
 var _ flatte.Option = Controls{}
 
-func (Controls) ConfigureRun(config *host.RunConfig) {
+func (Controls) ConfigureRun(config *flatte.RunConfig) {
 	config.UseFallbackHost(terminalHost{})
 }
 
 type terminalHost struct{}
 
-func (terminalHost) Run(ctx context.Context, session host.Session) error {
+func (terminalHost) Run(ctx context.Context, session *flatte.Session) error {
 	return appkit.RunTerminalMedia(ctx, session)
 }

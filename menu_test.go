@@ -40,15 +40,15 @@ func TestMenuShortcut(t *testing.T) {
 }
 
 func TestMenuHostRoutesShortcuts(t *testing.T) {
-	var m MenuHost
-	ev, ok := m.Route(ch('s', ModCtrl), testMenus, nil, 80, 24)
+	var m menuHost
+	ev, ok := m.route(ch('s', ModCtrl), testMenus, nil, 80, 24)
 	if !ok || ev != (MenuEvent{ID: "save"}) {
 		t.Errorf("ctrl+s: %#v %v", ev, ok)
 	}
-	if ev, ok := m.Route(ch('p', ModCtrl), testMenus, nil, 80, 24); ok {
+	if ev, ok := m.route(ch('p', ModCtrl), testMenus, nil, 80, 24); ok {
 		t.Errorf("a disabled item's key was delivered: %#v", ev)
 	}
-	if ev, ok := m.Route(ch('q', 0), testMenus, nil, 80, 24); !ok || ev != ch('q', 0) {
+	if ev, ok := m.route(ch('q', 0), testMenus, nil, 80, 24); !ok || ev != ch('q', 0) {
 		t.Errorf("other keys pass: %#v %v", ev, ok)
 	}
 }
@@ -73,12 +73,12 @@ func rightClick(x, y int, target string) MouseEvent {
 }
 
 func TestMenuHostContextMenuKeys(t *testing.T) {
-	var m MenuHost
-	route := func(ev Event) (Event, bool) { return m.Route(ev, nil, ctxFor, 40, 12) }
-	if ev, ok := route(rightClick(3, 2, "none")); !ok || m.IsOpen() || ev.(MouseEvent).Target != "none" {
+	var m menuHost
+	route := func(ev Event) (Event, bool) { return m.route(ev, nil, ctxFor, 40, 12) }
+	if ev, ok := route(rightClick(3, 2, "none")); !ok || m.isOpen() || ev.(MouseEvent).Target != "none" {
 		t.Fatal("no menu for the target: the click passes")
 	}
-	if _, ok := route(rightClick(3, 2, "doc")); ok || !m.IsOpen() {
+	if _, ok := route(rightClick(3, 2, "doc")); ok || !m.isOpen() {
 		t.Fatal("right-click did not open the menu")
 	}
 	l := m.levels[0]
@@ -111,8 +111,8 @@ func TestMenuHostContextMenuKeys(t *testing.T) {
 	route(KeyEvent{Key: KeyEnter}) // reopens
 	route(KeyEvent{Key: KeyDown})
 	ev, ok := route(KeyEvent{Key: KeyEnter})
-	if !ok || ev != (MenuEvent{ID: "b", Target: "doc"}) || m.IsOpen() {
-		t.Fatalf("choose: %#v %v open %v", ev, ok, m.IsOpen())
+	if !ok || ev != (MenuEvent{ID: "b", Target: "doc"}) || m.isOpen() {
+		t.Fatalf("choose: %#v %v open %v", ev, ok, m.isOpen())
 	}
 	// Escape closes one level at a time.
 	route(rightClick(0, 0, "doc"))
@@ -123,18 +123,18 @@ func TestMenuHostContextMenuKeys(t *testing.T) {
 		t.Fatal("esc closed more than the submenu")
 	}
 	route(KeyEvent{Key: KeyEscape})
-	if m.IsOpen() || m.target != "" {
+	if m.isOpen() || m.target != "" {
 		t.Fatal("esc did not close the menu")
 	}
 	route(rightClick(0, 0, "doc"))
-	if ev, ok := route(ResizeEvent{Width: 10, Height: 5}); !ok || m.IsOpen() || ev != (ResizeEvent{Width: 10, Height: 5}) {
+	if ev, ok := route(ResizeEvent{Width: 10, Height: 5}); !ok || m.isOpen() || ev != (ResizeEvent{Width: 10, Height: 5}) {
 		t.Fatal("resize must close the menu and pass")
 	}
 }
 
 func TestMenuHostContextMenuMouse(t *testing.T) {
-	var m MenuHost
-	route := func(ev Event) (Event, bool) { return m.Route(ev, nil, ctxFor, 40, 12) }
+	var m menuHost
+	route := func(ev Event) (Event, bool) { return m.route(ev, nil, ctxFor, 40, 12) }
 	route(rightClick(5, 1, "doc"))
 	l := m.levels[0]
 	// Motion highlights; over the separator or a disabled item it does not.
@@ -148,33 +148,33 @@ func TestMenuHostContextMenuMouse(t *testing.T) {
 		t.Fatalf("hover moved onto a separator or disabled item: %d", m.levels[0].hi)
 	}
 	// A click on the border or a disabled item does nothing.
-	if _, ok := route(MouseEvent{X: l.x, Y: l.y + 1, Button: MouseLeft, Action: MousePress}); ok || !m.IsOpen() {
+	if _, ok := route(MouseEvent{X: l.x, Y: l.y + 1, Button: MouseLeft, Action: MousePress}); ok || !m.isOpen() {
 		t.Fatal("border click")
 	}
-	if _, ok := route(MouseEvent{X: l.x + 2, Y: l.y + 4, Button: MouseLeft, Action: MousePress}); ok || !m.IsOpen() {
+	if _, ok := route(MouseEvent{X: l.x + 2, Y: l.y + 4, Button: MouseLeft, Action: MousePress}); ok || !m.isOpen() {
 		t.Fatal("disabled click")
 	}
 	ev, ok := route(MouseEvent{X: l.x + 2, Y: l.y + 1, Button: MouseLeft, Action: MousePress})
-	if !ok || ev != (MenuEvent{ID: "cut", Target: "doc"}) || m.IsOpen() {
+	if !ok || ev != (MenuEvent{ID: "cut", Target: "doc"}) || m.isOpen() {
 		t.Fatalf("click: %#v %v", ev, ok)
 	}
 	// A click outside closes it without reaching the app.
 	route(rightClick(5, 1, "doc"))
-	if _, ok := route(MouseEvent{X: 39, Y: 11, Button: MouseLeft, Action: MousePress}); ok || m.IsOpen() {
+	if _, ok := route(MouseEvent{X: 39, Y: 11, Button: MouseLeft, Action: MousePress}); ok || m.isOpen() {
 		t.Fatal("outside click")
 	}
 }
 
 func TestMenuHostKeepsMenusOnScreen(t *testing.T) {
-	var m MenuHost
-	m.Route(rightClick(38, 10, "doc"), nil, ctxFor, 40, 12)
+	var m menuHost
+	m.route(rightClick(38, 10, "doc"), nil, ctxFor, 40, 12)
 	l := m.levels[0]
 	if l.x+l.w != 40 || l.y+l.h != 12 {
 		t.Fatalf("menu at %+v not inside 40×12", l)
 	}
 	// The submenu does not fit on the right: it flips left.
-	m.Route(KeyEvent{Key: KeyUp}, nil, ctxFor, 40, 12)
-	m.Route(KeyEvent{Key: KeyEnter}, nil, ctxFor, 40, 12)
+	m.route(KeyEvent{Key: KeyUp}, nil, ctxFor, 40, 12)
+	m.route(KeyEvent{Key: KeyEnter}, nil, ctxFor, 40, 12)
 	s := m.levels[1]
 	if s.x+s.w != l.x+1 || s.y+s.h > 12 {
 		t.Fatalf("submenu %+v beside %+v", s, l)
@@ -182,13 +182,13 @@ func TestMenuHostKeepsMenusOnScreen(t *testing.T) {
 }
 
 func TestMenuHostPaint(t *testing.T) {
-	var m MenuHost
+	var m menuHost
 	base := Frame{Content: strings.Repeat(strings.Repeat(".", 30)+"\n", 9) + strings.Repeat(".", 30), Cursor: &Cursor{X: 1, Y: 1}}
-	if got := m.Paint(base); got != base {
+	if got := m.paint(base); got != base {
 		t.Fatal("a closed menu changed the frame")
 	}
-	m.Route(rightClick(2, 1, "doc"), nil, ctxFor, 30, 10)
-	got := m.Paint(base)
+	m.route(rightClick(2, 1, "doc"), nil, ctxFor, 30, 10)
+	got := m.paint(base)
 	if got.Cursor != nil {
 		t.Error("the cursor shows over the menu")
 	}

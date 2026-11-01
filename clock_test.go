@@ -10,7 +10,7 @@ import (
 func TestEveryTicksThroughInjectedClock(t *testing.T) {
 	clk := &manualClock{}
 	updates := make(chan StateUpdate[testState], 8)
-	fx := NewHarnessEffects[testState](context.Background(), updates,
+	fx := newHarnessEffectsForTest[testState](context.Background(), updates,
 		func() {}, func(f func()) { f() }, clk)
 
 	if err := Every(fx, "tick", 10, func(s *testState, _ time.Time) { s.count++ }); err != nil {
@@ -35,7 +35,7 @@ func TestEveryRejectsNonPositiveIntervalWithoutRegistering(t *testing.T) {
 		t.Run(interval.String(), func(t *testing.T) {
 			clk := &manualClock{}
 			updates := make(chan StateUpdate[testState], 1)
-			fx := NewHarnessEffects[testState](context.Background(), updates,
+			fx := newHarnessEffectsForTest[testState](context.Background(), updates,
 				func() {}, func(f func()) { f() }, clk)
 
 			err := Every(fx, "tick", interval, func(s *testState, _ time.Time) { s.count++ })

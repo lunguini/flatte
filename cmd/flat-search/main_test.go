@@ -9,7 +9,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
 	"github.com/lunguini/flatte/flatui"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
@@ -17,7 +17,7 @@ func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
 	updates := make(chan flatte.StateUpdate[State], 1)
 	state := State{focused: true}
 
-	fx := flattehost.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
+	fx := testkit.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'o'}, fx)
 
 	if state.query.Value != "o" {
@@ -40,7 +40,7 @@ func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
 func TestTypingJAndKEditsQuery(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "1ms")
 	updates := make(chan flatte.StateUpdate[State], 4)
-	fx := flattehost.NewHarnessEffects(t.Context(), updates, nil, nil, nil)
+	fx := testkit.NewHarnessEffects(t.Context(), updates, nil, nil, nil)
 	state := &State{focused: true}
 
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'j'}, fx)
@@ -56,7 +56,7 @@ func TestFocusedSearchCanTypeQ(t *testing.T) {
 	updates := make(chan flatte.StateUpdate[State], 1)
 	state := State{focused: true}
 
-	fx := flattehost.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
+	fx := testkit.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if state.query.Value != "q" {
@@ -86,7 +86,7 @@ func TestFocusedSearchUsesAltBFForWordMovement(t *testing.T) {
 func TestUnfocusedSearchUsesQToQuit(t *testing.T) {
 	state := State{focused: false}
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
@@ -101,7 +101,7 @@ func TestBackspaceStartsSearchForEditedQuery(t *testing.T) {
 	state.query.Value = "op"
 	state.query.Cursor = 2
 
-	fx := flattehost.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
+	fx := testkit.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyBackspace}, fx)
 
 	if state.query.Value != "o" {
@@ -112,7 +112,7 @@ func TestBackspaceStartsSearchForEditedQuery(t *testing.T) {
 func TestStaleSearchUpdateIsIgnored(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "1ms")
 	updates := make(chan flatte.StateUpdate[State], 16)
-	fx := flattehost.NewHarnessEffects(t.Context(), updates, nil, nil, nil)
+	fx := testkit.NewHarnessEffects(t.Context(), updates, nil, nil, nil)
 
 	// First search: "op" — will be superseded immediately.
 	state := State{focused: true}

@@ -7,7 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func ready() *State {
@@ -76,7 +76,7 @@ func TestClearingQueryRestoresAllItems(t *testing.T) {
 func TestPrintableQEditsAndEscapeQuits(t *testing.T) {
 	s := ready()
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, key('q'), fx)
 	if quit {
 		t.Fatal("q should edit the query, not quit")

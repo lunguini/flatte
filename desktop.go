@@ -29,10 +29,9 @@ type DesktopCommand struct {
 	Shortcut *KeyEvent
 }
 
-// WithHostDesktop routes Desktop effects to a host. Like WithHostClipboard,
+// withHostDesktop routes Desktop effects to a host. Like withHostClipboard,
 // it is host plumbing; applications use Effects.Desktop.
-// Deprecated: use host.WithHostDesktop.
-func WithHostDesktop[S any](fx Effects[S], command func(DesktopCommand)) Effects[S] {
+func withHostDesktop[S any](fx Effects[S], command func(DesktopCommand)) Effects[S] {
 	fx.desktop = command
 	return fx
 }

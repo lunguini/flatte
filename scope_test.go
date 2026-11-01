@@ -39,7 +39,7 @@ func TestScopeCancelStopsGo(t *testing.T) {
 func TestScopeGoDropsQueuedUpdateAfterCancel(t *testing.T) {
 	updates := make(chan StateUpdate[testState], 1)
 	var pending []func()
-	fx := NewHarnessEffects[testState](context.Background(), updates, nil,
+	fx := newHarnessEffectsForTest[testState](context.Background(), updates, nil,
 		func(f func()) { pending = append(pending, f) }, nil)
 	scope := NewScope(fx, "test")
 
@@ -63,7 +63,7 @@ func TestScopeGoDropsQueuedUpdateAfterCancel(t *testing.T) {
 func TestScopeStreamDropsQueuedUpdateAfterCancel(t *testing.T) {
 	updates := make(chan StateUpdate[testState], 1)
 	var pending []func()
-	fx := NewHarnessEffects[testState](context.Background(), updates, nil,
+	fx := newHarnessEffectsForTest[testState](context.Background(), updates, nil,
 		func(f func()) { pending = append(pending, f) }, nil)
 	scope := NewScope(fx, "test")
 
@@ -87,7 +87,7 @@ func TestScopeStreamDropsQueuedUpdateAfterCancel(t *testing.T) {
 func TestScopeEveryDropsQueuedUpdateAfterCancel(t *testing.T) {
 	updates := make(chan StateUpdate[testState], 1)
 	clk := &manualClock{}
-	fx := NewHarnessEffects[testState](context.Background(), updates, nil,
+	fx := newHarnessEffectsForTest[testState](context.Background(), updates, nil,
 		func(f func()) { f() }, clk)
 	scope := NewScope(fx, "test")
 
@@ -114,7 +114,7 @@ func TestScopeEveryRejectsNonPositiveIntervalWithoutRegistering(t *testing.T) {
 		t.Run(interval.String(), func(t *testing.T) {
 			updates := make(chan StateUpdate[testState], 1)
 			clk := &manualClock{}
-			fx := NewHarnessEffects[testState](context.Background(), updates,
+			fx := newHarnessEffectsForTest[testState](context.Background(), updates,
 				func() {}, func(f func()) { f() }, clk)
 			scope := NewScope(fx, "test")
 
@@ -137,7 +137,7 @@ func TestScopeEveryRejectsNonPositiveIntervalWithoutRegistering(t *testing.T) {
 func TestScopeEveryRegistersValidInterval(t *testing.T) {
 	updates := make(chan StateUpdate[testState], 1)
 	clk := &manualClock{}
-	fx := NewHarnessEffects[testState](context.Background(), updates,
+	fx := newHarnessEffectsForTest[testState](context.Background(), updates,
 		func() {}, func(f func()) { f() }, clk)
 	scope := NewScope(fx, "test")
 

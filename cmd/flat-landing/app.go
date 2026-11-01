@@ -19,6 +19,7 @@ import (
 	"github.com/lunguini/flatte/cmd/internal/snakeapp"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/internal/testkit"
 )
 
 // tickInterval is the host cadence for the intro animation and the hosted apps.
@@ -101,8 +102,8 @@ type State struct {
 	// than requested, which would otherwise slow the snake down).
 	lastTick time.Time
 
-	// hosted real apps. Each runs unchanged through its own Handle/View; a
-	// sandboxed Effects keeps its async dormant so the host drives timing.
+	// hosted real apps. Each runs unchanged through its own Handle/View; zero
+	// Effects keeps its async dormant so the host drives timing.
 	game     *snakeapp.State
 	gameFx   flatte.Effects[snakeapp.State]
 	docker   *dockerapp.State
@@ -129,29 +130,15 @@ func NewState() *State {
 		height:   32,
 		rects:    map[string]layout.Rect{},
 		game:     snakeapp.NewGame(1),
-		gameFx:   sandboxFx[snakeapp.State](),
+		gameFx:   flatte.Effects[snakeapp.State]{},
 		docker:   dockerapp.NewStateFromSession(dockerapp.SessionState{}),
-		dockerFx: sandboxFx[dockerapp.State](),
+		dockerFx: flatte.Effects[dockerapp.State]{},
 		spin:     flatui.NewSpinner(flatui.SpinnerDots),
 		prog:     flatui.NewProgress(24),
 		timer:    flatui.NewTimer(90 * time.Second),
 	}
 	s.catalog.SetCount(len(showcase))
 	return s
-}
-
-// noopClock satisfies flatte.Clock but never fires, so Every/ScopeEvery armed
-// under a sandboxed Effects stay dormant.
-type noopClock struct{}
-
-func (noopClock) Tick(context.Context, time.Duration, func(time.Time)) {}
-
-// sandboxFx builds an Effects whose Quit is a no-op, whose goroutine dispatch is
-// dropped, and whose clock never ticks — so a hosted app's Handle mutates state
-// in place but its async effects and quit are neutralized.
-func sandboxFx[T any]() flatte.Effects[T] {
-	ch := make(chan flatte.StateUpdate[T], 1)
-	return flatte.NewHarnessEffects[T](context.Background(), ch, func() {}, func(func()) {}, noopClock{})
 }
 
 // adopt is the sole geometry-adoption path: it sizes the active tab's hosted
@@ -1036,7 +1023,7 @@ func (h *pageHost) handle(s *State, ev flatte.Event) {
 
 func (h *pageHost) render(s *State) flatte.Frame {
 	var frame flatte.Frame
-	frame, h.comp, h.delivered = flatte.SettleFrame(
+	frame, h.comp, h.delivered = testkit.SettleFrame(
 		func() flatte.Frame { return View(s, flatte.RenderContext{Width: s.width}) },
 		func(ev flatte.LayoutEvent) { Handle(s, ev, flatte.Effects[State]{}) },
 		h.delivered, s.width, s.height,
@@ -1049,7 +1036,7 @@ func (h *pageHost) render(s *State) flatte.Frame {
 // any changed geometry is delivered to it as a LayoutEvent. It runs after
 // every event or tick that reaches docker, so View only composes.
 func (s *State) settleDocker() {
-	_, s.dockerComp, s.dockerLayout = flatte.SettleFrame(
+	_, s.dockerComp, s.dockerLayout = testkit.SettleFrame(
 		func() flatte.Frame { return dockerapp.View(s.docker, flatte.RenderContext{Width: s.appW}) },
 		func(ev flatte.LayoutEvent) { dockerapp.Handle(s.docker, ev, s.dockerFx) },
 		s.dockerLayout, s.appW, s.appH,

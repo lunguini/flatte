@@ -6,7 +6,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
-	flattehost "github.com/lunguini/flatte/host"
+	"github.com/lunguini/flatte/internal/testkit"
 )
 
 type state struct {
@@ -98,7 +98,7 @@ func main() {
 	}
 	if err := flatte.Run(context.Background(), app,
 		flatte.WithMouse(flatte.MouseModeCellMotion),
-		flattehost.WithHostMedia(media, func(*flatte.NowPlaying) {}),
+		testkit.WithHostMedia(media, func(*flatte.NowPlaying) {}),
 	); err != nil {
 		panic(err)
 	}

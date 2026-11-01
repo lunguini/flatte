@@ -47,14 +47,12 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		}
 	})
 	session.UseHostServices(HostServices{
-		Capabilities:                   browserCapabilities(cfg),
-		SetClipboard:                   host.writeClipboard,
-		ReadClipboard:                  host.readClipboard,
-		Notify:                         host.notify,
-		CellSurface:                    true,
-		DefaultQuit:                    cfg.defaultQuit,
-		PublishMedia:                   cfg.publishMedia,
-		DialogResizeRoutesThroughMenus: true,
+		Capabilities:  browserCapabilities(cfg),
+		SetClipboard:  host.writeClipboard,
+		ReadClipboard: host.readClipboard,
+		Notify:        host.notify,
+		CellSurface:   true,
+		PublishMedia:  cfg.publishMedia,
 		ShowDialog: func(d Dialog, done func(DialogResult)) {
 			if d.Alert == nil {
 				done(DialogResult{Err: ErrNoDialogs})
@@ -63,6 +61,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			session.cell.dialogs.show(d, done)
 		},
 	})
+	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, dialogResizeRoutesThroughMenus: true})
 	defer cancel()
 	defer host.close()
 	defer session.close()

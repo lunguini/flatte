@@ -142,7 +142,7 @@ func TestDriverResizeUpdatesHandleAndViewDimensions(t *testing.T) {
 		},
 	}
 	d := StartWith(app, Options{Width: 30, Height: 12, Graphical: true, Capabilities: flatte.Capabilities{Drop: true}})
-	if !d.fx.Capabilities().Drop {
+	if !d.session.State().Capabilities.Drop {
 		t.Fatal("Effects do not report the driver's capabilities")
 	}
 	d.Resize(50, 18)

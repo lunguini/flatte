@@ -78,17 +78,17 @@ type Effects[S any] struct {
 	dispatch   func(func())
 	clock      Clock
 	// setClipboard and readClipboard replace the terminal's OSC52 clipboard
-	// for a host with its own (WithHostClipboard).
+	// for a host with its own clipboard service.
 	setClipboard  func(string)
 	readClipboard func()
-	// dialogs shows dialogs (WithHostDialogs); nil: the host has none.
+	// dialogs shows dialogs; nil: the host has none.
 	dialogs func(Dialog, func(DialogResult))
-	// notify posts notifications (WithHostNotifications); nil: terminal
+	// notify posts notifications; nil: terminal
 	// escape sequences.
 	notify func(Notification)
 	// desktop routes background utility commands to a native host.
 	desktop func(DesktopCommand)
-	// caps is what the host supports (WithHostCapabilities).
+	// caps is what the host supports.
 	caps Capabilities
 }
 
@@ -96,11 +96,7 @@ type Effects[S any] struct {
 // a zero Effects value or a harness that did not set any.
 func (fx Effects[S]) Capabilities() Capabilities { return fx.caps }
 
-// WithHostCapabilities returns fx reporting c as the host's capabilities.
-// Like WithHostClipboard it is host plumbing, not application API.
-//
-// Deprecated: use host.WithHostCapabilities.
-func WithHostCapabilities[S any](fx Effects[S], c Capabilities) Effects[S] {
+func withHostCapabilities[S any](fx Effects[S], c Capabilities) Effects[S] {
 	fx.caps = c
 	return fx
 }
@@ -156,56 +152,8 @@ func newEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit 
 	return Effects[S]{ctx: ctx, updates: updates, quit: quit, latest: newLatestRegistry()}
 }
 
-// NewHarnessEffects builds an Effects for a host other than Run: dispatch
-// controls how async bodies are spawned (nil = real goroutine) and clock
-// controls time-based effects (nil = real clock). flatest uses it for
-// deterministic tests and the window host for real ones; it is host
-// plumbing, not application API. Terminal-only effects (Print, Suspend,
-// Exec, clipboard) are no-ops on it.
-//
-// Deprecated: use host.NewHarnessEffects.
-func NewHarnessEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S] {
-	fx := newEffects[S](ctx, updates, quit)
-	fx.dispatch = dispatch
-	fx.clock = clock
-	return fx
-}
-
-// WithHostClipboard returns fx with SetClipboard and ReadClipboard routed to
-// set and read: a host with a system clipboard of its own (a window) writes
-// it and answers read with a ClipboardEvent. Like NewHarnessEffects it is
-// host plumbing, not application API.
-//
-// Deprecated: use host.WithHostClipboard.
-func WithHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S] {
+func withHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S] {
 	fx.setClipboard, fx.readClipboard = set, read
-	return fx
-}
-
-// NewHarnessEffectsQueue builds a deterministic test Effects value backed by
-// an enqueue callback instead of a channel. It is intended for synchronous
-// harnesses such as flatest, where a burst of updates must not block a fake
-// clock or a controlled Stream worker on an arbitrary channel capacity.
-//
-// Deprecated: use host.NewHarnessEffectsQueue.
-func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(StateUpdate[S]) bool, quit func(), dispatch func(func()), clock Clock) Effects[S] {
-	fx := newEffects[S](ctx, nil, quit)
-	fx.sendUpdate = func(sendCtx context.Context, update StateUpdate[S]) bool {
-		if sendCtx == nil {
-			sendCtx = context.Background()
-		}
-		select {
-		case <-sendCtx.Done():
-			return false
-		default:
-		}
-		if enqueue == nil {
-			return false
-		}
-		return enqueue(update)
-	}
-	fx.dispatch = dispatch
-	fx.clock = clock
 	return fx
 }
 
@@ -400,13 +348,11 @@ func withSuspendProcess(fn func()) Option {
 	return optionFunc(func(c *runConfig) { c.suspendProcess = fn })
 }
 
-// WithHostMedia connects a terminal run to a system media host. Commands are
+// withHostMedia connects a terminal run to a system media host. Commands are
 // handled on the state loop. publish is called synchronously on that loop with
 // an owned snapshot (or nil), and must return promptly. It receives nil again
 // at shutdown. Closing commands disconnects it without ending Run.
-//
-// Deprecated: use host.WithHostMedia.
-func WithHostMedia(commands <-chan MediaEvent, publish func(*NowPlaying)) Option {
+func withHostMedia(commands <-chan MediaEvent, publish func(*NowPlaying)) Option {
 	return optionFunc(func(c *runConfig) { c.mediaCommands, c.publishMedia = commands, publish })
 }
 
@@ -624,10 +570,9 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		Capabilities: terminalCapabilities(cfg),
 		ShowDialog:   session.cell.dialogs.show,
 		CellSurface:  true,
-		DefaultQuit:  cfg.defaultQuit,
-		Inline:       cfg.inline,
 		PublishMedia: cfg.publishMedia,
 	})
+	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, inline: cfg.inline})
 
 	// The input pipeline is restartable: suspend and exec stop it before
 	// handing the terminal away (the subprocess must own stdin) and start
@@ -778,7 +723,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		_ = writePendingOutput(true)
 	}
 	terminalRenderContext := func() RenderContext {
-		ctx := RenderContextFor(out)
+		ctx := renderContextFor(out)
 		_, ctx.Height = terminalSize(out)
 		ctx.Capabilities = session.caps()
 		return ctx

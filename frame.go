@@ -5,6 +5,7 @@ import (
 	"maps"
 
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/internal/sessionaccess"
 )
 
 // Frame is what View returns: rendered content plus terminal metadata.
@@ -78,21 +79,28 @@ func ComposeFrame(frame Frame, width, height int) (Frame, layout.Composition) {
 // re-delivered on the next render, so a non-converging app cannot stall.
 const maxLayoutPasses = 2
 
-// SettleFrame renders one frame the way Run does. It calls view and composes
-// a Root at width×height; while the solved rects differ from last, it
-// delivers a copy of them to handle as a LayoutEvent and renders again, at
-// most maxLayoutPasses times. It returns the frame to paint, its composition
-// (for hit-testing), and the rects last delivered, to pass back as last on
-// the next render. Frames without Root, or a nil handle, deliver nothing.
-// Hosts and test harnesses use it so every host settles layout identically.
-// Deprecated: use host.SettleFrame in host and test-driver code.
-func SettleFrame(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width, height int) (Frame, layout.Composition, map[string]layout.Rect) {
-	return settleFrame(view, handle, last, width, func(layout.Node) int { return height })
+func init() {
+	sessionaccess.RegisterHelpers(sessionaccess.Helpers{
+		SettleFrame: func(view, handle any, last map[string]layout.Rect, width, height int) (any, layout.Composition, map[string]layout.Rect) {
+			var deliver func(LayoutEvent)
+			if handle != nil {
+				deliver = handle.(func(LayoutEvent))
+			}
+			return settleFrame(view.(func() Frame), deliver, last, width, height)
+		},
+		MediaOption: func(commands, publish any) any {
+			return withHostMedia(commands.(<-chan MediaEvent), publish.(func(*NowPlaying)))
+		},
+	})
 }
 
-// settleFrame is SettleFrame with a per-root height, which inline Run needs
-// because an inline frame's height comes from its root.
-func settleFrame(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width int, heightFor func(layout.Node) int) (Frame, layout.Composition, map[string]layout.Rect) {
+func settleFrame(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width, height int) (Frame, layout.Composition, map[string]layout.Rect) {
+	return settleFrameWithHeight(view, handle, last, width, func(layout.Node) int { return height })
+}
+
+// settleFrameWithHeight supports inline frames, whose height comes from the
+// root's measured content.
+func settleFrameWithHeight(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width int, heightFor func(layout.Node) int) (Frame, layout.Composition, map[string]layout.Rect) {
 	for pass := 0; ; pass++ {
 		frame := view()
 		if frame.Root == nil {

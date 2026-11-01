@@ -11,7 +11,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 // settle sizes the textarea as a run does: compose the view at the frame
@@ -37,11 +37,15 @@ func emptyState() *State {
 
 // routed delivers ev as a host does: menu shortcuts become MenuEvents.
 func routed(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	var m flattehost.MenuHost
-	app := flatte.App[State]{State: s, Menus: Menus, ContextMenu: ContextMenu}
-	if ev, ok := flattehost.RouteMenus(&m, app, ev, 80, 24); ok {
-		Handle(s, ev, fx)
+	if key, ok := ev.(flatte.KeyEvent); ok {
+		if item, matched := flatte.MenuShortcut(Menus(s), key); matched {
+			if item.Disabled {
+				return
+			}
+			ev = flatte.MenuEvent{ID: item.ID}
+		}
 	}
+	Handle(s, ev, fx)
 }
 
 func typeRunes(s *State, text string) {
@@ -296,7 +300,7 @@ func TestRawCtrlWDeletesWordThroughRun(t *testing.T) {
 func TestEscQuits(t *testing.T) {
 	s := emptyState()
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, fx)
 	if !quit {
 		t.Fatal("esc did not quit")
@@ -388,7 +392,10 @@ func TestSuperChordsCopyCutSelectAllAndPaste(t *testing.T) {
 	typeRunes(s, "one two")
 	var clip []string
 	reads := 0
-	fx := flattehost.WithHostClipboard(flatte.Effects[State]{}, func(text string) { clip = append(clip, text) }, func() { reads++ })
+	fx := testkit.NewHarnessEffectsWithServices[State](context.Background(), nil, nil, nil, nil, nil, flatte.HostServices{
+		SetClipboard:  func(text string) { clip = append(clip, text) },
+		ReadClipboard: func() { reads++ },
+	})
 	super := func(r rune) {
 		routed(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModSuper}, fx)
 	}
@@ -430,7 +437,9 @@ func TestCopyOnSelectIsOptIn(t *testing.T) {
 		s.copyOnSelect = on
 		typeRunes(s, "hello")
 		var clip []string
-		fx := flattehost.WithHostClipboard(flatte.Effects[State]{}, func(text string) { clip = append(clip, text) }, nil)
+		fx := testkit.NewHarnessEffectsWithServices[State](context.Background(), nil, nil, nil, nil, nil, flatte.HostServices{
+			SetClipboard: func(text string) { clip = append(clip, text) },
+		})
 		drag := func(caret int, action flatte.MouseAction) {
 			Handle(s, flatte.MouseEvent{Button: flatte.MouseLeft, Action: action, Target: editorID, Caret: caret, HasCaret: true}, fx)
 		}
@@ -559,8 +568,9 @@ func TestCtrlKeysCopyCutQuitAndMoveLines(t *testing.T) {
 	typeRunes(s, "hello")
 	var clip []string
 	quit := false
-	fx := flattehost.WithHostClipboard(flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil),
-		func(text string) { clip = append(clip, text) }, nil)
+	fx := testkit.NewHarnessEffectsWithServices[State](context.Background(), nil, nil, func() { quit = true }, nil, nil, flatte.HostServices{
+		SetClipboard: func(text string) { clip = append(clip, text) },
+	})
 	ctrl := func(r rune) { routed(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModCtrl}, fx) }
 	ctrl('a')
 	if s.ta.Col() != 0 {

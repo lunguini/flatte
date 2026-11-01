@@ -7,10 +7,11 @@
 //	flatte.Run(ctx, app, window.Options{}, flatte.WithMouse(flatte.MouseModeCellMotion))
 //	flatte.Run(ctx, app, media.Controls{})                  // macOS terminal media controls
 //
-// The window driver receives a host.Session. Native callbacks send events and
-// frame requests through its non-blocking Step method; the driver keeps point
-// layout and AppKit painting on its main-thread surfaces. Custom hosts and
-// service adapters use github.com/lunguini/flatte/host.
+// Run passes the window driver a *flatte.Session. Native callbacks send events
+// and frame requests through its non-blocking Step method; the driver keeps
+// point layout and AppKit painting on its main-thread surfaces. Custom drivers
+// implement flatte.Host in the root package; see the quick reference's
+// "Writing a host" section.
 //
 // The window draws the app's Frame.Root as real components: Labels in the
 // theme's font by text role, Boxes as rounded strokes (an overlay's box as a

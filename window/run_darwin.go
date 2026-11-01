@@ -14,7 +14,6 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
-	flattehost "github.com/lunguini/flatte/host"
 	"github.com/lunguini/flatte/window/internal/appkit"
 )
 
@@ -70,7 +69,7 @@ func runPosted() {
 }
 
 // Options selects the native window host on macOS.
-func (o Options) ConfigureRun(config *flattehost.RunConfig) {
+func (o Options) ConfigureRun(config *flatte.RunConfig) {
 	config.UseHost(windowHost{options: o})
 }
 
@@ -78,12 +77,12 @@ func Supported() bool { return true }
 
 type windowHost struct{ options Options }
 
-func (h windowHost) Run(ctx context.Context, session flattehost.Session) error {
+func (h windowHost) Run(ctx context.Context, session *flatte.Session) error {
 	return run(ctx, session, h.options)
 }
 
 // run enters AppKit on the calling goroutine, which Run documents as main.
-func run(ctx context.Context, session flattehost.Session, opts Options) error {
+func run(ctx context.Context, session *flatte.Session, opts Options) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if err := loadFrameworks(); err != nil {
@@ -217,7 +216,7 @@ func (n nativeWindows) closeWindow(id string) {
 	}
 }
 
-func runWindow(ctx context.Context, session flattehost.Session, opts Options) error {
+func runWindow(ctx context.Context, session *flatte.Session, opts Options) error {
 	if err := appkit.BeginRun(); err != nil {
 		return err
 	}
@@ -273,7 +272,7 @@ func runWindow(ctx context.Context, session flattehost.Session, opts Options) er
 	}()
 	h.text = windowText{th: func() theme { return st.th }}
 	h.clip = pasteboard{}
-	if flattehost.Snapshot(session).HasNowPlaying {
+	if session.UsesNowPlaying() {
 		media, err := appkit.NewMedia(h.mediaCommand)
 		if err != nil {
 			return err
@@ -441,7 +440,7 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	cols, lines := opts.size()
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line
 	// The first frame only: async results are dropped, quitting is moot.
-	session := flattehost.NewSession(context.Background(), app)
+	session := flatte.NewSession(context.Background(), app)
 	h := newSessionHost(context.Background(), session, m, func(func()) {}, func() {}, func() {})
 	defer h.cancel()
 	defer session.Cancel()

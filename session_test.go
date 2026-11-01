@@ -121,7 +121,8 @@ func TestSessionStepOwnsCellInputUpdatesFramesAndQuit(t *testing.T) {
 		},
 	}
 	session := newSession(context.Background(), app)
-	session.UseHostServices(HostServices{CellSurface: true, DefaultQuit: true})
+	session.UseHostServices(HostServices{CellSurface: true})
+	session.useCellPolicy(sessionPolicy{defaultQuit: true})
 	session.Step(StepInput{Start: &ResizeEvent{Width: 40, Height: 12}})
 	renderContext := RenderContext{Width: 40, Height: 12}
 	initial := session.Step(StepInput{FrameDue: true, RenderContext: renderContext})
@@ -183,6 +184,61 @@ func TestSessionStepDefersPaintUntilFrameDue(t *testing.T) {
 	}
 }
 
+func TestHostStateIsAValueSnapshotAndTargetQueriesStayOnSession(t *testing.T) {
+	type state struct {
+		menus   []Menu
+		windows []Window
+		item    *NowPlaying
+		context []MenuItem
+	}
+	s := &state{
+		menus:   []Menu{{Title: "File", Items: []MenuItem{{ID: "save", Label: "Save", Keys: []KeyEvent{{Rune: 's'}}}}}},
+		windows: []Window{{ID: "secondary"}},
+		item:    &NowPlaying{Title: "Song"},
+		context: []MenuItem{{ID: "open", Label: "Open"}},
+	}
+	session := NewSession(context.Background(), App[state]{
+		State:      s,
+		Menus:      func(s *state) []Menu { return s.menus },
+		Windows:    func(s *state) []Window { return s.windows },
+		NowPlaying: func(s *state) *NowPlaying { return s.item },
+		ContextMenu: func(s *state, target string) []MenuItem {
+			if target == "row" {
+				return s.context
+			}
+			return nil
+		},
+		View: func(*state, RenderContext) Frame { return Frame{Content: "main"} },
+	})
+	defer session.Cancel()
+	session.UseHostServices(HostServices{CellSurface: true})
+	snapshot := session.State()
+	if len(snapshot.Menus) != 1 || snapshot.Menus[0].Items[0].Label != "Save" || len(snapshot.Windows) != 1 || snapshot.NowPlaying == nil || snapshot.NowPlaying.Title != "Song" {
+		t.Fatalf("state snapshot = %+v", snapshot)
+	}
+	if !session.UsesNowPlaying() {
+		t.Fatal("session did not report its NowPlaying provider")
+	}
+	contextItems := session.ContextMenu("row")
+	if len(contextItems) != 1 || contextItems[0].Label != "Open" {
+		t.Fatalf("context menu = %+v", contextItems)
+	}
+	snapshot.Menus[0].Items[0].Keys[0].Rune = 'x'
+	snapshot.Menus[0].Items[0].Label = "changed"
+	snapshot.Windows[0].ID = "changed"
+	snapshot.NowPlaying.Title = "changed"
+	contextItems[0].Label = "changed"
+	if s.menus[0].Items[0].Label != "Save" || s.menus[0].Items[0].Keys[0].Rune != 's' || s.windows[0].ID != "secondary" || s.item.Title != "Song" || s.context[0].Label != "Open" {
+		t.Fatal("host snapshot or target query exposed app-owned mutable values")
+	}
+	start := ResizeEvent{Width: 40, Height: 12}
+	session.Step(StepInput{Start: &start})
+	session.Step(StepInput{FrameDue: true, RenderContext: RenderContext{Width: 40, Height: 12}})
+	if frame, ok := session.WindowFrame("secondary"); !ok || frame.Content != "main" {
+		t.Fatalf("secondary frame = (%+v, %t)", frame, ok)
+	}
+}
+
 func TestCellDialogResizeRoutingPreservesHostMenuPolicy(t *testing.T) {
 	newCell := func(routeResize bool) *sessionCell {
 		cell := &sessionCell{dialogResizeRoutesThroughMenus: routeResize}
@@ -194,12 +250,12 @@ func TestCellDialogResizeRoutingPreservesHostMenuPolicy(t *testing.T) {
 	resize := ResizeEvent{Width: 21, Height: 9}
 
 	terminal := newCell(false)
-	if got := routeCellEvent(terminal, App[struct{}]{}, resize, ctx); len(got) != 1 || got[0] != resize || !terminal.menus.IsOpen() {
-		t.Fatalf("terminal dialog resize route = %v, menu open=%t; want resize delivered and menu retained", got, terminal.menus.IsOpen())
+	if got := routeCellEvent(terminal, App[struct{}]{}, resize, ctx); len(got) != 1 || got[0] != resize || !terminal.menus.isOpen() {
+		t.Fatalf("terminal dialog resize route = %v, menu open=%t; want resize delivered and menu retained", got, terminal.menus.isOpen())
 	}
 
 	browser := newCell(true)
-	if got := routeCellEvent(browser, App[struct{}]{}, resize, ctx); len(got) != 1 || got[0] != resize || browser.menus.IsOpen() {
-		t.Fatalf("browser dialog resize route = %v, menu open=%t; want resize delivered and menu closed", got, browser.menus.IsOpen())
+	if got := routeCellEvent(browser, App[struct{}]{}, resize, ctx); len(got) != 1 || got[0] != resize || browser.menus.isOpen() {
+		t.Fatalf("browser dialog resize route = %v, menu open=%t; want resize delivered and menu closed", got, browser.menus.isOpen())
 	}
 }

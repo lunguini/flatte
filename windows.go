@@ -55,13 +55,8 @@ type WindowEvent struct {
 
 func (WindowEvent) isEvent() {}
 
-// WindowHost is the window presentation of a host that draws secondary
-// windows itself — the terminal runtime and flatest: it draws each
-// declared window as a bordered box over the main frame, tracks which one
-// has focus, and locates mouse events in them. Host plumbing, not
-// application API. The zero value is ready.
-// Deprecated: use host.WindowHost in host implementations.
-type WindowHost struct {
+// windowHost draws secondary windows for cell hosts.
+type windowHost struct {
 	open  []*hostWindow // in declaration order: later ones are on top
 	focus string
 }
@@ -77,14 +72,13 @@ type hostWindow struct {
 }
 
 // Focus is the focused window's ID ("" the main window).
-func (wh *WindowHost) Focus() string { return wh.focus }
+func (wh *windowHost) focusID() string { return wh.focus }
 
-// SyncWindows adopts app's declared windows for a width×height screen and
+// syncWindows adopts app's declared windows for a width×height screen and
 // returns the WindowEvents that result: a newly declared window takes
 // focus; when the focused one goes, focus falls to the topmost left (or the
 // main window).
-// Deprecated: use host.SyncWindows in host implementations.
-func SyncWindows[S any](wh *WindowHost, app App[S], width, height int) []Event {
+func syncWindows[S any](wh *windowHost, app App[S], width, height int) []Event {
 	var declared []Window
 	if app.Windows != nil {
 		declared = app.Windows(app.State)
@@ -133,13 +127,12 @@ func SyncWindows[S any](wh *WindowHost, app App[S], width, height int) []Event {
 	return []Event{WindowEvent{Window: focus, Kind: WindowFocused}}
 }
 
-// PaintWindows draws app's windows over frame: each window's View, settled
+// paintWindows draws app's windows over frame: each window's View, settled
 // at its size (its LayoutEvents, with Window set, go to handle), in a
 // bordered box titled by its Frame.Title. The focused window's cursor
 // shows; the main frame's shows only while it has focus. Each View gets
 // base with its own Window, Width and Height.
-// Deprecated: use host.PaintWindows in host implementations.
-func PaintWindows[S any](wh *WindowHost, app App[S], base RenderContext, frame Frame, handle func(LayoutEvent)) Frame {
+func paintWindows[S any](wh *windowHost, app App[S], base RenderContext, frame Frame, handle func(LayoutEvent)) Frame {
 	if len(wh.open) == 0 {
 		return frame
 	}
@@ -155,7 +148,7 @@ func PaintWindows[S any](wh *WindowHost, app App[S], base RenderContext, frame F
 				handle(ev)
 			}
 		}
-		wf, comp, delivered := SettleFrame(func() Frame {
+		wf, comp, delivered := settleFrame(func() Frame {
 			ctx := base
 			ctx.Window, ctx.Width, ctx.Height = id, hw.w, hw.h
 			return app.View(app.State, ctx)
@@ -169,9 +162,9 @@ func PaintWindows[S any](wh *WindowHost, app App[S], base RenderContext, frame F
 	return frame
 }
 
-// WindowFrame is the last frame drawn for window id (composed at its size,
+// windowFrame is the last frame drawn for window id (composed at its size,
 // without the box), for tests.
-func (wh *WindowHost) WindowFrame(id string) (Frame, bool) {
+func (wh *windowHost) windowFrame(id string) (Frame, bool) {
 	for _, hw := range wh.open {
 		if hw.win.ID == id {
 			return hw.frame, true
@@ -229,7 +222,7 @@ func (hw *hostWindow) closeAt(x, y int) bool {
 // there, and tagged with the window; a press on a window (or outside every
 // window) focuses it first; a press on a close mark is a close request.
 // Other events pass unchanged. It returns the events to deliver, in order.
-func (wh *WindowHost) Route(ev Event) []Event {
+func (wh *windowHost) route(ev Event) []Event {
 	m, ok := ev.(MouseEvent)
 	if !ok || len(wh.open) == 0 {
 		return []Event{ev}
@@ -268,7 +261,7 @@ func (wh *WindowHost) Route(ev Event) []Event {
 }
 
 // origin is the screen cell of window id's content top-left.
-func (wh *WindowHost) origin(id string) (x, y int) {
+func (wh *windowHost) origin(id string) (x, y int) {
 	for _, hw := range wh.open {
 		if hw.win.ID == id {
 			return hw.x + 1, hw.y + 1
@@ -277,18 +270,16 @@ func (wh *WindowHost) origin(id string) (x, y int) {
 	return 0, 0
 }
 
-// RouteInput routes one input event the way a host that draws its own
+// routeInput routes one input event the way a host that draws its own
 // windows and menus does: through the windows (locating mouse events and
 // focusing on press), then the menus (shortcuts, context menus at the
 // pointer's screen position). It returns the events to deliver, in order.
-// Host plumbing, not application API.
-// Deprecated: use host.RouteInput in host implementations.
-func RouteInput[S any](menus *MenuHost, windows *WindowHost, app App[S], ev Event, width, height int) []Event {
+func routeInput[S any](menus *menuHost, windows *windowHost, app App[S], ev Event, width, height int) []Event {
 	var out []Event
-	for _, ev := range windows.Route(ev) {
+	for _, ev := range windows.route(ev) {
 		m, mouse := ev.(MouseEvent)
 		if !mouse || m.Window == "" {
-			if ev, ok := RouteMenus(menus, app, ev, width, height); ok {
+			if ev, ok := routeMenus(menus, app, ev, width, height); ok {
 				out = append(out, ev)
 			}
 			continue
@@ -298,7 +289,7 @@ func RouteInput[S any](menus *MenuHost, windows *WindowHost, app App[S], ev Even
 		ox, oy := windows.origin(m.Window)
 		screen := m
 		screen.X, screen.Y = m.X+ox, m.Y+oy
-		routed, ok := RouteMenus(menus, app, screen, width, height)
+		routed, ok := routeMenus(menus, app, screen, width, height)
 		switch {
 		case !ok:
 		case routed == Event(screen):

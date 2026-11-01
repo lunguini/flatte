@@ -7,7 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func TestHandleEditsFocusedFieldWithoutHiddenWidgetOwnership(t *testing.T) {
@@ -96,7 +96,7 @@ func TestAltBFMoveFocusedFieldByWord(t *testing.T) {
 func TestEscapeBlursAndQQuitsOnlyWhenBlurred(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if quit {
 		t.Fatal("q should edit focused field, not quit")

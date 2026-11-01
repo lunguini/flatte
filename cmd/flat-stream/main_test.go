@@ -8,7 +8,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func TestApplyStreamEventAppendsAndCompletes(t *testing.T) {
@@ -71,7 +71,7 @@ func TestHandleClearsAndQuits(t *testing.T) {
 	}
 
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")

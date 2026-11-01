@@ -2,6 +2,7 @@ package flatte
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -37,9 +38,49 @@ func TestEffectsSendIsSafeOnZeroAndNilUpdate(t *testing.T) {
 	}
 }
 
+func TestZeroEffectsDoesNotStartAsyncWork(t *testing.T) {
+	var fx Effects[int]
+	clock := &countingClock{}
+	fx.clock = clock
+	var started atomic.Int32
+	Go(fx, "go", func(context.Context) (int, error) {
+		started.Add(1)
+		return 0, nil
+	}, func(*int, int, error) {})
+	Latest(fx, "latest", func(context.Context) (int, error) {
+		started.Add(1)
+		return 0, nil
+	}, func(*int, int, error) {})
+	Stream(fx, "stream", func(context.Context, func(int)) {
+		started.Add(1)
+	}, func(*int, int) {})
+	if err := Every(fx, "every", time.Second, func(*int, time.Time) { started.Add(1) }); err != nil {
+		t.Fatal(err)
+	}
+	scope := NewScope(fx, "scope")
+	ScopeGo(scope, fx, func(context.Context) (int, error) {
+		started.Add(1)
+		return 0, nil
+	}, func(*int, int, error) {})
+	ScopeStream(scope, fx, func(context.Context, func(int)) { started.Add(1) }, func(*int, int) {})
+	if err := ScopeEvery(scope, fx, time.Second, func(*int, time.Time) { started.Add(1) }); err != nil {
+		t.Fatal(err)
+	}
+	if started.Load() != 0 || clock.ticks != 0 {
+		t.Fatalf("zero Effects started %d workers and registered %d ticks", started.Load(), clock.ticks)
+	}
+	if err := Every(fx, "invalid", 0, func(*int, time.Time) {}); err != ErrInvalidInterval {
+		t.Fatalf("Every with invalid interval returned %v", err)
+	}
+}
+
+type countingClock struct{ ticks int }
+
+func (c *countingClock) Tick(context.Context, time.Duration, func(time.Time)) { c.ticks++ }
+
 func TestExecWithoutATerminalReportsUnsupported(t *testing.T) {
 	updates := make(chan StateUpdate[testState], 1)
-	fx := NewHarnessEffects[testState](context.Background(), updates, nil, nil, nil)
+	fx := newHarnessEffectsForTest[testState](context.Background(), updates, nil, nil, nil)
 	var got error
 	Exec(fx, "edit", nil, func(_ *testState, err error) { got = err })
 	select {
@@ -72,7 +113,7 @@ func TestHostsReportTheirCapabilities(t *testing.T) {
 	if web.Exec || web.OpenFile || web.SaveFile || web.Quit || !web.Alert || web.Mouse {
 		t.Fatalf("browser without WithMouse = %+v", web)
 	}
-	fx := WithHostCapabilities(zero, Capabilities{Drop: true})
+	fx := withHostCapabilities(zero, Capabilities{Drop: true})
 	if !fx.Capabilities().Drop {
 		t.Fatal("WithHostCapabilities was not reported")
 	}
@@ -274,7 +315,7 @@ func (r *latestRegistry) contains(name string) bool {
 func TestWithHostClipboardRoutesClipboard(t *testing.T) {
 	var set []string
 	reads := 0
-	fx := WithHostClipboard(NewHarnessEffects[struct{}](context.Background(), nil, nil, nil, nil),
+	fx := withHostClipboard(newHarnessEffectsForTest[struct{}](context.Background(), nil, nil, nil, nil),
 		func(s string) { set = append(set, s) }, func() { reads++ })
 	fx.SetClipboard("copied")
 	fx.ReadClipboard()
@@ -282,5 +323,5 @@ func TestWithHostClipboardRoutesClipboard(t *testing.T) {
 		t.Fatalf("set %q, reads %d", set, reads)
 	}
 	// Without a host clipboard, harness effects stay no-ops.
-	NewHarnessEffects[struct{}](context.Background(), nil, nil, nil, nil).SetClipboard("x")
+	newHarnessEffectsForTest[struct{}](context.Background(), nil, nil, nil, nil).SetClipboard("x")
 }

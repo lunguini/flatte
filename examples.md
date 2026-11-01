@@ -10,9 +10,9 @@ go run ./flat-pages
 Samples with an optional `-gui` flag define it only when `window.Supported()`
 is true. Selecting it appends `window.Options` to the same `flatte.Run` call;
 without the flag, native builds use the terminal and js/wasm uses the browser.
-Custom host adapters and deterministic Effects construction use
-`github.com/lunguini/flatte/host`; ordinary app samples continue to use the
-root `flatte.Run` entry point.
+Custom host adapters implement `flatte.Host` and `flatte.Option` from the root
+package; see [Writing a host](quick-reference.md#writing-a-host). Samples and
+applications continue to use the single `flatte.Run` entry point.
 
 For native media controls in a macOS terminal, add
 `github.com/lunguini/flatte/window/media` and pass `media.Controls{}`. It can

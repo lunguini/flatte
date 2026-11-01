@@ -83,12 +83,8 @@ func sameKey(a, b KeyEvent) bool {
 	return a.Key == b.Key && unicode.ToLower(a.Rune) == unicode.ToLower(b.Rune) && a.Mod == b.Mod
 }
 
-// MenuHost is the menu presentation of a host without native menus — the
-// terminal runtime and flatest: it routes shortcuts, and it draws and drives
-// context menus itself, so apps handle menus the same way in every host. It
-// is host plumbing, not application API. The zero value is ready.
-// Deprecated: use host.MenuHost in host implementations.
-type MenuHost struct {
+// menuHost is the menu presentation used by the cell drivers.
+type menuHost struct {
 	// levels are the open context menu and its open submenus, outermost
 	// first; target is the node it was opened on.
 	levels []menuLevel
@@ -102,9 +98,7 @@ type menuLevel struct {
 	x, y, w, h, hi int
 }
 
-// RouteMenus is m.Route with app's menus for its current state.
-// Deprecated: use host.RouteMenus in host implementations.
-func RouteMenus[S any](m *MenuHost, app App[S], ev Event, width, height int) (Event, bool) {
+func routeMenus[S any](m *menuHost, app App[S], ev Event, width, height int) (Event, bool) {
 	var menus []Menu
 	if app.Menus != nil {
 		menus = app.Menus(app.State)
@@ -113,16 +107,16 @@ func RouteMenus[S any](m *MenuHost, app App[S], ev Event, width, height int) (Ev
 	if app.ContextMenu != nil {
 		context = func(target string) []MenuItem { return app.ContextMenu(app.State, target) }
 	}
-	return m.Route(ev, menus, context, width, height)
+	return m.route(ev, menus, context, width, height)
 }
 
-// IsOpen reports whether a context menu is showing.
-func (m *MenuHost) IsOpen() bool { return len(m.levels) > 0 }
+// isOpen reports whether a context menu is showing.
+func (m *menuHost) isOpen() bool { return len(m.levels) > 0 }
 
-// Close closes any open context menu.
-func (m *MenuHost) Close() { m.levels, m.target = nil, "" }
+// close closes any open context menu.
+func (m *menuHost) close() { m.levels, m.target = nil, "" }
 
-// Route takes an event before the app does, for a frame of width×height
+// route takes an event before the app does, for a frame of width×height
 // cells (mouse events already hit-tested), with the app's menu bar and
 // context menu (either may be nil).
 // It returns the event to deliver — the event itself, or a MenuEvent — and
@@ -134,8 +128,8 @@ func (m *MenuHost) Close() { m.levels, m.target = nil, "" }
 // resize closes it; other events pass. When none is open, a right press
 // opens contextMenu(target) at the pointer (if it has items), and a key
 // matching a menus shortcut becomes its MenuEvent.
-func (m *MenuHost) Route(ev Event, menus []Menu, contextMenu func(target string) []MenuItem, width, height int) (Event, bool) {
-	if m.IsOpen() {
+func (m *menuHost) route(ev Event, menus []Menu, contextMenu func(target string) []MenuItem, width, height int) (Event, bool) {
+	if m.isOpen() {
 		return m.routeOpen(ev, width, height)
 	}
 	switch e := ev.(type) {
@@ -158,7 +152,7 @@ func (m *MenuHost) Route(ev Event, menus []Menu, contextMenu func(target string)
 	return ev, true
 }
 
-func (m *MenuHost) routeOpen(ev Event, width, height int) (Event, bool) {
+func (m *menuHost) routeOpen(ev Event, width, height int) (Event, bool) {
 	top := &m.levels[len(m.levels)-1]
 	switch e := ev.(type) {
 	case KeyEvent:
@@ -178,7 +172,7 @@ func (m *MenuHost) routeOpen(ev Event, width, height int) (Event, bool) {
 		case KeyEscape, KeyCtrlC:
 			m.levels = m.levels[:len(m.levels)-1]
 			if len(m.levels) == 0 {
-				m.Close()
+				m.close()
 			}
 		}
 		return nil, false
@@ -187,7 +181,7 @@ func (m *MenuHost) routeOpen(ev Event, width, height int) (Event, bool) {
 		switch {
 		case li < 0:
 			if e.Action == MousePress {
-				m.Close()
+				m.close()
 			}
 		case e.Action == MouseMotion:
 			if row >= 0 && selectable(m.levels[li].items[row]) {
@@ -201,7 +195,7 @@ func (m *MenuHost) routeOpen(ev Event, width, height int) (Event, bool) {
 		}
 		return nil, false
 	case ResizeEvent:
-		m.Close()
+		m.close()
 	}
 	return ev, true
 }
@@ -209,7 +203,7 @@ func (m *MenuHost) routeOpen(ev Event, width, height int) (Event, bool) {
 // choose acts on item row of level li: a submenu opens beside it; an
 // enabled command closes the menu and becomes a MenuEvent. onlyOpen (→)
 // does nothing on a command.
-func (m *MenuHost) choose(li, row int, onlyOpen bool, width, height int) (Event, bool) {
+func (m *menuHost) choose(li, row int, onlyOpen bool, width, height int) (Event, bool) {
 	l := m.levels[li]
 	it := l.items[row]
 	if !selectable(it) {
@@ -225,14 +219,14 @@ func (m *MenuHost) choose(li, row int, onlyOpen bool, width, height int) (Event,
 		return nil, false
 	}
 	target := m.target
-	m.Close()
+	m.close()
 	return MenuEvent{ID: it.ID, Target: target}, true
 }
 
 // open shows items with its top-left at (x, y), kept inside width×height:
 // a context menu shifts left and up to fit; a submenu (beside parent)
 // flips to the parent's left side when it does not fit on its right.
-func (m *MenuHost) open(items []MenuItem, x, y, width, height int, parent *menuLevel) {
+func (m *menuHost) open(items []MenuItem, x, y, width, height int, parent *menuLevel) {
 	w, h := menuSize(items)
 	if x+w > width {
 		if parent != nil {
@@ -249,7 +243,7 @@ func (m *MenuHost) open(items []MenuItem, x, y, width, height int, parent *menuL
 
 // at is the level (topmost first) and item row under (x, y); level -1 is
 // outside every level, row -1 its border.
-func (m *MenuHost) at(x, y int) (level, row int) {
+func (m *menuHost) at(x, y int) (level, row int) {
 	for i := len(m.levels) - 1; i >= 0; i-- {
 		l := m.levels[i]
 		if x >= l.x && x < l.x+l.w && y >= l.y && y < l.y+l.h {
@@ -352,10 +346,10 @@ func (l menuLevel) render() string {
 	return menuBorder.Render(strings.Join(rows, "\n"))
 }
 
-// Paint draws the open context menu over frame.Content, hiding the cursor
+// paint draws the open context menu over frame.Content, hiding the cursor
 // while it shows.
-func (m *MenuHost) Paint(frame Frame) Frame {
-	if m.IsOpen() {
+func (m *menuHost) paint(frame Frame) Frame {
+	if m.isOpen() {
 		frame.Cursor = nil
 	}
 	for _, l := range m.levels {

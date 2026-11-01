@@ -15,16 +15,13 @@ type StepInput struct {
 	RenderContext  RenderContext
 }
 
-// HostState is the app-owned data a driver needs to synchronize native
-// presentation after a step. Query callbacks stay on the session loop.
+// HostState is a values-only snapshot used to synchronize host presentation
+// after a step. Target-specific lookups are Session methods.
 type HostState struct {
-	Capabilities  Capabilities
-	Menus         func() []Menu
-	Windows       func() []Window
-	NowPlaying    func() *NowPlaying
-	HasNowPlaying bool
-	ContextMenu   func(string) []MenuItem
-	WindowFrame   func(string) (Frame, bool)
+	Capabilities Capabilities
+	Menus        []Menu
+	Windows      []Window
+	NowPlaying   *NowPlaying
 }
 
 // StepResult reports whether the driver should paint, the cell frame prepared
@@ -37,8 +34,8 @@ type StepResult struct {
 }
 
 type sessionCell struct {
-	menus                          MenuHost
-	windows                        WindowHost
+	menus                          menuHost
+	windows                        windowHost
 	dialogs                        termDialogs
 	dialogResizeRoutesThroughMenus bool
 	lastComp                       layout.Composition
@@ -145,12 +142,12 @@ func routeCellEvent[S any](cell *sessionCell, app App[S], event Event, ctx Rende
 		mouse.Caret, mouse.HasCaret = cell.lastComp.CaretAt(mouse.X, mouse.Y)
 		event = mouse
 	}
-	return RouteInput(&cell.menus, &cell.windows, app, event, ctx.Width, ctx.Height)
+	return routeInput(&cell.menus, &cell.windows, app, event, ctx.Width, ctx.Height)
 }
 
 func cellFrame[S any](session *Session, app App[S], cell *sessionCell, ctx RenderContext) (Frame, bool) {
 	ctx.Capabilities = session.caps()
-	for _, event := range SyncWindows(&cell.windows, app, ctx.Width, ctx.Height) {
+	for _, event := range syncWindows(&cell.windows, app, ctx.Width, ctx.Height) {
 		session.handle(event)
 		if session.quittingNow() {
 			return Frame{}, false
@@ -162,7 +159,7 @@ func cellFrame[S any](session *Session, app App[S], cell *sessionCell, ctx Rende
 			session.handle(event)
 		}
 	}
-	frame, comp, delivered := settleFrame(
+	frame, comp, delivered := settleFrameWithHeight(
 		func() Frame { return session.view(ctx) },
 		handleLayout,
 		cell.lastLayout,
@@ -173,8 +170,8 @@ func cellFrame[S any](session *Session, app App[S], cell *sessionCell, ctx Rende
 	if session.quittingNow() {
 		return Frame{}, false
 	}
-	frame = PaintWindows(&cell.windows, app, ctx, frame, handleLayout)
-	frame = cell.menus.Paint(frame)
+	frame = paintWindows(&cell.windows, app, ctx, frame, handleLayout)
+	frame = cell.menus.paint(frame)
 	frame = cell.dialogs.paint(frame, ctx.Width, ctx.Height)
 	return frame, true
 }
@@ -204,13 +201,58 @@ func (s *Session) applyPendingBatch() int {
 func (s *Session) Step(input StepInput) StepResult { return s.step(input) }
 
 func (s *Session) State() HostState {
-	return HostState{
-		Capabilities:  s.caps(),
-		Menus:         s.menus,
-		Windows:       s.windows,
-		HasNowPlaying: s.hasNowPlaying,
-		NowPlaying:    s.nowPlaying,
-		ContextMenu:   s.contextMenu,
-		WindowFrame:   s.cell.windows.WindowFrame,
+	state := HostState{Capabilities: s.caps()}
+	if s.menus != nil {
+		state.Menus = cloneMenus(s.menus())
 	}
+	if s.windows != nil {
+		state.Windows = append([]Window(nil), s.windows()...)
+	}
+	if s.nowPlaying != nil {
+		if item := s.nowPlaying(); item != nil {
+			copy := *item
+			state.NowPlaying = &copy
+		}
+	}
+	return state
+}
+
+// UsesNowPlaying reports whether the app supplies a NowPlaying callback.
+func (s *Session) UsesNowPlaying() bool { return s.hasNowPlaying }
+
+// ContextMenu returns the current menu items for a target ID.
+func (s *Session) ContextMenu(target string) []MenuItem {
+	if s.contextMenu == nil {
+		return nil
+	}
+	return cloneMenuItems(s.contextMenu(target))
+}
+
+// WindowFrame returns the latest cell-host frame for a secondary window.
+func (s *Session) WindowFrame(id string) (Frame, bool) {
+	return s.cell.windows.windowFrame(id)
+}
+
+func cloneMenus(menus []Menu) []Menu {
+	if menus == nil {
+		return nil
+	}
+	clone := make([]Menu, len(menus))
+	for i, menu := range menus {
+		clone[i] = Menu{Title: menu.Title, Items: cloneMenuItems(menu.Items)}
+	}
+	return clone
+}
+
+func cloneMenuItems(items []MenuItem) []MenuItem {
+	if items == nil {
+		return nil
+	}
+	clone := make([]MenuItem, len(items))
+	for i, item := range items {
+		clone[i] = item
+		clone[i].Keys = append([]KeyEvent(nil), item.Keys...)
+		clone[i].Items = cloneMenuItems(item.Items)
+	}
+	return clone
 }

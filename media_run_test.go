@@ -40,7 +40,7 @@ func TestRunHostMediaLifecycle(t *testing.T) {
 
 			}
 		},
-	}, WithInput(reader), WithOutput(io.Discard), WithHostMedia(commands, func(n *NowPlaying) {
+	}, WithInput(reader), WithOutput(io.Discard), withHostMedia(commands, func(n *NowPlaying) {
 		snapshots = append(snapshots, n)
 		if n != nil && n.Title == "after" {
 			cancel()

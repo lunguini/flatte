@@ -8,8 +8,12 @@ import (
 )
 
 // Go runs work off-loop and folds its result back into state as one named
-// update through Effects-owned context and transport.
+// update through Effects-owned context and transport. A zero Effects value
+// has no update transport, so Go does not start work on it.
 func Go[S, T any](fx Effects[S], name string, work func(context.Context) (T, error), fold func(*S, T, error)) {
+	if !fx.hasUpdateTransport() {
+		return
+	}
 	fx.spawn(func() {
 		ctx := fx.Ctx()
 		value, err := work(ctx)
@@ -129,6 +133,9 @@ func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(
 	if interval <= 0 {
 		return ErrInvalidInterval
 	}
+	if !fx.hasUpdateTransport() {
+		return nil
+	}
 	clk := fx.clock
 	if clk == nil {
 		clk = realClock{}
@@ -145,6 +152,9 @@ func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(
 // emitted value becomes one named update. The source must return when its
 // context is cancelled.
 func Stream[S, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T)) {
+	if !fx.hasUpdateTransport() {
+		return
+	}
 	ctx := fx.context()
 	fx.spawn(func() {
 		source(ctx, func(value T) {
@@ -159,8 +169,12 @@ func Stream[S, T any](fx Effects[S], name string, source func(context.Context, f
 // result is dropped even if it was already queued. This replaces manual
 // generation counters for request/response races.
 //
-// On a zero Effects value (no registry) it degrades to Go.
+// Without an update transport it does nothing. With a transport but no
+// registry, it degrades to Go.
 func Latest[S, T any](fx Effects[S], name string, work func(context.Context) (T, error), fold func(*S, T, error)) {
+	if !fx.hasUpdateTransport() {
+		return
+	}
 	if fx.latest == nil {
 		Go(fx, name, work, fold)
 		return
@@ -200,6 +214,10 @@ func Cancel[S any](fx Effects[S], name string) {
 		return
 	}
 	fx.latest.cancel(name)
+}
+
+func (fx Effects[S]) hasUpdateTransport() bool {
+	return fx.updates != nil || fx.sendUpdate != nil
 }
 
 func (fx Effects[S]) context() context.Context {

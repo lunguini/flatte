@@ -51,6 +51,9 @@ func (s *Scope) Cancel() {
 // the loop goroutine as a named update. The update checks the scope again at
 // apply time, so cancelling after enqueueing cannot run a stale fold.
 func ScopeGo[S, T any](scope *Scope, fx Effects[S], work func(context.Context) (T, error), fold func(*S, T, error)) {
+	if !fx.hasUpdateTransport() {
+		return
+	}
 	fx.spawn(func() {
 		value, err := work(scope.ctx)
 		if scope.ctx.Err() != nil {
@@ -71,6 +74,9 @@ func ScopeGo[S, T any](scope *Scope, fx Effects[S], work func(context.Context) (
 // both the source's context and the send-channel select see the cancellation;
 // an update already queued at cancellation time is discarded on apply.
 func ScopeStream[S, T any](scope *Scope, fx Effects[S], source func(context.Context, func(T)), fold func(*S, T)) {
+	if !fx.hasUpdateTransport() {
+		return
+	}
 	fx.spawn(func() {
 		source(scope.ctx, func(value T) {
 			update := Named(scope.name+":stream", func(state *S) {
@@ -92,6 +98,9 @@ func ScopeStream[S, T any](scope *Scope, fx Effects[S], source func(context.Cont
 func ScopeEvery[S any](scope *Scope, fx Effects[S], interval time.Duration, fold func(*S, time.Time)) error {
 	if interval <= 0 {
 		return ErrInvalidInterval
+	}
+	if !fx.hasUpdateTransport() {
+		return nil
 	}
 	clk := fx.clock
 	if clk == nil {

@@ -23,12 +23,6 @@ import (
 )
 ```
 
-Only host implementations need `github.com/lunguini/flatte/host`:
-
-```go
-import "github.com/lunguini/flatte/host"
-```
-
 ## One app, three hosts
 
 Keep application state, `Handle`, and `View` in `app.go`. The same entry point
@@ -83,23 +77,49 @@ window host connects media whenever `App.NowPlaying` is set. On other platforms
 `media.Controls{}` has no effect. Conflicting window-host options still return
 `flatte.ErrMultipleHosts`. A native window must be started from the main goroutine.
 
-Host authors implement `host.Host` and `host.Option`; the host-facing aliases
-and helpers live in `github.com/lunguini/flatte/host`. `host.RunConfig` is
-opaque; `UseHost` selects the host driver. `host.Session` is non-generic and
-exposes `Step`, `State`, `Updates`, `UseHostServices`, and `Cancel` without
-exposing `App[S]` or its Effects. The driver owns its wait mechanism: it passes
-events, resize, update-ready, frame-due, or quit signals to non-blocking `Step`.
-When `StepResult.Paint` is true, cell hosts paint `StepResult.Frame`; graphical
-hosts receive the current `Frame` for their own surface context. Use
-`host.Snapshot(session)` when a native host needs app menus, secondary windows,
-or Now Playing metadata after a step.
+## Writing a host
 
-Use `host.WithHostClipboard`, `host.WithHostDialogs`,
-`host.WithHostNotifications`, and `host.WithHostDesktop` in custom host code.
-Deterministic host drivers can use `host.NewHarnessEffects` or
-`host.NewHarnessEffectsQueue`. The corresponding root helpers remain for source
-compatibility. Offscreen hosts use `host.NewSession` and `host.CloseSession`;
-the root `flatte.NewSession` constructor remains as a deprecated shim.
+Host code lives in the root `flatte` package contract. Implement `Host` and
+`Option`; `RunConfig` is opaque and `UseHost` selects the driver. Root
+`Run` creates the non-generic `*Session` and owns its cleanup and `OnExit`
+callback. The driver owns waiting and passes the resulting events, updates,
+resize, frame deadline, or quit request to non-blocking `Session.Step`.
+
+`Session` exposes `Step`, `State`, `Updates`, `UseHostServices`,
+`Cancel`, `ContextMenu(target)`, `UsesNowPlaying()`, and
+`WindowFrame(id)`. `State` returns copied values for capabilities, menus,
+windows, and Now Playing; target-specific queries stay on the session.
+`HostServices` installs capabilities and optional clipboard, dialog,
+notification, desktop, and media callbacks. Set `CellSurface` for a host that
+uses the shared cell menu, dialog, and secondary-window presentation.
+
+The exported contract names are `Host`, `Option`, `RunConfig`,
+`ErrMultipleHosts`, `NewSession`, `Session`, `HostServices`,
+`HostState`, `StepInput`, and `StepResult`. `Host.Run` takes
+`context.Context` and `*Session`; `Option.ConfigureRun` receives
+`*RunConfig`; the config provides `UseHost` and `UseFallbackHost`.
+
+The value fields are:
+
+- `HostServices`: `Capabilities`, `SetClipboard`, `ReadClipboard`,
+  `ShowDialog`, `Notify`, `Desktop`, `CellSurface`, and
+  `PublishMedia`.
+- `HostState`: `Capabilities`, `Menus`, `Windows`, and `NowPlaying`.
+- `StepInput`: `Events`, `Resize`, `Start`, `UpdatesPending`,
+  `FrameDue`, `Quit`, and `RenderContext`.
+- `StepResult`: `Frame`, `Paint`, `Dirty`, and `Quit`.
+
+`StepInput` carries events, startup or resize information, whether updates are
+pending, whether a frame is due, and the view's `RenderContext`.
+`StepResult` reports whether to paint, the prepared cell frame, whether the
+state is dirty, and whether the session should stop. A graphical host uses the
+step result and its current `RenderContext` to draw its own surface.
+
+Offscreen hosts that create a session outside `Run` can use
+`flatte.NewSession`; call `Cancel` when finished. `UseFallbackHost` is
+reserved for an optional driver that should run only when no ordinary host was
+selected, as with `window/media.Controls{}`. Conflicting ordinary hosts return
+`flatte.ErrMultipleHosts`.
 
 An option selects a driver, and the driver calls Step after its own wait:
 
@@ -108,7 +128,6 @@ import (
 	"context"
 
 	"github.com/lunguini/flatte"
-	"github.com/lunguini/flatte/host"
 )
 
 type customHost struct {
@@ -119,18 +138,18 @@ type customHost struct {
 
 type customOption struct{ Host customHost }
 
-func (o customOption) ConfigureRun(c *host.RunConfig) {
+func (o customOption) ConfigureRun(c *flatte.RunConfig) {
 	c.UseHost(o.Host)
 }
 
-func (h customHost) Run(ctx context.Context, s host.Session) error {
-	s.UseHostServices(host.Services{CellSurface: true})
+func (h customHost) Run(ctx context.Context, s *flatte.Session) error {
+	s.UseHostServices(flatte.HostServices{CellSurface: true})
 	start := flatte.ResizeEvent{Width: 80, Height: 24}
-	if s.Step(host.StepInput{Start: &start}).Quit {
+	if s.Step(flatte.StepInput{Start: &start}).Quit {
 		return nil
 	}
 	view := flatte.RenderContext{Width: 80, Height: 24}
-	initial := s.Step(host.StepInput{FrameDue: true, RenderContext: view})
+	initial := s.Step(flatte.StepInput{FrameDue: true, RenderContext: view})
 	if initial.Paint {
 		h.Paint(initial.Frame)
 	}
@@ -138,14 +157,14 @@ func (h customHost) Run(ctx context.Context, s host.Session) error {
 	for {
 		select {
 		case <-ctx.Done():
-			s.Step(host.StepInput{Quit: true})
+			s.Step(flatte.StepInput{Quit: true})
 			return nil // Run calls Session cleanup after the driver returns.
 		case event, ok := <-events:
 			if !ok {
 				events = nil
 				continue
 			}
-			r := s.Step(host.StepInput{
+			r := s.Step(flatte.StepInput{
 				Events: []flatte.Event{event}, UpdatesPending: true, FrameDue: true,
 				RenderContext: flatte.RenderContext{Width: 80, Height: 24},
 			})
@@ -161,7 +180,7 @@ func (h customHost) Run(ctx context.Context, s host.Session) error {
 				continue
 			}
 			view.Width, view.Height = size.Width, size.Height
-			r := s.Step(host.StepInput{
+			r := s.Step(flatte.StepInput{
 				Resize: &size, UpdatesPending: true, FrameDue: true, RenderContext: view,
 			})
 			if r.Quit {
@@ -171,7 +190,7 @@ func (h customHost) Run(ctx context.Context, s host.Session) error {
 				h.Paint(r.Frame)
 			}
 		case <-s.Updates():
-			r := s.Step(host.StepInput{
+			r := s.Step(flatte.StepInput{
 				UpdatesPending: true, FrameDue: true,
 				RenderContext: flatte.RenderContext{Width: 80, Height: 24},
 			})
@@ -412,8 +431,9 @@ under the pointer (and `TargetRect` with that node's solved rect) — so `View`
 needs no size bookkeeping and `Handle` needs no hit-test solve. Before
 painting, it delivers a `LayoutEvent` whenever the solved rects changed (see
 [Geometry in state](#geometry-in-state)). `flatest.Driver` does all of this the
-same way, at its width and the last `ResizeEvent` height. A host composing an
-app inside another surface can use `host.SettleFrame` (and `flatte.ComposeFrame`).
+same way, at its width and the last `ResizeEvent` height. To preview one frame
+outside a driver, use `flatte.ComposeFrame`; a host that owns app dispatch
+should drive it through `Session.Step`.
 
 Call the solver yourself when you need the geometry somewhere else:
 
@@ -855,10 +875,10 @@ err := flatte.Run(ctx, app, window.Options{Theme: &th})
 
 Application code should use the helpers below. The deprecated raw-channel
 `Async` bridge was removed in the 2026-08 breaking stabilization increment;
-use `Go` or off-loop `Effects.Send`. `host.NewHarnessEffects` and
-`host.NewHarnessEffectsQueue` are test-only construction seams for external
-deterministic drivers, not app APIs. Root names remain deprecated compatibility
-shims.
+use `Go` or off-loop `Effects.Send`. For direct callback-level tests,
+`flatest.NewHarnessEffects` and `flatest.NewHarnessEffectsQueue` construct
+test Effects; prefer `flatest.Start` when testing a complete app. A zero
+`Effects` value has no update transport, so async helpers do not start work.
 
 | If you need... | Use... | Notes |
 |---|---|---|
@@ -873,7 +893,7 @@ shims.
 | Print above inline frame | `fx.Print(...)` / `fx.Printf(...)` | Requires `flatte.WithInline()`. |
 | Shell out to editor/tool | `flatte.Exec(fx, name, cmd, fold)` | Releases terminal, runs command, restores. |
 | File picker | `flatte.SelectFile(fx, name, cmd, fold)` | App chooses command; `cmd/flat-file-select` shows platform picker selection. |
-| Clipboard write/read | `fx.SetClipboard`, `fx.ReadClipboard`, `flatte.ClipboardEvent` | Reads are best-effort; unsupported terminals may never answer. A window uses the system pasteboard (custom hosts route it with `host.WithHostClipboard`). Pastes arrive as `PasteEvent` (⌘V in a window). |
+| Clipboard write/read | `fx.SetClipboard`, `fx.ReadClipboard`, `flatte.ClipboardEvent` | Reads are best-effort; unsupported terminals may never answer. A window uses the system pasteboard; custom hosts install clipboard callbacks with `Session.UseHostServices`. Pastes arrive as `PasteEvent` (⌘V in a window). |
 | Notifications | `fx.Notify(flatte.Notification{Title, Body})` | Fire and forget, no answer. A window posts a system notification; a terminal emits OSC 9 (iTerm2, Ghostty, WezTerm), OSC 99 (kitty) or OSC 777 (foot, rxvt), wrapped for tmux (needs `allow-passthrough`); others ignore it. The framework never decides when: track `FocusEvent` (`WithReportFocus` in a terminal; a window always sends it when the app comes to or leaves the front) to notify only while away. flatest records them: `d.Notifications()`. |
 | Suspend | `fx.Suspend()` | Releases and restores terminal state; Unix sends job-control suspend when supported. Apps should not assume a process stop on platforms without job control. |
 
@@ -1014,6 +1034,7 @@ Terminal applications can opt into native media controls with
 `App.NowPlaying` and `MediaEvent` without opening a window. On macOS call it
 from the main goroutine; on other platforms the option is ignored. Passing
 `media.Controls{}` with `window.Options` is also allowed; the window host
-connects media when `App.NowPlaying` is set. Custom hosts can connect
-`host.WithHostMedia(commands, publish)`; publishing runs on the state loop
+connects media when `App.NowPlaying` is set. A custom host checks
+`Session.UsesNowPlaying()`, reads the current item from `Session.State()`,
+and installs `HostServices.PublishMedia`; publishing runs on the state loop
 and must return promptly.

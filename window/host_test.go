@@ -9,7 +9,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
-	flattehost "github.com/lunguini/flatte/host"
+	"github.com/lunguini/flatte/internal/sessionaccess"
 )
 
 // cellMetrics: 8pt columns, 16pt lines, 4pt steps, 1pt border; text as
@@ -91,11 +91,11 @@ func testApp(s *testState) flatte.App[testState] {
 }
 
 func newHost[S any](ctx context.Context, app flatte.App[S], m layout.Metrics, post func(func()), stop, invalidate func()) *host {
-	return newSessionHost(ctx, flattehost.NewSession(ctx, app), m, post, stop, invalidate)
+	return newSessionHost(ctx, flatte.NewSession(ctx, app), m, post, stop, invalidate)
 }
 
-func closeTestSession(session flattehost.Session) {
-	flattehost.CloseSession(session)
+func closeTestSession(session *flatte.Session) {
+	sessionaccess.Close(session)
 }
 
 func newTestHost(t *testing.T, s *testState) (*host, *fakeBackend) {

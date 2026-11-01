@@ -17,7 +17,7 @@ import (
 	"github.com/lunguini/flatte/flatest"
 	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func resizedState(width, height int) *State {
@@ -199,7 +199,7 @@ func TestNumberKeysSwitchScreens(t *testing.T) {
 func TestQQuits(t *testing.T) {
 	s := resizedState(80, 24)
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	send(s, keyChar('q'), fx)
 	if !quit {
 		t.Fatal("q did not quit")
@@ -1545,7 +1545,7 @@ func TestStatsTickSidestepUpdatesCurrentContainerOnly(t *testing.T) {
 func TestScopedLogsRestartOnSelectionChange(t *testing.T) {
 	s := resizedState(80, 24)
 	ctx := context.Background()
-	fx := flattehost.NewHarnessEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {}, nil, nil)
+	fx := testkit.NewHarnessEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {}, nil, nil)
 	// Initial streamer for first container
 	s.containers.startScopedLogs(s, fx)
 	if s.containers.logScope == nil {
@@ -1640,7 +1640,7 @@ func TestCancelledQueuedLogDoesNotDuplicateDisplayedSequence(t *testing.T) {
 	id := sampleContainers[0].ID
 	state := State{containers: c}
 	var updates []flatte.StateUpdate[State]
-	fx := flattehost.NewHarnessEffectsQueue(context.Background(), func(update flatte.StateUpdate[State]) bool {
+	fx := testkit.NewHarnessEffectsQueue(context.Background(), func(update flatte.StateUpdate[State]) bool {
 		updates = append(updates, update)
 		return true
 	}, func() {}, func(run func()) { run() }, nil)
@@ -1681,7 +1681,7 @@ func TestScopedLogsCancelReleasesGoroutine(t *testing.T) {
 	s := resizedState(80, 24)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	fx := flattehost.NewHarnessEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {}, nil, nil)
+	fx := testkit.NewHarnessEffects[State](ctx, make(chan flatte.StateUpdate[State], 100), func() {}, nil, nil)
 	s.containers.startScopedLogs(s, fx)
 	done := make(chan struct{})
 	go func() {

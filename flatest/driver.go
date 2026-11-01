@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/lunguini/flatte"
-	flattehost "github.com/lunguini/flatte/host"
+	"github.com/lunguini/flatte/internal/sessionaccess"
 )
 
 // Driver runs a flatte.App synchronously for tests. App-triggered async
@@ -18,16 +18,15 @@ import (
 // with Advance. The width is fixed so frames are deterministic.
 type Driver[S any] struct {
 	app       flatte.App[S]
-	session   flattehost.Session
-	hostState flattehost.State
+	session   *flatte.Session
 	width     int
 	height    int // from the last ResizeEvent; Root frames compose at width×height
 	graphical bool
-	updates   []flatte.StateUpdate[S]
+	caps      flatte.Capabilities
 	clock     *fakeClock
 	pending   []func()
 	quit      bool
-	fx        flatte.Effects[S]
+	close     func()
 	// dialogs are the dialogs the app asked for that the test has not
 	// answered, oldest first.
 	dialogs []pendingDialog
@@ -61,44 +60,29 @@ func StartWith[S any](app flatte.App[S], opts Options) *Driver[S] {
 		width:     opts.Width,
 		height:    opts.Height,
 		graphical: opts.Graphical,
-		updates:   make([]flatte.StateUpdate[S], 0, 64),
+		caps:      opts.Capabilities,
 		clock:     newFakeClock(),
 	}
-	// One Effects for the whole session: the latest registry (and thus
-	// Latest's cross-event supersede) must persist across events, exactly
-	// like Run's single long-lived Effects.
-	d.fx = flattehost.NewHarnessEffectsQueue(
-		context.Background(), func(update flatte.StateUpdate[S]) bool {
-			d.updates = append(d.updates, update)
-			return true
+	d.session = flatte.NewSession(context.Background(), app)
+	access, ok := sessionaccess.For(d.session)
+	if !ok {
+		panic("flatest: session access was not registered")
+	}
+	d.close = access.Close
+	access.SetAsync(func(f func()) { d.pending = append(d.pending, f) }, d.clock)
+	sessionaccess.Unregister(d.session)
+	d.session.UseHostServices(flatte.HostServices{
+		Capabilities: opts.Capabilities,
+		CellSurface:  true,
+		ShowDialog: func(dialog flatte.Dialog, done func(flatte.DialogResult)) {
+			d.dialogs = append(d.dialogs, pendingDialog{dialog, done})
 		},
-		func() { d.quit = true },
-		func(f func()) { d.pending = append(d.pending, f) },
-		d.clock,
-	)
-	d.fx = flattehost.WithHostDialogs(d.fx, func(dg flatte.Dialog, done func(flatte.DialogResult)) {
-		d.dialogs = append(d.dialogs, pendingDialog{dg, done})
+		Notify: func(notification flatte.Notification) {
+			d.notifications = append(d.notifications, notification)
+		},
 	})
-	d.fx = flattehost.WithHostNotifications(d.fx, func(n flatte.Notification) {
-		d.notifications = append(d.notifications, n)
-	})
-	d.fx = flattehost.WithHostCapabilities(d.fx, opts.Capabilities)
-	sessionApp := app
-	sessionApp.Init = func(s *S, _ flatte.Effects[S]) {
-		if app.Init != nil {
-			app.Init(s, d.fx)
-		}
-	}
-	sessionApp.Handle = func(s *S, ev flatte.Event, _ flatte.Effects[S]) {
-		if app.Handle != nil {
-			app.Handle(s, ev, d.fx)
-		}
-		d.drain()
-	}
-	d.session = flattehost.NewSession(context.Background(), sessionApp)
-	d.session.UseHostServices(flattehost.Services{Capabilities: opts.Capabilities, CellSurface: true})
-	d.session.Step(flattehost.StepInput{Start: &flatte.ResizeEvent{Width: opts.Width, Height: opts.Height}})
-	d.hostState = flattehost.Snapshot(d.session)
+	initial := flatte.ResizeEvent{Width: opts.Width, Height: opts.Height}
+	d.stepResult(d.session.Step(flatte.StepInput{Start: &initial, UpdatesPending: true}))
 	d.render()
 	return d
 }
@@ -125,8 +109,8 @@ func (d *Driver[S]) Send(ev flatte.Event) flatte.Frame {
 
 // render asks the shared session step core to settle and paint a cell frame.
 func (d *Driver[S]) render() flatte.Frame {
-	result := d.session.Step(flattehost.StepInput{FrameDue: true, RenderContext: d.renderContext()})
-	d.hostState = flattehost.Snapshot(d.session)
+	result := d.session.Step(flatte.StepInput{FrameDue: true, RenderContext: d.renderContext()})
+	d.stepResult(result)
 	return result.Frame
 }
 
@@ -136,18 +120,15 @@ func (d *Driver[S]) step(ev flatte.Event) {
 		d.width = e.Width
 		d.height = e.Height
 	}
-	d.session.Step(flattehost.StepInput{Events: []flatte.Event{ev}, RenderContext: d.renderContext()})
+	d.stepResult(d.session.Step(flatte.StepInput{Events: []flatte.Event{ev}, UpdatesPending: true, RenderContext: d.renderContext()}))
 }
 
-// drain applies every queued update to completion — the harness is
-// synchronous, so there is no per-frame cap like Run's drainUpdates.
-func (d *Driver[S]) drain() {
-	for len(d.updates) > 0 {
-		u := d.updates[0]
-		d.updates[0] = nil
-		d.updates = d.updates[1:]
-		flatte.ApplyUpdate(d.app.State, d.app.Tracer, u)
-	}
+func (d *Driver[S]) stepResult(result flatte.StepResult) {
+	d.quit = result.Quit
+}
+
+func (d *Driver[S]) applyUpdates() {
+	d.stepResult(d.session.Step(flatte.StepInput{UpdatesPending: true, RenderContext: d.renderContext()}))
 }
 
 // Settle runs every pending async body (to fixpoint — a body may dispatch
@@ -161,7 +142,7 @@ func (d *Driver[S]) Settle() flatte.Frame {
 		d.pending = nil
 		for _, f := range batch {
 			f()
-			d.drain()
+			d.applyUpdates()
 		}
 	}
 	return d.render()
@@ -171,7 +152,7 @@ func (d *Driver[S]) Settle() flatte.Frame {
 // updates), then settles any async those ticks triggered.
 func (d *Driver[S]) Advance(by time.Duration) flatte.Frame {
 	d.clock.advance(by)
-	d.drain()
+	d.applyUpdates()
 	return d.Settle()
 }
 
@@ -186,10 +167,7 @@ func (d *Driver[S]) Frame() flatte.Frame {
 // when the app does not declare it. Mouse events for it are sent in screen
 // cells, as a terminal reports them: over its box in Frame.
 func (d *Driver[S]) WindowFrame(id string) (frame flatte.Frame, ok bool) {
-	if d.hostState.WindowFrame == nil {
-		return flatte.Frame{}, false
-	}
-	return d.hostState.WindowFrame(id)
+	return d.session.WindowFrame(id)
 }
 
 // Frames runs the driver through a sequence of steps and returns the
@@ -234,7 +212,7 @@ func (d *Driver[S]) Answer(r flatte.DialogResult) flatte.Frame {
 	p := d.dialogs[0]
 	d.dialogs = d.dialogs[1:]
 	p.done(r)
-	d.drain()
+	d.applyUpdates()
 	return d.render()
 }
 
@@ -247,10 +225,13 @@ func (d *Driver[S]) Quit() bool { return d.quit }
 // Close calls the app's OnExit hook, mirroring what Run does on loop exit.
 // Call it at the end of a test to verify state-save callbacks.
 func (d *Driver[S]) Close() {
-	flattehost.CloseSession(d.session)
+	if d.close != nil {
+		d.close()
+		d.close = nil
+	}
 }
 
 // renderContext is what View sees: the driver's size and render context.
 func (d *Driver[S]) renderContext() flatte.RenderContext {
-	return flatte.RenderContext{Width: d.width, Height: d.height, Graphical: d.graphical, Capabilities: d.fx.Capabilities()}
+	return flatte.RenderContext{Width: d.width, Height: d.height, Graphical: d.graphical, Capabilities: d.caps}
 }

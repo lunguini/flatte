@@ -11,7 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
-	flattehost "github.com/lunguini/flatte/host"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func TestVimKeysMoveCursor(t *testing.T) {
@@ -58,7 +58,7 @@ func TestHandleEnterSelectsCursorModel(t *testing.T) {
 func TestQQuits(t *testing.T) {
 	state := State{models: []string{"haiku"}}
 	var quit bool
-	fx := flattehost.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {

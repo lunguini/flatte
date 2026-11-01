@@ -68,14 +68,32 @@ func TestPublicAPISnapshotIncludesContracts(t *testing.T) {
 		"method *Session.Step(input StepInput) StepResult",
 		"method *Session.Updates() <-chan struct{}",
 		"method *Session.UseHostServices(services HostServices)",
-		"host package host",
-		"func Snapshot(session Session) State",
+		"method *Session.ContextMenu(target string)[]MenuItem",
+		"method *Session.UsesNowPlaying() bool",
+		"method *Session.WindowFrame(id string)(Frame, bool)",
+		"struct HostServices fields=8 comparable=false",
+		"struct HostState fields=4 comparable=false",
 		"field KeyEvent.Rune rune [order=1]",
 		"method Mod.Contains(mods Mod) bool",
 		"interface Event method isEvent()",
 	} {
 		if !strings.Contains(items, want) {
 			t.Errorf("API snapshot does not include %q", want)
+		}
+	}
+	rootItems := strings.SplitN(items, "\nflatest package ", 2)[0]
+	for _, removed := range []string{
+		"func NewHarnessEffects",
+		"func WithHost",
+		"func SettleFrame",
+		"func RouteInput",
+		"func PaintWindows",
+		"type MenuHost",
+		"type WindowHost",
+		"host package host",
+	} {
+		if strings.Contains(rootItems, removed) {
+			t.Errorf("superseded host plumbing remains exported: %q", removed)
 		}
 	}
 	value := constant.MakeFromLiteral("1.234567890123456789", token.FLOAT, 0)

@@ -4,18 +4,17 @@ import (
 	"context"
 	"maps"
 	"sync"
+
+	"github.com/lunguini/flatte/internal/sessionaccess"
 )
 
-// Host is a host-plumbing interface for a platform driver selected by an
-// Option. Application code should call Run instead of implementing Host.
+// Host runs an App through a platform-specific driver selected by Run.
 type Host interface {
 	Run(context.Context, *Session) error
 }
 
-// HostServices is the set of optional services a host provides to a Session.
-// It is host plumbing; applications use Effects.
-//
-// Deprecated: use host.Services in host implementations.
+// HostServices installs optional capabilities and services before a Session's
+// first step. Apps use Effects for these operations.
 type HostServices struct {
 	Capabilities  Capabilities
 	SetClipboard  func(string)
@@ -24,18 +23,17 @@ type HostServices struct {
 	Notify        func(Notification)
 	Desktop       func(DesktopCommand)
 	// CellSurface enables the shared cell input, layout, dialog, menu, and
-	// secondary-window rules. Native graphical hosts leave it false.
+	// secondary-window rules. Graphical hosts leave it false.
 	CellSurface bool
-	// DefaultQuit makes Ctrl+C end the session before it reaches App.Handle.
-	DefaultQuit bool
-	// Inline makes cell root frames use their measured content height.
-	Inline bool
-	// DialogResizeRoutesThroughMenus preserves a host where a resize that
-	// passes through an open cell dialog also reaches open cell menus.
-	DialogResizeRoutesThroughMenus bool
 	// PublishMedia receives the app's current media snapshot after a painted
 	// frame. A nil snapshot clears the host's published item.
 	PublishMedia func(*NowPlaying)
+}
+
+type sessionPolicy struct {
+	defaultQuit                    bool
+	inline                         bool
+	dialogResizeRoutesThroughMenus bool
 }
 
 // Session is the non-generic, minimal host driver handle for one App[S].
@@ -71,9 +69,8 @@ type Session struct {
 	cell          *sessionCell
 }
 
-// NewSession wraps an app for use by a Host. Run normally constructs sessions
-// itself; this constructor is also useful to offscreen host adapters.
-// Deprecated: use host.NewSession in host implementations.
+// NewSession wraps an app for an offscreen host. Run constructs sessions
+// itself for hosts selected through an Option.
 func NewSession[S any](ctx context.Context, app App[S]) *Session { return newSession(ctx, app) }
 
 func newSession[S any](ctx context.Context, app App[S]) *Session {
@@ -141,21 +138,18 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 	s.trace = func(ev Event) { app.Tracer.Event(ev) }
 	s.view = func(ctx RenderContext) Frame { return app.View(app.State, ctx) }
 	s.services = func(host HostServices) {
-		fx = WithHostCapabilities(fx, host.Capabilities)
-		fx = WithHostClipboard(fx, host.SetClipboard, host.ReadClipboard)
+		fx = withHostCapabilities(fx, host.Capabilities)
+		fx = withHostClipboard(fx, host.SetClipboard, host.ReadClipboard)
 		if host.ShowDialog != nil {
-			fx = WithHostDialogs(fx, host.ShowDialog)
+			fx = withHostDialogs(fx, host.ShowDialog)
 		}
 		if host.Notify != nil {
-			fx = WithHostNotifications(fx, host.Notify)
+			fx = withHostNotifications(fx, host.Notify)
 		}
 		if host.Desktop != nil {
-			fx = WithHostDesktop(fx, host.Desktop)
+			fx = withHostDesktop(fx, host.Desktop)
 		}
 		s.cellSurface = host.CellSurface
-		s.defaultQuit = host.DefaultQuit
-		s.inline = host.Inline
-		s.cell.dialogResizeRoutesThroughMenus = host.DialogResizeRoutesThroughMenus
 		s.publishMedia = host.PublishMedia
 	}
 	s.caps = func() Capabilities { return fx.Capabilities() }
@@ -190,6 +184,63 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 		return app.NowPlaying(app.State)
 	}
 	s.step = func(input StepInput) StepResult { return stepSession(s, app, s.cell, input) }
+	sessionaccess.Register(s, sessionaccess.Access{
+		SetAsync: func(dispatch func(func()), clock sessionaccess.Clock) {
+			fx.dispatch, fx.clock = dispatch, clock
+		},
+		ConfigureTests: func(config sessionaccess.HarnessEffects) {
+			if config.Context != nil {
+				fx.ctx = config.Context
+			}
+			if config.Updates != nil {
+				updates, ok := config.Updates.(chan<- StateUpdate[S])
+				if !ok {
+					panic("flatte: invalid harness update channel")
+				}
+				fx.updates = updates
+			}
+			fx.sendUpdate = nil
+			if config.SendUpdate != nil {
+				fx.updates = nil
+				fx.sendUpdate = func(ctx context.Context, update StateUpdate[S]) bool {
+					return config.SendUpdate(ctx, update)
+				}
+			}
+			fx.quit, fx.dispatch, fx.clock = config.Quit, config.Dispatch, config.Clock
+			if caps, ok := config.Capabilities.(Capabilities); ok {
+				fx.caps = caps
+			}
+			fx.setClipboard, fx.readClipboard = config.SetClipboard, config.ReadClipboard
+			fx.dialogs = nil
+			if config.ShowDialog != nil {
+				fx.dialogs = func(dialog Dialog, done func(DialogResult)) {
+					config.ShowDialog(dialog, func(result any) { done(result.(DialogResult)) })
+				}
+			}
+			fx.notify = nil
+			if config.Notify != nil {
+				fx.notify = func(notification Notification) { config.Notify(notification) }
+			}
+			fx.desktop = nil
+			if config.Desktop != nil {
+				fx.desktop = func(command DesktopCommand) { config.Desktop(command) }
+			}
+		},
+		Close: s.close,
+		RunTerminal: func(ctx context.Context, media sessionaccess.Media) error {
+			if s.runTerminal == nil {
+				return ErrUnsupported
+			}
+			if media.Commands == nil && media.Publish == nil {
+				return s.runTerminal(ctx)
+			}
+			option := optionFunc(func(config *runConfig) {
+				config.mediaCommands = media.Commands.(<-chan MediaEvent)
+				config.publishMedia = media.Publish.(func(*NowPlaying))
+			})
+			return s.runTerminal(ctx, option)
+		},
+	})
 	return s
 }
 
@@ -218,40 +269,33 @@ func (s *Session) quittingNow() bool {
 	return s.quitting
 }
 
-// UseHostServices installs the host's capabilities and optional callbacks.
-// Call it before the first StepInput.Start.
+// UseHostServices installs a host's capabilities and optional services. Call
+// it before the first StepInput.Start.
 func (s *Session) UseHostServices(services HostServices) { s.services(services) }
+
+func (s *Session) useCellPolicy(policy sessionPolicy) {
+	s.defaultQuit = policy.defaultQuit
+	s.inline = policy.inline
+	s.cell.dialogResizeRoutesThroughMenus = policy.dialogResizeRoutesThroughMenus
+}
 
 // close calls the app's cleanup hook once and cancels Effects work. Run owns
 // this call for selected hosts.
 func (s *Session) close() {
 	s.exitOnce.Do(func() {
 		defer s.cancel()
+		defer sessionaccess.Unregister(s)
 		if s.onExit != nil {
 			s.onExit()
 		}
 	})
 }
 
-// Cancel stops Effects work without calling the app's OnExit hook. Snapshot
-// uses it after rendering a frame.
-func (s *Session) Cancel() { s.cancel() }
-
-// RunTerminal is the terminal-only hook used by a host that wraps the terminal
-// driver with native services. It is kept as a free function so it is not part
-// of Session's common driver contract.
-// Deprecated: use host.RunTerminal.
-func RunTerminal(ctx context.Context, s *Session, options ...Option) error {
-	if s.runTerminal == nil {
-		return ErrUnsupported
-	}
-	return s.runTerminal(ctx, options...)
+// Cancel stops Effects work without calling the app's OnExit hook.
+func (s *Session) Cancel() {
+	s.cancel()
+	sessionaccess.Unregister(s)
 }
-
-// CloseSession runs app cleanup and cancels Effects work for an offscreen
-// session. Run owns cleanup for selected hosts.
-// Deprecated: use host.CloseSession.
-func CloseSession(s *Session) { s.close() }
 
 func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool, error) {
 	if config.err != nil {
