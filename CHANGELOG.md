@@ -4,6 +4,17 @@ Generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [release-please](https://github.com/googleapis/release-please); entries
 below the first release are automated.
 
+## [0.2.0](https://github.com/lunguini/flatte/compare/v0.1.2...v0.2.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* flatte.Option is now an interface, the host package is removed in favour of the root driver contract, Alert folds receive an error, unsupported effects report ErrUnsupported, and flatest starts apps with StartWith and Options.
+
+### Features
+
+* GUI and browser hosts ([#23](https://github.com/lunguini/flatte/issues/23)) ([09ef94a](https://github.com/lunguini/flatte/commit/09ef94abe41a22aefbeab345664cf6d2390d5783))
+
 ## [0.1.2](https://github.com/lunguini/flatte/compare/v0.1.1...v0.1.2) (2026-08-16)
 
 
