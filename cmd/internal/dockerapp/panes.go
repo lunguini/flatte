@@ -1,10 +1,14 @@
 package dockerapp
 
 import (
+	"slices"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -19,73 +23,6 @@ const (
 type splitDrag struct {
 	startX     int
 	startWidth int
-}
-
-// solveScreenRects solves a screen's body subtree and returns its geometry in
-// absolute frame coordinates by offsetting the origin-based solve to the body
-// rect. Used by the resize and drag paths, which derive geometry without going
-// through the full frame render in View.
-func solveScreenRects(body layout.Node, bodyRect layout.Rect) map[string]layout.Rect {
-	rects := layout.Solve(body, bodyRect.W, bodyRect.H)
-	if bodyRect.X == 0 && bodyRect.Y == 0 {
-		return rects
-	}
-	for id, r := range rects {
-		r.X += bodyRect.X
-		r.Y += bodyRect.Y
-		rects[id] = r
-	}
-	return rects
-}
-
-func scrollbarLines(offset, visible, total, height int) string {
-	if total <= visible || height <= 0 || visible <= 0 {
-		return strings.Repeat(" ", height)
-	}
-	maxOffset := total - visible
-	thumbSize := max(1, height*visible/total)
-	if thumbSize > height {
-		thumbSize = height
-	}
-	thumbPos := int(float64(offset) / float64(maxOffset) * float64(height-thumbSize))
-	if thumbPos < 0 {
-		thumbPos = 0
-	}
-	if thumbPos+thumbSize > height {
-		thumbPos = height - thumbSize
-	}
-	rows := make([]string, height)
-	for i := 0; i < height; i++ {
-		if i >= thumbPos && i < thumbPos+thumbSize {
-			rows[i] = "█"
-		} else {
-			rows[i] = "░"
-		}
-	}
-	return strings.Join(rows, "\n")
-}
-
-func withScrollbar(content, bar string) string {
-	if bar == "" {
-		return content
-	}
-	contentLines := strings.Split(content, "\n")
-	barLines := strings.Split(bar, "\n")
-	n := max(len(contentLines), len(barLines))
-	out := make([]string, n)
-	for i := 0; i < n; i++ {
-		var line, barChar string
-		if i < len(contentLines) {
-			line = contentLines[i]
-		}
-		if i < len(barLines) {
-			barChar = barLines[i]
-		} else {
-			barChar = " "
-		}
-		out[i] = line + barChar
-	}
-	return strings.Join(out, "\n")
 }
 
 // renderDragDivider produces a 1-col-wide, height-tall divider with a
@@ -116,4 +53,128 @@ func renderDragDivider(height int, dragging bool) string {
 		Foreground(gripFg).
 		Background(bg).
 		Render(content)
+}
+
+// --- Pane nodes shared by the screens ---
+
+// paneBase is a pane's frame: padding on the sides and bottom (none on top,
+// so pane headers line up across the body).
+func paneBase(id string, w layout.Size) layout.NodeBase {
+	return layout.NodeBase{ID: id, W: w, H: layout.Auto(), PadLeft: panePadding, PadRight: panePadding, PadBottom: panePadding}
+}
+
+// dragDivider is a draggable pane divider: a filled column with a grip mark
+// halfway down, in the accent while it is being dragged.
+func dragDivider(id string, dragging bool) layout.Node {
+	bg, grip := pal.panel, pal.bg // dark against gray
+	if dragging {
+		bg, grip = pal.accent, pal.dark // dark against blue
+	}
+	return layout.Col{
+		NodeBase: layout.NodeBase{ID: id, W: layout.Fixed(dividerWidth), H: layout.Auto(), Box: layout.Box{Background: bg}},
+		Children: []layout.Node{
+			layout.NewSpacer(),
+			layout.Text{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, String: lipgloss.NewStyle().Foreground(grip).Render("│")},
+			layout.NewSpacer(),
+		},
+	}
+}
+
+// namedListPane is a screen's list pane ("list"): a bold title, a blank
+// row, and the visible rows ("list:i": a selection marker and the name, bold
+// when selected) beside the scrollbar column.
+func namedListPane(width int, title string, list flatui.List, name func(i int) string) layout.Node {
+	rows := list.Rows("list", func(i int, selected bool) layout.Node {
+		marker, label := layout.Icon{Text: "  "}, layout.Label{Text: name(i)}
+		if selected {
+			marker, label.Style = layout.Icon{Name: layout.IconChevronRight, Text: "> "}, layout.TextStyle{Bold: true}
+		}
+		return layout.Row{Children: []layout.Node{marker, label}}
+	})
+	return layout.Col{
+		NodeBase: paneBase("list", layout.Fixed(width)),
+		Children: []layout.Node{layout.Row{Children: []layout.Node{
+			layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Children: []layout.Node{
+				layout.Label{Text: title, Style: layout.TextStyle{Bold: true, Fg: pal.accent}},
+				layout.Label{},
+				rows,
+			}},
+			listBar(list),
+		}}},
+	}
+}
+
+// fieldsPane is a screen's detail pane ("detail"): a bold title, a blank
+// row, and aligned "name: value" rows — or the empty placeholder when
+// nothing is selected.
+func fieldsPane(title string, fields [][2]string, empty string) layout.Node {
+	pane := layout.Col{NodeBase: paneBase("detail", layout.Grow(1))}
+	if title == "" {
+		pane.Children = []layout.Node{layout.Label{Text: empty, Style: layout.TextStyle{Fg: pal.muted}}}
+		return pane
+	}
+	pane.Children = []layout.Node{layout.Label{Text: title, Style: layout.TextStyle{Bold: true, Fg: pal.accent}}, layout.Label{}}
+	for _, f := range fields {
+		pane.Children = append(pane.Children, layout.Row{NodeBase: layout.NodeBase{PadLeft: 2}, Children: []layout.Node{
+			layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(fieldNameWidth)}, Text: f[0] + ":"},
+			layout.Label{Text: f[1]},
+		}})
+	}
+	return pane
+}
+
+// fieldNameWidth is the detail panes' name column: the longest name
+// ("containers:", "mountpoint:") and a space.
+const fieldNameWidth = 12
+
+// listRowTarget is the item index a mouse target names in a list pane, if
+// it is one of its rows ("list:i").
+func listRowTarget(target string) (int, bool) {
+	i, ok := strings.CutPrefix(target, "list:")
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.Atoi(i)
+	return n, err == nil
+}
+
+// scrollDrag follows a press and drag on a scroll bar: the bar pressed
+// keeps the drag, wherever the pointer goes, until the button is released.
+type scrollDrag struct {
+	id   string
+	rect layout.Rect
+}
+
+// event reports whether m belongs to a scroll bar — a left press on one of
+// ids, or any event during a drag — and, when it scrolls one, which bar
+// and the line on it (node-local, of a bar height lines tall).
+func (d *scrollDrag) event(m flatte.MouseEvent, ids ...string) (bar string, y, height int, handled bool) {
+	if d.id != "" {
+		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
+			d.id = ""
+			return "", 0, 0, true
+		}
+		return d.id, m.Y - d.rect.Y, d.rect.H, m.Action == flatte.MouseMotion || m.Action == flatte.MousePress
+	}
+	if m.Action != flatte.MousePress || m.Button != flatte.MouseLeft || !slices.Contains(ids, m.Target) {
+		return "", 0, 0, false
+	}
+	d.id, d.rect = m.Target, m.TargetRect
+	return d.id, m.Y - d.rect.Y, d.rect.H, true
+}
+
+// listBarID names a list pane's scroll bar.
+const listBarID = "listbar"
+
+// listBar is a list's scroll bar.
+func listBar(list flatui.List) layout.ScrollBar {
+	return layout.ScrollBar{NodeBase: layout.NodeBase{ID: listBarID}, Offset: list.Offset(), Visible: list.Height(), Total: list.Count(), Color: pal.panel}
+}
+
+// scrollList scrolls list for a press or drag at line y of its bar,
+// reporting whether the cursor moved with it.
+func scrollList(list *flatui.List, y, height int) bool {
+	before := list.Cursor()
+	list.ScrollTo(listBar(*list).OffsetAt(y, height))
+	return list.Cursor() != before
 }

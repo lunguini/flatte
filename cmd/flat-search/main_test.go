@@ -9,6 +9,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
 	"github.com/lunguini/flatte/flatui"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
@@ -16,10 +17,8 @@ func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
 	updates := make(chan flatte.StateUpdate[State], 1)
 	state := State{focused: true}
 
-	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'o'}, flatte.Effects[State]{
-		Context: context.Background(),
-		Updates: updates,
-	})
+	fx := testkit.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'o'}, fx)
 
 	if state.query.Value != "o" {
 		t.Fatalf("query = %q, want o", state.query.Value)
@@ -41,7 +40,7 @@ func TestHandleStartsSearchForTypedCharacters(t *testing.T) {
 func TestTypingJAndKEditsQuery(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "1ms")
 	updates := make(chan flatte.StateUpdate[State], 4)
-	fx := flatte.NewEffects(t.Context(), updates, nil)
+	fx := testkit.NewHarnessEffects(t.Context(), updates, nil, nil, nil)
 	state := &State{focused: true}
 
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'j'}, fx)
@@ -57,10 +56,8 @@ func TestFocusedSearchCanTypeQ(t *testing.T) {
 	updates := make(chan flatte.StateUpdate[State], 1)
 	state := State{focused: true}
 
-	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, flatte.Effects[State]{
-		Context: context.Background(),
-		Updates: updates,
-	})
+	fx := testkit.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if state.query.Value != "q" {
 		t.Fatalf("query = %q, want q", state.query.Value)
@@ -73,28 +70,52 @@ func TestFocusedSearchUsesAltBFForWordMovement(t *testing.T) {
 	state.query.Value = "hello world"
 	state.query.Cursor = len("hello world")
 
-	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'b', Mod: flatte.ModAlt}, flatte.Effects[State]{
-		Context: context.Background(),
-	})
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'b', Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if state.query.Cursor != len("hello ") {
 		t.Fatalf("alt-b cursor = %d, want start of world", state.query.Cursor)
 	}
 	if state.query.Value != "hello world" {
 		t.Fatalf("alt-b inserted text: %q", state.query.Value)
 	}
-	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'f', Mod: flatte.ModAlt}, flatte.Effects[State]{
-		Context: context.Background(),
-	})
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'f', Mod: flatte.ModAlt}, flatte.Effects[State]{})
 	if state.query.Cursor != len("hello world") {
 		t.Fatalf("alt-f cursor = %d, want end", state.query.Cursor)
+	}
+}
+
+func TestFocusedSearchUsesTextFieldEditing(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		key   flatte.KeyEvent
+		start int
+		want  int
+	}{
+		{"End", flatte.KeyEvent{Key: flatte.KeyEnd}, 5, len("Hello World")},
+		{"Cmd+Left", flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, 5, 0},
+		{"Alt+Right", flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, 0, len("Hello")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := State{focused: true, query: flatui.TextField{Value: "Hello World", Cursor: tc.start}}
+			Handle(&state, tc.key, flatte.Effects[State]{})
+			if state.query.Cursor != tc.want {
+				t.Fatalf("cursor = %d, want %d", state.query.Cursor, tc.want)
+			}
+		})
+	}
+}
+
+func TestFocusedSearchPastesAsSingleLine(t *testing.T) {
+	state := State{focused: true}
+	Handle(&state, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if state.query.Value != "ab" {
+		t.Fatalf("pasted query = %q, want single-line %q", state.query.Value, "ab")
 	}
 }
 
 func TestUnfocusedSearchUsesQToQuit(t *testing.T) {
 	state := State{focused: false}
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(&state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
@@ -109,10 +130,8 @@ func TestBackspaceStartsSearchForEditedQuery(t *testing.T) {
 	state.query.Value = "op"
 	state.query.Cursor = 2
 
-	Handle(&state, flatte.KeyEvent{Key: flatte.KeyBackspace}, flatte.Effects[State]{
-		Context: context.Background(),
-		Updates: updates,
-	})
+	fx := testkit.NewHarnessEffects(context.Background(), updates, nil, nil, nil)
+	Handle(&state, flatte.KeyEvent{Key: flatte.KeyBackspace}, fx)
 
 	if state.query.Value != "o" {
 		t.Fatalf("query = %q, want o", state.query.Value)
@@ -122,7 +141,7 @@ func TestBackspaceStartsSearchForEditedQuery(t *testing.T) {
 func TestStaleSearchUpdateIsIgnored(t *testing.T) {
 	t.Setenv("FLAT_SEARCH_DELAY", "1ms")
 	updates := make(chan flatte.StateUpdate[State], 16)
-	fx := flatte.NewEffects(t.Context(), updates, nil)
+	fx := testkit.NewHarnessEffects(t.Context(), updates, nil, nil, nil)
 
 	// First search: "op" — will be superseded immediately.
 	state := State{focused: true}
@@ -161,7 +180,7 @@ func TestViewRendersSearchState(t *testing.T) {
 	state := State{searching: true}
 	state.query.Value = "o"
 
-	frame := View(&state, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(&state, flatte.RenderContext{Width: 72})).Content
 
 	for _, want := range []string{"Flat Search", "query: o", "searching..."} {
 		if !strings.Contains(frame, want) {
@@ -175,7 +194,7 @@ func TestViewPlacesCursorOnlyWhenFocused(t *testing.T) {
 	state.query.Value = "ok"
 	state.query.Cursor = 2
 
-	frame := View(&state, flatte.RenderContext{Width: 72})
+	frame := composed(View(&state, flatte.RenderContext{Width: 72}))
 	if frame.Cursor == nil {
 		t.Fatal("focused view has no cursor")
 	}
@@ -189,7 +208,7 @@ func TestViewPlacesCursorOnlyWhenFocused(t *testing.T) {
 	}
 
 	state.focused = false
-	if blurred := View(&state, flatte.RenderContext{Width: 72}); blurred.Cursor != nil {
+	if blurred := composed(View(&state, flatte.RenderContext{Width: 72})); blurred.Cursor != nil {
 		t.Fatalf("blurred view still has a cursor: %+v", *blurred.Cursor)
 	}
 }
@@ -199,7 +218,7 @@ func TestViewMatchesFocusedSearchingSnapshot(t *testing.T) {
 	state.query.Value = "o"
 	state.query.Cursor = 1
 
-	flatest.AssertGoldenFrame(t, "testdata/focused-searching.golden", View(&state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/focused-searching.golden", composed(View(&state, flatte.RenderContext{Width: 72})))
 }
 
 func TestViewMatchesResultsSnapshot(t *testing.T) {
@@ -208,7 +227,7 @@ func TestViewMatchesResultsSnapshot(t *testing.T) {
 		results: []string{"sonnet", "opus", "freeform"},
 	}
 
-	flatest.AssertGoldenFrame(t, "testdata/results.golden", View(&state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/results.golden", composed(View(&state, flatte.RenderContext{Width: 72})))
 }
 
 func TestSearchDelayEnvironmentOverride(t *testing.T) {
@@ -233,4 +252,10 @@ func receiveSearchUpdate(t *testing.T, updates <-chan flatte.StateUpdate[State])
 		t.Fatal("timed out waiting for search update")
 		return nil
 	}
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

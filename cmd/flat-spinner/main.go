@@ -8,6 +8,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const interval = 100 * time.Millisecond
@@ -24,9 +25,11 @@ func NewState() *State {
 // Init starts the animation: Every drives the spinner from the loop goroutine;
 // the widget itself owns no timer.
 func Init(s *State, fx flatte.Effects[State]) {
-	flatte.Every(fx, "spin", interval, func(s *State, _ time.Time) {
+	if err := flatte.Every(fx, "spin", interval, func(s *State, _ time.Time) {
 		s.spinner.Tick()
-	})
+	}); err != nil {
+		panic(err) // interval is a sample invariant
+	}
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
@@ -35,16 +38,21 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	lines := []string{
-		flatui.Title("Flat Spinner"),
-		flatui.Subtle("activity indicator sample"),
-		"",
-		"  " + s.spinner.View() + "  " + s.label,
-		"",
-		flatui.Subtle("q quit"),
-	}
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Spinner", Style: title},
+		layout.Label{Text: "activity indicator sample", Style: subtle},
+		layout.Label{},
+		layout.Label{NodeBase: indent, Text: s.spinner.View() + "  " + s.label},
+		layout.Label{},
+		layout.Label{Text: "q quit", Style: subtle},
+	)}
 }
 
 func main() {

@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"time"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 const defaultTickInterval = 300 * time.Millisecond
@@ -30,7 +31,9 @@ func NewState() *State {
 }
 
 func Init(s *State, fx flatte.Effects[State]) {
-	flatte.Every(fx, "modal.background.tick", tickInterval(), applyTick)
+	if err := flatte.Every(fx, "modal.background.tick", tickInterval(), applyTick); err != nil {
+		panic(err) // tickInterval is a sample invariant
+	}
 }
 
 func applyTick(s *State, _ time.Time) {
@@ -64,19 +67,6 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 
 func handleModal(s *State, key flatte.KeyEvent) {
 	switch key.Key {
-	case flatte.KeyCharacter:
-		if handleAltWordKey(key, s.modalInput.MoveWordLeft, s.modalInput.MoveWordRight) {
-			return
-		}
-		s.modalInput.Insert(key.Rune)
-	case flatte.KeyBackspace:
-		s.modalInput.Backspace()
-	case flatte.KeyDelete:
-		s.modalInput.Delete()
-	case flatte.KeyLeft:
-		s.modalInput.MoveLeft()
-	case flatte.KeyRight:
-		s.modalInput.MoveRight()
 	case flatte.KeyEnter:
 		s.modalOpen = false
 		s.waiting = false
@@ -85,91 +75,68 @@ func handleModal(s *State, key flatte.KeyEvent) {
 		s.modalOpen = false
 		s.waiting = false
 		s.modalResult = "cancelled"
+	default:
+		s.modalInput.Edit(key)
 	}
 }
 
-func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatte.ModAlt) {
-		return false
-	}
-	switch key.Rune {
-	case 'b', 'B':
-		moveLeft()
-		return true
-	case 'f', 'F':
-		moveRight()
-		return true
-	}
-	return false
-}
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	base := viewMain(s, ctx)
-	if !s.modalOpen {
-		return flatte.Frame{Content: base}
-	}
-	modal := viewModal(s, ctx)
-	frame := flatte.Frame{Content: flatui.Overlay(base, modal)}
-	overlayX, overlayY := flatui.OverlayOrigin(base, modal)
-	cardX, cardY := flatui.CardOrigin()
-	frame.Cursor = &flatte.Cursor{
-		X: overlayX + cardX + lipgloss.Width("  name: ") + s.modalInput.CursorColumn(),
-		Y: overlayY + cardY + 3, // title, subtle, blank precede the name row
-	}
-	return frame
-}
-
-func viewMain(s *State, ctx flatte.RenderContext) string {
+// View returns the frame as a layout tree. The runtime composes it at the
+// window size and places the cursor at the focused Input's caret, so there
+// is no cursor arithmetic here.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	loader := "idle"
 	if s.waiting {
 		loader = "waiting " + spinnerFrames[s.spinner%len(spinnerFrames)]
 	}
-
 	result := "none"
 	if s.modalResult != "" {
 		result = s.modalResult
 	}
 
-	lines := []string{
-		flatui.Title("Flat Modal"),
-		fmt.Sprintf("  background ticks: %d | loader: %s", s.ticks, loader),
-		flatui.Subtle("modal focus with background updates"),
-		"  background workspace:",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"",
-		"  modal result: " + result,
-		"  recent events:",
-		"    - async tick applied",
-		"    - modal owns keyboard focus",
-		"",
-		flatui.Subtle("enter open modal | q quit"),
+	children := []layout.Node{
+		layout.Label{Text: "Flat Modal", Style: title},
+		layout.Label{NodeBase: indent, Text: fmt.Sprintf("background ticks: %d | loader: %s", s.ticks, loader)},
+		layout.Label{Text: "modal focus with background updates", Style: subtle},
+		layout.Label{NodeBase: indent, Text: "background workspace:"},
+		layout.NewSpacer(),
+		layout.Label{NodeBase: indent, Text: "modal result: " + result},
+		layout.Label{NodeBase: indent, Text: "recent events:\n  - async tick applied\n  - modal owns keyboard focus"},
+		layout.Label{},
+		layout.Label{Text: "enter open modal | q quit", Style: subtle},
 	}
 	if s.modalOpen {
-		lines = append(lines, flatui.Subtle("main view is waiting for modal input"))
+		children = append(children,
+			layout.Label{Text: "main view is waiting for modal input", Style: subtle},
+			modal(s),
+		)
 	}
-	return flatui.Card(lines, ctx.Width)
+	return flatte.Frame{Root: flatui.CardLayout(children...)}
 }
 
-func viewModal(s *State, ctx flatte.RenderContext) string {
-	lines := []string{
-		flatui.Title("Confirm Work"),
-		flatui.Subtle("modal captures input"),
-		"",
-		"  name: " + s.modalInput.Value,
-		"",
-		flatui.Subtle("enter confirm | esc cancel"),
-	}
-	return flatui.Card(lines, min(ctx.Width, 32))
+// modal is a card too, as a fixed-width overlay.
+func modal(s *State) layout.Node {
+	card := flatui.CardLayout(
+		layout.Label{Text: "Confirm Work", Style: title},
+		layout.Label{Text: "modal captures input", Style: subtle},
+		layout.Label{},
+		layout.Row{
+			NodeBase: layout.NodeBase{PadLeft: 2, Gap: 1},
+			Children: []layout.Node{
+				layout.Label{Text: "name:"},
+				s.modalInput.Layout("modal.name", true),
+			},
+		},
+		layout.Label{},
+		layout.Label{Text: "enter confirm | esc cancel", Style: subtle},
+	)
+	card.Overlay, card.W = true, layout.Fixed(32)
+	return card
 }
 
 func tickInterval() time.Duration {
@@ -185,13 +152,22 @@ func tickInterval() time.Duration {
 }
 
 func main() {
-	state := NewState()
-	err := flatte.Run(context.Background(), flatte.App[State]{
-		State:  state,
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
+	flag.Parse()
+	app := flatte.App[State]{
+		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,
 		View:   View,
-	})
+	}
+	runOptions := []flatte.Option{}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "Flat Modal", Width: 72, Height: 24})
+	}
+	err := flatte.Run(context.Background(), app, runOptions...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

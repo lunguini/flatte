@@ -2,9 +2,9 @@
 │   Flat Reader                                                        │
 │  scrollable viewport sample                                          │
 │                                                                      │
-│  This first paragraph is intentionally longer than the viewport wid  │
-│  th so that soft wrapping splits it across several rows inside the   │
-│  card.                                                               │
+│  This first paragraph is intentionally longer than the viewport      │
+│  width so that soft wrapping splits it across several rows inside    │
+│  the card.                                                           │
 │  line 02                                                             │
 │  line 03                                                             │
 │  line 04                                                             │

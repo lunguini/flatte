@@ -6,6 +6,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/rivo/uniseg"
+
+	"github.com/lunguini/flatte/flatui/internal/textedit"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type TextPosition struct {
@@ -46,9 +49,10 @@ type Textarea struct {
 // SetValue replaces the content (split on newlines) and resets the cursor.
 func (t *Textarea) SetValue(s string) {
 	t.lines = strings.Split(s, "\n")
-	t.row, t.col, t.goalCol, t.offset, t.xOffset = 0, 0, 0, 0, 0
+	t.row, t.col, t.goalCol, t.offset, t.xOffset, t.wrapOffset = 0, 0, 0, 0, 0, 0
 	t.ClearSelection()
 	t.ensure()
+	t.keepVisible()
 }
 
 // Value returns the content joined by newlines.
@@ -63,7 +67,7 @@ func (t Textarea) Value() string {
 // horizontal scrolling; height caps the rows View emits and drives vertical
 // scrolling.
 func (t *Textarea) SetSize(width, height int) {
-	t.width, t.height = width, height
+	t.width, t.height = clampWidgetDimension(width), clampWidgetDimension(height)
 	t.ensure()
 	t.keepVisible()
 }
@@ -135,6 +139,84 @@ func (t *Textarea) Insert(r rune) {
 	line := t.lines[t.row]
 	t.lines[t.row] = line[:t.col] + s + line[t.col:]
 	t.col += len(s)
+	t.syncGoal()
+	t.keepVisible()
+}
+
+// InsertText inserts s at the cursor, replacing the selection: "\n" (and
+// "\r\n" or "\r") break lines, so a paste lands as typed. The cursor ends
+// after the inserted text.
+func (t *Textarea) InsertText(s string) {
+	t.ensure()
+	t.deleteSelection()
+	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
+	parts := strings.Split(s, "\n")
+	line := t.lines[t.row]
+	left, right := line[:t.col], line[t.col:]
+	if len(parts) == 1 {
+		t.lines[t.row] = left + s + right
+		t.col += len(s)
+	} else {
+		last := len(parts) - 1
+		next := make([]string, 0, len(t.lines)+last)
+		next = append(next, t.lines[:t.row]...)
+		next = append(next, left+parts[0])
+		next = append(next, parts[1:last]...)
+		next = append(next, parts[last]+right)
+		next = append(next, t.lines[t.row+1:]...)
+		t.lines = next
+		t.row += last
+		t.col = len(parts[last])
+	}
+	t.syncGoal()
+	t.keepVisible()
+}
+
+// MoveTo puts the cursor at byte offset into Value — clamped, and backed off
+// to a grapheme boundary — and clears the selection: for a click (a
+// MouseEvent's Caret) or a host's row move (a KeyEvent's Caret).
+func (t *Textarea) MoveTo(offset int) {
+	t.moveTo(offset)
+	t.ClearSelection()
+}
+
+// MoveToSelecting is MoveTo extending the selection, for a drag or a
+// selecting row move.
+func (t *Textarea) MoveToSelecting(offset int) {
+	t.startSelection()
+	t.moveTo(offset)
+}
+
+// SelectAll selects the whole value, with the cursor at its end.
+func (t *Textarea) SelectAll() {
+	t.ensure()
+	t.anchorRow, t.anchorCol, t.selectionActive = 0, 0, true
+	t.row = len(t.lines) - 1
+	t.col = len(t.lines[t.row])
+	t.syncGoal()
+	t.keepVisible()
+}
+
+func (t *Textarea) moveTo(offset int) {
+	t.ensure()
+	offset = max(offset, 0)
+	row := 0
+	for row < len(t.lines)-1 && offset > len(t.lines[row]) {
+		offset -= len(t.lines[row]) + 1
+		row++
+	}
+	line := t.lines[row]
+	col, at := min(offset, len(line)), 0
+	// The last grapheme boundary at or before col.
+	g := uniseg.NewGraphemes(line)
+	for g.Next() {
+		_, to := g.Positions()
+		if to > col {
+			break
+		}
+		at = to
+	}
+	t.row, t.col = row, at
 	t.syncGoal()
 	t.keepVisible()
 }
@@ -378,16 +460,16 @@ func (t *Textarea) MoveDownSelecting() {
 func (t *Textarea) moveUp() {
 	t.ensure()
 	if t.softWrap && t.width > 0 {
-		visualRow := visualCursorRow(t.lines, t.row, t.col, t.width)
+		visualRow := textedit.VisualCursorRow(t.lines, t.row, t.col, t.width)
 		if visualRow > 0 {
-			t.row, t.col = positionForVisualCell(t.lines, visualRow-1, t.goalCol, t.width)
+			t.row, t.col = textedit.PositionForVisualCell(t.lines, visualRow-1, t.goalCol, t.width)
 		}
 		t.keepVisible()
 		return
 	}
 	if t.row > 0 {
 		t.row--
-		t.col = byteOffsetForColumn(t.lines[t.row], t.goalCol)
+		t.col = textedit.ByteOffsetForColumn(t.lines[t.row], t.goalCol)
 	}
 	t.keepVisible()
 }
@@ -395,16 +477,16 @@ func (t *Textarea) moveUp() {
 func (t *Textarea) moveDown() {
 	t.ensure()
 	if t.softWrap && t.width > 0 {
-		visualRow := visualCursorRow(t.lines, t.row, t.col, t.width)
-		if visualRow < totalWrappedRows(t.lines, t.width)-1 {
-			t.row, t.col = positionForVisualCell(t.lines, visualRow+1, t.goalCol, t.width)
+		visualRow := textedit.VisualCursorRow(t.lines, t.row, t.col, t.width)
+		if visualRow < textedit.TotalWrappedRows(t.lines, t.width)-1 {
+			t.row, t.col = textedit.PositionForVisualCell(t.lines, visualRow+1, t.goalCol, t.width)
 		}
 		t.keepVisible()
 		return
 	}
 	if t.row < len(t.lines)-1 {
 		t.row++
-		t.col = byteOffsetForColumn(t.lines[t.row], t.goalCol)
+		t.col = textedit.ByteOffsetForColumn(t.lines[t.row], t.goalCol)
 	}
 	t.keepVisible()
 }
@@ -413,31 +495,12 @@ func (t *Textarea) moveDown() {
 // x in display cells from the left of its line, y in rows from the top of the
 // window. Pair with a frame origin to place Frame.Cursor.
 func (t Textarea) CursorCell() (x, y int) {
-	if len(t.lines) == 0 {
-		return 0, 0
-	}
-	row := min(max(t.row, 0), len(t.lines)-1)
-	col := min(max(t.col, 0), len(t.lines[row]))
-	if t.softWrap {
-		wrapX, wrapY := wrappedCursorCell(t.lines[row], col, t.width)
-		return wrapX, visualRowsBefore(t.lines, row, t.width) + wrapY - t.wrapOffset
-	}
-	return max(lipgloss.Width(t.lines[row][:col])-t.xOffset, 0), row - t.offset
+	return t.area().CursorCell(t.scroll())
 }
 
 // View returns the visible lines joined by newlines (windowed to height).
 func (t Textarea) View() string {
-	if len(t.lines) == 0 {
-		return ""
-	}
-	if t.softWrap {
-		return visibleWrappedLines(t.lines, t.width, t.height, t.wrapOffset)
-	}
-	if t.height <= 0 {
-		return horizontalWindowLines(t.lines, t.xOffset, t.width)
-	}
-	end := min(t.offset+t.height, len(t.lines))
-	return horizontalWindowLines(t.lines[t.offset:end], t.xOffset, t.width)
+	return t.ViewWithSelection(func(text string, _ bool) string { return text })
 }
 
 // ViewWithSelection renders the visible textarea window and calls render for
@@ -446,42 +509,61 @@ func (t Textarea) ViewWithSelection(render func(text string, selected bool) stri
 	if render == nil {
 		return t.View()
 	}
-	if len(t.lines) == 0 {
-		return ""
+	rng, hasSelection := t.Selection()
+	return t.area().Render(t.scroll(), func(row int) (int, int, bool) {
+		return selectionColumnsForLine(t.lines[row], row, rng, hasSelection)
+	}, render)
+}
+
+// Layout returns the textarea as a multi-line layout.Input with the given
+// ID: its value, cursor, selection, soft-wrap, and scroll. In the terminal
+// it draws exactly what ViewWithSelection draws when the node is the
+// textarea's size (set SelectionStyle for the look of the selection; zero
+// is reverse video); a GUI draws a native text area. Size the textarea from
+// the node's rect (LayoutEvent) so cursor movement and the node agree.
+func (t Textarea) Layout(id string, focused bool) layout.Input {
+	in := layout.Input{
+		NodeBase:  layout.NodeBase{ID: id},
+		Value:     t.Value(),
+		Caret:     t.offsetOf(TextPosition{Row: t.row, Col: t.col}),
+		Focused:   focused,
+		Multiline: true,
+		Wrap:      t.softWrap,
+		OffsetX:   t.xOffset,
+		OffsetY:   t.offset,
 	}
 	if t.softWrap {
-		rng, hasSelection := t.Selection()
-		lines := make([]string, 0, len(t.lines))
-		for row, line := range t.lines {
-			selStart, selEnd, selected := selectionColumnsForLine(line, row, rng, hasSelection)
-			lines = append(lines, softWrapLineWithSelection(line, t.width, selStart, selEnd, selected, render)...)
-		}
-		if t.height <= 0 {
-			return strings.Join(lines, "\n")
-		}
-		start := min(max(t.wrapOffset, 0), len(lines))
-		end := min(start+t.height, len(lines))
-		return strings.Join(lines[start:end], "\n")
+		in.OffsetY = t.wrapOffset
 	}
-	startRow, endRow := 0, len(t.lines)
-	if t.height > 0 {
-		startRow = t.offset
-		endRow = min(t.offset+t.height, len(t.lines))
+	if rng, ok := t.Selection(); ok {
+		in.SelStart, in.SelEnd = t.offsetOf(rng.Start), t.offsetOf(rng.End)
 	}
-	rng, hasSelection := t.Selection()
-	lines := make([]string, 0, endRow-startRow)
-	for row := startRow; row < endRow; row++ {
-		selStart, selEnd, selected := selectionColumnsForLine(t.lines[row], row, rng, hasSelection)
-		lines = append(lines, horizontalWindowLineWithSelection(t.lines[row], t.xOffset, t.width, selStart, selEnd, selected, render))
+	return in
+}
+
+// offsetOf is pos as a byte offset into Value.
+func (t Textarea) offsetOf(pos TextPosition) int {
+	at := 0
+	for i := 0; i < pos.Row && i < len(t.lines); i++ {
+		at += len(t.lines[i]) + 1
 	}
-	return strings.Join(lines, "\n")
+	return at + pos.Col
+}
+
+// area is the textarea as textedit lays it out.
+func (t Textarea) area() textedit.Area {
+	return textedit.Area{Lines: t.lines, Row: t.row, Col: t.col, Width: t.width, Height: t.height, Wrap: t.softWrap}
+}
+
+func (t Textarea) scroll() textedit.Scroll {
+	return textedit.Scroll{Offset: t.offset, XOffset: t.xOffset, WrapOffset: t.wrapOffset}
 }
 
 // syncGoal records the cursor's current display column as the goal for
 // subsequent vertical moves.
 func (t *Textarea) syncGoal() {
 	if t.softWrap && t.width > 0 {
-		x, _ := wrappedCursorCell(t.lines[t.row], t.col, t.width)
+		x, _ := textedit.WrappedCursorCell(t.lines[t.row], t.col, t.width)
 		t.goalCol = x
 		return
 	}
@@ -490,51 +572,8 @@ func (t *Textarea) syncGoal() {
 
 // keepVisible scrolls the window so the cursor row and column stay inside it.
 func (t *Textarea) keepVisible() {
-	if t.softWrap {
-		t.xOffset = 0
-		visualRow := visualCursorRow(t.lines, t.row, t.col, t.width)
-		if t.height > 0 {
-			if visualRow < t.wrapOffset {
-				t.wrapOffset = visualRow
-			} else if visualRow >= t.wrapOffset+t.height {
-				t.wrapOffset = visualRow - t.height + 1
-			}
-			t.wrapOffset = min(max(t.wrapOffset, 0), max(totalWrappedRows(t.lines, t.width)-t.height, 0))
-		} else {
-			t.wrapOffset = 0
-		}
-		if t.height > 0 {
-			if t.row < t.offset {
-				t.offset = t.row
-			} else if t.row >= t.offset+t.height {
-				t.offset = t.row - t.height + 1
-			}
-			t.offset = min(max(t.offset, 0), max(len(t.lines)-t.height, 0))
-		}
-		return
-	}
-	t.wrapOffset = 0
-	if t.height > 0 {
-		if t.row < t.offset {
-			t.offset = t.row
-		} else if t.row >= t.offset+t.height {
-			t.offset = t.row - t.height + 1
-		}
-		t.offset = min(max(t.offset, 0), max(len(t.lines)-t.height, 0))
-	}
-
-	if t.width <= 0 {
-		t.xOffset = 0
-		return
-	}
-	line := t.lines[t.row]
-	cursorCol := lipgloss.Width(line[:t.col])
-	if cursorCol < t.xOffset {
-		t.xOffset = cursorCol
-	} else if cursorCol >= t.xOffset+t.width {
-		t.xOffset = displayColumnAtOrAfter(line, cursorCol-t.width+1)
-	}
-	t.xOffset = min(max(t.xOffset, 0), lipgloss.Width(line))
+	s := t.area().KeepVisible(t.scroll())
+	t.offset, t.xOffset, t.wrapOffset = s.Offset, s.XOffset, s.WrapOffset
 }
 
 // ensure guarantees at least one line and a cursor on a valid rune boundary.
@@ -602,281 +641,6 @@ func removeLineMerging(lines []string, at int, merged string) []string {
 	next = append(next, merged)
 	next = append(next, lines[at+2:]...)
 	return next
-}
-
-// byteOffsetForColumn returns the byte offset of the grapheme boundary in line
-// whose display column is the greatest not exceeding col (clamped to len).
-func byteOffsetForColumn(line string, col int) int {
-	state := -1
-	rest := line
-	at, width := 0, 0
-	for len(rest) > 0 {
-		cluster, r, _, st := uniseg.StepString(rest, state)
-		cw := lipgloss.Width(cluster)
-		if width+cw > col {
-			break
-		}
-		at += len(cluster)
-		width += cw
-		rest, state = r, st
-	}
-	return at
-}
-
-func horizontalWindowLines(lines []string, offset, width int) string {
-	if width <= 0 && offset <= 0 {
-		return strings.Join(lines, "\n")
-	}
-	windowed := make([]string, len(lines))
-	for i, line := range lines {
-		windowed[i] = horizontalWindowLine(line, offset, width)
-	}
-	return strings.Join(windowed, "\n")
-}
-
-func horizontalWindowLine(line string, offset, width int) string {
-	return horizontalWindowLineWithSelection(line, offset, width, 0, 0, false, func(text string, _ bool) string {
-		return text
-	})
-}
-
-func visibleWrappedLines(lines []string, width, height, offset int) string {
-	wrapped := make([]string, 0, len(lines))
-	for _, line := range lines {
-		wrapped = append(wrapped, softWrapLine(line, width)...)
-	}
-	if height <= 0 {
-		return strings.Join(wrapped, "\n")
-	}
-	start := min(max(offset, 0), len(wrapped))
-	end := min(start+height, len(wrapped))
-	return strings.Join(wrapped[start:end], "\n")
-}
-
-func softWrapLine(line string, width int) []string {
-	return softWrapLineWithSelection(line, width, 0, 0, false, func(text string, _ bool) string {
-		return text
-	})
-}
-
-func softWrapLineWithSelection(line string, width int, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) []string {
-	if width <= 0 {
-		return []string{renderLineWithSelection(line, selStart, selEnd, hasSelection, render)}
-	}
-	if line == "" {
-		return []string{render("", hasSelection && selStart == 0 && selEnd == 0)}
-	}
-	rows := make([]string, 0, max(lipgloss.Width(line)/width, 1))
-	state := -1
-	rest := line
-	at := 0
-	rowWidth := 0
-	var row strings.Builder
-	var segment strings.Builder
-	segmentSelected := false
-	haveSegment := false
-	flushSegment := func() {
-		if !haveSegment {
-			return
-		}
-		row.WriteString(render(segment.String(), segmentSelected))
-		segment.Reset()
-		haveSegment = false
-	}
-	flushRow := func() {
-		flushSegment()
-		rows = append(rows, row.String())
-		row.Reset()
-		rowWidth = 0
-	}
-	for len(rest) > 0 {
-		cluster, r, _, st := uniseg.StepString(rest, state)
-		clusterWidth := lipgloss.Width(cluster)
-		if rowWidth > 0 && rowWidth+clusterWidth > width {
-			flushRow()
-		}
-		selected := hasSelection && at >= selStart && at+len(cluster) <= selEnd
-		if haveSegment && selected != segmentSelected {
-			flushSegment()
-		}
-		segment.WriteString(cluster)
-		segmentSelected = selected
-		haveSegment = true
-		rowWidth += clusterWidth
-		at += len(cluster)
-		rest, state = r, st
-	}
-	flushRow()
-	return rows
-}
-
-func wrappedCursorCell(line string, col, width int) (x, y int) {
-	if width <= 0 {
-		return lipgloss.Width(line[:col]), 0
-	}
-	state := -1
-	rest := line[:col]
-	for len(rest) > 0 {
-		cluster, r, _, st := uniseg.StepString(rest, state)
-		clusterWidth := lipgloss.Width(cluster)
-		if x > 0 && x+clusterWidth > width {
-			y++
-			x = 0
-		}
-		x += clusterWidth
-		rest, state = r, st
-	}
-	if x == width && col < len(line) {
-		return 0, y + 1
-	}
-	return x, y
-}
-
-func visualCursorRow(lines []string, row, col, width int) int {
-	_, wrapY := wrappedCursorCell(lines[row], col, width)
-	return visualRowsBefore(lines, row, width) + wrapY
-}
-
-func visualRowsBefore(lines []string, row, width int) int {
-	total := 0
-	for i := 0; i < row && i < len(lines); i++ {
-		total += len(softWrapLine(lines[i], width))
-	}
-	return total
-}
-
-func totalWrappedRows(lines []string, width int) int {
-	return visualRowsBefore(lines, len(lines), width)
-}
-
-func positionForVisualCell(lines []string, visualRow, col, width int) (row, byteCol int) {
-	if len(lines) == 0 {
-		return 0, 0
-	}
-	remaining := max(visualRow, 0)
-	for row, line := range lines {
-		rows := len(softWrapLine(line, width))
-		if remaining < rows {
-			return row, byteOffsetForWrappedCell(line, remaining, col, width)
-		}
-		remaining -= rows
-	}
-	last := len(lines) - 1
-	return last, len(lines[last])
-}
-
-func byteOffsetForWrappedCell(line string, targetRow, col, width int) int {
-	if width <= 0 || targetRow <= 0 {
-		return byteOffsetForColumn(line, col)
-	}
-	if line == "" {
-		return 0
-	}
-	state := -1
-	rest := line
-	row, display := 0, 0
-	at, lastInTarget := 0, 0
-	for len(rest) > 0 {
-		cluster, r, _, st := uniseg.StepString(rest, state)
-		cw := lipgloss.Width(cluster)
-		if display > 0 && display+cw > width {
-			if row == targetRow {
-				return at
-			}
-			row++
-			display = 0
-		}
-		if row == targetRow {
-			if display+cw > col {
-				return at
-			}
-			lastInTarget = at + len(cluster)
-		}
-		display += cw
-		at += len(cluster)
-		rest, state = r, st
-	}
-	if row == targetRow {
-		return lastInTarget
-	}
-	return len(line)
-}
-
-func horizontalWindowLineWithSelection(line string, offset, width int, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) string {
-	if width <= 0 {
-		return renderLineWithSelection(line, selStart, selEnd, hasSelection, render)
-	}
-	right := offset + width
-	state := -1
-	rest := line
-	display := 0
-	var out strings.Builder
-	var segment strings.Builder
-	segmentSelected := false
-	haveSegment := false
-	flush := func() {
-		if !haveSegment {
-			return
-		}
-		out.WriteString(render(segment.String(), segmentSelected))
-		segment.Reset()
-		haveSegment = false
-	}
-	at := 0
-	for len(rest) > 0 {
-		cluster, r, _, st := uniseg.StepString(rest, state)
-		clusterWidth := lipgloss.Width(cluster)
-		nextDisplay := display + clusterWidth
-		if display >= offset && nextDisplay <= right {
-			selected := hasSelection && at >= selStart && at+len(cluster) <= selEnd
-			if haveSegment && selected != segmentSelected {
-				flush()
-			}
-			segment.WriteString(cluster)
-			segmentSelected = selected
-			haveSegment = true
-		}
-		at += len(cluster)
-		display = nextDisplay
-		rest, state = r, st
-	}
-	flush()
-	return out.String()
-}
-
-func displayColumnAtOrAfter(line string, col int) int {
-	if col <= 0 {
-		return 0
-	}
-	state := -1
-	rest := line
-	display := 0
-	for len(rest) > 0 {
-		cluster, r, _, st := uniseg.StepString(rest, state)
-		if display >= col {
-			return display
-		}
-		display += lipgloss.Width(cluster)
-		rest, state = r, st
-	}
-	return display
-}
-
-func renderLineWithSelection(line string, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) string {
-	if !hasSelection {
-		return render(line, false)
-	}
-	var out strings.Builder
-	if selStart > 0 {
-		out.WriteString(render(line[:selStart], false))
-	}
-	if selStart < selEnd {
-		out.WriteString(render(line[selStart:selEnd], true))
-	}
-	if selEnd < len(line) {
-		out.WriteString(render(line[selEnd:], false))
-	}
-	return out.String()
 }
 
 func selectionColumnsForLine(line string, row int, rng TextRange, hasSelection bool) (start, end int, selected bool) {

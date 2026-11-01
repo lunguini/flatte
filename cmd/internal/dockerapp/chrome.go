@@ -22,12 +22,9 @@ const chromeRowsBottom = 2
 // solve records each tab's rect into s.rects for hit-testing — no nested solve
 // that discards geometry, no manual coordinate math.
 func headerNode(s *State) layout.Node {
-	title := lipgloss.NewStyle().Bold(true).Background(pal.bg).Foreground(pal.accent).
-		Render("flat-docker")
-
 	content := layout.Row{
 		Children: []layout.Node{
-			layout.Text{String: title},
+			layout.Label{Text: "flat-docker", Style: layout.TextStyle{Bold: true, Bg: pal.bg, Fg: pal.accent}},
 			layout.NewSpacer().WithBackground(pal.bg),
 			s.headerTabs.Layout(),
 		},
@@ -93,48 +90,25 @@ func headerBorderStyle(border flatui.TabBarBorder) lipgloss.Border {
 	return border.Style
 }
 
-type Separator struct{ layout.NodeBase }
-
-func (s Separator) Size() (layout.Size, layout.Size) {
-	w, h := s.NodeBase.Size()
-	if h.Kind == layout.SizeAuto {
-		h = layout.Fixed(1)
-	}
-	return w, h
+// separatorNode is the full-width accent rule above the footer.
+func separatorNode() layout.Node {
+	return layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(1), Box: layout.Box{Background: pal.accent}}}
 }
 
-func (s Separator) Render(r layout.Rect) string {
-	return lipgloss.NewStyle().Width(r.W).Background(pal.accent).
-		Render(strings.Repeat(" ", r.W))
-}
-
-type Footer struct {
-	layout.NodeBase
-	State *State
-}
-
-func (f Footer) Size() (layout.Size, layout.Size) {
-	w, h := f.NodeBase.Size()
-	if h.Kind == layout.SizeAuto {
-		h = layout.Fixed(1)
-	}
-	return w, h
-}
-
-func (f Footer) Render(r layout.Rect) string {
+// footerNode is the key-hint line for whatever has the keyboard.
+func footerNode(s *State) layout.Node {
 	var hints string
-	if f.State.commandModal != nil {
-		hints = f.State.commandModal.keyHints()
+	if s.commandModal != nil {
+		hints = s.commandModal.keyHints()
 	} else {
-		switch f.State.screen {
+		switch s.screen {
 		case screenContainers:
-			hints = f.State.containers.keyHints()
+			hints = s.containers.keyHints()
 		case screenImages:
-			hints = f.State.images.keyHints()
+			hints = s.images.keyHints()
 		case screenVolumes:
-			hints = f.State.volumes.keyHints()
+			hints = s.volumes.keyHints()
 		}
 	}
-	return lipgloss.NewStyle().Width(r.W).Foreground(pal.muted).
-		Render(" " + hints + " ")
+	return layout.Label{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Text: " " + hints + " ", Style: layout.TextStyle{Fg: pal.muted}}
 }

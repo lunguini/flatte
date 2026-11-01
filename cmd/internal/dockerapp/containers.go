@@ -82,17 +82,23 @@ type containersScreen struct {
 	cpuHistory map[string][]float64
 	memHistory map[string][]float64
 	liveLogs   map[string][]string
-	logTarget  string
-	logScope   *flatte.Scope
-	zones      *flatui.ZoneScanner // auto-zones for list rows
-	detailTabs *flatui.TabBar      // stats/logs/inspect tab strip with mouse support
-	listHeight int
+	// nextDisplayedLogSeq numbers applied display entries independently of the
+	// retained 50-line window. A scoped value cancelled while queued was never
+	// displayed and does not reserve a number; a restarted stream may reuse it
+	// without creating duplicate visible entries.
+	nextDisplayedLogSeq map[string]int
+	logTarget           string
+	logScope            *flatte.Scope
+	zones               flatui.ZoneMap // measured list-row hit regions
+	detailTabs          *flatui.TabBar // stats/logs/inspect tab strip with mouse support
+	listHeight          int
 
 	activity      []string
 	statusLine    string
 	followTail    bool
 	drag          *dragState // non-nil while a divider is being dragged
-	pendingCursor int        // restored from session after layout sets list count
+	barDrag       scrollDrag
+	pendingCursor int // restored from session after layout sets list count
 }
 
 type dragState struct {
@@ -152,10 +158,9 @@ type containerStats struct {
 
 func newContainersScreen() containersScreen {
 	c := containersScreen{
-		containers: sampleContainers,
+		containers: append([]Container(nil), sampleContainers...),
 		cpu:        flatui.NewProgress(18),
 		mem:        flatui.NewProgress(18),
-		zones:      flatui.NewZoneScanner(),
 		followTail: true,
 		detailTabs: flatui.NewTabBar(
 			flatui.TabItem{ID: "stats", Label: "stats"},
@@ -165,6 +170,9 @@ func newContainersScreen() containersScreen {
 	}
 	c.focus.SetCount(3)
 	c.focus.Select(focusList)
+	// Keep the status line valid before the first resize/render. Rendering is a
+	// pure projection; all recomputation happens on state mutation paths.
+	c.recomputeStatusLine()
 	return c
 }
 
@@ -230,142 +238,200 @@ func (c *containersScreen) injectStreamDemo(id string) {
 	}
 }
 
-// listHeaderLines is the count of rows the list pane draws before the first
-// list row: the filter line plus a blank separator row.
-const listHeaderLines = 2
-
-// listNode builds the list pane as a real subtree: a Chrome-painted frame
-// (filter line, separator, scrollbar, padding — reproducing renderListPane's
-// non-row cells) with one ID'd Text per visible row composed on top. The row
-// nodes give the frame solve authoritative per-row rects, so hit-testing reads
-// rects["list:i"] instead of a parallel rowRects computation. Per-side padding
-// keeps the rows out of the regions the Chrome paints: the filter/separator
-// header rows on top, the left pad, and the right pad + scrollbar column.
+// listNode builds the list pane as a frame subtree: the filter line, a blank
+// row, and the visible rows from List.Rows ("list:i", so hit-testing reads
+// the solved row rects), beside the scrollbar column, inside the pane's
+// padding (none on top, so the filter line is flush with the other panes'
+// headers).
 func (c *containersScreen) listNode() layout.Node {
-	offset := c.list.Offset()
-	end := min(offset+c.listHeight, c.list.Count())
-	rows := make([]layout.Node, 0, max(end-offset, 0))
-	for i := offset; i < end; i++ {
-		rows = append(rows, layout.Text{
-			NodeBase: layout.NodeBase{ID: "list:" + strconv.Itoa(i), H: layout.Fixed(1)},
-			String:   c.renderListRow(i, i == c.list.Cursor()),
-		})
+	filterLine := "filter: " + c.filter.Value
+	if c.filter.Value == "" {
+		filterLine = "filter: (all)"
+	}
+	filterStyle := layout.TextStyle{}
+	if c.focus.Focused(focusFilter) {
+		filterStyle = layout.TextStyle{Bold: true, Fg: pal.accent}
+	}
+	var rows layout.Node = layout.Label{Text: "  (no matches)", Style: layout.TextStyle{Fg: pal.muted}}
+	if c.list.Count() > 0 {
+		rows = c.list.Rows("list", c.listRow)
 	}
 	return layout.Col{
 		NodeBase: layout.NodeBase{
-			ID:       "list",
-			W:        layout.Fixed(c.listPaneWidth),
-			H:        layout.Auto(),
-			Chrome:   c.renderListChrome,
-			PadTop:   listHeaderLines,
-			PadLeft:  panePadding,
-			PadRight: panePadding + 1, // right pad + scrollbar column
+			ID:        "list",
+			W:         layout.Fixed(c.listPaneWidth),
+			H:         layout.Auto(),
+			PadLeft:   panePadding,
+			PadRight:  panePadding,
+			PadBottom: panePadding,
 		},
-		Children: rows,
+		Children: []layout.Node{layout.Row{Children: []layout.Node{
+			layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Children: []layout.Node{
+				layout.Label{Text: filterLine, Style: filterStyle},
+				layout.Label{},
+				rows,
+			}},
+			listBar(c.list),
+		}}},
 	}
 }
 
-type containerDetailPane struct {
-	layout.NodeBase
-	screen *containersScreen
+// listRow is one container: its status (a dot or ring in a window, ● or ○
+// in the terminal), the selection marker (a chevron, or "> "), and its name,
+// bold when selected.
+func (c *containersScreen) listRow(idx int, selected bool) layout.Node {
+	if idx < 0 || idx >= len(c.filtered) {
+		return layout.Label{}
+	}
+	ct := c.containers[c.filtered[idx]]
+	status := layout.Icon{Name: layout.IconDot, Text: "●", Style: layout.TextStyle{Fg: pal.good}}
+	if ct.Status != "running" {
+		status = layout.Icon{Name: layout.IconCircle, Text: "○", Style: layout.TextStyle{Fg: pal.muted}}
+	}
+	marker, name := layout.Icon{Text: "  "}, layout.Label{Text: ct.Name}
+	if selected {
+		marker = layout.Icon{Name: layout.IconChevronRight, Text: "> "}
+		name.Style = layout.TextStyle{Bold: true, Fg: pal.text}
+	}
+	return layout.Row{Children: []layout.Node{status, marker, name}}
 }
 
-func newContainerDetailPane(c *containersScreen) containerDetailPane {
-	return containerDetailPane{
-		NodeBase: layout.NodeBase{ID: "detail", W: layout.Grow(1), H: layout.Auto()},
-		screen:   c,
+// detailNode is the detail pane as a frame subtree: the header (name and
+// tab strip), a blank row, and the active tab's body beside the scrollbar
+// column, inside the pane's padding. On the logs tab the follow indicator
+// takes the bottom padding row, right-aligned.
+func (c *containersScreen) detailNode() layout.Node {
+	pane := layout.Col{NodeBase: layout.NodeBase{
+		ID:        "detail",
+		W:         layout.Grow(1),
+		H:         layout.Auto(),
+		PadLeft:   panePadding,
+		PadRight:  panePadding,
+		PadBottom: panePadding,
+	}}
+	selected := c.selected()
+	if selected == nil {
+		pane.Children = []layout.Node{layout.Label{Text: "(no container selected)", Style: layout.TextStyle{Fg: pal.muted}}}
+		return pane
+	}
+	body := append([]layout.Node{c.detailHeader(selected), layout.Label{}}, c.tabBody(selected)...)
+	pane.Children = []layout.Node{layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1)}, Children: []layout.Node{
+		layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Children: body},
+		c.detailScrollBar(),
+	}}}
+	if indicator := c.followIndicator(); indicator != nil {
+		pane.PadBottom = 0
+		pane.Children = append(pane.Children, layout.Row{Children: []layout.Node{layout.NewSpacer(), indicator}})
+	}
+	return pane
+}
+
+// tabBody is the active tab's content: stats as labelled rows and meters,
+// logs and inspect as their viewports.
+func (c *containersScreen) tabBody(selected *Container) []layout.Node {
+	indent := layout.NodeBase{PadLeft: 2}
+	switch c.tab {
+	case tabStats:
+		status := layout.TextStyle{Fg: lipgloss.Color("203")}
+		if selected.Status == "running" {
+			status = layout.TextStyle{Fg: lipgloss.Color("114")}
+		}
+		// Names sit in a fixed column per group, so values (and the CPU and
+		// MEM bars) line up in a proportional font too.
+		field := func(name string, width int, value layout.Node) layout.Node {
+			return layout.Row{NodeBase: indent, Children: []layout.Node{
+				layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(width)}, Text: name},
+				value,
+			}}
+		}
+		return []layout.Node{
+			field("status:", 8, layout.Label{Text: selected.Status, Style: status}),
+			field("image:", 8, layout.Label{Text: selected.Image}),
+			layout.Label{},
+			field("CPU", 4, c.cpu.Layout()),
+			field("hist", 5, layout.Text{String: sparkline(c.cpuHistory[selected.ID], lipgloss.Color("117"))}),
+			layout.Label{},
+			field("MEM", 4, c.mem.Layout()),
+			field("hist", 5, layout.Text{String: sparkline(c.memHistory[selected.ID], lipgloss.Color("114"))}),
+		}
+	case tabLogs:
+		if c.logs.VisibleLines() == 0 {
+			return []layout.Node{layout.Label{Text: "(no logs)", Style: layout.TextStyle{Fg: pal.muted}}}
+		}
+		return []layout.Node{viewportBody(logsBodyID, c.logs)}
+	case tabInspect:
+		if c.inspect.VisibleLines() == 0 {
+			return []layout.Node{layout.Label{Text: "(no inspect data)", Style: layout.TextStyle{Fg: pal.muted}}}
+		}
+		return []layout.Node{viewportBody(inspectBodyID, c.inspect)}
+	}
+	return nil
+}
+
+// activityNode is the activity pane: a filled title row, a blank row, and
+// the newest events that fit, each truncated to the pane.
+func (c *containersScreen) activityNode() layout.Node {
+	width := max(c.activityPaneWidth-paneBorderCols, 1)
+	bodyHeight := max(c.bodyContentHeight-paneBorderRows-2, 0)
+	visible := c.activity[max(len(c.activity)-bodyHeight, 0):]
+	children := []layout.Node{
+		layout.Row{NodeBase: layout.NodeBase{Box: layout.Box{Background: pal.accent}}, Children: []layout.Node{
+			layout.Label{Text: "activity", Style: layout.TextStyle{Bold: true, Fg: pal.dark}},
+		}},
+		layout.Label{},
+	}
+	if len(visible) == 0 {
+		children = append(children, layout.Label{Text: "(no events yet)", Style: layout.TextStyle{Fg: pal.muted}})
+	}
+	for _, line := range visible {
+		children = append(children, layout.Label{Text: truncateToWidth(line, width)})
+	}
+	return layout.Col{
+		NodeBase: layout.NodeBase{
+			ID: "activity", W: layout.Fixed(c.activityPaneWidth), H: layout.Auto(),
+			PadLeft: panePadding, PadRight: panePadding, PadBottom: panePadding,
+		},
+		Children: children,
 	}
 }
 
-func (p containerDetailPane) Render(r layout.Rect) string {
-	if p.screen == nil {
-		return ""
+// dividerNode is the containers body's divider index (0: list|detail,
+// 1: detail|activity), in the accent while it is dragged.
+func (c *containersScreen) dividerNode(index int) layout.Node {
+	return dragDivider("div"+strconv.Itoa(index), c.drag != nil && c.drag.divider == index)
+}
+
+// statusNode is the status row: the containers summary on a filled line.
+func (c *containersScreen) statusNode() layout.Node {
+	return layout.Row{
+		NodeBase: layout.NodeBase{ID: "status", H: layout.Fixed(statusLineRows), Box: layout.Box{Background: lipgloss.Color("236")}},
+		Children: []layout.Node{layout.Label{Text: c.statusLine, Style: layout.TextStyle{Fg: lipgloss.Color("252")}}},
 	}
-	return p.screen.renderDetailPane(r)
-}
-
-type containerActivityPane struct {
-	layout.NodeBase
-	screen *containersScreen
-}
-
-func newContainerActivityPane(c *containersScreen) containerActivityPane {
-	return containerActivityPane{
-		NodeBase: layout.NodeBase{ID: "activity", W: layout.Fixed(c.activityPaneWidth), H: layout.Auto()},
-		screen:   c,
-	}
-}
-
-func (p containerActivityPane) Render(r layout.Rect) string {
-	if p.screen == nil {
-		return ""
-	}
-	return p.screen.renderActivityPane(r)
-}
-
-type containerDivider struct {
-	layout.NodeBase
-	screen *containersScreen
-	index  int
-}
-
-func newContainerDivider(c *containersScreen, index int) containerDivider {
-	return containerDivider{
-		NodeBase: layout.NodeBase{ID: "div" + strconv.Itoa(index), W: layout.Fixed(dividerWidth), H: layout.Auto()},
-		screen:   c,
-		index:    index,
-	}
-}
-
-func (d containerDivider) Render(r layout.Rect) string {
-	if d.screen == nil {
-		return ""
-	}
-	return d.screen.renderDivider(d.index, r)
-}
-
-type containerStatusRow struct {
-	layout.NodeBase
-	render func(layout.Rect) string
-}
-
-func newContainerStatusRow(render func(layout.Rect) string) containerStatusRow {
-	return containerStatusRow{
-		NodeBase: layout.NodeBase{ID: "status", W: layout.Auto(), H: layout.Fixed(statusLineRows)},
-		render:   render,
-	}
-}
-
-func (s containerStatusRow) Render(r layout.Rect) string {
-	if s.render == nil {
-		return ""
-	}
-	return s.render(r)
 }
 
 // containersBodyTree builds the 3-pane containers body layout tree for Solve.
-func containersBodyTree(c *containersScreen, status func(layout.Rect) string) layout.Col {
+func containersBodyTree(c *containersScreen, status layout.Node) layout.Col {
 	return layout.Col{
 		Children: []layout.Node{
 			layout.Row{
 				NodeBase: layout.NodeBase{H: layout.Grow(1)},
 				Children: []layout.Node{
 					c.listNode(),
-					newContainerDivider(c, 0),
-					newContainerDetailPane(c),
-					newContainerDivider(c, 1),
-					newContainerActivityPane(c),
+					c.dividerNode(0),
+					c.detailNode(),
+					c.dividerNode(1),
+					c.activityNode(),
 				},
 			},
-			newContainerStatusRow(status),
+			status,
 		},
 	}
 }
 
 // bodyNode returns the containers body subtree (3 panes + dividers over a
-// status row) as a frame child that grows to fill the body. status renders the
-// bottom status/command line; pass nil when only solving for geometry.
-func (c *containersScreen) bodyNode(status func(layout.Rect) string) layout.Node {
+// status row) as a frame child that grows to fill the body. status is the
+// bottom status/command line (the statusNode, or the command bar).
+func (c *containersScreen) bodyNode(status layout.Node) layout.Node {
 	t := containersBodyTree(c, status)
 	t.H = layout.Grow(1)
 	return t
@@ -373,8 +439,8 @@ func (c *containersScreen) bodyNode(status func(layout.Rect) string) layout.Node
 
 // adopt takes the solved frame geometry (absolute coordinates) and derives the
 // containers screen's dimensions and widget sizes from it. This is the single
-// site where pane geometry is consumed — the solve itself happens once, in the
-// frame solve (View) or the warm solve (resize/drag).
+// site where pane geometry is consumed; the host solves the frame and delivers
+// it as a LayoutEvent before painting.
 func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	c.rects = rects
 	list := rects["list"]
@@ -388,24 +454,28 @@ func (c *containersScreen) adopt(rects map[string]layout.Rect) {
 	c.listHeight = max(listInnerHeight-listChromeRows, 0)
 	c.list.SetHeight(c.listHeight)
 
-	detailInnerWidth := max(c.detailPaneWidth-paneBorderCols-1, 1)
+	detailInnerWidth := detailContentWidth(c.detailPaneWidth)
 	detailInnerHeight := max(c.bodyContentHeight-paneBorderRows, 0)
 	const detailChromeRows = 2
 	contentHeight := max(detailInnerHeight-detailChromeRows, 0)
 	c.logs.SetSize(detailInnerWidth, contentHeight)
 	c.inspect.SetSize(detailInnerWidth, contentHeight)
+	// The active tab's viewport, laid out, scrolls over the lines the host
+	// wrapped it into (a window wraps in its font).
+	c.logs.Adopt(rects, logsBodyID)
+	c.inspect.Adopt(rects, inspectBodyID)
 	c.cpu.SetWidth(max(detailInnerWidth-16, 4))
 	c.mem.SetWidth(max(detailInnerWidth-16, 4))
 
 	c.registerListZones()
 }
 
-// registerListZones feeds list-row hit rects to the zone scanner straight from
+// registerListZones feeds list-row hit rects to the zone map straight from
 // the frame-solved geometry. Each visible row is an ID'd node ("list:i"), so its
 // rect is recorded by the single frame walk — paint and hit-testing read the
 // same rects and can't drift.
 func (c *containersScreen) registerListZones() {
-	c.zones.Reset()
+	c.zones.Clear()
 	for id, rect := range c.rects {
 		if strings.HasPrefix(id, "list:") {
 			c.zones.Set(id, rect)
@@ -413,28 +483,23 @@ func (c *containersScreen) registerListZones() {
 	}
 }
 
-// detailTabStripRects returns the detail tab strip's absolute rect keyed by its
-// layout ID. The strip is right-aligned in the pane's content header row (the
-// same placement renderDetailPane composes), and its width is the strip's own
-// natural layout size — so the per-label math stays private to the widget.
-func (c *containersScreen) detailTabStripRects() map[string]layout.Rect {
-	detailRect := c.rects["detail"]
-	stripW, _ := c.detailTabs.Layout().Size()
-	contentStartX := detailRect.X + panePadding
-	contentWidth := detailRect.W - paneBorderCols
-	localStart := contentWidth - stripW.Value
-	if localStart < 0 || detailRect.W == 0 {
-		return nil
-	}
-	return map[string]layout.Rect{
-		detailTabsID: {
-			X: contentStartX + localStart,
-			Y: detailRect.Y,
-			W: stripW.Value,
-			H: 1,
-		},
-	}
+// detailHeader builds the detail pane's header row: the container name, then
+// the tab strip flush right. It is the detail pane's child in the frame tree.
+//
+// The name takes the remaining width and truncates first. A strip wider than
+// the pane is clipped at the pane edge rather than wrapped onto a second row:
+// clipped tabs stay where they are painted (and clickable while any of them
+// shows), where a wrap would move them away from their solved positions.
+func (c *containersScreen) detailHeader(selected *Container) layout.Node {
+	return layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(1)}, Children: []layout.Node{
+		layout.Label{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Text: selected.Name, Style: layout.TextStyle{Bold: true, Fg: pal.dark}},
+		c.detailTabs.Layout(),
+	}}
 }
+
+// detailContentWidth is the detail pane's content width: the pane minus its
+// side padding and the scrollbar column.
+func detailContentWidth(paneW int) int { return max(paneW-paneBorderCols-1, 1) }
 
 // clampPaneWidths enforces minimums on list and activity widths given the
 // total body width. Detail is derived after this runs; its minimum is
@@ -475,12 +540,11 @@ func (c *containersScreen) applyDrag(root *State, currentX int) {
 		maxActivity := c.width - c.listPaneWidth - minDetailWidth - 2*dividerWidth
 		c.activityPaneWidth = max(minActivityWidth, min(newActivity, maxActivity))
 	}
-	root.refreshActiveRects()
 	c.detailTabs.SetActive(int(c.tab))
 }
 
-// Detail tab hit-testing goes through detailTabStripRects + TabBar.HitTest —
-// solved geometry, not manual ZoneMap rectangles. See handleMouse for routing.
+// Detail tab hit-testing goes through the frame's solved tab rects +
+// TabBar.HitTest, not manual ZoneMap rectangles. See handleMouse for routing.
 
 // dividerAt reports which divider (0 or 1) is at the given frame
 // coordinates, using the absolute solved rects for hit-testing.
@@ -495,10 +559,6 @@ func (c *containersScreen) dividerAt(x, y int) int {
 		return 1
 	}
 	return -1
-}
-
-func (c *containersScreen) renderDivider(idx int, r layout.Rect) string {
-	return renderDragDivider(r.H, c.drag != nil && c.drag.divider == idx)
 }
 
 func (c *containersScreen) recomputeStatusLine() {
@@ -528,6 +588,19 @@ func (c *containersScreen) recomputeStatusLine() {
 }
 
 func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m flatte.MouseEvent) {
+	// A press or drag on a scroll bar scrolls its pane.
+	if bar, y, h, handled := c.barDrag.event(m, listBarID, detailBarID); handled {
+		switch bar {
+		case listBarID:
+			if scrollList(&c.list, y, h) {
+				c.onSelectionChange(root, fx)
+			}
+		case detailBarID:
+			d := c.detailScrollBar()
+			c.scrollActiveTab(d.OffsetAt(y, h) - d.Offset)
+		}
+		return
+	}
 	// Ongoing drag — track motion and release
 	if c.drag != nil {
 		if m.Action == flatte.MouseRelease || (m.Button == flatte.MouseNone && m.Action != flatte.MouseMotion) {
@@ -568,12 +641,9 @@ func (c *containersScreen) handleMouse(root *State, fx flatte.Effects[State], m 
 		return
 	}
 
-	// Detail tab clicks. The detail pane composes its own header row internally
-	// (it is a leaf), so per-tab rects aren't in the frame geometry; instead we
-	// hand HitTest the tab strip's absolute rect and let it map the click via
-	// its private label-width math. The strip is right-aligned in the pane's
-	// content, matching renderDetailPane.
-	if idx, ok := c.detailTabs.HitTest(c.detailTabStripRects(), m.X, m.Y); ok {
+	// Detail tab clicks: the header is in the frame tree, so each tab's rect
+	// is the one the frame painted.
+	if idx, ok := c.detailTabs.HitTest(c.rects, m.X, m.Y); ok {
 		c.setTab(detailTab(idx))
 		return
 	}
@@ -621,6 +691,7 @@ func (c *containersScreen) refreshFilter() {
 	}
 	c.list.SetCount(len(c.filtered))
 	c.syncDetail()
+	c.recomputeStatusLine()
 }
 
 func (c *containersScreen) syncDetail() {
@@ -753,23 +824,39 @@ func (c *containersScreen) startScopedLogs(_ *State, fx flatte.Effects[State]) {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
+	if c.nextDisplayedLogSeq == nil {
+		c.nextDisplayedLogSeq = make(map[string]int)
+	}
 
 	c.logScope = flatte.NewScope(fx, "logs:"+ct.ID)
 	targetID := ct.ID
+	// Capture the sequence on the loop goroutine before starting the worker.
+	// The worker must not read liveLogs: folds append to that map on the loop
+	// goroutine, and reading it here would race with those appends.
+	startSeq := c.nextDisplayedLogSeq[targetID]
 	flatte.ScopeStream(c.logScope, fx, func(ctx context.Context, send func(string)) {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				send(scopedLogLine(targetID, len(c.liveLogs[targetID])))
-			}
-		}
+		streamScopedLogs(ctx, targetID, startSeq, ticker.C, send)
 	}, func(s *State, line string) {
 		s.containers.appendLiveLog(targetID, line)
 	})
+}
+
+// streamScopedLogs emits a sequence of log lines without consulting app
+// state. ticks is injected so the sequencing behavior can be tested without
+// waiting on wall-clock time; production passes a ticker channel.
+func streamScopedLogs(ctx context.Context, targetID string, startSeq int, ticks <-chan time.Time, send func(string)) {
+	seq := startSeq
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticks:
+			send(scopedLogLine(targetID, seq))
+			seq++
+		}
+	}
 }
 
 func scopedLogLine(id string, seq int) string {
@@ -801,14 +888,22 @@ func (c *containersScreen) hostAdvanceLogs() {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
+	if c.nextDisplayedLogSeq == nil {
+		c.nextDisplayedLogSeq = make(map[string]int)
+	}
 	c.logTarget = ct.ID
-	c.appendLiveLog(ct.ID, scopedLogLine(ct.ID, len(c.liveLogs[ct.ID])))
+	seq := c.nextDisplayedLogSeq[ct.ID]
+	c.appendLiveLog(ct.ID, scopedLogLine(ct.ID, seq))
 }
 
 func (c *containersScreen) appendLiveLog(id, line string) {
 	if c.liveLogs == nil {
 		c.liveLogs = make(map[string][]string)
 	}
+	if c.nextDisplayedLogSeq == nil {
+		c.nextDisplayedLogSeq = make(map[string]int)
+	}
+	c.nextDisplayedLogSeq[id]++
 	c.liveLogs[id] = append(c.liveLogs[id], line)
 	if len(c.liveLogs[id]) > 50 {
 		c.liveLogs[id] = c.liveLogs[id][len(c.liveLogs[id])-50:]
@@ -1049,42 +1144,6 @@ func (c *containersScreen) resumeFollow() {
 	c.logs.GotoBottom()
 }
 
-func (c *containersScreen) renderStatusLine(width int) string {
-	if c.statusLine == "" {
-		c.recomputeStatusLine()
-	}
-	return lipgloss.NewStyle().
-		Width(width).
-		Background(lipgloss.Color("236")).
-		Foreground(lipgloss.Color("252")).
-		Render(c.statusLine)
-}
-
-func (c *containersScreen) renderActivityPane(r layout.Rect) string {
-	activityInnerWidth := max(r.W-paneBorderCols, 1)
-	activityInnerHeight := max(r.H-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(activityInnerWidth).Height(activityInnerHeight)
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render("activity")
-
-	bodyHeight := max(activityInnerHeight-2, 0)
-	start := len(c.activity) - bodyHeight
-	if start < 0 {
-		start = 0
-	}
-	visible := c.activity[start:]
-	if len(visible) == 0 {
-		visible = []string{lipgloss.NewStyle().Foreground(pal.muted).Render("(no events yet)")}
-	}
-	truncated := make([]string, len(visible))
-	for i, line := range visible {
-		truncated[i] = truncateToWidth(line, activityInnerWidth)
-	}
-	headerRow := lipgloss.NewStyle().Width(activityInnerWidth).Background(pal.accent).Render(title)
-	content := headerRow + "\n\n" + strings.Join(truncated, "\n")
-	inner := contentStyle.Render(content)
-	return paneStyle(r.W, r.H, false, false).Render(inner)
-}
-
 func (c *containersScreen) keyHints() string {
 	switch c.focus.Index() {
 	case focusFilter:
@@ -1104,166 +1163,44 @@ func (c *containersScreen) keyHints() string {
 	return "1/2/3 switch  q quit"
 }
 
-// renderListRow renders one list row exactly as the pane always has (status
-// glyph, selection marker, name). It is the per-row node's paint, called from
-// listNode with the absolute item index.
-func (c *containersScreen) renderListRow(idx int, selected bool) string {
-	if idx < 0 || idx >= len(c.filtered) {
-		return ""
-	}
-	ct := c.containers[c.filtered[idx]]
-	marker := "  "
-	if selected {
-		marker = "> "
-	}
-	statusColor := pal.good
-	if ct.Status != "running" {
-		statusColor = pal.bad
-	}
-	statusIcon := lipgloss.NewStyle().Foreground(statusColor).Render("●")
-	if ct.Status != "running" {
-		statusIcon = lipgloss.NewStyle().Foreground(pal.muted).Render("○")
-	}
-	name := ct.Name
-	if selected {
-		name = lipgloss.NewStyle().Bold(true).Foreground(pal.text).Render(name)
-	}
-	return statusIcon + marker + name
+// detailScrollBar is the active tab's scroll bar: the logs' or inspect
+// viewport's position, blank on the stats tab.
+// logsBodyID and inspectBodyID name the space the logs and inspect
+// viewports fill, so they adopt the host's layout of their text.
+const (
+	logsBodyID    = "detail:logs"
+	inspectBodyID = "detail:inspect"
+)
+
+// viewportBody is a tab's viewport in the space left below the header.
+func viewportBody(id string, v flatui.Viewport) layout.Node {
+	return layout.Col{NodeBase: layout.NodeBase{ID: id, H: layout.Grow(1)}, Children: []layout.Node{v.Layout()}}
 }
 
-// renderListChrome paints the pane frame — filter line, blank separator,
-// scrollbar column, and padding — with a blank row area. The per-row Text
-// children (see listNode) compose the rows on top of that blank area, so the
-// non-row cells come from the same lipgloss pipeline the pane always used and
-// stay byte-identical. When nothing matches, the frame carries the placeholder
-// itself (there are no row children to draw it).
-func (c *containersScreen) renderListChrome(r layout.Rect) string {
-	rows := ""
-	if c.list.Count() == 0 {
-		rows = lipgloss.NewStyle().Foreground(pal.muted).Render("  (no matches)")
-	}
+// detailBarID names the detail pane's scroll bar.
+const detailBarID = "detailbar"
 
-	listInnerWidth := max(r.W-paneBorderCols-1, 1) // -1 for scrollbar
-	listInnerHeight := max(r.H-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(listInnerWidth).Height(listInnerHeight)
-
-	filterLine := "filter: " + c.filter.Value
-	if c.filter.Value == "" {
-		filterLine = "filter: (all)"
-	}
-	if c.focus.Focused(focusFilter) {
-		filterLine = lipgloss.NewStyle().Bold(true).Foreground(pal.accent).Render(filterLine)
-	}
-
-	inner := contentStyle.Render(filterLine + "\n\n" + rows)
-	bar := scrollbarLines(c.list.Offset(), c.listHeight, c.list.Count(), listInnerHeight)
-	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
-	combined := withScrollbar(inner, barStyled)
-	return paneStyle(r.W, r.H, c.focus.Focused(focusList) || c.focus.Focused(focusFilter), false).Render(combined)
-}
-
-func (c *containersScreen) renderDetailPane(r layout.Rect) string {
-	detailInnerWidth := max(r.W-paneBorderCols-1, 1)
-	detailInnerHeight := max(r.H-paneBorderRows, 0)
-	contentStyle := lipgloss.NewStyle().Width(detailInnerWidth).Height(detailInnerHeight)
-
-	selected := c.selected()
-	if selected == nil {
-		empty := lipgloss.NewStyle().Foreground(pal.muted).Render("(no container selected)")
-		return paneStyle(r.W, r.H, c.focus.Focused(focusDetail), false).Render(empty)
-	}
-
-	indicator := c.renderFollowIndicator()
-	rightChildren := []layout.Node{c.detailTabs.Layout()}
-	if indicator != "" {
-		rightChildren = append(rightChildren, layout.Text{String: " " + indicator})
-	}
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.dark).Render(selected.Name)
-	headerNode := layout.Row{
-		Children: []layout.Node{
-			layout.Text{String: title},
-			layout.NewSpacer(),
-			layout.Row{Children: rightChildren},
-		},
-	}
-	// Compose at the row's natural width, not the (possibly narrower) pane
-	// width, so an over-wide tab strip is preserved instead of clipped. The
-	// enclosing contentStyle.Render(Width: detailInnerWidth) then wraps the
-	// overflow onto a second line — the same behavior the retired join-based
-	// layout.Render produced.
-	composeW := detailInnerWidth
-	if natW, _ := headerNode.Size(); natW.Value > composeW {
-		composeW = natW.Value
-	}
-	headerRow, _ := layout.SolveAndCompose(headerNode, composeW, 1)
-
-	body := c.renderActiveTab(selected)
-	inner := contentStyle.Render(strings.Join([]string{headerRow, "", body}, "\n"))
-	bar := c.detailScrollbar(detailInnerHeight)
-	barStyled := lipgloss.NewStyle().Foreground(pal.panel).Render(bar)
-	combined := withScrollbar(inner, barStyled)
-	focused := c.focus.Focused(focusDetail)
-	return paneStyle(r.W, r.H, focused, false).Render(combined)
-}
-
-func (c *containersScreen) detailScrollbar(detailInnerHeight int) string {
+func (c *containersScreen) detailScrollBar() layout.ScrollBar {
+	bar := layout.ScrollBar{NodeBase: layout.NodeBase{ID: detailBarID}, Color: pal.panel}
 	switch c.tab {
 	case tabLogs:
-		return scrollbarLines(c.logs.Offset(), c.logs.VisibleLines(), c.logs.TotalLines(), detailInnerHeight)
+		bar.Offset, bar.Visible, bar.Total = c.logs.Offset(), c.logs.VisibleLines(), c.logs.TotalLines()
 	case tabInspect:
-		return scrollbarLines(c.inspect.Offset(), c.inspect.VisibleLines(), c.inspect.TotalLines(), detailInnerHeight)
-	default:
-		return strings.Repeat(" ", detailInnerHeight)
+		bar.Offset, bar.Visible, bar.Total = c.inspect.Offset(), c.inspect.VisibleLines(), c.inspect.TotalLines()
 	}
+	return bar
 }
 
-func (c *containersScreen) renderActiveTab(selected *Container) string {
-	switch c.tab {
-	case tabStats:
-		statusLine := selected.Status
-		if selected.Status == "running" {
-			statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Render(selected.Status)
-		} else {
-			statusLine = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render(selected.Status)
-		}
-		cpuSpark := sparkline(c.cpuHistory[selected.ID], lipgloss.Color("117"))
-		memSpark := sparkline(c.memHistory[selected.ID], lipgloss.Color("114"))
-		return strings.Join([]string{
-			"  status: " + statusLine,
-			"  image:  " + selected.Image,
-			"",
-			"  CPU " + c.cpu.View(),
-			"  hist " + cpuSpark,
-			"",
-			"  MEM " + c.mem.View(),
-			"  hist " + memSpark,
-		}, "\n")
-	case tabLogs:
-		view := c.logs.View()
-		if view == "" {
-			view = lipgloss.NewStyle().Foreground(pal.muted).Render("(no logs)")
-		}
-		return view
-	case tabInspect:
-		view := c.inspect.View()
-		if view == "" {
-			view = lipgloss.NewStyle().Foreground(pal.muted).Render("(no inspect data)")
-		}
-		return view
-	}
-	return ""
-}
-
-// renderFollowIndicator returns the follow/paused indicator for the logs
-// tab. Rendered inside the tab-bar row (NOT as an extra body line, which
-// would overflow the pane's Height and corrupt the frame — see TTY-found
-// bug 2026-06-25).
-func (c *containersScreen) renderFollowIndicator() string {
+// followIndicator is the logs' follow/paused indicator, or nil while the
+// logs fit. It takes the detail pane's bottom padding row (not an extra body
+// line, which would overflow the pane — see TTY-found bug 2026-06-25; and not
+// the header row, where it pushed the tab strip out of place).
+func (c *containersScreen) followIndicator() layout.Node {
 	if c.logs.TotalLines() == 0 || c.logs.TotalLines() <= c.logs.VisibleLines() {
-		return ""
+		return nil
 	}
 	if c.followTail {
-		return lipgloss.NewStyle().Foreground(pal.good).Render("↓ tail")
+		return layout.Label{Text: "↓ tail", Style: layout.TextStyle{Fg: pal.good}}
 	}
-	return lipgloss.NewStyle().Foreground(pal.muted).Render("↑ paused (G)")
+	return layout.Label{Text: "↑ paused (G)", Style: layout.TextStyle{Fg: pal.muted}}
 }

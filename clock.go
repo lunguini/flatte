@@ -2,8 +2,13 @@ package flatte
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrInvalidInterval is returned by Every and ScopeEvery when interval is
+// zero or negative.
+var ErrInvalidInterval = errors.New("flat: interval must be positive")
 
 // Clock abstracts the timing source for interval effects so tests can
 // drive them deterministically. The real clock uses time.Ticker; flatest

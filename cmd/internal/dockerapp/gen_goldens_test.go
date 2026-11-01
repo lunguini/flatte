@@ -22,9 +22,9 @@ func TestGenerateGoldens(t *testing.T) {
 	}
 	for _, c := range cases {
 		s := NewState()
-		Handle(s, flatte.ResizeEvent{Width: 80, Height: 24}, flatte.Effects[State]{})
+		send(s, flatte.ResizeEvent{Width: 80, Height: 24}, flatte.Effects[State]{})
 		s.screen = c.screen
-		frame := View(s, flatte.RenderContext{Width: 80})
+		frame := render(s)
 		body := flatest.RenderFrame(frame) + "\n"
 		if err := os.WriteFile(c.path, []byte(body), 0o644); err != nil {
 			t.Fatal(err)

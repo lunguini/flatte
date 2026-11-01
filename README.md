@@ -34,6 +34,24 @@ identifier:
 import "github.com/lunguini/flatte"
 ```
 
+## Where it runs
+
+One `App[S]` runs in every host below; the host is chosen when you call
+`flatte.Run`, not in your app code.
+
+| Host | How to select it | Status |
+|---|---|---|
+| Terminal (macOS, Linux) | `flatte.Run(ctx, app)` | Supported |
+| Terminal (Windows) | `flatte.Run(ctx, app)` | Tested in CI; a real-console check is still recommended |
+| macOS window | `flatte.Run(ctx, app, window.Options{})` | Supported, no cgo |
+| Browser, terminal look | `flatte.Run` built with `GOOS=js GOARCH=wasm` | Supported (Go and TinyGo) |
+| Browser, GUI look on a canvas | `window.Options` built for js/wasm | Supported; no menu bar, context menus, extra windows, or file dialogs yet |
+| Windows and Linux windows | `window.Options` | Not yet: falls back to the terminal |
+
+`window.Supported()` reports whether the GUI host is available in the
+current build. See [One app, three hosts](quick-reference.md#one-app-three-hosts)
+for the setup of each.
+
 ## Minimal App
 
 ```go
@@ -98,18 +116,63 @@ func main() {
   key policy.
 - Tests use normal field assertions plus `flatest` golden/harness helpers.
 
+## Current terminal input scope
+
+Flatte currently delivers key presses (including F1–F12), paste, focus,
+mouse, clipboard, and resize events through its closed `Event` set. Key
+release events and terminal capability/keyboard-enhancement reports are not
+delivered. Composite or IME text is currently reduced to the first rune of a
+key event. `PasteEvent` preserves multi-rune pasted strings, but it is not an
+IME substitute; applications requiring composition must wait for a dedicated
+text-input API.
+
+Inline rendering cannot be combined with mouse reporting: `Run` returns
+`ErrInlineMouseUnsupported`. Inline frames can move as scrollback is printed,
+so Flatte does not claim frame-relative mouse coordinates in that mode.
+
+`ResizeEvent` is emitted initially. On Unix, later terminal resizes arrive via
+`SIGWINCH`; on Windows, ultraviolet receives console window-size events from a
+real Windows console. The repository's Windows checks compile and run tests,
+but piped input is not evidence of live console-resize behavior; verify that
+path in an actual Windows console before relying on it operationally.
+
+The repository includes an opt-in real-console gate. In PowerShell on Windows,
+build the test binary, run it directly, and resize the console once:
+
+```powershell
+go test -c -o flatte-resize-smoke.exe .
+$env:FLATTE_WINDOWS_RESIZE_TTY = "1"
+.\flatte-resize-smoke.exe -test.run TestWindowsConsoleResizeTTY -test.v
+```
+
 ## Packages
 
 - `github.com/lunguini/flatte` (`flatte`) - runtime, events, effects, frame,
-  cursor, clipboard, exec, file selection.
+  cursor, clipboard, exec, file selection. `flatte.Run` uses the native
+  terminal by default and mounts a browser page on js/wasm.
 - `github.com/lunguini/flatte/flatui` - stateful UI helpers such as `TextField`,
   `Textarea`, `Viewport`, `List`, `Table`, `Tree`, `FocusRing`, `Paginator`,
   `Progress`, `Spinner`, `Timer`, and `Stopwatch`.
 - `github.com/lunguini/flatte/flatui/layout` - flexbox-style layout engine
-  (`Row`, `Col`, `Text`, `Spacer`) that solves a frame tree once into composed
-  content plus per-ID rects for geometry-based hit-testing.
+  (`Row`, `Col`, `Scroll`, `Label`, `Input`, `Text`, `Spacer`) that solves a
+  frame tree once into composed content plus per-ID rects for geometry-based
+  hit-testing; return the tree as `Frame.Root` and the runtime composes it
+  and fills `MouseEvent.Target`. The same tree solves in points for GUI
+  backends (`LayoutScene`).
 - `github.com/lunguini/flatte/flatest` - deterministic app driver, golden
   assertions, frame rendering, and replay helpers.
+- `github.com/lunguini/flatte/window` (separate module) - runs the same app in
+  a native window with real text and components (macOS, no cgo), or with the
+  same look on a browser canvas in js/wasm builds. Select it
+  through the shared entry point: `flatte.Run(ctx, app, window.Options{})`.
+  On unsupported platforms `window.Options` installs no host; use
+  `window.Supported()` to show a native-window flag only where available.
+- `github.com/lunguini/flatte/window/media` - `media.Controls{}` opts a macOS
+  terminal run into system Now Playing controls. It is safe alongside
+  `window.Options`; the window host connects media when `App.NowPlaying` is set.
+
+Custom drivers implement the small host contract in the root `flatte` package;
+see [Writing a host](quick-reference.md#writing-a-host).
 
 ## Navigation Patterns
 
@@ -159,9 +222,50 @@ Flatte stands on a lot of excellent open-source work:
 ## Further Reading
 
 - [Quick Reference](quick-reference.md) maps common TUI needs to Flatte APIs.
+- [One app, three hosts](quick-reference.md#one-app-three-hosts) shows the terminal, native window, and browser setup.
 - [Examples](examples.md) maps every sample app to the capability it
   demonstrates.
 - [Contributing](CONTRIBUTING.md) covers Conventional Commits, the quality
   bar, and the golden-snapshot policy.
 - [Changelog](CHANGELOG.md) is generated from commit messages on each
   release.
+
+## Roadmap
+
+Flatte is pre-1.0. Planned work, roughly in order:
+
+- **Windows and Linux windows.** `window.Options` currently opens a window
+  only on macOS; elsewhere it falls back to the terminal. Native hosts for
+  Windows and Linux are planned; until then, treat the GUI as macOS and
+  browser only.
+- **Windows terminal verification.** The Windows build runs the test suite in
+  CI, but resize and input are still to be checked in a real Windows console
+  (see [Current terminal input scope](#current-terminal-input-scope)).
+- **Browser canvas parity.** Menu bar, context menus, secondary windows, and
+  file dialogs on the canvas host, and a smaller wasm download.
+- **API stabilization toward 1.0,** driven by feedback from apps built on
+  Flatte.
+
+## Compatibility and current limits
+
+Flatte is pre-1.0. The public packages follow Go module versioning, and
+breaking API changes are called out in the changelog; the API snapshot test is
+a regression guard, not a promise that every 0.x release is source-compatible.
+Ultraviolet and Lip Gloss are implementation dependencies: applications use
+Flatte's events, frames, and layout types rather than substrate types.
+
+The deprecated raw-channel `Async` bridge was removed in the 2026-08 breaking
+stabilization increment; use `Go` or off-loop `Effects.Send`. Use
+`flatest.Start` for app-level tests and `flatest.NewHarnessEffects` for
+callback-level tests that pass Effects directly to `Handle`.
+
+Public widget dimensions clamp to 0..65,536 cells. `SaveState` syncs the file
+before replacement and additionally syncs the containing directory on Unix;
+use `LoadStateWithError` when corrupt state must be preserved rather than
+silently replaced by defaults.
+
+See [Current terminal input scope](#current-terminal-input-scope) for the
+current input and resize limitations. Apps should size scrollable content with
+`flatui.Viewport`, return layout trees as `Frame.Root` so mouse events carry
+`Target`/`TargetRect`, and adopt solved geometry into widget state from
+`LayoutEvent`, which the runtime delivers before painting.

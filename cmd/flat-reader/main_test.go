@@ -7,13 +7,21 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
-// ready builds a state already sized to an 80x24 terminal.
+// ready builds a state already laid out on an 80x24 terminal.
 func ready() *State {
 	s := NewState()
-	s.layout(80, 24)
+	settle(s, 80, 24)
 	return s
+}
+
+// settle composes the view at width×height and delivers the solved rects as
+// the runtime does before painting.
+func settle(s *State, width, height int) {
+	_, comp := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, height)
+	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
 }
 
 func TestHandleScrollKeysMoveTheViewport(t *testing.T) {
@@ -36,7 +44,7 @@ func TestHandleGotoBottomAndQuit(t *testing.T) {
 		t.Fatal("G did not reach bottom")
 	}
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")
@@ -46,7 +54,7 @@ func TestHandleGotoBottomAndQuit(t *testing.T) {
 func TestResizeShrinksViewportInsteadOfBreaking(t *testing.T) {
 	s := ready()
 	tall := s.vp.VisibleLines()
-	s.layout(80, 10) // shrink height
+	settle(s, 80, 10) // shrink height
 	short := s.vp.VisibleLines()
 	if short >= tall {
 		t.Fatalf("VisibleLines did not shrink: %d -> %d", tall, short)
@@ -71,7 +79,7 @@ func TestMouseWheelScrollsTheViewport(t *testing.T) {
 func TestViewKeepsChromePinnedWhileScrolling(t *testing.T) {
 	s := ready()
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'G'}, flatte.Effects[State]{})
-	frame := View(s, flatte.RenderContext{Width: 80}).Content
+	frame := composed(View(s, flatte.RenderContext{Width: 80})).Content
 	for _, want := range []string{"Flat Reader", "scrollable viewport sample", "q quit"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("scrolled view missing pinned %q:\n%s", want, frame)
@@ -84,8 +92,8 @@ func TestViewKeepsChromePinnedWhileScrolling(t *testing.T) {
 
 func TestViewMatchesInitialSnapshot(t *testing.T) {
 	s := NewState()
-	s.layout(72, 24)
-	flatest.AssertGoldenFrame(t, "testdata/reader.golden", View(s, flatte.RenderContext{Width: 72}))
+	settle(s, 72, 24)
+	flatest.AssertGoldenFrame(t, "testdata/reader.golden", composed(View(s, flatte.RenderContext{Width: 72})))
 }
 
 func TestScrollThenShrinkSequenceSnapshot(t *testing.T) {
@@ -93,7 +101,7 @@ func TestScrollThenShrinkSequenceSnapshot(t *testing.T) {
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, 72) // Start delivers ResizeEvent{72,24}; layout sizes the viewport
+	}, 72) // Start lays out at 72x24; the LayoutEvent sizes the viewport
 
 	frames := flatest.Frames(d,
 		func(d *flatest.Driver[State]) {}, // initial frame at 72x24, offset 0
@@ -107,4 +115,10 @@ func TestScrollThenShrinkSequenceSnapshot(t *testing.T) {
 		}, // shrink: body clips to fewer rows, chrome still pinned
 	)
 	flatest.AssertFrames(t, "testdata/reader-sequence.golden", frames)
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func typeRunes(s *State, text string) {
@@ -35,6 +36,29 @@ func TestEnterOnEmptyInputDoesNothing(t *testing.T) {
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
 	if s.sent != 0 {
 		t.Fatalf("sent = %d, want 0 (empty enter is a no-op)", s.sent)
+	}
+}
+
+func TestInputUsesTextFieldEditing(t *testing.T) {
+	s := NewState()
+	s.input.Value, s.input.Cursor = "hello world", 5
+
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
+	if s.input.Cursor != len("hello world") {
+		t.Fatalf("End cursor = %d, want %d", s.input.Cursor, len("hello world"))
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, flatte.Effects[State]{})
+	if s.input.Cursor != 0 {
+		t.Fatalf("Cmd+Left cursor = %d, want 0", s.input.Cursor)
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, flatte.Effects[State]{})
+	if s.input.Cursor != len("hello") {
+		t.Fatalf("Alt+Right cursor = %d, want %d", s.input.Cursor, len("hello"))
+	}
+	s.input.Value, s.input.Cursor = "", 0
+	Handle(s, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if s.input.Value != "ab" {
+		t.Fatalf("pasted value = %q, want single-line text %q", s.input.Value, "ab")
 	}
 }
 
@@ -155,7 +179,7 @@ func TestCtrlHDeletesInputWordBackward(t *testing.T) {
 
 func TestEscQuits(t *testing.T) {
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(NewState(), flatte.KeyEvent{Key: flatte.KeyEscape}, fx)
 	if !quit {
 		t.Fatal("esc did not quit")
@@ -165,7 +189,7 @@ func TestEscQuits(t *testing.T) {
 func TestViewPlacesCursorAfterPrompt(t *testing.T) {
 	s := NewState()
 	typeRunes(s, "ab")
-	frame := View(s, flatte.RenderContext{Width: 50})
+	frame := composed(View(s, flatte.RenderContext{Width: 50}))
 	if frame.Cursor == nil {
 		t.Fatal("no cursor")
 	}
@@ -178,7 +202,7 @@ func TestViewPlacesCursorAfterPrompt(t *testing.T) {
 func TestViewSnapshot(t *testing.T) {
 	s := NewState()
 	typeRunes(s, "hello")
-	flatest.AssertGoldenFrame(t, "testdata/chat.golden", View(s, flatte.RenderContext{Width: 50}))
+	flatest.AssertGoldenFrame(t, "testdata/chat.golden", composed(View(s, flatte.RenderContext{Width: 50})))
 }
 
 // TestSentMessageReachesScrollback drives the real Run inline over a pipe:
@@ -216,4 +240,12 @@ func TestSentMessageReachesScrollback(t *testing.T) {
 	if !strings.Contains(out.String(), "you: hi") {
 		t.Fatalf("sent message did not reach scrollback:\n%q", out.String())
 	}
+}
+
+// composed is View's frame as inline Run paints it on a 72-column
+// terminal: at the root's measured height.
+func composed(f flatte.Frame) flatte.Frame {
+	_, h := f.Root.Size()
+	f, _ = flatte.ComposeFrame(f, 72, h.Value)
+	return f
 }

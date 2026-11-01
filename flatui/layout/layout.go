@@ -1,4 +1,4 @@
-// Package layout is a flexbox-style layout engine for Flatte.
+// Package layout is a flexbox-style layout and composition engine for Flatte.
 //
 // Every visual thing is a Node — an interface with two methods:
 //
@@ -7,18 +7,21 @@
 //	    Render(r Rect) string   // output at the solved rect
 //	}
 //
-// Concrete types embed NodeBase for shared geometry (W, H, Pad, Gap, Border)
+// Concrete types embed NodeBase for shared geometry (W, H, Pad, Gap, Bordered)
 // and add their own fields. Row distributes horizontally, Col vertically.
-// Text carries a string. Widgets embed NodeBase and implement both methods.
+// Text carries a string. Widgets may expose Layout nodes; the primitive nodes
+// implement both methods.
 //
-// There is no separate solver pass — containers distribute in their own
-// Render via a shared distributeMain helper. Measurement happens naturally
-// through Size() calls (each type computes its intrinsic size, querying
-// children as needed).
+// Solve returns geometry without painting. SolveAndCompose performs one shared
+// top-down walk that distributes rectangles, records IDs, and paints leaves
+// into a clipped cell buffer. Row and Col use that same compositor when they
+// are rendered as nested nodes, so layout geometry and pixels cannot drift.
 package layout
 
 import (
+	"image"
 	"image/color"
+	"math"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -29,18 +32,48 @@ import (
 
 type Rect struct{ X, Y, W, H int }
 
+const maxInt = int(^uint(0) >> 1)
+
+// saturating arithmetic keeps malformed, caller-authored geometry inside the
+// representable int domain. Layout dimensions are counts, so negative widths
+// and heights are treated as zero at the boundary.
+func satAdd(a, b int) int {
+	if b > 0 && a > maxInt-b {
+		return maxInt
+	}
+	if b < 0 && a < -maxInt-1-b {
+		return -maxInt - 1
+	}
+	return a + b
+}
+
+func satSub(a, b int) int {
+	if b > 0 && a < -maxInt-1+b {
+		return -maxInt - 1
+	}
+	if b < 0 && a > maxInt+b {
+		return maxInt
+	}
+	return a - b
+}
+
+func nonNegative(n int) int {
+	if n < 0 {
+		return 0
+	}
+	return n
+}
+
 func (r Rect) Inset(n int) Rect {
-	return Rect{r.X + n, r.Y + n, r.W - 2*n, r.H - 2*n}
+	return r.insetBy(sides{top: n, right: n, bottom: n, left: n})
 }
 
 // insetBy shrinks r by a per-side inset.
 func (r Rect) insetBy(s sides) Rect {
-	return Rect{r.X + s.left, r.Y + s.top, r.W - s.horiz(), r.H - s.vert()}
+	return Rect(insetOf[int](cells{}, rect[int](r), sidesOf[int]{s.top, s.right, s.bottom, s.left}))
 }
 
-func (r Rect) Contains(x, y int) bool {
-	return x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
-}
+func (r Rect) Contains(x, y int) bool { return containsOf[int](cells{}, rect[int](r), x, y) }
 
 // Intersect returns the overlapping region of r and s. If they do not overlap,
 // it returns a zero-area rect anchored at the clamped corner. It is used to
@@ -48,19 +81,7 @@ func (r Rect) Contains(x, y int) bool {
 // overflow (e.g. two Fixed(8) children in a 10-wide row) can never yield a rect
 // that escapes the parent or the frame — hit-testing trusts these rects.
 func (r Rect) Intersect(s Rect) Rect {
-	x0 := max(r.X, s.X)
-	y0 := max(r.Y, s.Y)
-	x1 := min(r.X+r.W, s.X+s.W)
-	y1 := min(r.Y+r.H, s.Y+s.H)
-	// On no overlap, collapse the origin onto the clamped far edge so the empty
-	// rect still sits inside s rather than reporting an out-of-bounds corner.
-	if x0 > x1 {
-		x0 = x1
-	}
-	if y0 > y1 {
-		y0 = y1
-	}
-	return Rect{x0, y0, x1 - x0, y1 - y0}
+	return Rect(intersectOf[int](cells{}, rect[int](r), rect[int](s)))
 }
 
 type SizeKind int
@@ -84,6 +105,19 @@ const (
 	// from content or children. It behaves like fixed on the parent's main
 	// axis, while still stretching on the cross axis.
 	SizeContent
+
+	// SizePoints is an exact length in points, for layouts designed for a
+	// window. A GUI lays it out exactly; a terminal reads it at a nominal
+	// cell of PointsPerColumn × PointsPerLine, rounding up. Otherwise it
+	// behaves like SizeFixed.
+	SizePoints
+)
+
+// PointsPerColumn and PointsPerLine are the nominal terminal cell a
+// terminal reads Points sizes at: the 13pt macOS monospace cell, rounded.
+const (
+	PointsPerColumn = 8
+	PointsPerLine   = 16
 )
 
 // Size is a one-axis layout constraint. Callers normally set Auto, Fixed, or
@@ -103,9 +137,33 @@ type Size struct {
 	Weight float64
 }
 
-func Fixed(n int) Size    { return Size{Kind: SizeFixed, Value: n} }
-func Grow(w float64) Size { return Size{Kind: SizeGrow, Weight: w} }
+func Fixed(n int) Size    { return Size{Kind: SizeFixed, Value: max(n, 0)} }
+func Points(n int) Size   { return Size{Kind: SizePoints, Value: max(n, 0)} }
+func Grow(w float64) Size { return normalizeSize(Size{Kind: SizeGrow, Weight: w}) }
 func Auto() Size          { return Size{Kind: SizeAuto} }
+
+// normalizeSize gives malformed public Size values a deterministic production
+// fallback. Fixed/Content counts cannot be negative. Grow weights must be
+// finite and non-negative; invalid weights become zero and participate in the
+// existing equal-share fallback when every grow weight is zero. Unknown kinds
+// behave as Auto. Consumers normalize as well as constructors because callers
+// can author Size values directly.
+func normalizeSize(s Size) Size {
+	switch s.Kind {
+	case SizeAuto:
+		return s
+	case SizeFixed, SizeContent, SizePoints:
+		s.Value = max(s.Value, 0)
+		return s
+	case SizeGrow:
+		if s.Weight < 0 || math.IsNaN(s.Weight) || math.IsInf(s.Weight, 0) {
+			s.Weight = 0
+		}
+		return s
+	default:
+		return Size{Kind: SizeAuto}
+	}
+}
 
 // Node is the primitive layout contract. Implementations should keep the two
 // methods separate:
@@ -149,13 +207,126 @@ type NodeBase struct {
 	PadTop, PadRight, PadBottom, PadLeft int
 
 	// Chrome, when set on a container, paints the node's own decoration
-	// (styled border, background, title) instead of the default Pad/Bordered
+	// (styled border, background, title) instead of the default Pad/Box
 	// fill. It receives the node's full solved rect and is painted before
 	// (under) the children. It does not change the layout inset: Pad and
-	// Bordered still declare the space the chrome occupies, so children are
-	// placed inside that inset regardless of what Chrome draws. Leaves ignore
-	// it — a leaf's Render owns all of its pixels already.
+	// the border still declare the space the chrome occupies, so children
+	// are placed inside that inset regardless of what Chrome draws. Leaves
+	// ignore it — a leaf's Render owns all of its pixels already. Chrome is
+	// terminal-only; prefer Box where it can say what is needed.
 	Chrome func(r Rect) string
+
+	// Box is the node's semantic decoration: border kind and color, and
+	// background. A terminal draws it with box-drawing cells, a GUI as a
+	// stroked and filled rect. A border takes one cell of inset per side,
+	// exactly like Bordered (which is shorthand for Box{Border:
+	// BorderRounded}; Box.Border wins when both are set).
+	Box Box
+
+	// Tooltip is help text a GUI shows while the pointer rests on the node
+	// (the innermost node with one); the terminal ignores it.
+	Tooltip string
+
+	// Anchor places an Overlay next to the node with this ID instead of
+	// centered on the frame: just below it and left-aligned to it, above
+	// it when there is no room below, kept inside the frame — for a
+	// dropdown or a context menu. An anchor that is not laid out (or an
+	// empty one) centers the overlay as usual.
+	Anchor string
+
+	// NoPadding disables a GUI host's default component padding. Explicit
+	// Pad/PadTop/PadRight/PadBottom/PadLeft still apply. Terminals ignore it.
+	NoPadding bool
+
+	// ItemPadding gives a Row/Col the GUI's regular item insets (8pt
+	// horizontal, 4pt vertical) when default padding is enabled. Explicit
+	// Pad fields or NoPadding override it. Terminal geometry is unchanged.
+	ItemPadding bool
+}
+
+func (n NodeBase) noPadding() bool   { return n.NoPadding }
+func (n NodeBase) itemPadding() bool { return n.ItemPadding }
+
+func (n NodeBase) tooltip() string { return n.Tooltip }
+
+type tooltipNode interface{ tooltip() string }
+
+// BorderKind is the line style of a Box border.
+type BorderKind int
+
+const (
+	BorderNone BorderKind = iota
+	BorderRounded
+	BorderNormal
+)
+
+// Box is a node's decoration. Nil colors mean the backend's default (no
+// background; the terminal's default border color). Unknown border kinds
+// draw as BorderRounded. Background is behind the node's content: leaf cells
+// without a background of their own show it. Selected marks the node as the
+// current selection: a GUI highlights it, while the terminal adds nothing
+// (the app's markers and styles show selection there). Round asks a GUI to
+// round a background's corners (a pill when the box is one line tall); the
+// terminal cannot, and draws it square. Title labels a border: the terminal
+// writes " Title " in TitleStyle into the top rule after its first rule
+// glyph (cut to fit), and a GUI sets it in the top stroke, which breaks
+// around it.
+//
+// Hover is a GUI's fill while the pointer is over the node (it needs an
+// ID), fading in and out, under its content and over its Background; the
+// terminal draws nothing for it. Backdrop is a picture behind a GUI's box,
+// under its Background — a translucent Background over it tints and dims
+// it; the terminal draws only the Background.
+//
+// InsetY draws all of that InsetY points inside the node's rect, top and
+// bottom, in a GUI — a gap between the rows of a list without changing
+// their layout (clicks in the gap still reach the node); terminals ignore
+// it.
+type Box struct {
+	Border      BorderKind
+	BorderColor color.Color
+	Background  color.Color
+	Selected    bool
+	Round       bool
+	Title       string
+	TitleStyle  TextStyle
+	Hover       color.Color
+	// Interactive opts a named box into native hover feedback using the
+	// theme's text tint when Hover is nil. Explicit Hover wins; transparent
+	// disables the fill. Callers remove Interactive when the item is disabled.
+	Interactive bool
+	Backdrop    *Backdrop
+	InsetY      float64
+}
+
+// Backdrop is a picture filling a box in a GUI: Source blurred by Blur
+// points and drawn at Opacity (0 means 1). Sharp (Blur 0), it is cropped to
+// cover the box; blurred, all of it is stretched to the box, so a large
+// blur leaves every color of it as a soft wash.
+type Backdrop struct {
+	Source  image.Image
+	Blur    float64
+	Opacity float64
+}
+
+// box resolves the Bordered shorthand into the effective Box.
+func (n NodeBase) box() Box {
+	b := n.Box
+	if b.Border == BorderNone && n.Bordered {
+		b.Border = BorderRounded
+	}
+	return b
+}
+
+func (b Box) hasBorder() bool { return b.Border != BorderNone }
+
+func (b Box) hasBackground() bool { return b.Background != nil && b.Background != color.Transparent }
+
+func (b Box) lipglossBorder() lipgloss.Border {
+	if b.Border == BorderNormal {
+		return lipgloss.NormalBorder()
+	}
+	return lipgloss.RoundedBorder()
 }
 
 func (n NodeBase) Size() (Size, Size) { return n.W, n.H }
@@ -166,202 +337,137 @@ func (n NodeBase) IsOverlay() bool    { return n.Overlay }
 type sides struct{ top, right, bottom, left int }
 
 func (s sides) any() bool  { return s.top > 0 || s.right > 0 || s.bottom > 0 || s.left > 0 }
-func (s sides) horiz() int { return s.left + s.right }
-func (s sides) vert() int  { return s.top + s.bottom }
+func (s sides) horiz() int { return satAdd(nonNegative(s.left), nonNegative(s.right)) }
+func (s sides) vert() int  { return satAdd(nonNegative(s.top), nonNegative(s.bottom)) }
+
+// clampTo constrains per-side claims to a concrete box without allowing the
+// second side to push the first outside it. The order matches Rect.insetBy:
+// left/top win when malformed callers claim more than the entire box.
+func (s sides) clampTo(width, height int) sides {
+	width, height = nonNegative(width), nonNegative(height)
+	left := min(nonNegative(s.left), width)
+	right := min(nonNegative(s.right), width-left)
+	top := min(nonNegative(s.top), height)
+	bottom := min(nonNegative(s.bottom), height-top)
+	return sides{top: top, right: right, bottom: bottom, left: left}
+}
 
 // padSides is the node's padding per side: symmetric Pad plus the per-side
 // extras (border excluded).
 func (n NodeBase) padSides() sides {
+	pad := max(n.Pad, 0)
 	return sides{
-		top:    n.Pad + n.PadTop,
-		right:  n.Pad + n.PadRight,
-		bottom: n.Pad + n.PadBottom,
-		left:   n.Pad + n.PadLeft,
+		top:    satAdd(pad, nonNegative(n.PadTop)),
+		right:  satAdd(pad, nonNegative(n.PadRight)),
+		bottom: satAdd(pad, nonNegative(n.PadBottom)),
+		left:   satAdd(pad, nonNegative(n.PadLeft)),
 	}
 }
 
 // insetSides is the full per-side layout inset: padding plus the border cell.
 func (n NodeBase) insetSides() sides {
 	s := n.padSides()
-	if n.Bordered {
-		s.top++
-		s.right++
-		s.bottom++
-		s.left++
+	if n.box().hasBorder() {
+		s.top = satAdd(s.top, 1)
+		s.right = satAdd(s.right, 1)
+		s.bottom = satAdd(s.bottom, 1)
+		s.left = satAdd(s.left, 1)
 	}
 	return s
 }
 
-func (n NodeBase) bordered() bool            { return n.Bordered }
 func (n NodeBase) chrome() func(Rect) string { return n.Chrome }
 
-// --- Distribution helpers (shared by Row and Col) ---
-
-// distributeMain computes main-axis sizes for children.
-// horizontal=true for Row, false for Col.
-func distributeMain(children []Node, horizontal bool, gap, avail int) []int {
-	n := len(children)
-	if n == 0 {
-		return nil
+// fractionOf returns floor(total*ratio), clamped to total. Keeping the
+// conversion behind an explicit cap avoids converting 2^wordsize to a
+// negative int when float64 rounds MaxInt up to the next power of two.
+func fractionOf(total int, ratio float64) int {
+	if total <= 0 || ratio <= 0 || math.IsNaN(ratio) {
+		return 0
 	}
-	avail -= gap * (n - 1)
-	if avail < 0 {
-		avail = 0
+	if ratio >= 1 || math.IsInf(ratio, 1) {
+		return total
 	}
-
-	// Collect sizes, sum fixed, sum grow weights.
-	sizes := make([]Size, n)
-	fixedSum := 0
-	growSum := 0.0
-	growCount := 0
-	for i, c := range children {
-		cw, ch := c.Size()
-		if horizontal {
-			sizes[i] = cw
-		} else {
-			sizes[i] = ch
-		}
-		switch sizes[i].Kind {
-		case SizeFixed, SizeContent:
-			fixedSum += sizes[i].Value
-		case SizeGrow:
-			growSum += sizes[i].Weight
-			growCount++
-		}
+	v := float64(total) * ratio
+	if v >= float64(total) {
+		return total
 	}
-
-	// Degenerate input: grow children exist but their weights sum to zero
-	// (Grow(0) or a zero-value Size{Kind: SizeGrow}). Treat them as equal
-	// weight so the space is shared rather than dropped.
-	equalGrow := growCount > 0 && growSum == 0
-	if equalGrow {
-		growSum = float64(growCount)
-	}
-
-	remaining := avail - fixedSum
-	if remaining < 0 {
-		remaining = 0
-	}
-
-	result := make([]int, n)
-	growUsed := 0
-	for i, s := range sizes {
-		switch s.Kind {
-		case SizeFixed, SizeContent:
-			result[i] = s.Value
-		case SizeGrow:
-			w := s.Weight
-			if equalGrow {
-				w = 1
-			}
-			if growSum > 0 {
-				result[i] = int(float64(remaining) * w / growSum)
-			}
-			growUsed += result[i]
-		}
-	}
-
-	// Distribute the rounding remainder to Grow children, round-robin
-	// left-to-right until it is exhausted (deterministic: earlier children win
-	// the extra cell).
-	rem := remaining - growUsed
-	for rem > 0 {
-		progressed := false
-		for i, s := range sizes {
-			if rem <= 0 {
-				break
-			}
-			if s.Kind == SizeGrow {
-				result[i]++
-				rem--
-				progressed = true
-			}
-		}
-		if !progressed {
-			break
-		}
-	}
-	return result
-}
-
-// crossAxis returns the cross-axis dimension for a child.
-// Fixed pins; everything else stretches to fill.
-func crossAxis(s Size, avail int) int {
-	if s.Kind == SizeFixed && s.Value < avail {
-		return s.Value
-	}
-	return avail
-}
-
-// measureChildren computes the intrinsic main-axis and cross-axis for a
-// container with Auto sizing. It also reports whether any child is Grow on the
-// main or cross axis, so a container whose only claim on an axis is "grow" can
-// itself report Grow(1) instead of collapsing to zero.
-func measureChildren(children []Node, horizontal bool, gap int) (main, cross int, mainGrow, crossGrow bool) {
-	for i, c := range children {
-		cw, ch := c.Size()
-		var m, cr Size
-		if horizontal {
-			m, cr = cw, ch
-		} else {
-			m, cr = ch, cw
-		}
-		if m.Kind == SizeFixed || m.Kind == SizeContent {
-			main += m.Value
-		}
-		if m.Kind == SizeGrow {
-			mainGrow = true
-		}
-		if i > 0 {
-			main += gap
-		}
-		if cr.Kind == SizeGrow {
-			crossGrow = true
-		}
-		if (cr.Kind == SizeFixed || cr.Kind == SizeContent) && cr.Value > cross {
-			cross = cr.Value
-		}
-	}
-	return
+	return int(v)
 }
 
 // --- Rendering helpers ---
 
-func fillRect(content string, r Rect, pad sides, bordered bool) string {
-	return fillRectWithBg(content, r, pad, color.Transparent, bordered)
-}
-
-func fillRectWithBg(content string, r Rect, pad sides, c color.Color, bordered bool) string {
+// fillBox renders content into r inside pad and box: the terminal painting
+// of a node's Box, padding, and content.
+func fillBox(content string, r Rect, pad sides, box Box) string {
 	if r.W <= 0 || r.H <= 0 {
 		return ""
 	}
+	bordered := box.hasBorder()
 
 	// Lip Gloss Width/Height are *minimum* total-frame sizes; when
 	// content+padding+border exceed them, MaxWidth/MaxHeight hard-truncate —
 	// eating the bottom/right chrome. Clipping the content to the inner box
 	// first means the frame can never overflow, so borders and padding stay
 	// intact no matter what the caller hands in.
+	borderWidth, borderHeight := 0, 0
+	if bordered {
+		borderWidth = min(2, r.W)
+		borderHeight = min(2, r.H)
+	}
+	pad = pad.clampTo(r.W-borderWidth, r.H-borderHeight)
 	inset := pad
 	if bordered {
-		inset.top++
-		inset.right++
-		inset.bottom++
-		inset.left++
+		inset.top = satAdd(inset.top, 1)
+		inset.right = satAdd(inset.right, 1)
+		inset.bottom = satAdd(inset.bottom, 1)
+		inset.left = satAdd(inset.left, 1)
 	}
 	content = clipToBox(content, r.W-inset.horiz(), r.H-inset.vert())
 
 	style := lipgloss.NewStyle().Width(r.W).Height(r.H).MaxWidth(r.W).MaxHeight(r.H)
-	if c != color.Transparent {
-		style = style.Background(c)
+	if box.hasBackground() {
+		style = style.Background(box.Background)
 	}
 	if pad.any() {
 		style = style.Padding(pad.top, pad.right, pad.bottom, pad.left)
 	}
 	if bordered {
-		style = style.Border(lipgloss.RoundedBorder())
+		style = style.Border(box.lipglossBorder())
+		if box.BorderColor != nil {
+			style = style.BorderForeground(box.BorderColor)
+		}
 	}
 
-	return style.Render(content)
+	out := style.Render(content)
+	if bordered && box.Title != "" {
+		out = titled(out, r.W, box)
+	}
+	return out
+}
+
+// titled writes box's title into the top rule of a bordered block w cells
+// wide, after the corner and one rule glyph; a block too narrow for a
+// title character keeps its rule.
+func titled(block string, w int, box Box) string {
+	avail := w - 3 // corner, rule glyph, ..., corner
+	if avail < 1 {
+		return block
+	}
+	title := box.TitleStyle.Render(" " + box.Title + " ")
+	if lipgloss.Width(title) > avail {
+		title = ansi.Truncate(title, avail, "")
+	}
+	b := box.lipglossBorder()
+	rule := lipgloss.NewStyle()
+	if box.BorderColor != nil {
+		rule = rule.Foreground(box.BorderColor)
+	}
+	top := rule.Render(b.TopLeft+b.Top) + title + rule.Render(strings.Repeat(b.Top, avail-lipgloss.Width(title))+b.TopRight)
+	if i := strings.IndexByte(block, '\n'); i >= 0 {
+		return top + block[i:]
+	}
+	return top
 }
 
 // clipToBox truncates content to at most h lines of w visible columns.
@@ -401,22 +507,19 @@ func getChildren(n Node) []Node {
 // geometry-only mode of the shared walk (buf nil), so its rects are identical
 // to the ones SolveAndCompose records while composing.
 func Solve(root Node, width, height int) map[string]Rect {
-	rects := make(map[string]Rect)
-	walk(root, Rect{0, 0, width, height}, nil, rects)
-	// Overlay pass: recurse so overlay descendants get rects too, matching
-	// SolveAndCompose's overlay walk for hit-test parity.
-	for _, o := range findOverlays(root) {
-		mr := centerRect(o, width, height)
-		walk(o, mr, nil, rects)
-	}
+	rects, _ := SolveWithDiagnostics(root, width, height)
 	return rects
 }
 
-func mainAvail(inner Rect, horizontal bool) int {
-	if horizontal {
-		return inner.W
+// SolveWithDiagnostics returns geometry and reports repeated non-empty IDs in
+// deterministic traversal order. Duplicate IDs retain the existing last-node-
+// wins map behavior; empty IDs are intentionally ignored.
+func SolveWithDiagnostics(root Node, width, height int) (map[string]Rect, []DuplicateIDDiagnostic) {
+	if width <= 0 || height <= 0 {
+		return map[string]Rect{}, nil
 	}
-	return inner.H
+	s := solveTree[int](cells{}, root, width, height, nil)
+	return cellRects(s), cellDiagnostics(s)
 }
 
 // --- Overlay helpers ---
@@ -432,39 +535,21 @@ func findOverlays(n Node) []Node {
 	return result
 }
 
-func centerRect(n Node, vpW, vpH int) Rect {
-	w, h := n.Size()
-	lw := resolveLayerSize(w, vpW)
-	lh := resolveLayerSize(h, vpH)
-	return Rect{(vpW - lw) / 2, (vpH - lh) / 2, lw, lh}
-}
-
-// resolveLayerSize maps an overlay layer's one-axis Size to a concrete cell
-// count within the viewport. Fixed and Content are exact sizes clamped to the
-// viewport — Content is a measured natural size, so an overlay whose Size()
-// reports Content (e.g. a Col of measurable children) is content-sized, not
-// stretched. Auto means "no measurable content on this axis" and fills the
-// whole viewport. For Grow, Weight carries a meaning specific to overlays:
-// Weight>=1 means the full viewport and Weight<1 means that fraction of the
-// viewport (see the Size doc for why this dual meaning is intentional).
-func resolveLayerSize(s Size, viewport int) int {
-	switch s.Kind {
-	case SizeFixed, SizeContent:
-		if s.Value > viewport {
-			return viewport
-		}
-		return s.Value
-	case SizeGrow:
-		if s.Weight >= 1 {
-			return viewport
-		}
-		return int(float64(viewport) * s.Weight)
-	default: // SizeAuto
-		return viewport
-	}
+func isOverlay(n Node) bool {
+	o, ok := n.(interface{ IsOverlay() bool })
+	return ok && o.IsOverlay()
 }
 
 // --- Small helpers ---
+
+func getAnchor(n Node) string {
+	if a, ok := n.(interface{ anchor() string }); ok {
+		return a.anchor()
+	}
+	return ""
+}
+
+func (n NodeBase) anchor() string { return n.Anchor }
 
 func getID(n Node) string {
 	if ider, ok := n.(interface{ GetID() string }); ok {
@@ -473,10 +558,18 @@ func getID(n Node) string {
 	return ""
 }
 
+func getAlign(n Node) Align {
+	type aligner interface{ GetAlign() Align }
+	if a, ok := n.(aligner); ok {
+		return a.GetAlign()
+	}
+	return AlignStretch
+}
+
 func getGap(n Node) int {
 	type gapper interface{ GetGap() int }
 	if g, ok := n.(gapper); ok {
-		return g.GetGap()
+		return max(g.GetGap(), 0)
 	}
 	return 0
 }

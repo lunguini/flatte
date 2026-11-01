@@ -7,6 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func driver() *flatest.Driver[State] {
@@ -29,7 +30,7 @@ func TestSpinnerFrameChangesOnTick(t *testing.T) {
 }
 
 func TestViewShowsLabel(t *testing.T) {
-	frame := View(NewState(), flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(NewState(), flatte.RenderContext{Width: 72})).Content
 	for _, want := range []string{"Flat Spinner", "working...", "q quit"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -39,7 +40,7 @@ func TestViewShowsLabel(t *testing.T) {
 
 func TestQuitOnQ(t *testing.T) {
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(NewState(), flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if !quit {
 		t.Fatal("q did not request quit")
@@ -55,4 +56,10 @@ func TestSpinnerSequenceSnapshot(t *testing.T) {
 		func(d *flatest.Driver[State]) { d.Advance(2 * interval) }, // +2 ticks
 	)
 	flatest.AssertFrames(t, "testdata/spinner-sequence.golden", frames)
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

@@ -1,510 +1,1399 @@
-flatte
-  const CursorShapeBar
-  const CursorShapeBlock
-  const CursorShapeDefault
-  const CursorShapeUnderline
-  const KeyBackspace
-  const KeyCharacter
-  const KeyCtrlC
-  const KeyDelete
-  const KeyDown
-  const KeyEnd
-  const KeyEnter
-  const KeyEscape
-  const KeyHome
-  const KeyLeft
-  const KeyPageDown
-  const KeyPageUp
-  const KeyRight
-  const KeyTab
-  const KeyUnknown
-  const KeyUp
-  const ModAlt
-  const ModCtrl
-  const ModShift
-  const MouseLeft
-  const MouseMiddle
-  const MouseModeAllMotion
-  const MouseModeCellMotion
-  const MouseModeNone
-  const MouseMotion
-  const MouseNone
-  const MousePress
-  const MouseRelease
-  const MouseRight
-  const MouseWheelDown
-  const MouseWheelUp
-  field App.Handle
-  field App.Init
-  field App.OnExit
-  field App.State
-  field App.Tracer
-  field App.View
-  field ClipboardEvent.Text
-  field Cursor.Style
-  field Cursor.X
-  field Cursor.Y
-  field CursorStyle.Blink
-  field CursorStyle.Color
-  field CursorStyle.Shape
-  field Effects.Context
-  field Effects.Updates
-  field FileSelection.Err
-  field FileSelection.Path
-  field FocusEvent.Focused
-  field Frame.Content
-  field Frame.Cursor
-  field Frame.Title
-  field KeyEvent.Key
-  field KeyEvent.Mod
-  field KeyEvent.Rune
-  field MouseEvent.Action
-  field MouseEvent.Button
-  field MouseEvent.Mod
-  field MouseEvent.X
-  field MouseEvent.Y
-  field PasteEvent.Text
-  field RenderContext.ColorProfile
-  field RenderContext.Width
-  field ResizeEvent.Height
-  field ResizeEvent.Width
-  func ApplyUpdate
-  func Async
-  func Cancel
-  func Every
-  func Exec
-  func Go
-  func Latest
-  func LoadState
-  func Named
-  func NewEffects
-  func NewHarnessEffects
-  func NewScope
-  func RenderContextFor
-  func Run
-  func SaveState
-  func ScopeEvery
-  func ScopeGo
-  func ScopeStream
-  func SelectFile
-  func Stream
-  func WithInline
-  func WithInput
-  func WithMouse
-  func WithOutput
-  func WithReportFocus
-  func WithoutBracketedPaste
-  func WithoutDefaultQuit
-  method Effects.Ctx
-  method Effects.Print
-  method Effects.Printf
-  method Effects.Quit
-  method Effects.ReadClipboard
-  method Effects.SetClipboard
-  method Effects.Suspend
-  method Mod.Contains
-  method NoopTracer.Event
-  method NoopTracer.Update
-  method Scope.Cancel
-  method Scope.Ctx
-  method UpdateTracer.Event
-  method UpdateTracer.Update
-  type App
-  type ClipboardEvent
-  type Clock
-  type Cursor
-  type CursorShape
-  type CursorStyle
-  type Effects
-  type Event
-  type FileSelection
-  type FocusEvent
-  type Frame
-  type Key
-  type KeyEvent
-  type Mod
-  type MouseAction
-  type MouseButton
-  type MouseEvent
-  type MouseMode
-  type NoopTracer
-  type Option
-  type PasteEvent
-  type RenderContext
-  type ResizeEvent
-  type Scope
-  type StateUpdate
-  type Tracer
-  type UpdateTracer
-  var ErrNoSelection
-flatui
-  const KeyMapFull
-  const KeyMapShort
-  field CardStyle.BorderForeground
-  field CardStyle.Container
-  field Column.Title
-  field Column.Width
-  field KeyBinding.Disabled
-  field KeyBinding.Help
-  field KeyBinding.Keys
-  field KeyGroup.Bindings
-  field KeyGroup.Title
-  field KeyMapOptions.Mode
-  field KeyMapOptions.Width
-  field List.RenderRow
-  field ProgressStyle.Empty
-  field ProgressStyle.Filled
-  field ProgressStyle.Label
-  field TabBar.Items
-  field TabBarBorder.Bottom
-  field TabBarBorder.Color
-  field TabBarBorder.Left
-  field TabBarBorder.Right
-  field TabBarBorder.Style
-  field TabBarBorder.Top
-  field TabGlyphs.Left
-  field TabGlyphs.Right
-  field TabItem.ID
-  field TabItem.Label
-  field TableStyle.Active
-  field TableStyle.Header
-  field TableStyle.Row
-  field TextField.Cursor
-  field TextField.Value
-  field TextPosition.Col
-  field TextPosition.Row
-  field TextRange.End
-  field TextRange.Start
-  field TreeNode.Children
-  field TreeNode.ID
-  field TreeNode.Label
-  field TreeRow.Depth
-  field TreeRow.Expandable
-  field TreeRow.Expanded
-  field TreeRow.ID
-  field TreeRow.Label
-  func Card
-  func CardBodyHeight
-  func CardBodyWidth
-  func CardOrigin
-  func CardWithStyle
-  func ContentWidth
-  func FrameWidth
-  func NewProgress
-  func NewSpinner
-  func NewStopwatch
-  func NewTabBar
-  func NewTimer
-  func NewTree
-  func NewZoneScanner
-  func Overlay
-  func OverlayOrigin
-  func Subtle
-  func SubtleWithStyle
-  func Title
-  func TitleWithStyle
-  method FocusRing.Count
-  method FocusRing.Focused
-  method FocusRing.Index
-  method FocusRing.Next
-  method FocusRing.Prev
-  method FocusRing.Select
-  method FocusRing.SetCount
-  method KeyGroups.ViewWithOptions
-  method KeyMap.View
-  method List.Count
-  method List.Cursor
-  method List.Height
-  method List.Layout
-  method List.MoveDown
-  method List.MoveUp
-  method List.Offset
-  method List.Select
-  method List.SetCount
-  method List.SetHeight
-  method List.View
-  method Paginator.NextPage
-  method Paginator.Page
-  method Paginator.PageSize
-  method Paginator.Pages
-  method Paginator.PrevPage
-  method Paginator.Range
-  method Paginator.SelectPage
-  method Paginator.SetPageSize
-  method Paginator.SetTotal
-  method Paginator.Total
-  method Paginator.View
-  method Progress.Layout
-  method Progress.Percent
-  method Progress.SetPercent
-  method Progress.SetWidth
-  method Progress.View
-  method Progress.ViewWithStyle
-  method Progress.Width
-  method Spinner.Frame
-  method Spinner.Tick
-  method Spinner.View
-  method Stopwatch.Elapsed
-  method Stopwatch.Reset
-  method Stopwatch.Running
-  method Stopwatch.Start
-  method Stopwatch.Stop
-  method Stopwatch.Tick
-  method Stopwatch.Toggle
-  method TabBar.Active
-  method TabBar.ActiveID
-  method TabBar.HitTest
-  method TabBar.Layout
-  method TabBar.Next
-  method TabBar.Prev
-  method TabBar.SetActive
-  method TabBar.WithBorder
-  method TabBar.WithColors
-  method TabBar.WithGlyphs
-  method TabBar.WithID
-  method Table.Cursor
-  method Table.Header
-  method Table.HeaderWithStyle
-  method Table.MoveDown
-  method Table.MoveUp
-  method Table.Select
-  method Table.SelectedRow
-  method Table.SetColumns
-  method Table.SetHeight
-  method Table.SetRows
-  method Table.View
-  method Table.ViewWithStyle
-  method TextField.Backspace
-  method TextField.ClearSelection
-  method TextField.CursorColumn
-  method TextField.Delete
-  method TextField.DeleteWordLeft
-  method TextField.DeleteWordRight
-  method TextField.Insert
-  method TextField.MoveLeft
-  method TextField.MoveLeftSelecting
-  method TextField.MoveRight
-  method TextField.MoveRightSelecting
-  method TextField.MoveWordLeft
-  method TextField.MoveWordLeftSelecting
-  method TextField.MoveWordRight
-  method TextField.MoveWordRightSelecting
-  method TextField.SelectedText
-  method TextField.Selection
-  method TextField.SetCursor
-  method Textarea.Backspace
-  method Textarea.ClearSelection
-  method Textarea.Col
-  method Textarea.CursorCell
-  method Textarea.Delete
-  method Textarea.DeleteWordLeft
-  method Textarea.DeleteWordRight
-  method Textarea.Insert
-  method Textarea.InsertNewline
-  method Textarea.MoveDown
-  method Textarea.MoveDownSelecting
-  method Textarea.MoveLeft
-  method Textarea.MoveLeftSelecting
-  method Textarea.MoveLineEnd
-  method Textarea.MoveLineEndSelecting
-  method Textarea.MoveLineStart
-  method Textarea.MoveLineStartSelecting
-  method Textarea.MoveRight
-  method Textarea.MoveRightSelecting
-  method Textarea.MoveUp
-  method Textarea.MoveUpSelecting
-  method Textarea.MoveWordLeft
-  method Textarea.MoveWordLeftSelecting
-  method Textarea.MoveWordRight
-  method Textarea.MoveWordRightSelecting
-  method Textarea.Offset
-  method Textarea.Row
-  method Textarea.SelectedText
-  method Textarea.Selection
-  method Textarea.SetSize
-  method Textarea.SetSoftWrap
-  method Textarea.SetValue
-  method Textarea.SoftWrap
-  method Textarea.Value
-  method Textarea.View
-  method Textarea.ViewWithSelection
-  method Timer.Done
-  method Timer.Duration
-  method Timer.Elapsed
-  method Timer.Percent
-  method Timer.Remaining
-  method Timer.Reset
-  method Timer.Tick
-  method Tree.CursorID
-  method Tree.MoveDown
-  method Tree.MoveUp
-  method Tree.Offset
-  method Tree.SelectVisible
-  method Tree.SetHeight
-  method Tree.SetNodes
-  method Tree.Toggle
-  method Tree.View
-  method Tree.VisibleRows
-  method Viewport.AtBottom
-  method Viewport.AtTop
-  method Viewport.GotoBottom
-  method Viewport.GotoTop
-  method Viewport.HalfPageDown
-  method Viewport.HalfPageUp
-  method Viewport.Layout
-  method Viewport.LineDown
-  method Viewport.LineUp
-  method Viewport.Offset
-  method Viewport.PageDown
-  method Viewport.PageUp
-  method Viewport.ScrollPercent
-  method Viewport.ScrollToLine
-  method Viewport.SetContent
-  method Viewport.SetLines
-  method Viewport.SetSize
-  method Viewport.SetWrappedContent
-  method Viewport.TotalLines
-  method Viewport.View
-  method Viewport.VisibleLines
-  method ZoneMap.At
-  method ZoneMap.Clear
-  method ZoneMap.In
-  method ZoneMap.Local
-  method ZoneMap.Rect
-  method ZoneMap.Set
-  method ZoneScanner.At
-  method ZoneScanner.In
-  method ZoneScanner.Rect
-  method ZoneScanner.Reset
-  method ZoneScanner.Set
-  type CardStyle
-  type Column
-  type FocusRing
-  type KeyBinding
-  type KeyGroup
-  type KeyGroups
-  type KeyMap
-  type KeyMapMode
-  type KeyMapOptions
-  type List
-  type Paginator
-  type Progress
-  type ProgressStyle
-  type Rect
-  type Spinner
-  type Stopwatch
-  type TabBar
-  type TabBarBorder
-  type TabGlyphs
-  type TabItem
-  type Table
-  type TableStyle
-  type TextField
-  type TextPosition
-  type TextRange
-  type Textarea
-  type Timer
-  type Tree
-  type TreeNode
-  type TreeRow
-  type Viewport
-  type ZoneMap
-  type ZoneScanner
-  var SpinnerDots
-  var SpinnerLine
-  var TabGlyphsPowerline
-  var TabGlyphsSafe
-flatui/layout
-  const SizeAuto
-  const SizeContent
-  const SizeFixed
-  const SizeGrow
-  field Col.Children
-  field Col.NodeBase
-  field NodeBase.Bordered
-  field NodeBase.Chrome
-  field NodeBase.Gap
-  field NodeBase.H
-  field NodeBase.ID
-  field NodeBase.Overlay
-  field NodeBase.Pad
-  field NodeBase.PadBottom
-  field NodeBase.PadLeft
-  field NodeBase.PadRight
-  field NodeBase.PadTop
-  field NodeBase.W
-  field Rect.H
-  field Rect.W
-  field Rect.X
-  field Rect.Y
-  field Row.Children
-  field Row.NodeBase
-  field Size.Kind
-  field Size.Value
-  field Size.Weight
-  field Spacer.NodeBase
-  field Text.NodeBase
-  field Text.String
-  func Auto
-  func Fixed
-  func Grow
-  func NewSpacer
-  func Overlay
-  func OverlayOrigin
-  func Solve
-  func SolveAndCompose
-  method Col.GetChildren
-  method Col.GetGap
-  method Col.IsHorizontal
-  method Col.Render
-  method Col.Size
-  method NodeBase.GetID
-  method NodeBase.IsOverlay
-  method NodeBase.Size
-  method Rect.Contains
-  method Rect.Inset
-  method Rect.Intersect
-  method Row.GetChildren
-  method Row.GetGap
-  method Row.IsHorizontal
-  method Row.Render
-  method Row.Size
-  method Spacer.Render
-  method Spacer.WithBackground
-  method Text.Render
-  method Text.Size
-  type Col
-  type Node
-  type NodeBase
-  type Rect
-  type Row
-  type Size
-  type SizeKind
-  type Spacer
-  type Text
-flatest
-  field Recorder.Steps
-  field Step.Event
-  field Step.Update
-  func AssertFrames
-  func AssertGolden
-  func AssertGoldenFrame
-  func CleanFrame
-  func Frames
-  func RenderFrame
-  func Replay
-  func Start
-  method Driver.Advance
-  method Driver.Close
-  method Driver.Frame
-  method Driver.Quit
-  method Driver.Send
-  method Driver.Settle
-  method Driver.State
-  method Recorder.Event
-  method Recorder.Events
-  method Recorder.Update
-  method Recorder.Updates
-  type Driver
-  type Recorder
-  type Step
+flatte package flatte
+  const CursorShapeBar CursorShape = 3
+  const CursorShapeBlock CursorShape = 1
+  const CursorShapeDefault CursorShape = 0
+  const CursorShapeUnderline CursorShape = 2
+  const KeyBackspace Key = 5
+  const KeyCharacter Key = 6
+  const KeyCtrlC Key = 4
+  const KeyDelete Key = 11
+  const KeyDown Key = 2
+  const KeyEnd Key = 13
+  const KeyEnter Key = 3
+  const KeyEscape Key = 8
+  const KeyF1 Key = 16
+  const KeyF10 Key = 25
+  const KeyF11 Key = 26
+  const KeyF12 Key = 27
+  const KeyF2 Key = 17
+  const KeyF3 Key = 18
+  const KeyF4 Key = 19
+  const KeyF5 Key = 20
+  const KeyF6 Key = 21
+  const KeyF7 Key = 22
+  const KeyF8 Key = 23
+  const KeyF9 Key = 24
+  const KeyHome Key = 12
+  const KeyLeft Key = 9
+  const KeyPageDown Key = 15
+  const KeyPageUp Key = 14
+  const KeyRight Key = 10
+  const KeyTab Key = 7
+  const KeyUnknown Key = 0
+  const KeyUp Key = 1
+  const MediaNext MediaCommand = 4
+  const MediaPause MediaCommand = 2
+  const MediaPlay MediaCommand = 1
+  const MediaPrevious MediaCommand = 5
+  const MediaTogglePlayPause MediaCommand = 3
+  const ModAlt Mod = 2
+  const ModCtrl Mod = 4
+  const ModShift Mod = 1
+  const ModSuper Mod = 8
+  const MouseLeft MouseButton = 1
+  const MouseMiddle MouseButton = 2
+  const MouseModeAllMotion MouseMode = 2
+  const MouseModeCellMotion MouseMode = 1
+  const MouseModeNone MouseMode = 0
+  const MouseMotion MouseAction = 2
+  const MouseNone MouseButton = 0
+  const MousePress MouseAction = 0
+  const MouseRelease MouseAction = 1
+  const MouseRight MouseButton = 3
+  const MouseWheelDown MouseButton = 5
+  const MouseWheelUp MouseButton = 4
+  const WindowCloseRequest WindowEventKind = 1
+  const WindowFocused WindowEventKind = 0
+  func Alert[S any](fx Effects[S], name string, d AlertDialog, fold func(s*S, button int, err error))
+  func ApplyUpdate[S any](s*S, tracer Tracer, update StateUpdate[S])
+  func Cancel[S any](fx Effects[S], name string)
+  func ComposeFrame(frame Frame, width int, height int)(Frame, layout.Composition)
+  func Every[S any](fx Effects[S], name string, interval time.Duration, fold func(*S, time.Time)) error
+  func Exec[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, error))
+  func Go[S any, T any](fx Effects[S], name string, work func(context.Context)(T, error), fold func(*S, T, error))
+  func Latest[S any, T any](fx Effects[S], name string, work func(context.Context)(T, error), fold func(*S, T, error))
+  func LoadState[S any](path string, defaultState S) S
+  func LoadStateWithError[S any](path string, defaultState S)(S, error)
+  func MenuShortcut(menus[]Menu, key KeyEvent)(MenuItem, bool)
+  func Named[S any](name string, apply func(*S)) StateUpdate[S]
+  func NewScope[S any](fx Effects[S], name string) *Scope
+  func NewSession[S any](ctx context.Context, app App[S]) *Session
+  func OpenFile[S any](fx Effects[S], name string, d OpenDialog, fold func(s*S, paths[]string, err error))
+  func Run[S any](ctx context.Context, app App[S], opts ... Option)(runErr error)
+  func SaveFile[S any](fx Effects[S], name string, d SaveDialog, fold func(s*S, path string, err error))
+  func SaveState[S any](path string, state S) error
+  func ScopeEvery[S any](scope*Scope, fx Effects[S], interval time.Duration, fold func(*S, time.Time)) error
+  func ScopeGo[S any, T any](scope*Scope, fx Effects[S], work func(context.Context)(T, error), fold func(*S, T, error))
+  func ScopeStream[S any, T any](scope*Scope, fx Effects[S], source func(context.Context, func(T)), fold func(*S, T))
+  func SelectFile[S any](fx Effects[S], name string, cmd*exec.Cmd, fold func(*S, FileSelection))
+  func Stream[S any, T any](fx Effects[S], name string, source func(context.Context, func(T)), fold func(*S, T))
+  func WithInline() Option
+  func WithInput(in io.Reader) Option
+  func WithMouse(mode MouseMode) Option
+  func WithOutput(out io.Writer) Option
+  func WithReportFocus() Option
+  func WithoutBracketedPaste() Option
+  func WithoutDefaultQuit() Option
+  method *RunConfig.UseFallbackHost(host Host)
+  method *RunConfig.UseHost(host Host)
+  method *Scope.Cancel()
+  method *Scope.Ctx() context.Context
+  method *Session.Cancel()
+  method *Session.ContextMenu(target string)[]MenuItem
+  method *Session.State() HostState
+  method *Session.Step(input StepInput) StepResult
+  method *Session.Updates() <-chan struct{}
+  method *Session.UseHostServices(services HostServices)
+  method *Session.UsesNowPlaying() bool
+  method *Session.WindowFrame(id string)(Frame, bool)
+  method Effects[S].Capabilities() Capabilities
+  method Effects[S].Ctx() context.Context
+  method Effects[S].Desktop(command DesktopCommand)
+  method Effects[S].Notify(n Notification)
+  method Effects[S].Print(s string)
+  method Effects[S].Printf(format string, args ... any)
+  method Effects[S].Quit()
+  method Effects[S].ReadClipboard()
+  method Effects[S].Send(update StateUpdate[S]) bool
+  method Effects[S].SetClipboard(text string)
+  method Effects[S].Suspend()
+  method Mod.Contains(mods Mod) bool
+  method NoopTracer.Event(Event)
+  method NoopTracer.Update(string)
+  method UpdateTracer.Event(Event)
+  method UpdateTracer.Update(name string)
+  type AlertDialog struct
+  field AlertDialog.Title string [order=0]
+  field AlertDialog.Message string [order=1]
+  field AlertDialog.Buttons []string [order=2]
+  struct AlertDialog fields=3 comparable=false
+  type App[S any] struct
+  field App.State *S [order=0]
+  field App.Init func(*S, Effects[S]) [order=1]
+  field App.Handle func(*S, Event, Effects[S]) [order=2]
+  field App.View func(*S, RenderContext) Frame [order=3]
+  field App.Tracer Tracer [order=4]
+  field App.OnExit func(*S) [order=5]
+  field App.Menus func(*S)[]Menu [order=6]
+  field App.ContextMenu func(s*S, target string)[]MenuItem [order=7]
+  field App.Windows func(*S)[]Window [order=8]
+  field App.NowPlaying func(*S) *NowPlaying [order=9]
+  struct App fields=10 comparable=false
+  type Capabilities struct
+  field Capabilities.Exec bool [order=0]
+  field Capabilities.Suspend bool [order=1]
+  field Capabilities.Print bool [order=2]
+  field Capabilities.Alert bool [order=3]
+  field Capabilities.OpenFile bool [order=4]
+  field Capabilities.SaveFile bool [order=5]
+  field Capabilities.Notifications bool [order=6]
+  field Capabilities.Clipboard bool [order=7]
+  field Capabilities.Drop bool [order=8]
+  field Capabilities.Mouse bool [order=9]
+  field Capabilities.Quit bool [order=10]
+  struct Capabilities fields=11 comparable=true
+  type ClipboardEvent struct
+  field ClipboardEvent.Text string [order=0]
+  struct ClipboardEvent fields=1 comparable=true
+  type Clock interface
+  interface Clock method Tick(ctx context.Context, interval time.Duration, cb func(time.Time))
+  type Cursor struct
+  field Cursor.X int [order=0]
+  field Cursor.Y int [order=1]
+  field Cursor.Style *CursorStyle [order=2]
+  struct Cursor fields=3 comparable=true
+  type CursorShape int
+  type CursorStyle struct
+  field CursorStyle.Shape CursorShape [order=0]
+  field CursorStyle.Blink bool [order=1]
+  field CursorStyle.Color color.Color [order=2]
+  struct CursorStyle fields=3 comparable=true
+  type Desktop struct
+  field Desktop.Title string [order=0]
+  field Desktop.Shortcut *KeyEvent [order=1]
+  struct Desktop fields=2 comparable=true
+  type DesktopCommand struct
+  field DesktopCommand.Kind string [order=0]
+  field DesktopCommand.Shortcut *KeyEvent [order=1]
+  struct DesktopCommand fields=2 comparable=true
+  type DesktopEvent struct
+  field DesktopEvent.ID string [order=0]
+  field DesktopEvent.Text string [order=1]
+  field DesktopEvent.Error string [order=2]
+  field DesktopEvent.Source string [order=3]
+  struct DesktopEvent fields=4 comparable=true
+  type Dialog struct
+  field Dialog.Open *OpenDialog [order=0]
+  field Dialog.Save *SaveDialog [order=1]
+  field Dialog.Alert *AlertDialog [order=2]
+  struct Dialog fields=3 comparable=true
+  type DialogResult struct
+  field DialogResult.Paths []string [order=0]
+  field DialogResult.Button int [order=1]
+  field DialogResult.Err error [order=2]
+  struct DialogResult fields=3 comparable=false
+  type DropEvent struct
+  field DropEvent.X int [order=0]
+  field DropEvent.Y int [order=1]
+  field DropEvent.Target string [order=2]
+  field DropEvent.TargetRect layout.Rect [order=3]
+  field DropEvent.Paths []string [order=4]
+  field DropEvent.Text string [order=5]
+  field DropEvent.Window string [order=6]
+  struct DropEvent fields=7 comparable=false
+  type Effects[S any] struct
+  field Effects.<unexported> context.Context [order=0]
+  field Effects.<unexported> chan<-StateUpdate[S] [order=1]
+  field Effects.<unexported> func(context.Context, StateUpdate[S]) bool [order=2]
+  field Effects.<unexported> func() [order=3]
+  field Effects.<unexported> func(action) [order=4]
+  field Effects.<unexported> *latestRegistry [order=5]
+  field Effects.<unexported> func(func()) [order=6]
+  field Effects.<unexported> Clock [order=7]
+  field Effects.<unexported> func(string) [order=8]
+  field Effects.<unexported> func() [order=9]
+  field Effects.<unexported> func(Dialog, func(DialogResult)) [order=10]
+  field Effects.<unexported> func(Notification) [order=11]
+  field Effects.<unexported> func(DesktopCommand) [order=12]
+  field Effects.<unexported> Capabilities [order=13]
+  struct Effects fields=14 comparable=false
+  type Event interface
+  interface Event method isEvent()
+  type FileSelection struct
+  field FileSelection.Path string [order=0]
+  field FileSelection.Err error [order=1]
+  struct FileSelection fields=2 comparable=true
+  type FocusEvent struct
+  field FocusEvent.Focused bool [order=0]
+  struct FocusEvent fields=1 comparable=true
+  type Frame struct
+  field Frame.Content string [order=0]
+  field Frame.Cursor *Cursor [order=1]
+  field Frame.CursorStyle *CursorStyle [order=2]
+  field Frame.Title string [order=3]
+  field Frame.Root layout.Node [order=4]
+  struct Frame fields=5 comparable=true
+  type Host interface
+  interface Host method Run(context.Context, *Session) error
+  type HostServices struct
+  field HostServices.Capabilities Capabilities [order=0]
+  field HostServices.SetClipboard func(string) [order=1]
+  field HostServices.ReadClipboard func() [order=2]
+  field HostServices.ShowDialog func(Dialog, func(DialogResult)) [order=3]
+  field HostServices.Notify func(Notification) [order=4]
+  field HostServices.Desktop func(DesktopCommand) [order=5]
+  field HostServices.CellSurface bool [order=6]
+  field HostServices.PublishMedia func(*NowPlaying) [order=7]
+  struct HostServices fields=8 comparable=false
+  type HostState struct
+  field HostState.Capabilities Capabilities [order=0]
+  field HostState.Menus []Menu [order=1]
+  field HostState.Windows []Window [order=2]
+  field HostState.NowPlaying *NowPlaying [order=3]
+  struct HostState fields=4 comparable=false
+  type Key int
+  type KeyEvent struct
+  field KeyEvent.Key Key [order=0]
+  field KeyEvent.Rune rune [order=1]
+  field KeyEvent.Mod Mod [order=2]
+  field KeyEvent.Caret int [order=3]
+  field KeyEvent.HasCaret bool [order=4]
+  struct KeyEvent fields=5 comparable=true
+  type LayoutEvent struct
+  field LayoutEvent.Rects map[string] layout.Rect [order=0]
+  field LayoutEvent.PointRects map[string] layout.PointRect [order=1]
+  field LayoutEvent.Window string [order=2]
+  struct LayoutEvent fields=3 comparable=false
+  type MediaCommand uint8
+  type MediaEvent struct
+  field MediaEvent.Command MediaCommand [order=0]
+  struct MediaEvent fields=1 comparable=true
+  type Menu struct
+  field Menu.Title string [order=0]
+  field Menu.Items []MenuItem [order=1]
+  struct Menu fields=2 comparable=false
+  type MenuEvent struct
+  field MenuEvent.ID string [order=0]
+  field MenuEvent.Target string [order=1]
+  struct MenuEvent fields=2 comparable=true
+  type MenuItem struct
+  field MenuItem.ID string [order=0]
+  field MenuItem.Label string [order=1]
+  field MenuItem.Keys []KeyEvent [order=2]
+  field MenuItem.Checked bool [order=3]
+  field MenuItem.Disabled bool [order=4]
+  field MenuItem.Separator bool [order=5]
+  field MenuItem.Items []MenuItem [order=6]
+  struct MenuItem fields=7 comparable=false
+  type Mod int
+  type MouseAction int
+  type MouseButton int
+  type MouseEvent struct
+  field MouseEvent.X int [order=0]
+  field MouseEvent.Y int [order=1]
+  field MouseEvent.Button MouseButton [order=2]
+  field MouseEvent.Action MouseAction [order=3]
+  field MouseEvent.Mod Mod [order=4]
+  field MouseEvent.Target string [order=5]
+  field MouseEvent.TargetRect layout.Rect [order=6]
+  field MouseEvent.Caret int [order=7]
+  field MouseEvent.HasCaret bool [order=8]
+  field MouseEvent.Clicks int [order=9]
+  field MouseEvent.Clear bool [order=10]
+  field MouseEvent.Window string [order=11]
+  struct MouseEvent fields=12 comparable=true
+  type MouseMode int
+  type NoopTracer struct
+  struct NoopTracer fields=0 comparable=true
+  type Notification struct
+  field Notification.Title string [order=0]
+  field Notification.Body string [order=1]
+  struct Notification fields=2 comparable=true
+  type NowPlaying struct
+  field NowPlaying.Title string [order=0]
+  field NowPlaying.Artist string [order=1]
+  field NowPlaying.Album string [order=2]
+  field NowPlaying.Duration time.Duration [order=3]
+  field NowPlaying.Position time.Duration [order=4]
+  field NowPlaying.Playing bool [order=5]
+  field NowPlaying.CanNext bool [order=6]
+  field NowPlaying.CanPrevious bool [order=7]
+  struct NowPlaying fields=8 comparable=true
+  type OpenDialog struct
+  field OpenDialog.Title string [order=0]
+  field OpenDialog.Directory string [order=1]
+  field OpenDialog.Types []string [order=2]
+  field OpenDialog.Multiple bool [order=3]
+  field OpenDialog.Folders bool [order=4]
+  struct OpenDialog fields=5 comparable=false
+  type Option interface
+  interface Option method ConfigureRun(*RunConfig)
+  type PasteEvent struct
+  field PasteEvent.Text string [order=0]
+  struct PasteEvent fields=1 comparable=true
+  type RenderContext struct
+  field RenderContext.Width int [order=0]
+  field RenderContext.Height int [order=1]
+  field RenderContext.ColorProfile colorprofile.Profile [order=2]
+  field RenderContext.Window string [order=3]
+  field RenderContext.Graphical bool [order=4]
+  field RenderContext.Capabilities Capabilities [order=5]
+  struct RenderContext fields=6 comparable=true
+  type ResizeEvent struct
+  field ResizeEvent.Width int [order=0]
+  field ResizeEvent.Height int [order=1]
+  struct ResizeEvent fields=2 comparable=true
+  type RunConfig struct
+  field RunConfig.<unexported> runConfig [order=0]
+  field RunConfig.<unexported> Host [order=1]
+  field RunConfig.<unexported> Host [order=2]
+  field RunConfig.<unexported> error [order=3]
+  struct RunConfig fields=4 comparable=false
+  type SaveDialog struct
+  field SaveDialog.Title string [order=0]
+  field SaveDialog.Directory string [order=1]
+  field SaveDialog.Name string [order=2]
+  field SaveDialog.Types []string [order=3]
+  struct SaveDialog fields=4 comparable=false
+  type Scope struct
+  field Scope.<unexported> string [order=0]
+  field Scope.<unexported> context.Context [order=1]
+  field Scope.<unexported> context.CancelFunc [order=2]
+  struct Scope fields=3 comparable=false
+  type Session struct
+  field Session.<unexported> sync.Mutex [order=0]
+  field Session.<unexported> []func() [order=1]
+  field Session.<unexported> chan struct{} [order=2]
+  field Session.<unexported> bool [order=3]
+  field Session.<unexported> bool [order=4]
+  field Session.<unexported> sync.Once [order=5]
+  field Session.<unexported> context.CancelFunc [order=6]
+  field Session.<unexported> func(ResizeEvent) [order=7]
+  field Session.<unexported> func(Event) [order=8]
+  field Session.<unexported> func(Event) [order=9]
+  field Session.<unexported> func(RenderContext) Frame [order=10]
+  field Session.<unexported> func(HostServices) [order=11]
+  field Session.<unexported> func(StepInput) StepResult [order=12]
+  field Session.<unexported> func(func(action)) [order=13]
+  field Session.<unexported> func() Capabilities [order=14]
+  field Session.<unexported> func() [order=15]
+  field Session.<unexported> func()[]Menu [order=16]
+  field Session.<unexported> func(string)[]MenuItem [order=17]
+  field Session.<unexported> func()[]Window [order=18]
+  field Session.<unexported> func() *NowPlaying [order=19]
+  field Session.<unexported> bool [order=20]
+  field Session.<unexported> func(context.Context, ... Option) error [order=21]
+  field Session.<unexported> bool [order=22]
+  field Session.<unexported> bool [order=23]
+  field Session.<unexported> bool [order=24]
+  field Session.<unexported> bool [order=25]
+  field Session.<unexported> func(*NowPlaying) [order=26]
+  field Session.<unexported> *sessionCell [order=27]
+  struct Session fields=28 comparable=false
+  type StateUpdate[S any] interface
+  interface StateUpdate method Apply(*S)
+  interface StateUpdate method Name() string
+  type StepInput struct
+  field StepInput.Events []Event [order=0]
+  field StepInput.Resize *ResizeEvent [order=1]
+  field StepInput.Start *ResizeEvent [order=2]
+  field StepInput.UpdatesPending bool [order=3]
+  field StepInput.FrameDue bool [order=4]
+  field StepInput.Quit bool [order=5]
+  field StepInput.RenderContext RenderContext [order=6]
+  struct StepInput fields=7 comparable=false
+  type StepResult struct
+  field StepResult.Frame Frame [order=0]
+  field StepResult.Paint bool [order=1]
+  field StepResult.Dirty bool [order=2]
+  field StepResult.Quit bool [order=3]
+  struct StepResult fields=4 comparable=true
+  type Tracer interface
+  interface Tracer method Event(Event)
+  interface Tracer method Update(string)
+  type UpdateTracer func(string)
+  type Window struct
+  field Window.ID string [order=0]
+  field Window.Width int [order=1]
+  field Window.Height int [order=2]
+  field Window.MinWidth int [order=3]
+  field Window.MinHeight int [order=4]
+  field Window.Autosave string [order=5]
+  struct Window fields=6 comparable=true
+  type WindowEvent struct
+  field WindowEvent.Window string [order=0]
+  field WindowEvent.Kind WindowEventKind [order=1]
+  struct WindowEvent fields=2 comparable=true
+  type WindowEventKind int
+  var ErrInlineMouseUnsupported error
+  var ErrInvalidInterval error
+  var ErrMultipleHosts error
+  var ErrNoDialogs error
+  var ErrNoSelection error
+  var ErrUnsupported error
+flatest package flatest
+  func AssertFrames(t*testing.T, path string, frames[]flatte.Frame)
+  func AssertGolden(t*testing.T, path string, frame string)
+  func AssertGoldenFrame(t*testing.T, path string, frame flatte.Frame)
+  func CleanFrame(frame string) string
+  func Frames[S any](d*Driver[S], steps ... func(*Driver[S]))[]flatte.Frame
+  func NewHarnessEffects[S any](ctx context.Context, updates chan<-flatte.StateUpdate[S], quit func(), dispatch func(func()), clock flatte.Clock) flatte.Effects[S]
+  func NewHarnessEffectsQueue[S any](ctx context.Context, enqueue func(flatte.StateUpdate[S]) bool, quit func(), dispatch func(func()), clock flatte.Clock) flatte.Effects[S]
+  func RenderFrame(frame flatte.Frame) string
+  func Replay[S any](app flatte.App[S], width int, rec*Recorder) *Recorder
+  func Start[S any](app flatte.App[S], width int) *Driver[S]
+  func StartWith[S any](app flatte.App[S], opts Options) *Driver[S]
+  method *Driver[S].Advance(by time.Duration) flatte.Frame
+  method *Driver[S].Answer(r flatte.DialogResult) flatte.Frame
+  method *Driver[S].Close()
+  method *Driver[S].Dialog()(dialog flatte.Dialog, ok bool)
+  method *Driver[S].Frame() flatte.Frame
+  method *Driver[S].Notifications()[]flatte.Notification
+  method *Driver[S].Quit() bool
+  method *Driver[S].Resize(width int, height int) flatte.Frame
+  method *Driver[S].Send(ev flatte.Event) flatte.Frame
+  method *Driver[S].Settle() flatte.Frame
+  method *Driver[S].State() *S
+  method *Driver[S].WindowFrame(id string)(frame flatte.Frame, ok bool)
+  method *Recorder.Event(ev flatte.Event)
+  method *Recorder.Events()[]flatte.Event
+  method *Recorder.Update(name string)
+  method *Recorder.Updates()[]string
+  type Driver[S any] struct
+  field Driver.<unexported> flatte.App[S] [order=0]
+  field Driver.<unexported> *flatte.Session [order=1]
+  field Driver.<unexported> int [order=2]
+  field Driver.<unexported> int [order=3]
+  field Driver.<unexported> bool [order=4]
+  field Driver.<unexported> flatte.Capabilities [order=5]
+  field Driver.<unexported> *fakeClock [order=6]
+  field Driver.<unexported> []func() [order=7]
+  field Driver.<unexported> bool [order=8]
+  field Driver.<unexported> func() [order=9]
+  field Driver.<unexported> []pendingDialog [order=10]
+  field Driver.<unexported> []flatte.Notification [order=11]
+  struct Driver fields=12 comparable=false
+  type Options struct
+  field Options.Width int [order=0]
+  field Options.Height int [order=1]
+  field Options.Graphical bool [order=2]
+  field Options.Capabilities flatte.Capabilities [order=3]
+  struct Options fields=4 comparable=true
+  type Recorder struct
+  field Recorder.Steps []Step [order=0]
+  struct Recorder fields=1 comparable=false
+  type Step struct
+  field Step.Event flatte.Event [order=0]
+  field Step.Update string [order=1]
+  struct Step fields=2 comparable=true
+flatui package flatui
+  const KeyMapFull KeyMapMode = 1
+  const KeyMapShort KeyMapMode = 0
+  func Card(lines[]string, maxWidth int) string
+  func CardBodyHeight(totalHeight int, pinnedRows int) int
+  func CardBodyWidth(totalWidth int) int
+  func CardLayout(children ... layout.Node) layout.Col
+  func CardOrigin()(x int, y int)
+  func CardWithStyle(lines[]string, maxWidth int, style CardStyle) string
+  func ContentWidth(totalWidth int) int
+  func FrameWidth(maxWidth int, lines[]string) int
+  func NewProgress(width int) Progress
+  func NewSpinner(frames[]string) Spinner
+  func NewStopwatch() Stopwatch
+  func NewTabBar(items ... TabItem) *TabBar
+  func NewTimer(duration time.Duration) Timer
+  func NewTree(nodes[]TreeNode) Tree
+  func NewZoneScanner() *ZoneScanner
+  func Overlay(base string, layer string) string
+  func OverlayOrigin(base string, layer string)(x int, y int)
+  func Subtle(text string) string
+  func SubtleWithStyle(text string, style lipgloss.Style) string
+  func Title(text string) string
+  func TitleWithStyle(text string, style lipgloss.Style) string
+  method *FocusRing.Next()
+  method *FocusRing.Prev()
+  method *FocusRing.Select(i int)
+  method *FocusRing.SetCount(n int)
+  method *List.Adopt(event flatte.LayoutEvent, id string)
+  method *List.MoveDown()
+  method *List.MoveUp()
+  method *List.Scroll(rows int)
+  method *List.ScrollTo(offset int)
+  method *List.Select(i int)
+  method *List.SetCount(n int)
+  method *List.SetHeight(h int)
+  method *Paginator.NextPage()
+  method *Paginator.PrevPage()
+  method *Paginator.SelectPage(page int)
+  method *Paginator.SetPageSize(n int)
+  method *Paginator.SetTotal(n int)
+  method *Progress.SetPercent(percent float64)
+  method *Progress.SetWidth(width int)
+  method *Select.Click(target string, id string) bool
+  method *Select.Close()
+  method *Select.Confirm()
+  method *Select.MoveDown()
+  method *Select.MoveUp()
+  method *Select.Open()
+  method *Select.Select(i int)
+  method *Select.SetOptions(options[]string)
+  method *Select.Toggle()
+  method *Spinner.Tick()
+  method *Stopwatch.Reset()
+  method *Stopwatch.Start()
+  method *Stopwatch.Stop()
+  method *Stopwatch.Tick(delta time.Duration)
+  method *Stopwatch.Toggle()
+  method *TabBar.Active() int
+  method *TabBar.ActiveID() string
+  method *TabBar.HitTest(rects map[string] layout.Rect, x int, y int)(int, bool)
+  method *TabBar.Layout() layout.Node
+  method *TabBar.Next()
+  method *TabBar.Prev()
+  method *TabBar.SetActive(i int)
+  method *TabBar.WithBorder(b TabBarBorder) *TabBar
+  method *TabBar.WithColors(f color.Color, i color.Color, bg color.Color) *TabBar
+  method *TabBar.WithGlyphs(g TabGlyphs) *TabBar
+  method *TabBar.WithID(id string) *TabBar
+  method *Table.MoveDown()
+  method *Table.MoveUp()
+  method *Table.Select(i int)
+  method *Table.SetColumns(cols[]Column)
+  method *Table.SetHeight(h int)
+  method *Table.SetRows(rows[][]string)
+  method *TextField.Backspace()
+  method *TextField.ClearSelection()
+  method *TextField.Delete()
+  method *TextField.DeleteToEnd()
+  method *TextField.DeleteToStart()
+  method *TextField.DeleteWordLeft()
+  method *TextField.DeleteWordRight()
+  method *TextField.Edit(key flatte.KeyEvent) bool
+  method *TextField.HandleMouse(id string, e flatte.MouseEvent) bool
+  method *TextField.Insert(r rune)
+  method *TextField.InsertText(s string)
+  method *TextField.MoveEnd()
+  method *TextField.MoveEndSelecting()
+  method *TextField.MoveLeft()
+  method *TextField.MoveLeftSelecting()
+  method *TextField.MoveRight()
+  method *TextField.MoveRightSelecting()
+  method *TextField.MoveStart()
+  method *TextField.MoveStartSelecting()
+  method *TextField.MoveWordLeft()
+  method *TextField.MoveWordLeftSelecting()
+  method *TextField.MoveWordRight()
+  method *TextField.MoveWordRightSelecting()
+  method *TextField.SelectAll()
+  method *TextField.SetCursor(cursor int)
+  method *Textarea.Backspace()
+  method *Textarea.ClearSelection()
+  method *Textarea.Delete()
+  method *Textarea.DeleteWordLeft()
+  method *Textarea.DeleteWordRight()
+  method *Textarea.Edit(key flatte.KeyEvent) bool
+  method *Textarea.Insert(r rune)
+  method *Textarea.InsertNewline()
+  method *Textarea.InsertText(s string)
+  method *Textarea.MoveDown()
+  method *Textarea.MoveDownSelecting()
+  method *Textarea.MoveLeft()
+  method *Textarea.MoveLeftSelecting()
+  method *Textarea.MoveLineEnd()
+  method *Textarea.MoveLineEndSelecting()
+  method *Textarea.MoveLineStart()
+  method *Textarea.MoveLineStartSelecting()
+  method *Textarea.MoveRight()
+  method *Textarea.MoveRightSelecting()
+  method *Textarea.MoveTo(offset int)
+  method *Textarea.MoveToSelecting(offset int)
+  method *Textarea.MoveUp()
+  method *Textarea.MoveUpSelecting()
+  method *Textarea.MoveWordLeft()
+  method *Textarea.MoveWordLeftSelecting()
+  method *Textarea.MoveWordRight()
+  method *Textarea.MoveWordRightSelecting()
+  method *Textarea.SelectAll()
+  method *Textarea.SetSize(width int, height int)
+  method *Textarea.SetSoftWrap(enabled bool)
+  method *Textarea.SetValue(s string)
+  method *Timer.Reset()
+  method *Timer.Tick(delta time.Duration)
+  method *Tree.MoveDown()
+  method *Tree.MoveUp()
+  method *Tree.SelectVisible(i int)
+  method *Tree.SetHeight(h int)
+  method *Tree.SetNodes(nodes[]TreeNode)
+  method *Tree.Toggle(id string)
+  method *Viewport.Adopt(rects map[string] layout.Rect, id string)
+  method *Viewport.GotoBottom()
+  method *Viewport.GotoTop()
+  method *Viewport.HalfPageDown()
+  method *Viewport.HalfPageUp()
+  method *Viewport.LineDown(n int)
+  method *Viewport.LineUp(n int)
+  method *Viewport.PageDown()
+  method *Viewport.PageUp()
+  method *Viewport.ScrollToLine(i int)
+  method *Viewport.SetContent(content string)
+  method *Viewport.SetLines(lines[]string)
+  method *Viewport.SetSize(width int, height int)
+  method *Viewport.SetWrappedContent(content string)
+  method *ZoneMap.Clear()
+  method *ZoneMap.Set(id string, rect Rect)
+  method *ZoneScanner.Reset()
+  method *ZoneScanner.Set(id string, r Rect)
+  method FocusRing.Count() int
+  method FocusRing.Focused(i int) bool
+  method FocusRing.Index() int
+  method KeyGroups.ViewWithOptions(opts KeyMapOptions) string
+  method KeyMap.View() string
+  method List.Count() int
+  method List.Cursor() int
+  method List.Height() int
+  method List.Layout() layout.Node
+  method List.Offset() int
+  method List.Rows(id string, row func(index int, selected bool) layout.Node) layout.Col
+  method List.View(render func(index int, selected bool) string) string
+  method Paginator.Page() int
+  method Paginator.PageSize() int
+  method Paginator.Pages() int
+  method Paginator.Range()(first int, last int)
+  method Paginator.Total() int
+  method Paginator.View() string
+  method Progress.Layout() layout.Node
+  method Progress.Percent() float64
+  method Progress.View() string
+  method Progress.ViewWithStyle(style ProgressStyle) string
+  method Progress.Width() int
+  method Select.Highlighted() int
+  method Select.IsOpen() bool
+  method Select.Layout(id string, focused bool) layout.Node
+  method Select.LayoutWithButton(button layout.Button) layout.Node
+  method Select.Options()[]string
+  method Select.Selected() int
+  method Select.Value() string
+  method Spinner.Frame() int
+  method Spinner.View() string
+  method Stopwatch.Elapsed() time.Duration
+  method Stopwatch.Running() bool
+  method Table.Cells(cells[]string, style layout.TextStyle) layout.Row
+  method Table.Cursor() int
+  method Table.Header() string
+  method Table.HeaderLayout(style layout.TextStyle) layout.Row
+  method Table.HeaderWithStyle(style TableStyle) string
+  method Table.Rows(id string, row func(cells[]string, selected bool) layout.Node) layout.Col
+  method Table.SelectedRow()[]string
+  method Table.View(renderRow func(text string, selected bool) string) string
+  method Table.ViewWithStyle(style TableStyle) string
+  method TextField.CursorColumn() int
+  method TextField.Layout(id string, focused bool) layout.Input
+  method TextField.SelectedText() string
+  method TextField.Selection()(start int, end int, ok bool)
+  method Textarea.Col() int
+  method Textarea.CursorCell()(x int, y int)
+  method Textarea.Layout(id string, focused bool) layout.Input
+  method Textarea.Offset() int
+  method Textarea.Row() int
+  method Textarea.SelectedText() string
+  method Textarea.Selection()(TextRange, bool)
+  method Textarea.SoftWrap() bool
+  method Textarea.Value() string
+  method Textarea.View() string
+  method Textarea.ViewWithSelection(render func(text string, selected bool) string) string
+  method Timer.Done() bool
+  method Timer.Duration() time.Duration
+  method Timer.Elapsed() time.Duration
+  method Timer.Percent() float64
+  method Timer.Remaining() time.Duration
+  method Tree.CursorID() string
+  method Tree.Offset() int
+  method Tree.Rows(id string, row func(row TreeRow, selected bool) layout.Node) layout.Col
+  method Tree.View(render func(row TreeRow, selected bool) string) string
+  method Tree.VisibleRows()[]TreeRow
+  method Viewport.AtBottom() bool
+  method Viewport.AtTop() bool
+  method Viewport.Layout() layout.Node
+  method Viewport.Offset() int
+  method Viewport.ScrollPercent() float64
+  method Viewport.TotalLines() int
+  method Viewport.View() string
+  method Viewport.VisibleLines() int
+  method ZoneMap.At(x int, y int)(string, bool)
+  method ZoneMap.In(id string, x int, y int) bool
+  method ZoneMap.Local(id string, x int, y int)(localX int, localY int, ok bool)
+  method ZoneMap.Rect(id string)(Rect, bool)
+  method ZoneScanner.At(x int, y int)(string, bool)
+  method ZoneScanner.In(id string, x int, y int) bool
+  method ZoneScanner.Rect(id string)(Rect, bool)
+  type CardStyle struct
+  field CardStyle.Container lipgloss.Style [order=0]
+  field CardStyle.BorderForeground color.Color [order=1]
+  struct CardStyle fields=2 comparable=false
+  type Column struct
+  field Column.Title string [order=0]
+  field Column.Width int [order=1]
+  struct Column fields=2 comparable=true
+  type FocusRing struct
+  field FocusRing.<unexported> int [order=0]
+  field FocusRing.<unexported> int [order=1]
+  struct FocusRing fields=2 comparable=true
+  type KeyBinding struct
+  field KeyBinding.Keys []string [order=0]
+  field KeyBinding.Help string [order=1]
+  field KeyBinding.Disabled bool [order=2]
+  struct KeyBinding fields=3 comparable=false
+  type KeyGroup struct
+  field KeyGroup.Title string [order=0]
+  field KeyGroup.Bindings KeyMap [order=1]
+  struct KeyGroup fields=2 comparable=false
+  type KeyGroups []KeyGroup
+  type KeyMap []KeyBinding
+  type KeyMapMode int
+  type KeyMapOptions struct
+  field KeyMapOptions.Width int [order=0]
+  field KeyMapOptions.Mode KeyMapMode [order=1]
+  struct KeyMapOptions fields=2 comparable=true
+  type List struct
+  field List.<unexported> int [order=0]
+  field List.<unexported> int [order=1]
+  field List.<unexported> int [order=2]
+  field List.<unexported> int [order=3]
+  field List.RenderRow func(index int, selected bool) string [order=4]
+  struct List fields=5 comparable=false
+  type Paginator struct
+  field Paginator.<unexported> int [order=0]
+  field Paginator.<unexported> int [order=1]
+  field Paginator.<unexported> int [order=2]
+  struct Paginator fields=3 comparable=true
+  type Progress struct
+  field Progress.<unexported> int [order=0]
+  field Progress.<unexported> float64 [order=1]
+  struct Progress fields=2 comparable=true
+  type ProgressStyle struct
+  field ProgressStyle.Filled lipgloss.Style [order=0]
+  field ProgressStyle.Empty lipgloss.Style [order=1]
+  field ProgressStyle.Label lipgloss.Style [order=2]
+  struct ProgressStyle fields=3 comparable=false
+  type Rect = layout.Rect
+  type Select struct
+  field Select.<unexported> []string [order=0]
+  field Select.<unexported> int [order=1]
+  field Select.<unexported> bool [order=2]
+  field Select.<unexported> List [order=3]
+  struct Select fields=4 comparable=false
+  type Spinner struct
+  field Spinner.<unexported> []string [order=0]
+  field Spinner.<unexported> int [order=1]
+  struct Spinner fields=2 comparable=false
+  type Stopwatch struct
+  field Stopwatch.<unexported> time.Duration [order=0]
+  field Stopwatch.<unexported> bool [order=1]
+  struct Stopwatch fields=2 comparable=true
+  type TabBar struct
+  field TabBar.Items []TabItem [order=0]
+  field TabBar.<unexported> int [order=1]
+  field TabBar.<unexported> TabGlyphs [order=2]
+  field TabBar.<unexported> color.Color [order=3]
+  field TabBar.<unexported> color.Color [order=4]
+  field TabBar.<unexported> color.Color [order=5]
+  field TabBar.<unexported> TabBarBorder [order=6]
+  field TabBar.<unexported> string [order=7]
+  struct TabBar fields=8 comparable=false
+  type TabBarBorder struct
+  field TabBarBorder.Style lipgloss.Border [order=0]
+  field TabBarBorder.Color color.Color [order=1]
+  field TabBarBorder.Top bool [order=2]
+  field TabBarBorder.Right bool [order=3]
+  field TabBarBorder.Bottom bool [order=4]
+  field TabBarBorder.Left bool [order=5]
+  struct TabBarBorder fields=6 comparable=true
+  type TabGlyphs struct
+  field TabGlyphs.Left string [order=0]
+  field TabGlyphs.Right string [order=1]
+  struct TabGlyphs fields=2 comparable=true
+  type TabItem struct
+  field TabItem.ID string [order=0]
+  field TabItem.Label string [order=1]
+  struct TabItem fields=2 comparable=true
+  type Table struct
+  field Table.<unexported> []Column [order=0]
+  field Table.<unexported> [][]string [order=1]
+  field Table.<unexported> List [order=2]
+  struct Table fields=3 comparable=false
+  type TableStyle struct
+  field TableStyle.Header lipgloss.Style [order=0]
+  field TableStyle.Row lipgloss.Style [order=1]
+  field TableStyle.Active lipgloss.Style [order=2]
+  struct TableStyle fields=3 comparable=false
+  type TextField struct
+  field TextField.Value string [order=0]
+  field TextField.Cursor int [order=1]
+  field TextField.<unexported> bool [order=2]
+  field TextField.<unexported> int [order=3]
+  field TextField.<unexported> bool [order=4]
+  field TextField.<unexported> int [order=5]
+  field TextField.<unexported> int [order=6]
+  field TextField.<unexported> int [order=7]
+  struct TextField fields=8 comparable=true
+  type TextPosition struct
+  field TextPosition.Row int [order=0]
+  field TextPosition.Col int [order=1]
+  struct TextPosition fields=2 comparable=true
+  type TextRange struct
+  field TextRange.Start TextPosition [order=0]
+  field TextRange.End TextPosition [order=1]
+  struct TextRange fields=2 comparable=true
+  type Textarea struct
+  field Textarea.<unexported> []string [order=0]
+  field Textarea.<unexported> int [order=1]
+  field Textarea.<unexported> int [order=2]
+  field Textarea.<unexported> int [order=3]
+  field Textarea.<unexported> int [order=4]
+  field Textarea.<unexported> int [order=5]
+  field Textarea.<unexported> int [order=6]
+  field Textarea.<unexported> int [order=7]
+  field Textarea.<unexported> bool [order=8]
+  field Textarea.<unexported> int [order=9]
+  field Textarea.<unexported> bool [order=10]
+  field Textarea.<unexported> int [order=11]
+  field Textarea.<unexported> int [order=12]
+  struct Textarea fields=13 comparable=false
+  type Timer struct
+  field Timer.<unexported> time.Duration [order=0]
+  field Timer.<unexported> time.Duration [order=1]
+  struct Timer fields=2 comparable=true
+  type Tree struct
+  field Tree.<unexported> []TreeNode [order=0]
+  field Tree.<unexported> map[string] bool [order=1]
+  field Tree.<unexported> int [order=2]
+  field Tree.<unexported> int [order=3]
+  field Tree.<unexported> int [order=4]
+  struct Tree fields=5 comparable=false
+  type TreeNode struct
+  field TreeNode.ID string [order=0]
+  field TreeNode.Label string [order=1]
+  field TreeNode.Children []TreeNode [order=2]
+  struct TreeNode fields=3 comparable=false
+  type TreeRow struct
+  field TreeRow.ID string [order=0]
+  field TreeRow.Label string [order=1]
+  field TreeRow.Depth int [order=2]
+  field TreeRow.Expandable bool [order=3]
+  field TreeRow.Expanded bool [order=4]
+  struct TreeRow fields=5 comparable=true
+  type Viewport struct
+  field Viewport.<unexported> []string [order=0]
+  field Viewport.<unexported> string [order=1]
+  field Viewport.<unexported> bool [order=2]
+  field Viewport.<unexported> int [order=3]
+  field Viewport.<unexported> int [order=4]
+  field Viewport.<unexported> int [order=5]
+  field Viewport.<unexported> string [order=6]
+  field Viewport.<unexported> int [order=7]
+  field Viewport.<unexported> bool [order=8]
+  struct Viewport fields=9 comparable=false
+  type ZoneMap struct
+  field ZoneMap.<unexported> []string [order=0]
+  field ZoneMap.<unexported> map[string] Rect [order=1]
+  struct ZoneMap fields=2 comparable=false
+  type ZoneScanner struct
+  field ZoneScanner.<unexported> []string [order=0]
+  field ZoneScanner.<unexported> map[string] Rect [order=1]
+  struct ZoneScanner fields=2 comparable=false
+  var SpinnerDots []string
+  var SpinnerLine []string
+  var TabGlyphsPowerline TabGlyphs
+  var TabGlyphsSafe TabGlyphs
+flatui/layout package layout
+  const AlignCenter Align = 2
+  const AlignEnd Align = 3
+  const AlignStart Align = 1
+  const AlignStretch Align = 0
+  const BorderNone BorderKind = 0
+  const BorderNormal BorderKind = 2
+  const BorderRounded BorderKind = 1
+  const ControlButton ControlKind = 0
+  const ControlCheckbox ControlKind = 1
+  const ControlRadio ControlKind = 3
+  const ControlSlider ControlKind = 4
+  const ControlSwitch ControlKind = 2
+  const IconArrowDown IconName = 17
+  const IconArrowLeft IconName = 18
+  const IconArrowRight IconName = 19
+  const IconArrowUp IconName = 16
+  const IconBlank IconName = 6
+  const IconCheck IconName = 7
+  const IconChevronDown IconName = 22
+  const IconChevronLeft IconName = 20
+  const IconChevronRight IconName = 1
+  const IconChevronUp IconName = 21
+  const IconCircle IconName = 5
+  const IconClock IconName = 36
+  const IconClose IconName = 8
+  const IconDisclosureClosed IconName = 2
+  const IconDisclosureOpen IconName = 3
+  const IconDot IconName = 4
+  const IconEllipsis IconName = 23
+  const IconEqualizer IconName = 37
+  const IconError IconName = 15
+  const IconFile IconName = 25
+  const IconFolder IconName = 24
+  const IconGear IconName = 12
+  const IconHeart IconName = 34
+  const IconHeartOutline IconName = 35
+  const IconHome IconName = 33
+  const IconInfo IconName = 13
+  const IconLibrary IconName = 38
+  const IconMinus IconName = 10
+  const IconNext IconName = 29
+  const IconNone IconName = 0
+  const IconPause IconName = 27
+  const IconPlay IconName = 26
+  const IconPlus IconName = 9
+  const IconPrevious IconName = 28
+  const IconRepeat IconName = 31
+  const IconRepeatOne IconName = 39
+  const IconSearch IconName = 11
+  const IconShuffle IconName = 30
+  const IconSpeaker IconName = 32
+  const IconWarning IconName = 14
+  const ImageContain ImageFit = 0
+  const ImageCover ImageFit = 1
+  const ImageStretch ImageFit = 2
+  const PointsPerColumn untyped int = 8
+  const PointsPerLine untyped int = 16
+  const SizeAuto SizeKind = 0
+  const SizeContent SizeKind = 3
+  const SizeFixed SizeKind = 1
+  const SizeGrow SizeKind = 2
+  const SizePoints SizeKind = 4
+  const TextBody TextRole = 0
+  const TextSubtle TextRole = 2
+  const TextTitle TextRole = 1
+  const ToggleCheckbox ToggleKind = 0
+  const ToggleRadio ToggleKind = 2
+  const ToggleSwitch ToggleKind = 1
+  func Auto() Size
+  func ClampScroll(offset int, viewport int, content int) int
+  func Compose(root Node, width int, height int) Composition
+  func Fixed(n int) Size
+  func Grow(w float64) Size
+  func LayoutScene(root Node, width float64, height float64, m Metrics) Scene
+  func NewSpacer() *Spacer
+  func Overlay(base string, layer string) string
+  func OverlayAt(base string, layer string, x int, y int) string
+  func OverlayOrigin(base string, layer string)(x int, y int)
+  func Points(n int) Size
+  func Solve(root Node, width int, height int) map[string] Rect
+  func SolveAndCompose(root Node, width int, height int)(string, map[string] Rect)
+  func SolveAndComposeWithDiagnostics(root Node, width int, height int)(string, map[string] Rect, []DuplicateIDDiagnostic)
+  func SolveWithDiagnostics(root Node, width int, height int)(map[string] Rect, []DuplicateIDDiagnostic)
+  method *Spacer.Render(r Rect) string
+  method *Spacer.WithBackground(c color.Color) *Spacer
+  method Button.Render(r Rect) string
+  method Button.Size()(Size, Size)
+  method Col.GetAlign() Align
+  method Col.GetChildren()[]Node
+  method Col.GetGap() int
+  method Col.IsHorizontal() bool
+  method Col.Render(rect Rect) string
+  method Col.Size()(Size, Size)
+  method Composition.CaretAt(x int, y int)(offset int, ok bool)
+  method Composition.Cursor()(x int, y int, ok bool)
+  method Composition.HitTest(x int, y int)(string, Rect)
+  method Icon.Render(r Rect) string
+  method Icon.Size()(Size, Size)
+  method Image.Render(r Rect) string
+  method Image.Size()(Size, Size)
+  method Input.Render(r Rect) string
+  method Input.Size()(Size, Size)
+  method Label.Render(r Rect) string
+  method Label.Size()(Size, Size)
+  method Meter.Render(r Rect) string
+  method Meter.Size()(Size, Size)
+  method NodeBase.GetID() string
+  method NodeBase.IsOverlay() bool
+  method NodeBase.Size()(Size, Size)
+  method PointRect.Cells(m Metrics) Rect
+  method Rect.Contains(x int, y int) bool
+  method Rect.Inset(n int) Rect
+  method Rect.Intersect(s Rect) Rect
+  method Row.GetAlign() Align
+  method Row.GetChildren()[]Node
+  method Row.GetGap() int
+  method Row.IsHorizontal() bool
+  method Row.Render(rect Rect) string
+  method Row.Size()(Size, Size)
+  method Scene.HitTest(x float64, y float64)(string, PointRect)
+  method Scene.IDsAt(x float64, y float64)[]string
+  method Scene.TooltipAt(x float64, y float64) string
+  method Scroll.GetChildren()[]Node
+  method Scroll.IsHorizontal() bool
+  method Scroll.Render(rect Rect) string
+  method Scroll.Size()(Size, Size)
+  method ScrollBar.OffsetAt(y int, height int) int
+  method ScrollBar.Render(r Rect) string
+  method ScrollBar.Size()(Size, Size)
+  method Slider.Render(r Rect) string
+  method Slider.Size()(Size, Size)
+  method Slider.ValueAt(x int, width int) float64
+  method Text.Render(r Rect) string
+  method Text.Size()(Size, Size)
+  method TextStyle.Render(text string) string
+  method Toggle.Render(r Rect) string
+  method Toggle.Size()(Size, Size)
+  methodset *Button.GetID() string
+  methodset *Button.IsOverlay() bool
+  methodset *Col.GetID() string
+  methodset *Col.IsOverlay() bool
+  methodset *Icon.GetID() string
+  methodset *Icon.IsOverlay() bool
+  methodset *Image.GetID() string
+  methodset *Image.IsOverlay() bool
+  methodset *Input.GetID() string
+  methodset *Input.IsOverlay() bool
+  methodset *Label.GetID() string
+  methodset *Label.IsOverlay() bool
+  methodset *Meter.GetID() string
+  methodset *Meter.IsOverlay() bool
+  methodset *Row.GetID() string
+  methodset *Row.IsOverlay() bool
+  methodset *Scroll.GetID() string
+  methodset *Scroll.IsOverlay() bool
+  methodset *ScrollBar.GetID() string
+  methodset *ScrollBar.IsOverlay() bool
+  methodset *Slider.GetID() string
+  methodset *Slider.IsOverlay() bool
+  methodset *Spacer.GetID() string
+  methodset *Spacer.IsOverlay() bool
+  methodset *Spacer.Size()(Size, Size)
+  methodset *Text.GetID() string
+  methodset *Text.IsOverlay() bool
+  methodset *Toggle.GetID() string
+  methodset *Toggle.IsOverlay() bool
+  methodset Button.GetID() string
+  methodset Button.IsOverlay() bool
+  methodset Col.GetID() string
+  methodset Col.IsOverlay() bool
+  methodset Icon.GetID() string
+  methodset Icon.IsOverlay() bool
+  methodset Image.GetID() string
+  methodset Image.IsOverlay() bool
+  methodset Input.GetID() string
+  methodset Input.IsOverlay() bool
+  methodset Label.GetID() string
+  methodset Label.IsOverlay() bool
+  methodset Meter.GetID() string
+  methodset Meter.IsOverlay() bool
+  methodset Row.GetID() string
+  methodset Row.IsOverlay() bool
+  methodset Scroll.GetID() string
+  methodset Scroll.IsOverlay() bool
+  methodset ScrollBar.GetID() string
+  methodset ScrollBar.IsOverlay() bool
+  methodset Slider.GetID() string
+  methodset Slider.IsOverlay() bool
+  methodset Spacer.GetID() string
+  methodset Spacer.IsOverlay() bool
+  methodset Spacer.Size()(Size, Size)
+  methodset Text.GetID() string
+  methodset Text.IsOverlay() bool
+  methodset Toggle.GetID() string
+  methodset Toggle.IsOverlay() bool
+  type Align int
+  type Backdrop struct
+  field Backdrop.Source image.Image [order=0]
+  field Backdrop.Blur float64 [order=1]
+  field Backdrop.Opacity float64 [order=2]
+  struct Backdrop fields=3 comparable=true
+  type BorderKind int
+  type Box struct
+  field Box.Border BorderKind [order=0]
+  field Box.BorderColor color.Color [order=1]
+  field Box.Background color.Color [order=2]
+  field Box.Selected bool [order=3]
+  field Box.Round bool [order=4]
+  field Box.Title string [order=5]
+  field Box.TitleStyle TextStyle [order=6]
+  field Box.Hover color.Color [order=7]
+  field Box.Interactive bool [order=8]
+  field Box.Backdrop *Backdrop [order=9]
+  field Box.InsetY float64 [order=10]
+  struct Box fields=11 comparable=true
+  type BoxOp struct
+  field BoxOp.Rect PointRect [order=0]
+  field BoxOp.Clip PointRect [order=1]
+  field BoxOp.Box Box [order=2]
+  field BoxOp.ID string [order=3]
+  struct BoxOp fields=4 comparable=true
+  type Button struct
+  field Button.NodeBase NodeBase [order=0]
+  field Button.Label string [order=1]
+  field Button.Style TextStyle [order=2]
+  field Button.Default bool [order=3]
+  field Button.Disabled bool [order=4]
+  field Button.Focused bool [order=5]
+  field Button.Icon IconName [order=6]
+  field Button.Plain bool [order=7]
+  struct Button fields=8 comparable=false
+  type CellsOp struct
+  field CellsOp.Rect PointRect [order=0]
+  field CellsOp.Clip PointRect [order=1]
+  field CellsOp.Cols int [order=2]
+  field CellsOp.Lines int [order=3]
+  field CellsOp.Content string [order=4]
+  struct CellsOp fields=5 comparable=true
+  type Col struct
+  field Col.NodeBase NodeBase [order=0]
+  field Col.Children []Node [order=1]
+  field Col.Align Align [order=2]
+  struct Col fields=3 comparable=false
+  type Composition struct
+  field Composition.Frame string [order=0]
+  field Composition.Rects map[string] Rect [order=1]
+  field Composition.Diagnostics []DuplicateIDDiagnostic [order=2]
+  field Composition.<unexported> []hit [order=3]
+  field Composition.<unexported> *caretPos [order=4]
+  field Composition.<unexported> map[string] placedInput [order=5]
+  struct Composition fields=6 comparable=false
+  type ControlKind int
+  type ControlOp struct
+  field ControlOp.ID string [order=0]
+  field ControlOp.Kind ControlKind [order=1]
+  field ControlOp.Rect PointRect [order=2]
+  field ControlOp.Clip PointRect [order=3]
+  field ControlOp.Label string [order=4]
+  field ControlOp.Style TextStyle [order=5]
+  field ControlOp.Checked bool [order=6]
+  field ControlOp.Value float64 [order=7]
+  field ControlOp.Fill color.Color [order=8]
+  field ControlOp.Default bool [order=9]
+  field ControlOp.Disabled bool [order=10]
+  field ControlOp.Focused bool [order=11]
+  field ControlOp.Icon IconName [order=12]
+  field ControlOp.Plain bool [order=13]
+  field ControlOp.Content PointRect [order=14]
+  struct ControlOp fields=15 comparable=true
+  type DuplicateIDDiagnostic struct
+  field DuplicateIDDiagnostic.ID string [order=0]
+  field DuplicateIDDiagnostic.FirstRect Rect [order=1]
+  field DuplicateIDDiagnostic.Duplicate Rect [order=2]
+  struct DuplicateIDDiagnostic fields=3 comparable=true
+  type Icon struct
+  field Icon.NodeBase NodeBase [order=0]
+  field Icon.Name IconName [order=1]
+  field Icon.Text string [order=2]
+  field Icon.Style TextStyle [order=3]
+  field Icon.Animate bool [order=4]
+  struct Icon fields=5 comparable=false
+  type IconName int
+  type IconOp struct
+  field IconOp.Rect PointRect [order=0]
+  field IconOp.Clip PointRect [order=1]
+  field IconOp.Name IconName [order=2]
+  field IconOp.Text string [order=3]
+  field IconOp.Style TextStyle [order=4]
+  field IconOp.Animate bool [order=5]
+  struct IconOp fields=6 comparable=true
+  type Image struct
+  field Image.NodeBase NodeBase [order=0]
+  field Image.Source image.Image [order=1]
+  field Image.Text string [order=2]
+  field Image.Fit ImageFit [order=3]
+  struct Image fields=4 comparable=false
+  type ImageFit int
+  type ImageOp struct
+  field ImageOp.Rect PointRect [order=0]
+  field ImageOp.Clip PointRect [order=1]
+  field ImageOp.Source image.Image [order=2]
+  field ImageOp.Fit ImageFit [order=3]
+  field ImageOp.Round bool [order=4]
+  struct ImageOp fields=5 comparable=true
+  type Input struct
+  field Input.NodeBase NodeBase [order=0]
+  field Input.Value string [order=1]
+  field Input.Caret int [order=2]
+  field Input.Placeholder string [order=3]
+  field Input.Focused bool [order=4]
+  field Input.Style TextStyle [order=5]
+  field Input.Multiline bool [order=6]
+  field Input.Wrap bool [order=7]
+  field Input.SelStart int [order=8]
+  field Input.SelEnd int [order=9]
+  field Input.SelectionStyle TextStyle [order=10]
+  field Input.OffsetX int [order=11]
+  field Input.OffsetY int [order=12]
+  field Input.Bare bool [order=13]
+  field Input.Clearable bool [order=14]
+  struct Input fields=15 comparable=false
+  type InputOp struct
+  field InputOp.ID string [order=0]
+  field InputOp.Rect PointRect [order=1]
+  field InputOp.Clip PointRect [order=2]
+  field InputOp.Value string [order=3]
+  field InputOp.Caret int [order=4]
+  field InputOp.Placeholder string [order=5]
+  field InputOp.Focused bool [order=6]
+  field InputOp.Style TextStyle [order=7]
+  field InputOp.Multiline bool [order=8]
+  field InputOp.Wrap bool [order=9]
+  field InputOp.SelStart int [order=10]
+  field InputOp.SelEnd int [order=11]
+  field InputOp.OffsetY int [order=12]
+  field InputOp.Bare bool [order=13]
+  field InputOp.Clearable bool [order=14]
+  field InputOp.Field PointRect [order=15]
+  struct InputOp fields=16 comparable=true
+  type Label struct
+  field Label.NodeBase NodeBase [order=0]
+  field Label.Text string [order=1]
+  field Label.Style TextStyle [order=2]
+  field Label.Wrap bool [order=3]
+  field Label.Runs []Run [order=4]
+  field Label.Selectable bool [order=5]
+  field Label.Truncate bool [order=6]
+  field Label.HoverFg color.Color [order=7]
+  struct Label fields=8 comparable=false
+  type LayerOp struct
+  field LayerOp.Rect PointRect [order=0]
+  struct LayerOp fields=1 comparable=true
+  type Meter struct
+  field Meter.NodeBase NodeBase [order=0]
+  field Meter.Value float64 [order=1]
+  field Meter.Fill color.Color [order=2]
+  field Meter.Track color.Color [order=3]
+  struct Meter fields=4 comparable=false
+  type MeterOp struct
+  field MeterOp.Rect PointRect [order=0]
+  field MeterOp.Clip PointRect [order=1]
+  field MeterOp.Value float64 [order=2]
+  field MeterOp.Fill color.Color [order=3]
+  field MeterOp.Track color.Color [order=4]
+  struct MeterOp fields=5 comparable=true
+  type Metrics struct
+  field Metrics.Column float64 [order=0]
+  field Metrics.Line float64 [order=1]
+  field Metrics.Step float64 [order=2]
+  field Metrics.Border float64 [order=3]
+  field Metrics.MeasureText func(text string, style TextStyle, maxWidth float64)(w float64, h float64) [order=4]
+  field Metrics.MeasureRuns func(runs[]Run, maxWidth float64)(w float64, h float64) [order=5]
+  field Metrics.DefaultPadding bool [order=6]
+  field Metrics.ControlHeight float64 [order=7]
+  struct Metrics fields=8 comparable=false
+  type Node interface
+  interface Node method Render(r Rect) string
+  interface Node method Size()(w Size, h Size)
+  type NodeBase struct
+  field NodeBase.W Size [order=0]
+  field NodeBase.H Size [order=1]
+  field NodeBase.Pad int [order=2]
+  field NodeBase.Gap int [order=3]
+  field NodeBase.Bordered bool [order=4]
+  field NodeBase.Overlay bool [order=5]
+  field NodeBase.ID string [order=6]
+  field NodeBase.PadTop int [order=7]
+  field NodeBase.PadRight int [order=8]
+  field NodeBase.PadBottom int [order=9]
+  field NodeBase.PadLeft int [order=10]
+  field NodeBase.Chrome func(r Rect) string [order=11]
+  field NodeBase.Box Box [order=12]
+  field NodeBase.Tooltip string [order=13]
+  field NodeBase.Anchor string [order=14]
+  field NodeBase.NoPadding bool [order=15]
+  field NodeBase.ItemPadding bool [order=16]
+  struct NodeBase fields=17 comparable=false
+  type Op interface
+  interface Op method isOp()
+  type PointRect struct
+  field PointRect.X float64 [order=0]
+  field PointRect.Y float64 [order=1]
+  field PointRect.W float64 [order=2]
+  field PointRect.H float64 [order=3]
+  struct PointRect fields=4 comparable=true
+  type Rect struct
+  field Rect.X int [order=0]
+  field Rect.Y int [order=1]
+  field Rect.W int [order=2]
+  field Rect.H int [order=3]
+  struct Rect fields=4 comparable=true
+  type Row struct
+  field Row.NodeBase NodeBase [order=0]
+  field Row.Children []Node [order=1]
+  field Row.Align Align [order=2]
+  struct Row fields=3 comparable=false
+  type Run struct
+  field Run.Text string [order=0]
+  field Run.Style TextStyle [order=1]
+  struct Run fields=2 comparable=true
+  type Scene struct
+  field Scene.Ops []Op [order=0]
+  field Scene.Rects map[string] PointRect [order=1]
+  field Scene.<unexported> []hitOf[float64] [order=2]
+  field Scene.<unexported> []tip [order=3]
+  struct Scene fields=4 comparable=false
+  type Scroll struct
+  field Scroll.NodeBase NodeBase [order=0]
+  field Scroll.OffsetY int [order=1]
+  field Scroll.Child Node [order=2]
+  struct Scroll fields=3 comparable=false
+  type ScrollBar struct
+  field ScrollBar.NodeBase NodeBase [order=0]
+  field ScrollBar.Offset int [order=1]
+  field ScrollBar.Visible int [order=2]
+  field ScrollBar.Total int [order=3]
+  field ScrollBar.Color color.Color [order=4]
+  struct ScrollBar fields=5 comparable=false
+  type ScrollBarOp struct
+  field ScrollBarOp.Rect PointRect [order=0]
+  field ScrollBarOp.Clip PointRect [order=1]
+  field ScrollBarOp.Start float64 [order=2]
+  field ScrollBarOp.Length float64 [order=3]
+  field ScrollBarOp.Show bool [order=4]
+  field ScrollBarOp.Color color.Color [order=5]
+  struct ScrollBarOp fields=6 comparable=true
+  type Size struct
+  field Size.Kind SizeKind [order=0]
+  field Size.Value int [order=1]
+  field Size.Weight float64 [order=2]
+  struct Size fields=3 comparable=true
+  type SizeKind int
+  type Slider struct
+  field Slider.NodeBase NodeBase [order=0]
+  field Slider.Value float64 [order=1]
+  field Slider.Fill color.Color [order=2]
+  field Slider.Disabled bool [order=3]
+  field Slider.Focused bool [order=4]
+  struct Slider fields=5 comparable=false
+  type Spacer struct
+  field Spacer.NodeBase NodeBase [order=0]
+  field Spacer.<unexported> color.Color [order=1]
+  struct Spacer fields=2 comparable=false
+  type Text struct
+  field Text.NodeBase NodeBase [order=0]
+  field Text.String string [order=1]
+  struct Text fields=2 comparable=false
+  type TextOp struct
+  field TextOp.Rect PointRect [order=0]
+  field TextOp.Clip PointRect [order=1]
+  field TextOp.Text string [order=2]
+  field TextOp.Style TextStyle [order=3]
+  field TextOp.Wrap bool [order=4]
+  field TextOp.Runs []Run [order=5]
+  field TextOp.Selectable bool [order=6]
+  field TextOp.Truncate bool [order=7]
+  field TextOp.ID string [order=8]
+  field TextOp.HoverFg color.Color [order=9]
+  struct TextOp fields=10 comparable=false
+  type TextRole int
+  type TextStyle struct
+  field TextStyle.Role TextRole [order=0]
+  field TextStyle.Fg color.Color [order=1]
+  field TextStyle.Bg color.Color [order=2]
+  field TextStyle.Size float64 [order=3]
+  field TextStyle.Leading float64 [order=4]
+  field TextStyle.Bold bool [order=5]
+  field TextStyle.Italic bool [order=6]
+  field TextStyle.Underline bool [order=7]
+  field TextStyle.Strikethrough bool [order=8]
+  struct TextStyle fields=9 comparable=true
+  type Toggle struct
+  field Toggle.NodeBase NodeBase [order=0]
+  field Toggle.Kind ToggleKind [order=1]
+  field Toggle.Label string [order=2]
+  field Toggle.Style TextStyle [order=3]
+  field Toggle.Checked bool [order=4]
+  field Toggle.Disabled bool [order=5]
+  field Toggle.Focused bool [order=6]
+  struct Toggle fields=7 comparable=false
+  type ToggleKind int

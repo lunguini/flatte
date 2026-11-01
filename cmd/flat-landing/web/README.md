@@ -1,15 +1,19 @@
 # flat-landing web build
 
 This page hosts the same Flatte app used by `go run ./flat-landing`, compiled to
-WebAssembly. The Go app core is shared; only `main_js.go` wires browser events
-and DOM rendering. `index.html` + `styles.css` are the static shell.
+WebAssembly with either the standard Go toolchain or TinyGo 0.41. Both builds
+call `flatte.Run`; by default its js/wasm backend mounts the `data-flatte`
+element and renders the cell grid with text nodes. Apps that pass
+`window.Options` select the GUI canvas host instead. `main_js.go` contains only
+this page's deep-link and leaderboard integration. `index.html` + `styles.css`
+are the static shell.
 
 The build artifacts (`flat-landing.wasm.gz`, `wasm_exec.js`) are **gitignored** —
 build them locally with the commands below before serving.
 
 ## Build
 
-From `cmd/`, with the standard Go toolchain:
+From `cmd/`, build with standard Go:
 
 ```bash
 GOOS=js GOARCH=wasm go build -o flat-landing/web/flat-landing.wasm ./flat-landing
@@ -17,12 +21,27 @@ cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" flat-landing/web/wasm_exec.js
 gzip -9 -f flat-landing/web/flat-landing.wasm
 ```
 
-This is the exact sequence the Pages workflow runs. The standard Go compiler is
-required: its garbage collector is solid under the browser's asyncify scheduler,
-whereas TinyGo's GC deadlocks the scheduler when a hosted app allocates during a
-JS callback (which the App tab does on every frame). The `.wasm` is shipped
-gzip-compressed (~1.5 MB) and inflated in the browser via `DecompressionStream`,
-so the transfer stays small regardless of the host's own compression.
+Or build with TinyGo 0.41:
+
+```bash
+tinygo build -target wasm -o flat-landing/web/flat-landing.wasm ./flat-landing
+cp "$(tinygo env TINYGOROOT)/targets/wasm_exec.js" flat-landing/web/wasm_exec.js
+gzip -9 -f flat-landing/web/flat-landing.wasm
+```
+
+Use the `wasm_exec.js` supplied by the same toolchain that built the `.wasm`.
+The Pages workflow continues to publish the standard Go build. From the repo
+root, `scripts/wasm-check.sh` builds both toolchains, prints raw, gzip, and
+Brotli sizes for the cell and canvas variants of the same smoke app, runs Go
+browser tests under Node, and runs TinyGo cell and canvas smokes through the
+DOM shim.
+
+This landing page stays in cell-grid mode, so `RenderContext.Graphical` is
+false. The canvas host is available to browser apps through `window.Options{}`
+and reports `Graphical: true`; it measures with Canvas fonts, displays GUI
+scene images, and uses a high-DPI backing store. Clipboard access depends on
+browser support and permission. Notifications are sent only when the Web
+Notifications API is already permitted; otherwise they are ignored.
 
 ## Serve
 

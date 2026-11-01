@@ -74,24 +74,57 @@ func (t *TabBar) SetActive(i int) {
 		t.active = i
 	}
 }
-func (t *TabBar) Next() { t.active = (t.active + 1) % len(t.Items) }
-func (t *TabBar) Prev() { t.active = (t.active - 1 + len(t.Items)) % len(t.Items) }
+func (t *TabBar) Next() {
+	if len(t.Items) == 0 {
+		return
+	}
+	t.active = (t.active + 1) % len(t.Items)
+}
+func (t *TabBar) Prev() {
+	if len(t.Items) == 0 {
+		return
+	}
+	t.active = (t.active - 1 + len(t.Items)) % len(t.Items)
+}
 
-// Layout builds the tab strip as a Row of styled Text leaves. The engine
-// positions and sizes it; the widget computes no coordinates. When WithID was
-// set, the strip and each tab carry IDs so a solve records their rects.
+// Layout builds the tab strip as a Row of tabs. Each tab is a Row of its
+// glyph caps — blank Icons, so the terminal draws them and a GUI leaves them
+// out — around its label on the tab's fill with two columns of padding: the
+// string render's cells in the terminal, flat filled segments in a window.
+// The engine positions and sizes it; the widget computes no coordinates.
+// When WithID was set, the strip and each tab carry IDs so a solve records
+// their rects. A bordered strip is one Text leaf.
 func (t *TabBar) Layout() layout.Node {
 	if t.border.enabled() {
 		return layout.Text{NodeBase: layout.NodeBase{ID: t.id}, String: t.renderTabsWithBorder()}
 	}
 	tabs := make([]layout.Node, len(t.Items))
 	for i, item := range t.Items {
-		tabs[i] = layout.Text{
-			NodeBase: layout.NodeBase{ID: t.tabID(item.ID)},
-			String:   t.renderTab(item, i == t.active),
-		}
+		fill, text := t.tabColors(i == t.active)
+		capStyle := layout.TextStyle{Fg: fill, Bg: t.barBg}
+		tabs[i] = layout.Row{NodeBase: layout.NodeBase{ID: t.tabID(item.ID)}, Children: []layout.Node{
+			layout.Icon{Name: layout.IconBlank, Text: t.glyphs.Left, Style: capStyle},
+			// The fill is a pill in a window; the blank caps around it space
+			// the pills apart.
+			layout.Row{NodeBase: layout.NodeBase{Box: layout.Box{Background: fill, Round: true}}, Children: []layout.Node{
+				layout.Label{NodeBase: layout.NodeBase{PadLeft: 2}, Text: item.Label, Style: layout.TextStyle{Fg: text}},
+				// The trailing padding is its own node so that a clipped
+				// strip loses padding before label text, as the string
+				// render does.
+				layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(2)}},
+			}},
+			layout.Icon{Name: layout.IconBlank, Text: t.glyphs.Right, Style: capStyle},
+		}}
 	}
 	return layout.Row{NodeBase: layout.NodeBase{ID: t.id}, Children: tabs}
+}
+
+// tabColors is a tab's fill and label color.
+func (t *TabBar) tabColors(active bool) (fill, text color.Color) {
+	if active {
+		return t.fill, activeTabText
+	}
+	return t.inactiveFill, lipgloss.Color("245")
 }
 
 // tabID is the per-tab layout ID, or "" when the strip has no ID (so tabs stay
@@ -125,12 +158,7 @@ func (t *TabBar) renderTabsWithBorder() string {
 }
 
 func (t *TabBar) renderTab(item TabItem, active bool) string {
-	var f, text color.Color
-	if active {
-		f, text = t.fill, activeTabText
-	} else {
-		f, text = t.inactiveFill, lipgloss.Color("245")
-	}
+	f, text := t.tabColors(active)
 	l := lipgloss.NewStyle().Foreground(f).Background(t.barBg).Render(t.glyphs.Left)
 	c := lipgloss.NewStyle().Foreground(text).Background(f).Padding(0, 2).Render(item.Label)
 	r := lipgloss.NewStyle().Foreground(f).Background(t.barBg).Render(t.glyphs.Right)
@@ -156,10 +184,18 @@ func (t *TabBar) HitTest(rects map[string]layout.Rect, x, y int) (int, bool) {
 	if !ok || !strip.Contains(x, y) {
 		return -1, false
 	}
-	localX := x - strip.X - t.border.leadingWidth()
+	left, right := t.border.leadingWidth(), t.border.trailingWidth()
+	top, bottom := t.border.topHeight(), t.border.bottomHeight()
+	localX := x - strip.X - left
+	localY := y - strip.Y - top
+	contentWidth := strip.W - left - right
+	contentHeight := strip.H - top - bottom
+	if localX < 0 || localX >= contentWidth || localY < 0 || localY >= contentHeight {
+		return -1, false
+	}
 	px := 0
 	for i, item := range t.Items {
-		w := tabLabelWidth(item.Label)
+		w := t.tabWidth(item)
 		if localX >= px && localX < px+w {
 			return i, true
 		}
@@ -168,9 +204,17 @@ func (t *TabBar) HitTest(rects map[string]layout.Rect, x, y int) (int, bool) {
 	return -1, false
 }
 
-// tabLabelWidth is the rendered width of one tab: the label plus the two-cell
-// side padding and the two edge glyphs.
-func tabLabelWidth(label string) int { return lipgloss.Width(label) + 6 }
+// tabWidth is measured from the rendered tab so arbitrary glyph widths and
+// the label's actual Lip Gloss padding stay in sync with HitTest geometry.
+func (t *TabBar) tabWidth(item TabItem) int {
+	return lipgloss.Width(t.renderTab(item, false))
+}
+
+// tabLabelWidth is the default-glyph width retained for callers and tests that
+// need to describe the natural width of a default tab.
+func tabLabelWidth(label string) int {
+	return lipgloss.Width(TabGlyphsPowerline.Left) + lipgloss.Width(label) + 4 + lipgloss.Width(TabGlyphsPowerline.Right)
+}
 
 // activeTabText is the label color on an active tab's fill. A computed
 // contrast color is the eventual fix if themes need it; today every palette
@@ -189,8 +233,29 @@ func (b TabBarBorder) style() lipgloss.Border {
 }
 
 func (b TabBarBorder) leadingWidth() int {
-	if b.Left {
-		return 1
+	if !b.Left {
+		return 0
+	}
+	return b.style().GetLeftSize()
+}
+
+func (b TabBarBorder) trailingWidth() int {
+	if !b.Right {
+		return 0
+	}
+	return b.style().GetRightSize()
+}
+
+func (b TabBarBorder) topHeight() int {
+	if b.Top {
+		return b.style().GetTopSize()
+	}
+	return 0
+}
+
+func (b TabBarBorder) bottomHeight() int {
+	if b.Bottom {
+		return b.style().GetBottomSize()
 	}
 	return 0
 }

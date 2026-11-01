@@ -1,0 +1,30 @@
+  Game   App                                                          Flatte   Layout   UI 
+
+ ╭────────────────────────────────────────────────────────────────────────────────────────╮
+ │ flat-docker                              1 containers    2 images    3 volumes   │
+ │ ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀ │
+ │  filter: (all)        ngi  stats    logs    inspect      activity                │
+ │                                                                                        │
+ │  ●> nginx-proxy         status: running                        (no events yet)         │
+ │  ●  api-server          image:  nginx:1.25                                             │
+ │  ●  postgres                                                                           │
+ │  ●  redis-cache         CPU █████████████░░░░░░░░   63%                                │
+ │  ○  frontend            hist (no history)                                              │
+ │  ●  worker                                                                             │
+ │  ●  nginx-web           MEM ███████░░░░░░░░░░░░░░   35%                                │
+ │  ○  migration       │   hist (no history)                    │                         │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │  8 containers (6 running)  avg CPU  0%  avg MEM  0%  filter: (all)                     │
+ │                                                                                        │
+ │  j/k move  s stop  x remove  : command  tab next  1/2/3 switch  q quit                 │
+ ╰────────────────────────────────────────────────────────────────────────────────────────╯
+
+ ▚ App · arrows move · tab focus · : palette · click to interact  Ctrl+←/→ tabs · click to 

@@ -92,3 +92,41 @@ func TestStepCapBoundsReplay(t *testing.T) {
 		t.Fatalf("cap=3 replay scored %d, expected less than the full %d", capped, g.Score)
 	}
 }
+
+func BenchmarkReplayWorstCase(b *testing.B) {
+	inputs := longRunningReplayInputs(b, 8192)
+	b.ReportMetric(float64(8192), "steps/replay")
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		Replay(1, inputs, 8192)
+	}
+}
+
+// longRunningReplayInputs drives a large interior rectangle. Unlike a merely
+// maximum-sized payload that crashes into a wall after a few moves, this log
+// makes Replay execute the full verifier step cap, so the benchmark measures
+// the actual worst bounded simulation path.
+func longRunningReplayInputs(tb testing.TB, stepCap int) []Input {
+	tb.Helper()
+	g := New(1)
+	g.Steer(Down)
+	for !g.Over && g.Moves < stepCap {
+		head := g.Snake[0]
+		switch {
+		case g.Dir == Down && head.Y == GridH-2:
+			g.Steer(Right)
+		case g.Dir == Right && head.X == GridW-2:
+			g.Steer(Up)
+		case g.Dir == Up && head.Y == 1:
+			g.Steer(Left)
+		case g.Dir == Left && head.X == 1:
+			g.Steer(Down)
+		}
+		g.Step()
+	}
+	if g.Moves != stepCap {
+		tb.Fatalf("long-running replay stopped after %d moves, want %d", g.Moves, stepCap)
+	}
+	return append([]Input(nil), g.Inputs...)
+}

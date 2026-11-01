@@ -57,52 +57,6 @@ func TestNamedUpdateAppliesAndCarriesName(t *testing.T) {
 	}
 }
 
-func TestAsyncSendsNamedFoldedUpdate(t *testing.T) {
-	ctx := context.Background()
-	updates := make(chan StateUpdate[testState], 1)
-
-	Async(ctx, updates, nil, "counter.load",
-		func(context.Context) (int, error) {
-			return 7, nil
-		},
-		func(s *testState, value int, err error) {
-			s.count = value
-		},
-	)
-
-	update := receiveCoreUpdate(t, updates)
-	state := testState{}
-	update.Apply(&state)
-
-	if update.Name() != "counter.load" {
-		t.Fatalf("Name() = %q, want %q", update.Name(), "counter.load")
-	}
-	if state.count != 7 {
-		t.Fatalf("count = %d, want 7", state.count)
-	}
-}
-
-func TestAsyncSuppressesCancelledUpdate(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	updates := make(chan StateUpdate[testState], 1)
-
-	Async(ctx, updates, nil, "counter.stale",
-		func(context.Context) (int, error) {
-			return 7, nil
-		},
-		func(s *testState, value int, err error) {
-			s.count = value
-		},
-	)
-
-	select {
-	case update := <-updates:
-		t.Fatalf("received cancelled update: %s", update.Name())
-	case <-time.After(25 * time.Millisecond):
-	}
-}
-
 func TestApplyUpdateTracesBeforeApply(t *testing.T) {
 	var calls []string
 	state := testState{}
@@ -150,7 +104,7 @@ func TestRunProcessesInputAndAsyncUpdates(t *testing.T) {
 		done <- Run(ctx, App[testState]{
 			State: &state,
 			Init: func(s *testState, fx Effects[testState]) {
-				Async(fx.Context, fx.Updates, nil, "counter.load",
+				Go(fx, "counter.load",
 					func(context.Context) (int, error) {
 						return 3, nil
 					},
@@ -295,7 +249,7 @@ func TestRunExitsWhenInitRequestsQuit(t *testing.T) {
 
 func TestEffectsQuitRequestsExit(t *testing.T) {
 	var called bool
-	fx := NewEffects[testState](context.Background(), nil, func() { called = true })
+	fx := newEffects[testState](context.Background(), nil, func() { called = true })
 
 	fx.Quit()
 
@@ -376,7 +330,7 @@ func TestRunCoalescesQueuedUpdatesIntoOneDraw(t *testing.T) {
 				// Three updates queued before the loop starts; they must
 				// be applied in one batch and drawn once.
 				for range 3 {
-					fx.Updates <- Named("inc", func(s *testState) { s.count++ })
+					fx.Send(Named("inc", func(s *testState) { s.count++ }))
 				}
 			},
 			Handle: func(s *testState, ev Event, fx Effects[testState]) {

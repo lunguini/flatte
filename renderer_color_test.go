@@ -39,7 +39,7 @@ func TestRenderContextForCarriesOutputColorProfile(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	ctx := RenderContextFor(&out)
+	ctx := renderContextFor(&out)
 	if detected != &out {
 		t.Fatalf("RenderContextFor detected profile from %T, want output writer", detected)
 	}

@@ -7,11 +7,13 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	"github.com/lunguini/flatte/flatui"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func ready() *State {
 	s := NewState()
-	s.layout(14)
+	settle(s, 72, 14)
 	return s
 }
 
@@ -75,8 +77,7 @@ func TestClearingQueryRestoresAllItems(t *testing.T) {
 func TestPrintableQEditsAndEscapeQuits(t *testing.T) {
 	s := ready()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, key('q'), fx)
 	if quit {
 		t.Fatal("q should edit the query, not quit")
@@ -88,6 +89,36 @@ func TestPrintableQEditsAndEscapeQuits(t *testing.T) {
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, fx)
 	if !quit {
 		t.Fatal("escape should request quit")
+	}
+}
+
+func TestQueryUsesTextFieldEditing(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		key   flatte.KeyEvent
+		start int
+		want  int
+	}{
+		{"End", flatte.KeyEvent{Key: flatte.KeyEnd}, 5, len("Hello World")},
+		{"Cmd+Left", flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, 5, 0},
+		{"Alt+Right", flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, 0, len("Hello")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewState()
+			s.query = flatui.TextField{Value: "Hello World", Cursor: tc.start}
+			Handle(s, tc.key, flatte.Effects[State]{})
+			if s.query.Cursor != tc.want {
+				t.Fatalf("cursor = %d, want %d", s.query.Cursor, tc.want)
+			}
+		})
+	}
+}
+
+func TestQueryPastesAsSingleLine(t *testing.T) {
+	s := NewState()
+	Handle(s, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if s.query.Value != "ab" {
+		t.Fatalf("pasted query = %q, want single-line %q", s.query.Value, "ab")
 	}
 }
 
@@ -118,7 +149,7 @@ func TestViewSnapshot(t *testing.T) {
 	s := ready()
 	typeQuery(s, "api")
 
-	flatest.AssertGoldenFrame(t, "testdata/filter.golden", View(s, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/filter.golden", composedAt(composed(View(s, flatte.RenderContext{Width: 72})), 14))
 }
 
 func labels(indexes []int) []string {
@@ -127,4 +158,24 @@ func labels(indexes []int) []string {
 		out = append(out, items()[i].Title)
 	}
 	return out
+}
+
+// settle composes the view at width×height and delivers the solved rects as
+// the runtime does before painting.
+func settle(s *State, width, height int) {
+	_, comp := flatte.ComposeFrame(composed(View(s, flatte.RenderContext{Width: width})), width, height)
+	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
+}
+
+// composedAt is View's frame painted on a 72-column terminal height rows
+// tall.
+func composedAt(f flatte.Frame, height int) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, height)
+	return f
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

@@ -7,12 +7,28 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
+// ready is a state that has seen its first frame at 72×24: the runtime's
+// LayoutEvent has fed the panel rects into the zone map.
 func ready() *State {
 	s := NewState()
-	s.layout(72)
+	settle(s, 72, 24)
 	return s
+}
+
+// settle composes the view at width×height and delivers the solved rects as
+// the runtime does before painting.
+func settle(s *State, width, height int) {
+	_, comp := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, height)
+	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }
 
 func TestClickSelectsPanelThroughZoneMap(t *testing.T) {
@@ -51,9 +67,9 @@ func TestClickOutsidePanelDoesNotChangeSelection(t *testing.T) {
 }
 
 func TestResizeDistributesPanelZones(t *testing.T) {
-	s := NewState()
+	s := ready()
 
-	Handle(s, flatte.ResizeEvent{Width: 80, Height: 24}, flatte.Effects[State]{})
+	settle(s, 80, 24)
 
 	left, _ := s.zones.Rect(logsZone)
 	right, _ := s.zones.Rect(metricsZone)
@@ -68,8 +84,7 @@ func TestResizeDistributesPanelZones(t *testing.T) {
 func TestQuitKeys(t *testing.T) {
 	s := ready()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
@@ -82,7 +97,7 @@ func TestViewShowsZonesAndSelection(t *testing.T) {
 	s.selected = metricsZone
 	s.last = "metrics local 1,2"
 
-	frame := View(s, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(s, flatte.RenderContext{Width: 72})).Content
 	for _, want := range []string{"Flat Zones", "LOGS", "METRICS", "selected: metrics", "last: metrics local 1,2"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("view missing %q:\n%s", want, frame)
@@ -93,5 +108,5 @@ func TestViewShowsZonesAndSelection(t *testing.T) {
 func TestViewSnapshot(t *testing.T) {
 	s := ready()
 
-	flatest.AssertGoldenFrame(t, "testdata/zones.golden", View(s, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/zones.golden", composed(View(s, flatte.RenderContext{Width: 72})))
 }

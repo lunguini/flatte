@@ -1,0 +1,24 @@
+┌──────────────────────────────────────────────────────────────────────┐
+│   Flat Modal                                                         │
+│    background ticks: 0 | loader: idle                                │
+│  modal focus with background updates                                 │
+│    background workspace:                                             │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│    modal result: none                                                │
+│    recent events:                                                    │
+│      - async tick applied                                            │
+│      - modal owns keyboard focus                                     │
+│                                                                      │
+│  enter open modal | q quit                                           │
+└──────────────────────────────────────────────────────────────────────┘

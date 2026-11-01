@@ -15,8 +15,10 @@ alternative** — software teams ship on and depend on, not a research spike.
 **This is not experimentation.** The phased roadmap and the "abstraction is
 found, not designed" rule are about *engineering rigor* (don't add surface
 ahead of evidence), **not** about hedging on whether to deliver. We are
-committed to carrying the roadmap through a 0.1 release, then to a 1.0 once
-community feedback and API stabilization justify it.
+committed to carrying the roadmap to a 1.0 once community feedback and API
+stabilization justify it. Check the current version before reasoning about
+compatibility (`git tag --sort=-v:refname | head -1`, or the GitHub
+releases); do not assume one from this file.
 
 What that means in practice, on every increment:
 
@@ -99,7 +101,7 @@ deterministic (no wall-clock, no randomness in `View`).
 ## Architecture
 
 - root package `flatte` — the runtime: `App[S]`, `Run`, the closed event set
-  + substrate event translation, `StateUpdate[S]`/`Async`, `Tracer`,
+  + substrate event translation, `StateUpdate[S]`/`Named`, `Tracer`,
   cell-buffer rendering via ultraviolet. No app policy here, and no
   ultraviolet types in exported signatures.
 - `flatui` — opt-in widget state structs and layout helpers (`TextField`,
@@ -108,6 +110,10 @@ deterministic (no wall-clock, no randomness in `View`).
   no goroutines, no hidden focus policy; apps store them in their own state.
 - `flatest` — deterministic driver, fake-clock async harness, replay, and
   golden-test helpers.
+- `window` (nested module `github.com/lunguini/flatte/window`) — the native
+  GUI host: runs an `App[S]` in a desktop window (macOS via purego, no cgo),
+  drawing `layout.LayoutScene` ops with the OS text and 2D stack. Keeps
+  purego out of the root module's dependency graph.
 - `cmd/flat-*` — dogfood sample apps; each has tests + goldens.
 - `cmd/bubble-modal`, `cmd/bubble-v2-modal`, `cmd/bubble-v2-search` —
   Bubble Tea v1/v2 comparison apps. They are the benchmark; keep them
@@ -168,7 +174,11 @@ deterministic (no wall-clock, no randomness in `View`).
   when a useful scope exists, otherwise `type: subject`. Use standard
   release-driving types such as `feat`, `fix`, `docs`, `test`, `refactor`,
   `perf`, `build`, `ci`, and `chore`; mark breaking changes with `!` and/or a
-  `BREAKING CHANGE:` footer. Releases and `CHANGELOG.md` are automated from
+  `BREAKING CHANGE:` footer, with the `!` after the scope
+  (`refactor(run)!: subject`). Before 1.0, release-please bumps the minor
+  version for breaking changes (`bump-minor-pre-major`), so a breaking
+  change belongs in the next minor release; delete superseded API there
+  instead of keeping deprecated shims. Releases and `CHANGELOG.md` are automated from
   these messages by release-please (`.github/workflows/release-please.yml`);
   the public contributor-facing version of this rule lives in
   `CONTRIBUTING.md`.

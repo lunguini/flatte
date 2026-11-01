@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -26,6 +27,27 @@ type App[S any] struct {
 	// context cancel, signal). Use it to persist state before the process
 	// exits. It fires before terminal restoration.
 	OnExit func(*S)
+	// Menus, when set, is the menu bar for the state, read like View after
+	// every change: a window shows it natively, and every host delivers a
+	// key matching an item's Keys as its MenuEvent (a terminal shows no
+	// bar).
+	Menus func(*S) []Menu
+	// ContextMenu, when set, is the menu for a right-click on the ID'd node
+	// target ("" outside any): a window shows it as a native popup, a
+	// terminal draws it over the frame. Return nil for no menu (the click
+	// is then delivered as usual); a shown menu consumes the click, and the
+	// choice arrives as a MenuEvent with Target set.
+	ContextMenu func(s *S, target string) []MenuItem
+	// Windows, when set, declares the app's secondary windows for the
+	// state, read like View after every change: a window appears when
+	// declared and closes when no longer declared. View draws each (see
+	// RenderContext.Window). A desktop host opens real windows; a terminal
+	// draws them over the main frame.
+	Windows func(*S) []Window
+	// NowPlaying reports the current media item and the commands available
+	// for it. A native host publishes it to the system media controls; nil
+	// opts out. The callback is read on the app's state loop after changes.
+	NowPlaying func(*S) *NowPlaying
 }
 
 // action is a one-shot terminal capability request, queued by Effects
@@ -44,29 +66,94 @@ type execAction struct {
 }
 
 type Effects[S any] struct {
-	Context  context.Context
-	Updates  chan<- StateUpdate[S]
-	quit     func()
-	enqueue  func(action)
-	latest   *latestRegistry
-	dispatch func(func())
-	clock    Clock
+	ctx     context.Context
+	updates chan<- StateUpdate[S]
+	// sendUpdate is used by deterministic harnesses that need an unbounded
+	// in-memory queue. Production effects always use updates; keeping this
+	// seam private prevents applications from replacing the loop transport.
+	sendUpdate func(context.Context, StateUpdate[S]) bool
+	quit       func()
+	enqueue    func(action)
+	latest     *latestRegistry
+	dispatch   func(func())
+	clock      Clock
+	// setClipboard and readClipboard replace the terminal's OSC52 clipboard
+	// for a host with its own clipboard service.
+	setClipboard  func(string)
+	readClipboard func()
+	// dialogs shows dialogs; nil: the host has none.
+	dialogs func(Dialog, func(DialogResult))
+	// notify posts notifications; nil: terminal
+	// escape sequences.
+	notify func(Notification)
+	// desktop routes background utility commands to a native host.
+	desktop func(DesktopCommand)
+	// caps is what the host supports.
+	caps Capabilities
 }
 
-// NewEffects builds an Effects value with an observable quit callback.
-// Run uses it internally; tests use it to assert quit requests.
-func NewEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func()) Effects[S] {
-	return Effects[S]{Context: ctx, Updates: updates, quit: quit, latest: newLatestRegistry()}
+// Capabilities reports what the current host supports; the zero value on
+// a zero Effects value or a harness that did not set any.
+func (fx Effects[S]) Capabilities() Capabilities { return fx.caps }
+
+func withHostCapabilities[S any](fx Effects[S], c Capabilities) Effects[S] {
+	fx.caps = c
+	return fx
 }
 
-// NewHarnessEffects builds an Effects wired for deterministic testing:
-// dispatch controls how async bodies are spawned (nil = real goroutine)
-// and clock controls time-based effects (nil = real clock). For flatest;
-// not app API.
-func NewHarnessEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func(), dispatch func(func()), clock Clock) Effects[S] {
-	fx := NewEffects(ctx, updates, quit)
-	fx.dispatch = dispatch
-	fx.clock = clock
+// terminalCapabilities is what Run's terminal host supports under cfg.
+func terminalCapabilities(cfg runConfig) Capabilities {
+	return Capabilities{
+		Exec: true, Suspend: true, Print: true,
+		Alert: true, OpenFile: true, SaveFile: true,
+		Notifications: true, Clipboard: true,
+		Mouse: cfg.mouse != MouseModeNone,
+		Quit:  true,
+	}
+}
+
+// cancelReaderFactory is a seam for the input lifecycle tests. Keeping the
+// substrate constructor behind this small interface also makes ownership
+// explicit: every cancel reader created here is closed after its read loop
+// has joined.
+type cancelReader interface {
+	io.ReadCloser
+	Cancel() bool
+}
+
+var cancelReaderFactory = func(in io.Reader) (cancelReader, error) {
+	return uv.NewCancelReader(in)
+}
+
+// outputSink is the one place where Run writes bytes to the real terminal
+// sink. It latches the first failure so later best-effort cleanup writes do
+// not hide the error that stopped normal work.
+type outputSink struct {
+	w   io.Writer
+	err error
+}
+
+func (s *outputSink) write(p []byte) error {
+	n, err := s.w.Write(p)
+	if err == nil && n != len(p) {
+		err = io.ErrShortWrite
+	}
+	s.record(err)
+	return err
+}
+
+func (s *outputSink) record(err error) {
+	if err != nil && s.err == nil {
+		s.err = err
+	}
+}
+
+func newEffects[S any](ctx context.Context, updates chan<- StateUpdate[S], quit func()) Effects[S] {
+	return Effects[S]{ctx: ctx, updates: updates, quit: quit, latest: newLatestRegistry()}
+}
+
+func withHostClipboard[S any](fx Effects[S], set func(text string), read func()) Effects[S] {
+	fx.setClipboard, fx.readClipboard = set, read
 	return fx
 }
 
@@ -89,20 +176,30 @@ func (fx Effects[S]) Quit() {
 	}
 }
 
-// SetClipboard writes text to the system clipboard via OSC52 on the next
-// flush. Loop-goroutine-only, like Quit. Terminals without OSC52 support
-// ignore it. Safe on a zero Effects value.
+// SetClipboard writes text to the system clipboard: via OSC52 on the next
+// flush in a terminal, directly in a window. Loop-goroutine-only, like
+// Quit. Terminals without OSC52 support ignore it. Safe on a zero Effects
+// value.
 func (fx Effects[S]) SetClipboard(text string) {
+	if fx.setClipboard != nil {
+		fx.setClipboard(text)
+		return
+	}
 	if fx.enqueue != nil {
 		fx.enqueue(action{write: ansi.SetSystemClipboard(text)})
 	}
 }
 
-// ReadClipboard asks the terminal for its clipboard content via OSC52.
-// A supporting terminal answers with a ClipboardEvent; unsupported
-// terminals never answer — treat the event as optional and do not wait
-// for it. Loop-goroutine-only, like Quit. Safe on a zero Effects value.
+// ReadClipboard asks for the clipboard content: the terminal via OSC52, or
+// the window's pasteboard. A window or supporting terminal answers with a
+// ClipboardEvent; unsupported terminals never answer — treat the event as
+// optional and do not wait for it. Loop-goroutine-only, like Quit. Safe on
+// a zero Effects value.
 func (fx Effects[S]) ReadClipboard() {
+	if fx.readClipboard != nil {
+		fx.readClipboard()
+		return
+	}
 	if fx.enqueue != nil {
 		fx.enqueue(action{write: ansi.RequestSystemClipboard})
 	}
@@ -114,7 +211,7 @@ func (fx Effects[S]) ReadClipboard() {
 // the terminal and repaints. On platforms without job control it is a
 // release/restore round trip. The framework never binds a key to this —
 // apps decide what (if anything) triggers it. Loop-goroutine-only, like
-// Quit. Safe on a zero Effects value.
+// Quit. No-op on window and browser hosts and on a zero Effects value.
 func (fx Effects[S]) Suspend() {
 	if fx.enqueue != nil {
 		fx.enqueue(action{suspend: true})
@@ -129,7 +226,7 @@ func (fx Effects[S]) Suspend() {
 // because the prepended lines would be overwritten by the next frame. The
 // content is the app's to format (no trailing newline is added). Newlines in s
 // produce multiple scrollback lines. Loop-goroutine-only, like Quit. Safe on a
-// zero Effects value.
+// zero Effects value. No-op on window and browser hosts.
 func (fx Effects[S]) Print(s string) {
 	if fx.enqueue != nil {
 		fx.enqueue(action{print: s})
@@ -141,8 +238,83 @@ func (fx Effects[S]) Printf(format string, args ...any) {
 	fx.Print(fmt.Sprintf(format, args...))
 }
 
-// Option configures Run behaviour.
-type Option func(*runConfig)
+// Option configures Run behavior. Options are host-plumbing values; the
+// standard With* functions are the application-facing constructors.
+type Option interface {
+	ConfigureRun(*RunConfig)
+}
+
+// RunConfig is opaque Run configuration supplied to Option implementations.
+// Its exported methods are for host plumbing; apps should use With* options.
+type RunConfig struct {
+	config runConfig
+	host   Host
+	// defaultHost is selected only when no host-installing option is present.
+	// Optional services such as terminal media controls use this slot so a
+	// window host can take precedence without creating a host conflict.
+	defaultHost Host
+	err         error
+}
+
+// ErrMultipleHosts reports that more than one host-installing option was
+// supplied to Run.
+var ErrMultipleHosts = errors.New("flatte: multiple host options selected")
+
+// UseHost selects a host driver for Run. Supplying multiple host-installing
+// options makes Run return ErrMultipleHosts.
+func (c *RunConfig) UseHost(host Host) {
+	if c.host != nil {
+		c.err = ErrMultipleHosts
+		return
+	}
+	c.host = host
+}
+
+// UseFallbackHost selects a host only when no ordinary host option selects
+// one. Repeating the same optional host is harmless; ordinary hosts still
+// conflict with one another through UseHost.
+func (c *RunConfig) UseFallbackHost(host Host) {
+	if c.host == nil && c.defaultHost == nil {
+		c.defaultHost = host
+	}
+}
+
+func (c RunConfig) selectedHost() Host {
+	if c.host != nil {
+		return c.host
+	}
+	return c.defaultHost
+}
+
+type optionFunc func(*runConfig)
+
+func (o optionFunc) ConfigureRun(c *RunConfig) { o(&c.config) }
+
+func applyRunOptions(defaults runConfig, options ...Option) RunConfig {
+	c := RunConfig{config: defaults}
+	for _, option := range options {
+		if option != nil {
+			option.ConfigureRun(&c)
+		}
+	}
+	return c
+}
+
+func nativeRunConfig() runConfig {
+	return runConfig{
+		input:          os.Stdin,
+		output:         os.Stdout,
+		defaultQuit:    true,
+		bracketedPaste: true,
+		suspendProcess: suspendProcess,
+	}
+}
+
+// ErrInlineMouseUnsupported reports an invalid combination of options.
+// Inline frames do not have a stable terminal origin, so mouse coordinates
+// cannot be translated to frame-relative positions. Use alternate-screen
+// rendering for mouse-enabled apps.
+var ErrInlineMouseUnsupported = errors.New("flat: WithInline cannot be combined with mouse reporting")
 
 // MouseMode selects which mouse events the terminal reports.
 type MouseMode int
@@ -157,6 +329,8 @@ const (
 )
 
 type runConfig struct {
+	mediaCommands  <-chan MediaEvent
+	publishMedia   func(*NowPlaying)
 	input          io.Reader
 	output         io.Writer
 	defaultQuit    bool
@@ -171,59 +345,83 @@ type runConfig struct {
 // the real one stops the whole process group, which would stop the test
 // runner too.
 func withSuspendProcess(fn func()) Option {
-	return func(c *runConfig) { c.suspendProcess = fn }
+	return optionFunc(func(c *runConfig) { c.suspendProcess = fn })
+}
+
+// withHostMedia connects a terminal run to a system media host. Commands are
+// handled on the state loop. publish is called synchronously on that loop with
+// an owned snapshot (or nil), and must return promptly. It receives nil again
+// at shutdown. Closing commands disconnects it without ending Run.
+func withHostMedia(commands <-chan MediaEvent, publish func(*NowPlaying)) Option {
+	return optionFunc(func(c *runConfig) { c.mediaCommands, c.publishMedia = commands, publish })
 }
 
 // WithInput sets the event source. Default: os.Stdin.
-func WithInput(in io.Reader) Option { return func(c *runConfig) { c.input = in } }
+func WithInput(in io.Reader) Option { return optionFunc(func(c *runConfig) { c.input = in }) }
 
 // WithOutput sets the render sink. Default: os.Stdout.
-func WithOutput(out io.Writer) Option { return func(c *runConfig) { c.output = out } }
+func WithOutput(out io.Writer) Option { return optionFunc(func(c *runConfig) { c.output = out }) }
 
 // WithoutDefaultQuit delivers Ctrl-C to the app instead of exiting the loop.
 // The app must call fx.Quit(), close the input, or cancel the context to exit.
-func WithoutDefaultQuit() Option { return func(c *runConfig) { c.defaultQuit = false } }
+func WithoutDefaultQuit() Option { return optionFunc(func(c *runConfig) { c.defaultQuit = false }) }
 
 // WithoutBracketedPaste disables bracketed paste mode. It is on by
 // default: without it a paste arrives as a flood of individual key
 // events instead of one PasteEvent.
-func WithoutBracketedPaste() Option { return func(c *runConfig) { c.bracketedPaste = false } }
+func WithoutBracketedPaste() Option {
+	return optionFunc(func(c *runConfig) { c.bracketedPaste = false })
+}
 
 // WithMouse enables terminal mouse reporting; events arrive as MouseEvent.
-func WithMouse(mode MouseMode) Option { return func(c *runConfig) { c.mouse = mode } }
+// MouseModeNone remains compatible with WithInline; reporting modes do not.
+func WithMouse(mode MouseMode) Option { return optionFunc(func(c *runConfig) { c.mouse = mode }) }
 
 // WithReportFocus enables focus reporting; terminal focus changes arrive
 // as FocusEvent. Some terminals and multiplexers need configuration to
 // report focus (tmux: focus-events).
-func WithReportFocus() Option { return func(c *runConfig) { c.reportFocus = true } }
+func WithReportFocus() Option { return optionFunc(func(c *runConfig) { c.reportFocus = true }) }
 
 // WithInline renders below the shell prompt instead of in the alternate
 // screen: the frame occupies exactly its own lines, the terminal's
 // scrollback stays intact, and on exit the final frame remains visible
-// with the prompt landing below it.
-func WithInline() Option { return func(c *runConfig) { c.inline = true } }
+// with the prompt landing below it. Mouse reporting cannot be enabled because
+// an inline frame has no stable terminal origin; Run returns
+// ErrInlineMouseUnsupported for that combination.
+func WithInline() Option { return optionFunc(func(c *runConfig) { c.inline = true }) }
 
-func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
+// runTerminal owns the native terminal loop. Run delegates here on non-WASM
+// builds; keeping the proven terminal implementation intact limits the
+// platform-host change to backend selection.
+func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) {
+	return runTerminalConfig(ctx, app, applyRunOptions(nativeRunConfig(), opts...).config)
+}
+
+func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (runErr error) {
 	if app.State == nil {
 		panic("flat: App.State is nil")
 	}
 	if app.View == nil {
 		panic("flat: App.View is nil")
 	}
-
-	cfg := runConfig{
-		input:          os.Stdin,
-		output:         os.Stdout,
-		defaultQuit:    true,
-		bracketedPaste: true,
-		suspendProcess: suspendProcess,
-	}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&cfg)
+	var inputCloseErr error
+	// Input cleanup happens before renderer cleanup, but a close failure is a
+	// cleanup error. Let an earlier run or output error win, and only expose it
+	// when the run otherwise completed successfully.
+	defer func() {
+		if runErr == nil && inputCloseErr != nil {
+			runErr = inputCloseErr
 		}
+	}()
+
+	if cfg.inline && cfg.mouse != MouseModeNone {
+		return ErrInlineMouseUnsupported
+	}
+	if cfg.publishMedia != nil {
+		defer cfg.publishMedia(nil)
 	}
 	in, out := cfg.input, cfg.output
+	sink := &outputSink{w: out}
 
 	// Raw mode enter/restore are reusable: suspend and exec hand the
 	// terminal back to the shell or a subprocess and re-enter afterwards.
@@ -262,6 +460,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		return newTerminalRenderer(renderOut, out, os.Environ(), cfg.inline)
 	}
 	renderer := newRenderer()
+	flushRenderer := func() error {
+		err := renderer.Flush()
+		sink.record(err)
+		return err
+	}
 	var lastFrame Frame
 	drew := false
 	cursorShown := false
@@ -345,14 +548,31 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		} else {
 			renderer.ExitAltScreen()
 		}
-		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
-			_, _ = out.Write(renderOut.Bytes())
+		if err := flushRenderer(); err != nil && runErr == nil {
+			runErr = err
+		}
+		if renderOut.Len() > 0 {
+			data := append([]byte(nil), renderOut.Bytes()...)
 			renderOut.Reset()
+			_ = sink.write(data)
+		}
+		if runErr == nil {
+			runErr = sink.err
 		}
 	}()
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	session := newSession(runCtx, app)
+	session.setActionSink(func(a action) { pending = append(pending, a) })
+	session.cell.dialogs.home, _ = os.UserHomeDir()
+	session.UseHostServices(HostServices{
+		Capabilities: terminalCapabilities(cfg),
+		ShowDialog:   session.cell.dialogs.show,
+		CellSurface:  true,
+		PublishMedia: cfg.publishMedia,
+	})
+	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, inline: cfg.inline})
 
 	// The input pipeline is restartable: suspend and exec stop it before
 	// handing the terminal away (the subprocess must own stdin) and start
@@ -378,19 +598,62 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	// hanging, and not reachable on a real console, where the substrate has
 	// a cancelable reader and Cancel reports true.
 	type inputPipeline struct {
-		events <-chan inputResult
-		stop   func() bool
+		events   <-chan inputResult
+		stop     func() bool
+		finish   func()
+		finalize func()
 	}
 	startInput := func() inputPipeline {
 		inputCtx, cancelCtx := context.WithCancel(runCtx)
 		eventSource := io.Reader(in)
 		cancelRead := func() bool { return false }
-		if cancelable, err := uv.NewCancelReader(in); err == nil {
+		var cancelable cancelReader
+		if candidate, err := cancelReaderFactory(in); err == nil {
+			cancelable = candidate
 			eventSource = cancelable
 			cancelRead = cancelable.Cancel
 		}
 		events, done := readInput(inputCtx, eventSource)
-		return inputPipeline{events: events, stop: func() bool {
+		stopped := false
+		var closeOnce sync.Once
+		var closeErr error
+		closeCancelable := func() error {
+			closeOnce.Do(func() {
+				if cancelable != nil {
+					closeErr = cancelable.Close()
+				}
+			})
+			return closeErr
+		}
+		recordClose := func() {
+			if err := closeCancelable(); err != nil && inputCloseErr == nil {
+				inputCloseErr = err
+			}
+		}
+		finish := func() {
+			if stopped {
+				return
+			}
+			cancelCtx()
+			<-done
+			recordClose()
+			stopped = true
+		}
+		var stop func() bool
+		stop = func() bool {
+			if stopped {
+				return true
+			}
+			// A reader that reached EOF on its own is already safe to close;
+			// Cancel may legitimately return false once no read is pending.
+			select {
+			case <-done:
+				cancelCtx()
+				recordClose()
+				stopped = true
+				return true
+			default:
+			}
 			// Cancel first: it is the only way to learn whether this
 			// pipeline can be stopped, and the answer decides whether the
 			// context may be cancelled at all. The interrupted read makes
@@ -401,8 +664,25 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			}
 			cancelCtx()
 			<-done
+			recordClose()
+			stopped = true
 			return true
-		}}
+		}
+		finalize := func() {
+			if stop() {
+				return
+			}
+			// Final Run shutdown differs from suspend/exec: this pipeline will
+			// never be reused. Stop delivering events now, then release the
+			// CancelReader asynchronously once its uncancelable read eventually
+			// completes. A late close error cannot be returned after Run exits.
+			cancelCtx()
+			go func() {
+				<-done
+				_ = closeCancelable()
+			}()
+		}
+		return inputPipeline{events: events, stop: stop, finish: finish, finalize: finalize}
 	}
 	pipe := startInput()
 	// inputStopped tracks whether the last stop actually tore the pipeline
@@ -411,53 +691,64 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	inputStopped := false
 	defer func() {
 		cancel()
-		pipe.stop()
+		pipe.finalize()
 	}()
 	resize, stopResize := notifyResize()
 	defer stopResize()
-	defer func() {
-		if app.OnExit != nil {
-			app.OnExit(app.State)
-		}
-	}()
-	updates := make(chan StateUpdate[S], 64)
-	quitRequested := false
-	effects := NewEffects(runCtx, updates, func() { quitRequested = true })
-	effects.enqueue = func(a action) { pending = append(pending, a) }
-	if app.Init != nil {
-		app.Init(app.State, effects)
-	}
-	if quitRequested {
-		return nil
-	}
-	if app.Tracer == nil {
-		app.Tracer = NoopTracer{}
-	}
+	defer session.close()
 
 	width, height := terminalSize(out)
-	initialSize := Event(ResizeEvent{Width: width, Height: height})
-	app.Tracer.Event(initialSize)
-	if app.Handle != nil {
-		app.Handle(app.State, initialSize, effects)
-	}
-	if quitRequested {
+	initialResize := ResizeEvent{Width: width, Height: height}
+	started := session.Step(StepInput{Start: &initialResize})
+	if started.Quit {
 		return nil
 	}
 
-	writeFrameOutput := func() {
+	writePendingOutput := func(synchronized bool) error {
 		if renderOut.Len() == 0 {
-			return // nothing to write, not even markers
+			return nil // nothing to write, not even markers
 		}
-		fmt.Fprintf(out, "\x1b[?2026h%s\x1b[?2026l", renderOut.Bytes())
+		prefix, suffix := "", ""
+		if synchronized {
+			prefix, suffix = "\x1b[?2026h", "\x1b[?2026l"
+		}
+		data := make([]byte, 0, len(prefix)+renderOut.Len()+len(suffix))
+		data = append(data, prefix...)
+		data = append(data, renderOut.Bytes()...)
+		data = append(data, suffix...)
 		renderOut.Reset()
+		return sink.write(data)
+	}
+	writeFrameOutput := func() {
+		_ = writePendingOutput(true)
+	}
+	terminalRenderContext := func() RenderContext {
+		ctx := renderContextFor(out)
+		_, ctx.Height = terminalSize(out)
+		ctx.Capabilities = session.caps()
+		return ctx
+	}
+	eventRenderContext := func() RenderContext {
+		ctx := terminalRenderContext()
+		if drew {
+			ctx.Width, ctx.Height = screenWidth, screenHeight
+		}
+		return ctx
 	}
 
 	draw := func() {
-		renderCtx := RenderContextFor(out)
-		frame := app.View(app.State, renderCtx)
+		if sink.err != nil {
+			return // terminal output failed; defer handles best-effort cleanup
+		}
+		renderCtx := terminalRenderContext()
+		step := session.Step(StepInput{FrameDue: true, RenderContext: renderCtx})
+		if step.Quit || !step.Paint {
+			return
+		}
+		frame := step.Frame
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
-			if err := renderer.Flush(); err == nil {
+			if err := flushRenderer(); err == nil {
 				writeFrameOutput()
 			}
 			return
@@ -506,7 +797,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 				cursorShown = true
 			}
 		}
-		if err := renderer.Flush(); err != nil {
+		if err := flushRenderer(); err != nil {
 			return
 		}
 		lastFrame, drew = frame, true
@@ -534,9 +825,8 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		} else {
 			renderer.ExitAltScreen()
 		}
-		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
-			_, _ = out.Write(renderOut.Bytes())
-			renderOut.Reset()
+		if err := flushRenderer(); err == nil {
+			_ = writePendingOutput(false)
 		}
 		restoreRaw()
 	}
@@ -561,11 +851,8 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		}
 		forceRepaint = true
 		width, height := terminalSize(out)
-		resizeEvent := Event(ResizeEvent{Width: width, Height: height})
-		app.Tracer.Event(resizeEvent)
-		if app.Handle != nil {
-			app.Handle(app.State, resizeEvent, effects)
-		}
+		resizeEvent := ResizeEvent{Width: width, Height: height}
+		session.Step(StepInput{Resize: &resizeEvent})
 	}
 
 	// insertAbove emits unmanaged lines into the terminal's scrollback above the
@@ -593,9 +880,11 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 		}
 		// Flush any buffered renderer output first so the inserted lines land in
 		// order relative to a pending frame.
-		if err := renderer.Flush(); err == nil && renderOut.Len() > 0 {
-			_, _ = out.Write(renderOut.Bytes())
-			renderOut.Reset()
+		if err := flushRenderer(); err != nil {
+			return
+		}
+		if err := writePendingOutput(false); err != nil {
+			return
 		}
 		_, y := renderer.Position()
 		var sb strings.Builder
@@ -609,7 +898,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 			sb.WriteString(ansi.EraseLineRight)
 			sb.WriteString("\r\n")
 		}
-		_, _ = io.WriteString(out, sb.String())
+		_ = sink.write([]byte(sb.String()))
 		// Rebuild the frame fresh starting at the current cursor row (below the
 		// inserted lines). A fresh inline renderer treats that row as its origin.
 		// Zero dimensions force the next draw through the full render path; do not
@@ -626,16 +915,28 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 	// loop re-checks because the post-restore resize Handle may enqueue.
 	processActions := func() {
 		for len(pending) > 0 {
+			if sink.err != nil {
+				return
+			}
 			queued := pending
 			pending = nil
 			for _, a := range queued {
+				if sink.err != nil {
+					return
+				}
 				switch {
 				case a.suspend:
 					releaseTerminal()
+					if sink.err != nil {
+						return
+					}
 					cfg.suspendProcess()
 					restoreTerminal()
 				case a.exec != nil:
 					releaseTerminal()
+					if sink.err != nil {
+						return
+					}
 					cmd := a.exec.cmd
 					if cmd.Stdin == nil {
 						cmd.Stdin = in
@@ -662,15 +963,42 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 						insertAbove(a.print)
 					}
 				}
+				if sink.err != nil {
+					return
+				}
 			}
 		}
 	}
 
+	// render draws, then runs any actions a LayoutEvent handler queued while
+	// the frame settled and redraws once, so they are not stranded until an
+	// unrelated later event. A further queue from that redraw waits for the
+	// next loop turn, keeping render bounded.
+	render := func() {
+		draw()
+		if sink.err != nil || session.quittingNow() || len(pending) == 0 {
+			return
+		}
+		processActions()
+		if sink.err == nil && !session.quittingNow() {
+			draw()
+		}
+	}
+
 	processActions() // Init and the initial resize Handle may have enqueued
-	if quitRequested {
+	if sink.err != nil {
+		return sink.err
+	}
+	if session.quittingNow() {
 		return nil
 	}
-	draw()
+	render()
+	if sink.err != nil {
+		return sink.err
+	}
+	if session.quittingNow() {
+		return nil
+	}
 	for {
 		select {
 		case <-runCtx.Done():
@@ -680,46 +1008,67 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) error {
 				return nil
 			}
 			if result.err != nil {
+				// The terminal reader has already returned, but the dispatcher
+				// may still be unwinding after its unbuffered error send. Join it
+				// before closing the owned CancelReader.
+				pipe.finish()
 				return result.err
 			}
-			// Trace before any exit decision so the recorder sees the
-			// exit-causing event too (incl. a default-quit Ctrl-C).
-			app.Tracer.Event(result.event)
-			if key, isKey := result.event.(KeyEvent); isKey && key.Key == KeyCtrlC && cfg.defaultQuit {
-				return nil
+			if _, ok := result.event.(ResizeEvent); ok {
+				// A resize can arrive through the input stream (notably the
+				// Windows console path), rather than SIGWINCH. Both paths
+				// invalidate the renderer's screen model and require a full
+				// repaint, even when the frame content is unchanged.
+				forceRepaint = true
 			}
-			if app.Handle != nil {
-				app.Handle(app.State, result.event, effects)
-			}
-			// quitRequested flips synchronously inside Init, Handle, or a
-			// fold — all on the loop goroutine. The updates path is checked
-			// after drainUpdates below.
-			if quitRequested {
+			step := session.Step(StepInput{
+				Events: []Event{result.event}, UpdatesPending: true, RenderContext: eventRenderContext(),
+			})
+			if step.Quit {
 				return nil
 			}
 		case <-resize:
 			forceRepaint = true
 			width, height := terminalSize(out)
-			resizeEvent := Event(ResizeEvent{Width: width, Height: height})
-			app.Tracer.Event(resizeEvent)
-			if app.Handle != nil {
-				app.Handle(app.State, resizeEvent, effects)
-			}
-			if quitRequested {
+			resizeEvent := ResizeEvent{Width: width, Height: height}
+			step := session.Step(StepInput{Resize: &resizeEvent, UpdatesPending: true, RenderContext: eventRenderContext()})
+			if step.Quit {
 				return nil
 			}
-		case update := <-updates:
-			ApplyUpdate(app.State, app.Tracer, update)
+		case event, ok := <-cfg.mediaCommands:
+			if !ok {
+				cfg.mediaCommands = nil
+				continue
+			}
+			step := session.Step(StepInput{
+				Events: []Event{event}, UpdatesPending: true, RenderContext: eventRenderContext(),
+			})
+			if step.Quit {
+				return nil
+			}
+		case <-session.Updates():
+			step := session.Step(StepInput{UpdatesPending: true, RenderContext: eventRenderContext()})
+			if step.Quit {
+				return nil
+			}
 		}
-		drainUpdates(app, updates)
-		if quitRequested {
+		if session.quittingNow() {
 			return nil
 		}
 		processActions()
-		if quitRequested {
+		if sink.err != nil {
+			return sink.err
+		}
+		if session.quittingNow() {
 			return nil
 		}
-		draw()
+		render()
+		if sink.err != nil {
+			return sink.err
+		}
+		if session.quittingNow() {
+			return nil
+		}
 	}
 }
 
@@ -757,21 +1106,6 @@ func resetModes(cfg runConfig) string {
 			ansi.ResetModeMouseExtSgr
 	}
 	return modes
-}
-
-// drainUpdates applies at most len(updates) pending updates without blocking,
-// so a burst of async results produces one redraw instead of one per update.
-// Capping at the snapshot length bounds latency to one frame's worth of work
-// even if a fast producer keeps the channel continuously non-empty.
-func drainUpdates[S any](app App[S], updates <-chan StateUpdate[S]) {
-	for n := len(updates); n > 0; n-- {
-		select {
-		case update := <-updates:
-			ApplyUpdate(app.State, app.Tracer, update)
-		default:
-			return
-		}
-	}
 }
 
 var detectRendererColorProfile = colorprofile.Detect
@@ -838,8 +1172,11 @@ func readInput(ctx context.Context, in io.Reader) (<-chan inputResult, <-chan st
 		streamErr <- reader.StreamEvents(ctx, rawEvents)
 	}()
 	go func() {
-		defer close(done)
+		// Publish completion before closing results. A caller that observes
+		// input EOF can then close an already-finished CancelReader even when
+		// its Cancel method correctly reports that no read remains pending.
 		defer close(results)
+		defer close(done)
 		for {
 			select {
 			case raw := <-rawEvents:

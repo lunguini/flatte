@@ -12,7 +12,7 @@ func TestStateSurvivesSaveLoad(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test-state.gob")
 
-	original := State{Cursor: 42, ShowModal: true, Width: 100, Height: 30}
+	original := State{Cursor: 42, ShowModal: true}
 	if err := flatte.SaveState(path, original); err != nil {
 		t.Fatalf("SaveState: %v", err)
 	}
@@ -24,9 +24,6 @@ func TestStateSurvivesSaveLoad(t *testing.T) {
 	if !loaded.ShowModal {
 		t.Fatalf("ShowModal: got false want true")
 	}
-	if loaded.Width != 100 || loaded.Height != 30 {
-		t.Fatalf("Width/Height: got %d/%d want 100/30", loaded.Width, loaded.Height)
-	}
 }
 
 func TestStateMissingFileReturnsDefault(t *testing.T) {
@@ -37,7 +34,7 @@ func TestStateMissingFileReturnsDefault(t *testing.T) {
 }
 
 func TestLayoutSolvesCorrectly(t *testing.T) {
-	s := &State{Width: 80, Height: 24, ShowModal: true}
+	s := &State{ShowModal: true}
 	tree := buildTree(s)
 	rects := layout.Solve(tree, 80, 24)
 
@@ -72,7 +69,7 @@ func TestLayoutSolvesCorrectly(t *testing.T) {
 }
 
 func TestNoModalWhenHidden(t *testing.T) {
-	s := &State{Width: 80, Height: 24, ShowModal: false}
+	s := &State{ShowModal: false}
 	tree := buildTree(s)
 	rects := layout.Solve(tree, 80, 24)
 

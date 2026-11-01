@@ -7,6 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 // A zero-enqueue Effects makes SetClipboard/ReadClipboard/Suspend/Exec
@@ -49,8 +50,7 @@ func TestCtrlZRequestsSuspend(t *testing.T) {
 func TestModifiedPlainCommandsAreIgnored(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'z', Mod: flatte.ModAlt}, fx)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'y', Mod: flatte.ModCtrl}, fx)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q', Mod: flatte.ModAlt}, fx)
@@ -79,8 +79,7 @@ func TestClipboardEventStoresContent(t *testing.T) {
 func TestQuitKeyRequestsQuit(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 
 	if !quit {
@@ -103,5 +102,11 @@ func TestViewMatchesSnapshot(t *testing.T) {
 		editorText: "edited line",
 	}
 
-	flatest.AssertGolden(t, "testdata/capable.golden", View(state, flatte.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/capable.golden", composed(View(state, flatte.RenderContext{Width: 72})).Content)
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

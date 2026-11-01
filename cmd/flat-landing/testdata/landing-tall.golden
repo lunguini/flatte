@@ -1,0 +1,22 @@
+  Game   App                                                          Flatte   Layout   UI 
+
+ ╭────────────────────────────────────────────────────────────────────────────────────────╮
+ │ What Flatte is                                                                         │
+ │                                                                                        │
+ │ Flatte is a Go-native TUI foundation. You keep one mutable state struct, mutate it     │
+ │ directly in Handle, and render one pure frame in View — no Msg/Cmd/Update loop, no     │
+ │ message plumbing.                                                                      │
+ │                                                                                        │
+ │ state   is your struct — the single source of truth                                    │
+ │ view    is a pure function: state in, frame out                                        │
+ │ async   is one named, self-applying update                                             │
+ │                                                                                        │
+ │ Everything on these tabs — the snake game, the docker TUI, this text — is one          │
+ │ Flatte app hosting others. Apps compose because they are just State + Handle +         │
+ │ View.                                                                                  │
+ │                                                                                        │
+ │ → Ctrl+←/→ or click a tab to explore                                                   │
+ │                                                                                        │
+ ╰────────────────────────────────────────────────────────────────────────────────────────╯
+
+ ▚ Flatte · direct mutation, pure views, no messages  Ctrl+←/→ tabs · click to switch

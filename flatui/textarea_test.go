@@ -360,6 +360,27 @@ func TestTextareaSoftWrapViewsLongLogicalLine(t *testing.T) {
 	}
 }
 
+func TestTextareaSetValueResetsSoftWrapWindow(t *testing.T) {
+	var ta Textarea
+	ta.SetValue("abcdefghijklmnop")
+	ta.SetSize(4, 2)
+	ta.SetSoftWrap(true)
+	for range 8 {
+		ta.MoveRight()
+	}
+	if got := ta.View(); got == "" {
+		t.Fatal("precondition failed: cursor movement should scroll the wrapped view")
+	}
+
+	ta.SetValue("x")
+	if got := ta.View(); got != "x" {
+		t.Fatalf("View() after replacing scrolled content = %q, want %q", got, "x")
+	}
+	if x, y := ta.CursorCell(); x != 0 || y != 0 {
+		t.Fatalf("CursorCell() after replacing scrolled content = (%d,%d), want (0,0)", x, y)
+	}
+}
+
 func TestTextareaSoftWrapCursorAtWrapBoundaryUsesNextVisualRow(t *testing.T) {
 	var ta Textarea
 	ta.SetValue("abcdefgh")

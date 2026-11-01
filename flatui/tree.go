@@ -1,6 +1,10 @@
 package flatui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/lunguini/flatte/flatui/layout"
+)
 
 // TreeNode is one node in an app-owned tree.
 type TreeNode struct {
@@ -33,9 +37,10 @@ func NewTree(nodes []TreeNode) Tree {
 	return Tree{nodes: cloneTreeNodes(nodes), expanded: map[string]bool{}}
 }
 
-// SetHeight sets the number of visible rows.
+// SetHeight sets the number of visible rows, clamped to the supported widget
+// dimension range.
 func (t *Tree) SetHeight(h int) {
-	t.height = h
+	t.height = clampWidgetDimension(h)
 	t.clamp()
 }
 
@@ -102,16 +107,9 @@ func (t Tree) VisibleRows() []TreeRow {
 // View renders the visible window of rows. The app decides each row's marker,
 // indentation, and styling through render.
 func (t Tree) View(render func(row TreeRow, selected bool) string) string {
-	rows := t.VisibleRows()
-	if t.height <= 0 || len(rows) == 0 {
-		return ""
-	}
-	offset := min(max(t.offset, 0), max(len(rows)-t.height, 0))
-	cursor := min(max(t.cursor, 0), len(rows)-1)
-	end := min(offset+t.height, len(rows))
-	out := make([]string, 0, end-offset)
-	for i := offset; i < end; i++ {
-		row := rows[i]
+	rows, cursor := t.window()
+	out := make([]string, 0, len(rows))
+	for i, row := range rows {
 		if render != nil {
 			out = append(out, render(row, i == cursor))
 		} else {
@@ -119,6 +117,36 @@ func (t Tree) View(render func(row TreeRow, selected bool) string) string {
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+// Rows returns the visible window of rows as nodes, for a Frame.Root: row is
+// called for each visible row with whether it is the cursor row, and each
+// result is wrapped in a Row with ID "id:<node ID>" (stable as the tree
+// expands, so MouseEvent.Target names the clicked node) whose Box is marked
+// Selected for the cursor row. The Col is the app's to name and size.
+func (t Tree) Rows(id string, row func(row TreeRow, selected bool) layout.Node) layout.Col {
+	rows, cursor := t.window()
+	var col layout.Col
+	for i, r := range rows {
+		col.Children = append(col.Children, layout.Row{
+			NodeBase: layout.NodeBase{ID: id + ":" + r.ID, Box: layout.Box{Selected: i == cursor, Interactive: true, Round: true}},
+			Children: []layout.Node{row(r, i == cursor)},
+		})
+	}
+	return col
+}
+
+// window returns the visible rows and the cursor's index among them (-1
+// when it is outside the window).
+func (t Tree) window() ([]TreeRow, int) {
+	rows := t.VisibleRows()
+	if t.height <= 0 || len(rows) == 0 {
+		return nil, -1
+	}
+	offset := min(max(t.offset, 0), max(len(rows)-t.height, 0))
+	cursor := min(max(t.cursor, 0), len(rows)-1)
+	end := min(offset+t.height, len(rows))
+	return rows[offset:end], cursor - offset
 }
 
 func (t Tree) appendVisibleRows(rows *[]TreeRow, nodes []TreeNode, depth int) {

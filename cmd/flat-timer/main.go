@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 const (
@@ -29,7 +32,9 @@ func NewState() *State {
 }
 
 func Init(s *State, fx flatte.Effects[State]) {
-	flatte.Every(fx, "timer.tick", tickInterval, applyTick)
+	if err := flatte.Every(fx, "timer.tick", tickInterval, applyTick); err != nil {
+		panic(err) // tickInterval is a sample invariant
+	}
 }
 
 func applyTick(s *State, _ time.Time) {
@@ -40,15 +45,14 @@ func applyTick(s *State, _ time.Time) {
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(ev.Width)
+	case flatte.LayoutEvent:
+		// The bar fills the rect the frame solved for it, in either host.
+		if r, ok := ev.Rects[barID]; ok {
+			s.progress.SetWidth(max(r.W-percentLabelWidth, 0))
+		}
 	case flatte.KeyEvent:
 		handleKey(s, ev, fx)
 	}
-}
-
-func (s *State) layout(width int) {
-	s.progress.SetWidth(max(flatui.CardBodyWidth(width)-20, 0))
 }
 
 func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
@@ -74,7 +78,30 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+// barID names the node the progress bar fills.
+const barID = "timer.bar"
+
+// percentLabelWidth is the "  100%" Progress.View puts after the bar.
+const percentLabelWidth = 6
+
+// field is one "name: value" row with the names in a fixed-width column, so
+// values line up in a proportional font too.
+func field(name string, value layout.Node) layout.Node {
+	return layout.Row{NodeBase: indent, Children: []layout.Node{
+		layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(11)}, Text: name},
+		value,
+	}}
+}
+
+// View shows the progress bar as Progress.Layout: block characters in the
+// terminal, a native bar in a window.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	stopState := "stopped"
 	if s.stopwatch.Running() {
 		stopState = "running"
@@ -83,17 +110,18 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	if s.timer.Done() {
 		timerState = "done"
 	}
-	lines := []string{
-		flatui.Title("Flat Timer"),
-		flatui.Subtle("countdown + stopwatch sample"),
-		"",
-		fmt.Sprintf("  timer:     %s remaining (%s)", formatDuration(s.timer.Remaining()), timerState),
-		"  progress:  " + s.progress.View(),
-		fmt.Sprintf("  stopwatch: %s (%s)", formatDuration(s.stopwatch.Elapsed()), stopState),
-		"",
-		flatui.Subtle("space start/stop | r reset all | t restart timer | q/esc quit"),
-	}
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Timer", Style: title},
+		layout.Label{Text: "countdown + stopwatch sample", Style: subtle},
+		layout.Label{},
+		field("timer:", layout.Label{Text: fmt.Sprintf("%s remaining (%s)", formatDuration(s.timer.Remaining()), timerState)}),
+		field("progress:", layout.Col{NodeBase: layout.NodeBase{ID: barID, W: layout.Grow(1)}, Children: []layout.Node{
+			s.progress.Layout(),
+		}}),
+		field("stopwatch:", layout.Label{Text: fmt.Sprintf("%s (%s)", formatDuration(s.stopwatch.Elapsed()), stopState)}),
+		layout.Label{},
+		layout.Label{Text: "space start/stop | r reset all | t restart timer | q/esc quit", Style: subtle},
+	)}
 }
 
 func formatDuration(d time.Duration) string {
@@ -107,12 +135,23 @@ func formatDuration(d time.Duration) string {
 }
 
 func main() {
-	if err := flatte.Run(context.Background(), flatte.App[State]{
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
+	flag.Parse()
+	app := flatte.App[State]{
 		State:  NewState(),
 		Init:   Init,
 		Handle: Handle,
 		View:   View,
-	}); err != nil {
+	}
+	runOptions := []flatte.Option{}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "Flat Timer", Width: 72, Height: 20})
+	}
+	err := flatte.Run(context.Background(), app, runOptions...)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

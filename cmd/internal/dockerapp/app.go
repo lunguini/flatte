@@ -29,7 +29,7 @@ func (sc screen) Name() string {
 type State struct {
 	width, height int
 	screen        screen
-	rects         map[string]layout.Rect // full-frame solved geometry
+	rects         map[string]layout.Rect // full-frame solved geometry, from LayoutEvent
 	bodyYOffset   int                    // Y where body starts (header + separator)
 
 	containers containersScreen
@@ -64,6 +64,26 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	// The host solves the frame tree and delivers the geometry before painting
+	// whenever it changes — after a resize, a screen switch, a modal, a drag,
+	// or a list whose row count follows its pane. Adopting it here is the only
+	// place geometry enters state.
+	if layoutEv, ok := ev.(flatte.LayoutEvent); ok {
+		s.rects = layoutEv.Rects
+		s.adoptScreenRects(s.screen, layoutEv.Rects)
+		return
+	}
+	// A LayoutEvent only arrives when geometry changes. Screens with identical
+	// layouts (images ↔ volumes) switch without one, so the newly active
+	// screen adopts the last delivered rects — which, unchanged, still
+	// describe the frame. A different layout re-adopts via its own event.
+	initialScreen := s.screen
+	defer func() {
+		if s.screen != initialScreen && s.rects != nil {
+			s.adoptScreenRects(s.screen, s.rects)
+		}
+	}()
+
 	if s.confirmModal != nil {
 		s.confirmModal.Handle(s, ev, fx)
 		return
@@ -148,40 +168,36 @@ func (s *State) resize(width, height int) {
 	s.images.initLayout(body.W, body.H, s.bodyYOffset)
 	s.volumes.initLayout(body.W, body.H, s.bodyYOffset)
 
-	// Warm every screen's geometry from one absolute solve apiece so hit-testing
-	// works before the first View and for screens that are not yet active.
-	s.warmRects(body)
+	// Rehydrate data-derived widgets now; the LayoutEvent the host delivers
+	// before the next paint sizes them from the solved frame and records hit
+	// zones.
 	s.containers.afterResize()
 }
 
-// warmRects solves each screen's body subtree at the absolute body rect and
-// hands the resulting geometry to that screen. Cold path (resize only) — the
-// per-frame path resolves the active screen as part of the single frame solve
-// in View.
-func (s *State) warmRects(body layout.Rect) {
-	s.containers.adopt(solveScreenRects(s.containers.bodyNode(nil), body))
-	s.images.adopt(solveScreenRects(s.images.bodyNode(), body))
-	s.volumes.adopt(solveScreenRects(s.volumes.bodyNode(), body))
-}
-
-// refreshActiveRects re-solves only the active screen's geometry. Used by
-// divider drags, which change pane widths between frames and need the updated
-// rects immediately (before the next View).
-func (s *State) refreshActiveRects() {
-	body := s.bodyRect()
-	switch s.screen {
-	case screenContainers:
-		s.containers.adopt(solveScreenRects(s.containers.bodyNode(nil), body))
-	case screenImages:
-		s.images.adopt(solveScreenRects(s.images.bodyNode(), body))
-	case screenVolumes:
-		s.volumes.adopt(solveScreenRects(s.volumes.bodyNode(), body))
+// frameTree is the one source of truth for the frame: View returns it as the
+// Root, and the host's solve of it is what LayoutEvent and mouse targets
+// report, so geometry and pixels cannot drift.
+func (s *State) frameTree() layout.Node {
+	status := s.containers.statusNode()
+	if s.commandModal != nil {
+		status = s.commandModal.node()
 	}
+
+	children := []layout.Node{
+		headerNode(s),
+		s.activeBody(status),
+		separatorNode(),
+		footerNode(s),
+	}
+	if s.confirmModal != nil {
+		children = append(children, modalNode(s.confirmModal))
+	}
+	return layout.Col{Children: children}
 }
 
 // activeBody returns the active screen's body subtree, ready to slot into the
-// frame tree as real children (so the single frame Solve owns its geometry).
-func (s *State) activeBody(status func(layout.Rect) string) layout.Node {
+// frame tree as real children (so the single frame solve owns its geometry).
+func (s *State) activeBody(status layout.Node) layout.Node {
 	switch s.screen {
 	case screenImages:
 		return s.images.bodyNode()
@@ -192,66 +208,23 @@ func (s *State) activeBody(status func(layout.Rect) string) layout.Node {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	width := ctx.Width
-	if s.width > 0 {
-		width = s.width
-	}
-	height := s.height
-	if height <= 0 {
-		height = 24
-	}
-	if s.width != width || s.height != height {
-		s.resize(width, height)
-	}
-
-	status := func(r layout.Rect) string {
-		if s.commandModal != nil {
-			return s.commandModal.View(r.W)
-		}
-		return s.containers.renderStatusLine(r.W)
-	}
-
-	children := []layout.Node{
-		headerNode(s),
-		s.activeBody(status),
-		Separator{},
-		Footer{State: s},
-	}
-	// The confirm dialog is a centered overlay node appended to the frame tree:
-	// the single SolveAndCompose walk clears its rect and composes it over the
-	// base, and records its rects — no separate string-overlay pass.
-	if s.confirmModal != nil {
-		children = append(children, modalNode(s.confirmModal))
-	}
-	tree := layout.Col{Children: children}
-
-	// One top-to-bottom pass resolves the whole frame — header, panes,
-	// dividers, status, footer — in absolute coordinates AND paints it into a
-	// cell buffer. The active screen adopts that geometry for hit-testing and
-	// widget sizing; solve and render can't drift because there is one walk.
-	content, rects := layout.SolveAndCompose(tree, width, height)
-	s.rects = rects
-	switch s.screen {
+func (s *State) adoptScreenRects(sc screen, rects map[string]layout.Rect) {
+	switch sc {
 	case screenContainers:
-		s.containers.adopt(s.rects)
+		s.containers.adopt(rects)
 	case screenImages:
-		s.images.adopt(s.rects)
+		s.images.adopt(rects)
 	case screenVolumes:
-		s.volumes.adopt(s.rects)
+		s.volumes.adopt(rects)
 	}
+}
 
-	frame := flatte.Frame{
-		Content: content,
-		Title:   "flat-docker — " + s.screen.Name(),
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	// The host solves and paints the whole frame — header, panes, dividers,
+	// status, footer — in one pass at the terminal size.
+	// The command bar's Input places the cursor while it is open.
+	return flatte.Frame{
+		Root:  s.frameTree(),
+		Title: "flat-docker — " + s.screen.Name(),
 	}
-	if s.commandModal != nil {
-		if r, ok := s.rects["status"]; ok {
-			frame.Cursor = &flatte.Cursor{
-				X: r.X + s.commandModal.cursorFrameX(),
-				Y: r.Y,
-			}
-		}
-	}
-	return frame
 }

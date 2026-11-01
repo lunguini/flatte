@@ -42,6 +42,18 @@ func TestTranslateEvent(t *testing.T) {
 		{"release", uv.MouseReleaseEvent{X: 3, Y: 4, Button: uv.MouseLeft}, MouseEvent{X: 3, Y: 4, Button: MouseLeft, Action: MouseRelease}},
 		{"motion", uv.MouseMotionEvent{X: 5, Y: 6}, MouseEvent{X: 5, Y: 6, Button: MouseNone, Action: MouseMotion}},
 		{"wheel", uv.MouseWheelEvent{Button: uv.MouseWheelDown}, MouseEvent{Button: MouseWheelDown, Action: MousePress}},
+		{"f1", uv.KeyPressEvent{Code: uv.KeyF1}, KeyEvent{Key: KeyF1}},
+		{"f2", uv.KeyPressEvent{Code: uv.KeyF2}, KeyEvent{Key: KeyF2}},
+		{"f3", uv.KeyPressEvent{Code: uv.KeyF3}, KeyEvent{Key: KeyF3}},
+		{"f4", uv.KeyPressEvent{Code: uv.KeyF4}, KeyEvent{Key: KeyF4}},
+		{"f5", uv.KeyPressEvent{Code: uv.KeyF5}, KeyEvent{Key: KeyF5}},
+		{"f6", uv.KeyPressEvent{Code: uv.KeyF6}, KeyEvent{Key: KeyF6}},
+		{"f7", uv.KeyPressEvent{Code: uv.KeyF7}, KeyEvent{Key: KeyF7}},
+		{"f8", uv.KeyPressEvent{Code: uv.KeyF8}, KeyEvent{Key: KeyF8}},
+		{"f9", uv.KeyPressEvent{Code: uv.KeyF9}, KeyEvent{Key: KeyF9}},
+		{"f10", uv.KeyPressEvent{Code: uv.KeyF10}, KeyEvent{Key: KeyF10}},
+		{"f11", uv.KeyPressEvent{Code: uv.KeyF11}, KeyEvent{Key: KeyF11}},
+		{"f12", uv.KeyPressEvent{Code: uv.KeyF12}, KeyEvent{Key: KeyF12}},
 		{"clipboard", uv.ClipboardEvent{Selection: uv.SystemClipboard, Content: "hello"}, ClipboardEvent{Text: "hello"}},
 	}
 	for _, tc := range cases {
@@ -60,7 +72,6 @@ func TestTranslateEvent(t *testing.T) {
 func TestTranslateEventDropsUnmappedEvents(t *testing.T) {
 	for _, in := range []uv.Event{
 		uv.KeyReleaseEvent{Code: 'q'},
-		uv.KeyPressEvent{Code: uv.KeyF1},
 	} {
 		if got, ok := translateEvent(in); ok {
 			t.Fatalf("translateEvent(%#v) = %#v, want dropped", in, got)

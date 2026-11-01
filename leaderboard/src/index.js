@@ -8,8 +8,8 @@
 //
 // Free-tier discipline (Workers Free: 100k req/day, 10 ms CPU; KV Free: 100k
 // reads, 1k writes/day, 1 write/s per key):
-//   - Verification is a synchronous wasm replay of a ≤~1 KB log — well under
-//     10 ms, and the module is instantiated once per isolate.
+//   - Verification is a synchronous wasm replay with a hard 8,192-step and
+//     2,048-turn cap; the module is instantiated once per isolate.
 //   - The whole board is one KV value; GET is edge-cached, and a submission
 //     only WRITES when the score actually qualifies for the top N, so ordinary
 //     play doesn't burn the daily write budget.
@@ -26,6 +26,9 @@ import {
   qualifies,
   rankOf,
   MAX_SCORE,
+  PUBLIC_SEED,
+  MAX_BODY_BYTES,
+  readCappedBytes,
 } from "./board.js";
 
 const BOARD_KEY = "board";
@@ -87,20 +90,27 @@ async function handlePost(request, env) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   if (throttled(ip)) return json({ error: "slow down" }, 429);
 
+  const declaredLength = Number(request.headers.get("Content-Length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return json({ error: "request too large" }, 413);
+  }
+
   let body;
   try {
-    body = await request.json();
+    const raw = await readCappedBytes(request.body, MAX_BODY_BYTES);
+    if (raw === null) return json({ error: "request too large" }, 413);
+    body = JSON.parse(new TextDecoder().decode(raw));
   } catch {
     return json({ error: "invalid JSON" }, 400);
   }
 
   const inputs = normalizeInputs(body?.inputs);
   if (inputs === null) return json({ error: "invalid inputs" }, 400);
-  if (body?.seed === undefined || body?.seed === null) {
-    return json({ error: "missing seed" }, 400);
+  if (body?.seed !== PUBLIC_SEED) {
+    return json({ error: "invalid seed" }, 400);
   }
 
-  const score = verifier()(body.seed, inputs);
+  const score = verifier()(PUBLIC_SEED, inputs);
   if (score < 0 || score > MAX_SCORE) {
     return json({ error: "unverifiable score" }, 400);
   }

@@ -7,10 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const defaultSearchDelay = 300 * time.Millisecond
@@ -34,10 +33,22 @@ type State struct {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	key, ok := ev.(flatte.KeyEvent)
-	if !ok {
+	switch e := ev.(type) {
+	case flatte.PasteEvent:
+		if s.focused {
+			before := s.query.Value
+			s.query.InsertText(e.Text)
+			if s.query.Value != before {
+				startSearch(s, fx)
+			}
+		}
 		return
+	case flatte.KeyEvent:
+		handleKey(s, e, fx)
 	}
+}
+
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	if !s.focused {
 		if key.Key == flatte.KeyCharacter && (key.Rune == 'q' || key.Rune == 'Q') {
 			fx.Quit()
@@ -49,41 +60,14 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		return
 	}
 
-	switch key.Key {
-	case flatte.KeyCharacter:
-		if handleAltWordKey(key, s.query.MoveWordLeft, s.query.MoveWordRight) {
-			return
-		}
-		s.query.Insert(key.Rune)
-		startSearch(s, fx)
-	case flatte.KeyBackspace:
-		s.query.Backspace()
-		startSearch(s, fx)
-	case flatte.KeyDelete:
-		s.query.Delete()
-		startSearch(s, fx)
-	case flatte.KeyLeft:
-		s.query.MoveLeft()
-	case flatte.KeyRight:
-		s.query.MoveRight()
-	case flatte.KeyEnter:
+	if key.Key == flatte.KeyEnter {
 		s.focused = false
+		return
 	}
-}
-
-func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatte.ModAlt) {
-		return false
+	before := s.query.Value
+	if s.query.Edit(key) && s.query.Value != before {
+		startSearch(s, fx)
 	}
-	switch key.Rune {
-	case 'b', 'B':
-		moveLeft()
-		return true
-	case 'f', 'F':
-		moveRight()
-		return true
-	}
-	return false
 }
 
 func startSearch(s *State, fx flatte.Effects[State]) {
@@ -130,7 +114,15 @@ func search(ctx context.Context, query string) ([]string, error) {
 	return results, nil
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
+
+// View shows the query input, status, and results. The query Input places
+// the cursor while focused, so there is no cursor arithmetic here.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
 	status := "idle"
 	if s.searching {
 		status = "searching..."
@@ -138,36 +130,26 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	if s.err != nil {
 		status = s.err.Error()
 	}
-
-	rows := []string{
-		flatui.Title("Flat Search"),
-		flatui.Subtle("input-triggered async sample"),
-		"",
-		"  query: " + renderQuery(s),
-		"  state: " + status,
-		"",
+	children := []layout.Node{
+		layout.Label{Text: "Flat Search", Style: title},
+		layout.Label{Text: "input-triggered async sample", Style: subtle},
+		layout.Label{},
+		layout.Row{NodeBase: indent, Children: []layout.Node{
+			layout.Label{Text: "query: "},
+			s.query.Layout("search.query", s.focused),
+		}},
+		layout.Label{NodeBase: indent, Text: "state: " + status},
+		layout.Label{},
 	}
 	if len(s.results) == 0 {
-		rows = append(rows, flatui.Subtle("  no results"))
+		children = append(children, layout.Label{NodeBase: indent, Text: "no results", Style: subtle})
 	} else {
 		for _, result := range s.results {
-			rows = append(rows, "  - "+result)
+			children = append(children, layout.Label{NodeBase: indent, Text: "- " + result})
 		}
 	}
-	rows = append(rows, "", flatui.Subtle("enter blur/focus | q quits when blurred"))
-	frame := flatte.Frame{Content: flatui.Card(rows, ctx.Width)}
-	if s.focused {
-		originX, originY := flatui.CardOrigin()
-		frame.Cursor = &flatte.Cursor{
-			X: originX + lipgloss.Width("  query: ") + s.query.CursorColumn(),
-			Y: originY + 3, // title, subtle, blank precede the query row
-		}
-	}
-	return frame
-}
-
-func renderQuery(s *State) string {
-	return s.query.Value
+	children = append(children, layout.Label{}, layout.Label{Text: "enter blur/focus | q quits when blurred", Style: subtle})
+	return flatte.Frame{Root: flatui.CardLayout(children...)}
 }
 
 func searchDelay() time.Duration {

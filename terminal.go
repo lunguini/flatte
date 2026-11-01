@@ -15,7 +15,31 @@ const (
 
 type RenderContext struct {
 	Width        int
+	Height       int
 	ColorProfile colorprofile.Profile
+	// Window is the window being drawn: "" for the main window, or a
+	// secondary window's ID (App.Windows).
+	Window string
+	// Graphical reports a host that draws in points — a native window:
+	// Points sizes, images, and icon shapes show as themselves. False in a
+	// terminal, where they round up to whole cells and show their text, so
+	// a view can size generously for one and compactly for the other.
+	Graphical    bool
+	Capabilities Capabilities
+}
+
+// Capabilities reports which effects and inputs the current host supports,
+// so an app can hide what would only fail or do nothing. Each host fills it
+// once; Effects.Capabilities and RenderContext.Capabilities report the same
+// value. Effects the host lacks still answer: Exec with ErrUnsupported,
+// dialogs with ErrNoDialogs.
+type Capabilities struct {
+	Exec, Suspend, Print      bool // shelling out and releasing the terminal
+	Alert, OpenFile, SaveFile bool // the dialogs the host can show
+	Notifications, Clipboard  bool
+	Drop                      bool // DropEvent for dropped files
+	Mouse                     bool // mouse events arrive (WithMouse in a terminal or browser)
+	Quit                      bool // Quit ends the program; false where it only stops the loop
 }
 
 type fdWriter interface {
@@ -40,13 +64,14 @@ func terminalSize(out io.Writer) (width, height int) {
 	return width, height
 }
 
-// RenderContextFor reports the terminal facts available to View. It mirrors
+// renderContextFor reports the terminal facts available to View. It mirrors
 // renderer color-profile detection so apps can pick theme styles without
 // owning terminal probing.
-func RenderContextFor(out io.Writer) RenderContext {
-	width, _ := terminalSize(out)
+func renderContextFor(out io.Writer) RenderContext {
+	width, height := terminalSize(out)
 	return RenderContext{
 		Width:        width,
+		Height:       height,
 		ColorProfile: detectRendererColorProfile(out, os.Environ()),
 	}
 }

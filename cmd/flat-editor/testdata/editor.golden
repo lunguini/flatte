@@ -1,11 +1,25 @@
-┌────────────────────────────────────────┐
-│   Flat Editor                          │
-│  multi-line textarea sample            │
-│                                        │
-│  Edit me.                              │
-│  Multiple lines.                       │
-│  Grapheme-correct.                     │
-│                                        │
-│  arrows move  enter newline  esc quit  │
-└────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│   Flat Editor                                                        │
+│  untitled                                                            │
+│                                                                      │
+│  Edit me.                                                            │
+│  Multiple lines.                                                     │
+│  Grapheme-correct.                                                   │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│  ctrl+n new  ctrl+o open  ctrl+s save  ctrl+t stats  ⌘ in windows    │
+│  arrows  drag select  right-click menu  ⌘C/ctrl+c copy  esc quit     │
+└──────────────────────────────────────────────────────────────────────┘
 [cursor 3,4]

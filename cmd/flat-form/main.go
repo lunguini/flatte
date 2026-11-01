@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-
-	"charm.land/lipgloss/v2"
+	"strconv"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type Field struct {
@@ -34,10 +34,17 @@ func NewState() *State {
 }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	key, ok := ev.(flatte.KeyEvent)
-	if !ok {
-		return
+	switch ev := ev.(type) {
+	case flatte.PasteEvent:
+		if s.editing {
+			s.fields[s.focused].Input.InsertText(ev.Text)
+		}
+	case flatte.KeyEvent:
+		handleKey(s, ev, fx)
 	}
+}
+
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	if !s.editing {
 		handleBlurred(s, key, fx)
 		return
@@ -51,47 +58,9 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		s.editing = false
 	case flatte.KeyEnter:
 		s.submitted = fmt.Sprintf("name=%s filter=%s", s.fields[0].Input.Value, s.fields[1].Input.Value)
-	case flatte.KeyLeft:
-		if wordMove(key.Mod) {
-			field.Input.MoveWordLeft()
-		} else {
-			field.Input.MoveLeft()
-		}
-	case flatte.KeyRight:
-		if wordMove(key.Mod) {
-			field.Input.MoveWordRight()
-		} else {
-			field.Input.MoveRight()
-		}
-	case flatte.KeyBackspace:
-		field.Input.Backspace()
-	case flatte.KeyDelete:
-		field.Input.Delete()
-	case flatte.KeyCharacter:
-		if handleAltWordKey(key, field.Input.MoveWordLeft, field.Input.MoveWordRight) {
-			return
-		}
-		field.Input.Insert(key.Rune)
+	default:
+		field.Input.Edit(key)
 	}
-}
-
-func wordMove(mod flatte.Mod) bool {
-	return mod.Contains(flatte.ModAlt) || mod.Contains(flatte.ModCtrl)
-}
-
-func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatte.ModAlt) {
-		return false
-	}
-	switch key.Rune {
-	case 'b', 'B':
-		moveLeft()
-		return true
-	case 'f', 'F':
-		moveRight()
-		return true
-	}
-	return false
 }
 
 func handleBlurred(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
@@ -105,43 +74,39 @@ func handleBlurred(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	lines := []string{
-		flatui.Title("Flat Form"),
-		flatui.Subtle("multi-input retained state sample"),
-		"",
-	}
+var (
+	title  = layout.TextStyle{Role: layout.TextTitle}
+	subtle = layout.TextStyle{Role: layout.TextSubtle}
+	indent = layout.NodeBase{PadLeft: 2}
+)
 
+// View lays out one row per field. The focused field's Input places the
+// cursor, so there is no cursor arithmetic here.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	children := []layout.Node{
+		layout.Label{Text: "Flat Form", Style: title},
+		layout.Label{Text: "multi-input retained state sample", Style: subtle},
+		layout.Label{},
+	}
 	for i, field := range s.fields {
+		focused := s.editing && i == s.focused
 		prefix := "  "
-		if s.editing && i == s.focused {
+		if focused {
 			prefix = "> "
 		}
-		lines = append(lines, prefix+field.Label+": "+renderField(s, i))
+		children = append(children, layout.Row{Children: []layout.Node{
+			layout.Label{Text: prefix + field.Label + ": "},
+			field.Input.Layout("form.field."+strconv.Itoa(i), focused),
+		}})
 	}
-
-	lines = append(lines, "")
+	children = append(children, layout.Label{})
 	if s.submitted == "" {
-		lines = append(lines, flatui.Subtle("  not submitted"))
+		children = append(children, layout.Label{NodeBase: indent, Text: "not submitted", Style: subtle})
 	} else {
-		lines = append(lines, "  "+s.submitted)
+		children = append(children, layout.Label{NodeBase: indent, Text: s.submitted})
 	}
-	lines = append(lines, "", flatui.Subtle("tab focus | arrows move | esc blur | q quits blurred"))
-
-	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
-	if s.editing {
-		originX, originY := flatui.CardOrigin()
-		field := s.fields[s.focused]
-		frame.Cursor = &flatte.Cursor{
-			X: originX + lipgloss.Width("> "+field.Label+": ") + field.Input.CursorColumn(),
-			Y: originY + 3 + s.focused, // title, subtle, blank precede the fields
-		}
-	}
-	return frame
-}
-
-func renderField(s *State, index int) string {
-	return s.fields[index].Input.Value
+	children = append(children, layout.Label{}, layout.Label{Text: "tab focus | arrows move | esc blur | q quits blurred", Style: subtle})
+	return flatte.Frame{Root: flatui.CardLayout(children...)}
 }
 
 func main() {

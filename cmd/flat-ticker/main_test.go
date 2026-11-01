@@ -41,7 +41,7 @@ func TestHandleTogglesPauseAndResets(t *testing.T) {
 func TestViewRendersTickerState(t *testing.T) {
 	state := State{ticks: 3, paused: true}
 
-	frame := View(&state, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(&state, flatte.RenderContext{Width: 72})).Content
 
 	for _, want := range []string{"Flat Ticker", "ticks: 3", "state: paused"} {
 		if !strings.Contains(frame, want) {
@@ -53,7 +53,7 @@ func TestViewRendersTickerState(t *testing.T) {
 func TestViewMatchesPausedSnapshot(t *testing.T) {
 	state := State{ticks: 3, paused: true}
 
-	flatest.AssertGolden(t, "testdata/paused.golden", View(&state, flatte.RenderContext{Width: 72}).Content)
+	flatest.AssertGolden(t, "testdata/paused.golden", composed(View(&state, flatte.RenderContext{Width: 72})).Content)
 }
 
 func TestTickIntervalEnvironmentOverride(t *testing.T) {
@@ -88,4 +88,10 @@ func TestTicksAreDeterministicUnderFakeClock(t *testing.T) {
 	)
 
 	flatest.AssertFrames(t, "testdata/ticks-sequence.golden", frames)
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

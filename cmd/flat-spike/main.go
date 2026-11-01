@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/cmd/internal/brand"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const defaultLoadDelay = 250 * time.Millisecond
@@ -29,10 +31,8 @@ func NewState() *State {
 	return &State{loading: true}
 }
 
-// listTopLine is the content-line index of the first model row: the
-// title, subtitle, and a blank line precede it.
-const listTopLine = 3
-const modelListZoneID = "models"
+// modelID is the ID of model row i; a click's Target names the row.
+func modelID(i int) string { return "model:" + strconv.Itoa(i) }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch ev := ev.(type) {
@@ -75,36 +75,13 @@ func handleMouse(s *State, m flatte.MouseEvent) {
 		if m.Action != flatte.MousePress {
 			return
 		}
-		var zones flatui.ZoneMap
-		zones.Set(modelListZoneID, modelListZone(s))
-		_, row, ok := zones.Local(modelListZoneID, m.X, m.Y)
-		if ok {
-			s.cursor = row
-			s.selectedModel = s.models[s.cursor]
+		if i, ok := strings.CutPrefix(m.Target, "model:"); ok {
+			if n, err := strconv.Atoi(i); err == nil && n >= 0 && n < len(s.models) {
+				s.cursor = n
+				s.selectedModel = s.models[n]
+			}
 		}
 	}
-}
-
-func modelListZone(s *State) flatui.Rect {
-	x, y := flatui.CardOrigin()
-	return flatui.Rect{
-		X: x,
-		Y: y + listTopLine,
-		W: modelListWidth(s),
-		H: len(s.models),
-	}
-}
-
-func modelListWidth(s *State) int {
-	width := 1
-	for _, model := range s.models {
-		row := "  " + model
-		if model == s.selectedModel {
-			row += " (selected)"
-		}
-		width = max(width, lipgloss.Width(row))
-	}
-	return width
 }
 
 func moveDown(s *State) {
@@ -119,66 +96,60 @@ func moveUp(s *State) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	rows := make([]string, 0, len(s.models))
-	if s.loading {
-		rows = append(rows, flatui.Subtle("  loading models..."))
-	} else if s.err != nil {
-		rows = append(rows, errorStyle().Render("  "+s.err.Error()))
-	} else {
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	var rows []layout.Node
+	switch {
+	case s.loading:
+		rows = append(rows, layout.Label{NodeBase: indent, Text: "loading models...", Style: layout.TextStyle{Role: layout.TextSubtle}})
+	case s.err != nil:
+		rows = append(rows, layout.Label{NodeBase: indent, Text: s.err.Error(), Style: errorStyle})
+	default:
 		for i, model := range s.models {
-			prefix := "  "
-			style := itemStyle()
-			if i == s.cursor {
-				prefix = "> "
-				style = activeStyle()
-			}
-			row := prefix + model
-			if model == s.selectedModel {
-				row += " " + selectedStyle().Render("(selected)")
-			}
-			rows = append(rows, style.Render(row))
+			rows = append(rows, modelRow(s, i, model))
 		}
 	}
-
 	selected := "selected: none"
 	if s.selectedModel != "" {
 		selected = "selected: " + s.selectedModel
 	}
-
-	lines := []string{
-		flatui.Title("Flatte"),
-		flatui.Subtle("async list selection"),
-		"",
-		strings.Join(rows, "\n"),
-		"",
-		selected,
-		flatui.Subtle("j/k or click/wheel | enter select | q quit"),
+	children := []layout.Node{
+		layout.Label{Text: "Flatte", Style: layout.TextStyle{Role: layout.TextTitle}},
+		layout.Label{Text: "async list selection", Style: layout.TextStyle{Role: layout.TextSubtle}},
+		layout.Label{},
 	}
-
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+	children = append(children, rows...)
+	children = append(children,
+		layout.Label{},
+		layout.Label{Text: selected},
+		layout.Label{Text: "j/k or click/wheel | enter select | q quit", Style: layout.TextStyle{Role: layout.TextSubtle}},
+	)
+	return flatte.Frame{Root: flatui.CardLayout(children...)}
 }
 
-func itemStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
+// modelRow is one model: the cursor marker (a chevron in a window, "> " in
+// the terminal), the name, and the chosen mark, as an ID'd row.
+func modelRow(s *State, i int, model string) layout.Node {
+	marker, style := layout.Icon{Text: "  ", Style: itemStyle}, itemStyle
+	if i == s.cursor {
+		marker, style = layout.Icon{Name: layout.IconChevronRight, Text: "> ", Style: activeStyle}, activeStyle
+	}
+	row := layout.Row{
+		NodeBase: layout.NodeBase{ID: modelID(i), Box: layout.Box{Selected: i == s.cursor}},
+		Children: []layout.Node{marker, layout.Label{Text: model, Style: style}},
+	}
+	if model == s.selectedModel {
+		row.Children = append(row.Children, layout.Label{Text: " (selected)", Style: selectedStyle})
+	}
+	return row
 }
 
-func activeStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Bold(true).
-		Foreground(brand.Teal)
-}
-
-func selectedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color("108"))
-}
-
-func errorStyle() lipgloss.Style {
-	return lipgloss.NewStyle().
-		Foreground(brand.Pink)
-}
+var (
+	indent        = layout.NodeBase{PadLeft: 2}
+	itemStyle     = layout.TextStyle{Fg: lipgloss.Color("252")}
+	activeStyle   = layout.TextStyle{Fg: brand.Teal, Bold: true}
+	selectedStyle = layout.TextStyle{Fg: lipgloss.Color("108")}
+	errorStyle    = layout.TextStyle{Fg: brand.Pink}
+)
 
 func loadModels(s *State, fx flatte.Effects[State]) {
 	flatte.Go(fx, "models.load", fetchModels, func(s *State, models []string, err error) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
 
 func TestHandleEditsFocusedFieldWithoutHiddenWidgetOwnership(t *testing.T) {
@@ -35,6 +36,29 @@ func TestTabMovesFocusBetweenFields(t *testing.T) {
 	}
 	if state.fields[1].Input.Value != "o" {
 		t.Fatalf("filter field = %q, want o", state.fields[1].Input.Value)
+	}
+}
+
+func TestFocusedFieldUsesTextFieldEditing(t *testing.T) {
+	state := NewState()
+	state.fields[0].Input.Value, state.fields[0].Input.Cursor = "hello world", 5
+
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
+	if state.fields[0].Input.Cursor != len("hello world") {
+		t.Fatalf("End cursor = %d, want %d", state.fields[0].Input.Cursor, len("hello world"))
+	}
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper}, flatte.Effects[State]{})
+	if state.fields[0].Input.Cursor != 0 {
+		t.Fatalf("Cmd+Left cursor = %d, want 0", state.fields[0].Input.Cursor)
+	}
+	Handle(state, flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt}, flatte.Effects[State]{})
+	if state.fields[0].Input.Cursor != len("hello") {
+		t.Fatalf("Alt+Right cursor = %d, want %d", state.fields[0].Input.Cursor, len("hello"))
+	}
+	state.fields[0].Input.Value, state.fields[0].Input.Cursor = "", 0
+	Handle(state, flatte.PasteEvent{Text: "a\nb"}, flatte.Effects[State]{})
+	if state.fields[0].Input.Value != "ab" {
+		t.Fatalf("pasted value = %q, want single-line text %q", state.fields[0].Input.Value, "ab")
 	}
 }
 
@@ -95,8 +119,7 @@ func TestAltBFMoveFocusedFieldByWord(t *testing.T) {
 func TestEscapeBlursAndQQuitsOnlyWhenBlurred(t *testing.T) {
 	state := NewState()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
-
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(state, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'q'}, fx)
 	if quit {
 		t.Fatal("q should edit focused field, not quit")
@@ -131,7 +154,7 @@ func TestViewRendersFocusedCursorAndSubmittedState(t *testing.T) {
 	state.fields[1].Input.Value = "op"
 	state.submitted = "name=Ada filter=op"
 
-	frame := View(state, flatte.RenderContext{Width: 72}).Content
+	frame := composed(View(state, flatte.RenderContext{Width: 72})).Content
 
 	for _, want := range []string{"Flat Form", "Ada", "filter", "name=Ada filter=op"} {
 		if !strings.Contains(frame, want) {
@@ -148,7 +171,7 @@ func TestViewPlacesCursorInFocusedField(t *testing.T) {
 	state.fields[0].Input.Insert('a')
 	state.fields[0].Input.Insert('b')
 
-	frame := View(state, flatte.RenderContext{Width: 72})
+	frame := composed(View(state, flatte.RenderContext{Width: 72}))
 	if frame.Cursor == nil {
 		t.Fatal("editing view has no cursor")
 	}
@@ -159,12 +182,12 @@ func TestViewPlacesCursorInFocusedField(t *testing.T) {
 	}
 
 	state.focused = 1
-	if second := View(state, flatte.RenderContext{Width: 72}); second.Cursor == nil || second.Cursor.Y != 5 {
+	if second := composed(View(state, flatte.RenderContext{Width: 72})); second.Cursor == nil || second.Cursor.Y != 5 {
 		t.Fatalf("cursor on second field = %+v, want row 5", second.Cursor)
 	}
 
 	state.editing = false
-	if blurred := View(state, flatte.RenderContext{Width: 72}); blurred.Cursor != nil {
+	if blurred := composed(View(state, flatte.RenderContext{Width: 72})); blurred.Cursor != nil {
 		t.Fatalf("blurred view still has a cursor: %+v", *blurred.Cursor)
 	}
 }
@@ -177,5 +200,11 @@ func TestViewMatchesSubmittedSnapshot(t *testing.T) {
 	state.fields[1].Input.Cursor = 2
 	state.submitted = "name=Ada filter=op"
 
-	flatest.AssertGoldenFrame(t, "testdata/submitted.golden", View(state, flatte.RenderContext{Width: 72}))
+	flatest.AssertGoldenFrame(t, "testdata/submitted.golden", composed(View(state, flatte.RenderContext{Width: 72})))
+}
+
+// composed is View's frame as the runtime paints it at 72×24.
+func composed(f flatte.Frame) flatte.Frame {
+	f, _ = flatte.ComposeFrame(f, 72, 24)
+	return f
 }

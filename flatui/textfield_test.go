@@ -1,6 +1,12 @@
 package flatui
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lunguini/flatte"
+
+	"github.com/lunguini/flatte/flatui/layout"
+)
 
 func TestTextFieldInsertBackspaceDeleteAndCursorMovement(t *testing.T) {
 	field := TextField{Value: "abcd", Cursor: 2}
@@ -16,6 +22,14 @@ func TestTextFieldInsertBackspaceDeleteAndCursorMovement(t *testing.T) {
 	}
 	if field.Cursor != 2 {
 		t.Fatalf("Cursor = %d, want 2", field.Cursor)
+	}
+}
+
+func TestTextFieldInsertTextDropsNewlines(t *testing.T) {
+	field := TextField{Value: "abcd", Cursor: 1}
+	field.InsertText("X\r\nY")
+	if field.Value != "aXYbcd" || field.Cursor != 3 {
+		t.Fatalf("Value, Cursor = %q, %d; want aXYbcd, 3", field.Value, field.Cursor)
 	}
 }
 
@@ -45,6 +59,50 @@ func TestTextFieldSetCursorClampsToRuneBoundary(t *testing.T) {
 	}
 	if got := field.CursorColumn(); got != 1 {
 		t.Fatalf("CursorColumn() = %d, want 1", got)
+	}
+}
+
+func TestTextFieldSetCursorClampsToGraphemeBoundary(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  string
+		cursor int
+		want   int
+	}{
+		{
+			name:   "combining mark",
+			value:  "a\u0301b",
+			cursor: len("a"),
+			want:   0,
+		},
+		{
+			name:   "zwj emoji",
+			value:  "x👩‍💻y",
+			cursor: len("x👩"),
+			want:   len("x"),
+		},
+		{
+			name:   "regional indicator flag",
+			value:  "x🇺🇳y",
+			cursor: len("x🇺"),
+			want:   len("x"),
+		},
+		{
+			name:   "cluster end remains a boundary",
+			value:  "a\u0301b",
+			cursor: len("a\u0301"),
+			want:   len("a\u0301"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			field := TextField{Value: tc.value}
+			field.SetCursor(tc.cursor)
+			if field.Cursor != tc.want {
+				t.Fatalf("Cursor = %d, want %d", field.Cursor, tc.want)
+			}
+		})
 	}
 }
 
@@ -174,5 +232,48 @@ func TestCursorColumnCountsDisplayCells(t *testing.T) {
 				t.Fatalf("CursorColumn() = %d, want %d", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestTextFieldLayoutShowsValueAndCaret(t *testing.T) {
+	f := TextField{Value: "héllo", Cursor: len("hé")}
+	in := f.Layout("name", true)
+	if in.ID != "name" || in.Value != "héllo" || in.Caret != len("hé") || !in.Focused {
+		t.Fatalf("Layout = %+v", in)
+	}
+	// The composed caret lands on the same column CursorColumn reports.
+	x, _, ok := layout.Compose(in, 20, 1).Cursor()
+	if !ok || x != f.CursorColumn() {
+		t.Fatalf("composed caret x = %d (%v), want CursorColumn %d", x, ok, f.CursorColumn())
+	}
+	// An out-of-range cursor is clamped the way the field itself clamps it.
+	f.Cursor = 99
+	if got := f.Layout("name", false); got.Caret != len(f.Value) || got.Focused {
+		t.Fatalf("clamped Layout = %+v", got)
+	}
+}
+
+// Terminals send Option+Left/Right as Alt+B/F on macOS by default, and
+// Alt+D is readline's delete-word-forward.
+func TestTextFieldEditReadlineAltKeys(t *testing.T) {
+	alt := func(r rune) flatte.KeyEvent {
+		return flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModAlt}
+	}
+	f := TextField{Value: "one two three", Cursor: len("one two three")}
+	if !f.Edit(alt('b')) || f.Cursor != len("one two ") {
+		t.Fatalf("Alt+B: cursor %d", f.Cursor)
+	}
+	if !f.Edit(alt('b')) || f.Cursor != len("one ") {
+		t.Fatalf("second Alt+B: cursor %d", f.Cursor)
+	}
+	if !f.Edit(alt('f')) || f.Cursor != len("one two") {
+		t.Fatalf("Alt+F: cursor %d", f.Cursor)
+	}
+	f.Cursor = len("one ")
+	if !f.Edit(alt('d')) || f.Value != "one  three" {
+		t.Fatalf("Alt+D: %q", f.Value)
+	}
+	if f.Edit(alt('x')) {
+		t.Fatal("Edit claimed an unbound Alt key")
 	}
 }

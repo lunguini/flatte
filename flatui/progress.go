@@ -22,13 +22,18 @@ func NewProgress(width int) Progress {
 	return p
 }
 
-// SetWidth sets the fill bar width in cells. Negative widths clamp to zero.
+// SetWidth sets the fill bar width in cells. Values outside the supported
+// 0..65,536 cell range clamp to the nearest endpoint.
 func (p *Progress) SetWidth(width int) {
-	p.width = max(width, 0)
+	p.width = clampWidgetDimension(width)
 }
 
-// SetPercent sets the fill percentage. Values outside 0..100 clamp.
+// SetPercent sets the fill percentage. Finite values outside 0..100 clamp;
+// NaN normalizes to zero and infinities clamp to the corresponding endpoint.
 func (p *Progress) SetPercent(percent float64) {
+	if math.IsNaN(percent) {
+		percent = 0
+	}
 	p.percent = min(max(percent, 0), 100)
 }
 
@@ -38,9 +43,19 @@ func (p Progress) Percent() float64 { return p.percent }
 // Width returns the bar width in cells.
 func (p Progress) Width() int { return p.width }
 
-// Layout renders the bar as a single Text leaf for composition.
+// Layout returns the bar as a layout.Meter of the bar's width followed by
+// the percentage label: View's text in the terminal, a native bar in a
+// window. A zero-width bar is only the label, as in View.
 func (p Progress) Layout() layout.Node {
-	return layout.Text{String: p.View()}
+	label := layout.Label{Text: fmt.Sprintf("%3d%%", int(math.Round(p.percent)))}
+	if p.width <= 0 {
+		return label
+	}
+	label.Text = "  " + label.Text
+	return layout.Row{Children: []layout.Node{
+		layout.Meter{NodeBase: layout.NodeBase{W: layout.Fixed(p.width)}, Value: p.percent / 100},
+		label,
+	}}
 }
 
 // View renders the progress bar and a rounded percentage label. A zero-width

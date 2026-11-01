@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image/color"
 	"reflect"
 	"strings"
 	"testing"
@@ -45,6 +46,37 @@ func TestSolveAndComposeGlyphs(t *testing.T) {
 	}
 }
 
+func TestSolveWithDiagnosticsReportsDuplicateIDsInTraversalOrder(t *testing.T) {
+	tree := Col{Children: []Node{
+		Text{NodeBase: NodeBase{ID: "same", H: Fixed(1)}, String: "a"},
+		Text{NodeBase: NodeBase{H: Fixed(1)}, String: "empty"},
+		Text{NodeBase: NodeBase{ID: "same", H: Fixed(1)}, String: "b"},
+		Text{NodeBase: NodeBase{ID: "same", H: Fixed(1)}, String: "c"},
+	}}
+	rects, diagnostics := SolveWithDiagnostics(tree, 10, 4)
+	if len(diagnostics) != 2 || diagnostics[0].ID != "same" || diagnostics[1].ID != "same" {
+		t.Fatalf("diagnostics = %#v, want two same-ID reports in traversal order", diagnostics)
+	}
+	if diagnostics[0].FirstRect.Y != 0 || diagnostics[0].Duplicate.Y != 2 || diagnostics[1].Duplicate.Y != 3 {
+		t.Fatalf("diagnostic rects = %#v, want y 0->2 and 0->3", diagnostics)
+	}
+	if rects["same"].Y != 3 {
+		t.Fatalf("duplicate map winner = %#v, want last node", rects["same"])
+	}
+}
+
+func TestSolveAndComposeWithDiagnosticsMatchesWrapper(t *testing.T) {
+	tree := Text{NodeBase: NodeBase{ID: "one"}, String: "x"}
+	want, wantRects := SolveAndCompose(tree, 4, 1)
+	got, gotRects, diagnostics := SolveAndComposeWithDiagnostics(tree, 4, 1)
+	if got != want || len(diagnostics) != 0 {
+		t.Fatalf("extended compose = %q, diagnostics %#v; wrapper = %q", got, diagnostics, want)
+	}
+	if gotRects["one"] != wantRects["one"] {
+		t.Fatalf("rect mismatch: got %#v want %#v", gotRects, wantRects)
+	}
+}
+
 // The id→rect map from a single compose pass must equal a standalone Solve, so
 // hit-test geometry and painted geometry are provably the same.
 func TestSolveAndComposeRectsMatchSolve(t *testing.T) {
@@ -77,6 +109,53 @@ func TestSolveAndComposeClipsOverflow(t *testing.T) {
 	for _, line := range strings.Split(ansi.Strip(composed), "\n") {
 		if w := ansi.StringWidth(line); w > 10 {
 			t.Fatalf("composed line width %d exceeds buffer width 10: %q", w, line)
+		}
+	}
+}
+
+func TestSolveAndComposeParityForNonPositiveViewports(t *testing.T) {
+	minInt := -int(^uint(0)>>1) - 1
+	viewports := []struct{ w, h int }{
+		{0, 10}, {10, 0}, {-1, 10}, {10, -1}, {minInt, minInt},
+	}
+	trees := []Node{
+		Col{NodeBase: NodeBase{ID: "root"}, Children: []Node{
+			Text{NodeBase: NodeBase{ID: "child"}, String: "x"},
+		}},
+		Col{NodeBase: NodeBase{ID: "overlay", Overlay: true}, Children: []Node{
+			Text{NodeBase: NodeBase{ID: "overlay-child"}, String: "x"},
+		}},
+	}
+	for _, vp := range viewports {
+		for _, tree := range trees {
+			frame, composed := SolveAndCompose(tree, vp.w, vp.h)
+			solved := Solve(tree, vp.w, vp.h)
+			if frame != "" || len(composed) != 0 || len(solved) != 0 {
+				t.Fatalf("viewport %dx%d: frame=%q composed=%v solved=%v, want empty parity", vp.w, vp.h, frame, composed, solved)
+			}
+		}
+	}
+}
+
+func TestSolveAndComposeBoundsExtremePublicPadding(t *testing.T) {
+	max := int(^uint(0) >> 1)
+	trees := []Node{
+		Text{NodeBase: NodeBase{Pad: max}, String: "x"},
+		Text{NodeBase: NodeBase{PadLeft: max, PadRight: max, PadTop: max, PadBottom: max}, String: "x"},
+		Text{NodeBase: NodeBase{Pad: max, Bordered: true}, String: "x"},
+		Row{NodeBase: NodeBase{Pad: max}},
+		Col{NodeBase: NodeBase{Pad: max}, Children: []Node{Text{String: "x"}}},
+	}
+	for i, tree := range trees {
+		frame, _ := SolveAndCompose(tree, 10, 3)
+		lines := strings.Split(ansi.Strip(frame), "\n")
+		if len(lines) > 3 {
+			t.Fatalf("tree %d rendered %d rows, want <= 3", i, len(lines))
+		}
+		for _, line := range lines {
+			if width := ansi.StringWidth(line); width > 10 {
+				t.Fatalf("tree %d rendered width %d, want <= 10", i, width)
+			}
 		}
 	}
 }
@@ -142,7 +221,8 @@ func TestNoRectEscapesFrame(t *testing.T) {
 	}
 	for ti, tr := range trees {
 		for id, r := range Solve(tr, W, H) {
-			if r.X < 0 || r.Y < 0 || r.X+r.W > W || r.Y+r.H > H {
+			if r.X < 0 || r.Y < 0 || r.W < 0 || r.H < 0 ||
+				r.X > W || r.Y > H || r.W > W-r.X || r.H > H-r.Y {
 				t.Fatalf("tree %d: rect %q = %+v escapes frame %dx%d", ti, id, r, W, H)
 			}
 		}
@@ -291,5 +371,52 @@ func TestSolveAndComposePaintsOverlay(t *testing.T) {
 	}
 	if mr.W != 4 || mr.H != 1 {
 		t.Fatalf("overlay rect = %+v, want 4x1 centered", mr)
+	}
+}
+
+// An overlay at the root has no base-pass pixels: it is painted exactly once
+// at its centered layer rect. Before the root guard, the children were painted
+// once at (0,0) and again at the centered position.
+func TestRootOverlayPaintedOnceAtCenter(t *testing.T) {
+	tree := Col{
+		NodeBase: NodeBase{Overlay: true, W: Fixed(6), H: Fixed(3)},
+		Children: []Node{Text{String: "ROOT"}},
+	}
+	composed, _ := SolveAndCompose(tree, 16, 5)
+	lines := strings.Split(ansi.Strip(composed), "\n")
+	if len(lines) < 2 || !strings.Contains(lines[1], "     ROOT") {
+		t.Fatalf("root overlay not centered:\n%s", ansi.Strip(composed))
+	}
+	if n := strings.Count(ansi.Strip(composed), "ROOT"); n != 1 {
+		t.Fatalf("root overlay painted %d times, want 1:\n%s", n, ansi.Strip(composed))
+	}
+}
+
+// A nested overlay under an overlay root is still composed once by the
+// separate overlay pass, while the root's ordinary child remains underneath.
+func TestNestedOverlayUnderRootPaintedOnce(t *testing.T) {
+	tree := Col{
+		NodeBase: NodeBase{Overlay: true, W: Fixed(8), H: Fixed(3)},
+		Children: []Node{
+			Text{String: "ROOT"},
+			Text{NodeBase: NodeBase{Overlay: true, W: Fixed(4), H: Fixed(1)}, String: "NEST"},
+		},
+	}
+	composed, _ := SolveAndCompose(tree, 20, 7)
+	stripped := ansi.Strip(composed)
+	if n := strings.Count(stripped, "ROOT"); n != 1 {
+		t.Fatalf("root content painted %d times, want 1:\n%s", n, stripped)
+	}
+	if n := strings.Count(stripped, "NEST"); n != 1 {
+		t.Fatalf("nested overlay painted %d times, want 1:\n%s", n, stripped)
+	}
+}
+
+func TestPaddedRowKeepsTheBackgroundBehindIt(t *testing.T) {
+	inner := Row{NodeBase: NodeBase{PadLeft: 1, PadRight: 1}, Children: []Node{Label{Text: "hi"}}}
+	outer := Col{NodeBase: NodeBase{Box: Box{Background: color.NRGBA{0x3b, 0x33, 0x55, 0xff}}}, Children: []Node{inner}}
+	out, _ := SolveAndCompose(outer, 6, 1)
+	if !strings.Contains(out, "48;2;59;51;85") || strings.Contains(out, "\x1b[m hi") {
+		t.Fatalf("the padded row blanked its parent's background: %q", out)
 	}
 }

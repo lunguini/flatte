@@ -1,0 +1,34 @@
+
+  Gallery 
+
+ Text
+ Labels hold rich text in runs: italic, colored, underlined, or larger — and
+ the runs wrap together as one paragraph. In a window, drag across this text
+ and copy it with ⌘C.
+
+ Pictures
+ ╭──────────────────╮  ╭──────────────────╮  ╭──────────────────╮
+ │a sun setting over│  │a checkerboard of │  │bands of waves    │
+ │hills             │  │tiles             │  │                  │
+ │                  │  │                  │  │                  │
+ │                  │  │                  │  │                  │
+ ╰──────────────────╯  ╰──────────────────╯  ╰──────────────────╯
+ sunset  240×160       tiles  160×160        waves  320×120
+
+ Icons
+ ✓ check      ✕ close      + plus       − minus      ⌕ search
+ ⚙ gear       ⓘ info       ⚠ warning    ⊗ error      … more
+ ↑ up         ↓ down       ← left       → right      ‹ back
+ › next       ˄ less       ˅ expand     ▭ folder     ▯ file
+
+
+
+
+
+
+
+
+
+
+ fit: Contain   f change fit  ←/→ choose  q quit
+[title Gallery]

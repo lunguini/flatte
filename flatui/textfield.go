@@ -6,24 +6,48 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/rivo/uniseg"
+
+	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 // TextField is a single-line editable string. Cursor is a byte offset into
 // Value; the movement and edit methods keep it on a grapheme-cluster boundary
 // so multi-rune clusters (combining marks, ZWJ emoji, regional-indicator flags)
-// are treated as indivisible units and never split. clampCursor additionally
-// guards against a manually-set offset landing inside a UTF-8 rune.
+// are treated as indivisible units and never split. SetCursor and the edit
+// methods preserve the byte-offset API while normalizing offsets to grapheme
+// boundaries; clampCursor additionally guards against a manually-set offset
+// landing inside a UTF-8 rune.
 type TextField struct {
-	Value           string
-	Cursor          int
-	selectionActive bool
-	selectionAnchor int
+	Value                string
+	Cursor               int
+	selectionActive      bool
+	selectionAnchor      int
+	mouseSelecting       bool
+	mouseMode            int
+	mouseStart, mouseEnd int
 }
 
 func (f *TextField) Insert(r rune) {
 	f.clampCursor()
 	f.deleteSelection()
 	text := string(r)
+	f.Value = f.Value[:f.Cursor] + text + f.Value[f.Cursor:]
+	f.Cursor += len(text)
+}
+
+// InsertText inserts s at the cursor, replacing the selection. Newlines and
+// carriage returns are dropped because TextField is single-line.
+func (f *TextField) InsertText(s string) {
+	f.clampCursor()
+	f.deleteSelection()
+	clean := make([]rune, 0, len(s))
+	for _, r := range s {
+		if r != '\n' && r != '\r' {
+			clean = append(clean, r)
+		}
+	}
+	text := string(clean)
 	f.Value = f.Value[:f.Cursor] + text + f.Value[f.Cursor:]
 	f.Cursor += len(text)
 }
@@ -126,6 +150,166 @@ func (f *TextField) DeleteWordRight() {
 	f.Value = f.Value[:f.Cursor] + f.Value[end:]
 }
 
+// MoveStart and MoveEnd put the cursor at the start or end of the value;
+// the Selecting forms extend the selection there.
+func (f *TextField) MoveStart() { f.SetCursor(0) }
+func (f *TextField) MoveEnd()   { f.SetCursor(len(f.Value)) }
+
+func (f *TextField) MoveStartSelecting() {
+	f.startSelection()
+	f.Cursor = 0
+}
+
+func (f *TextField) MoveEndSelecting() {
+	f.startSelection()
+	f.Cursor = len(f.Value)
+}
+
+// SelectAll selects the whole value, the cursor at its end.
+func (f *TextField) SelectAll() {
+	f.selectionAnchor, f.selectionActive = 0, true
+	f.Cursor = len(f.Value)
+}
+
+// DeleteToStart and DeleteToEnd delete from the cursor to the start or end
+// (or the selection, when there is one).
+func (f *TextField) DeleteToStart() {
+	f.clampCursor()
+	if f.deleteSelection() {
+		return
+	}
+	f.Value, f.Cursor = f.Value[f.Cursor:], 0
+}
+
+func (f *TextField) DeleteToEnd() {
+	f.clampCursor()
+	if f.deleteSelection() {
+		return
+	}
+	f.Value = f.Value[:f.Cursor]
+}
+
+// Edit applies key as a native one-line text field does, and reports
+// whether it was an editing key. It handles typing (replacing the
+// selection), ←/→ (Shift selects, ⌥ or Ctrl by word, ⌘ to the start or
+// end), Home/End (a window's ⌘←/⌘→), ⌫ and ⌦ (⌥ or Ctrl a word, ⌘ to the
+// start or end), ⌘A, and the terminal's Ctrl+A/E/U/K/W and Alt+B/F/D.
+// Everything else is
+// the app's — Enter, Esc, Tab, ↑/↓, and copy, cut, and paste, which need
+// the clipboard (SelectedText gives what to copy).
+func (f *TextField) Edit(key flatte.KeyEvent) bool {
+	shift := key.Mod.Contains(flatte.ModShift)
+	super := key.Mod.Contains(flatte.ModSuper)
+	word := key.Mod.Contains(flatte.ModAlt) || key.Mod.Contains(flatte.ModCtrl)
+	switch key.Key {
+	case flatte.KeyCharacter:
+		switch {
+		case key.Mod&^flatte.ModShift == 0:
+			f.Insert(key.Rune)
+		case super && (key.Rune == 'a' || key.Rune == 'A') && key.Mod&^(flatte.ModSuper|flatte.ModShift) == 0:
+			f.SelectAll()
+		case key.Mod == flatte.ModCtrl:
+			switch key.Rune {
+			case 'a':
+				f.MoveStart()
+			case 'e':
+				f.MoveEnd()
+			case 'u':
+				f.DeleteToStart()
+			case 'k':
+				f.DeleteToEnd()
+			case 'w':
+				f.DeleteWordLeft()
+			default:
+				return false
+			}
+		case key.Mod == flatte.ModAlt:
+			// Readline's word keys; macOS terminals send Option+Left and
+			// Option+Right as Alt+B and Alt+F by default.
+			switch key.Rune {
+			case 'b':
+				f.MoveWordLeft()
+			case 'f':
+				f.MoveWordRight()
+			case 'd':
+				f.DeleteWordRight()
+			default:
+				return false
+			}
+		default:
+			return false
+		}
+	case flatte.KeyLeft, flatte.KeyRight:
+		left := key.Key == flatte.KeyLeft
+		switch {
+		case super && shift && left:
+			f.MoveStartSelecting()
+		case super && shift:
+			f.MoveEndSelecting()
+		case super && left:
+			f.MoveStart()
+		case super:
+			f.MoveEnd()
+		case word && shift && left:
+			f.MoveWordLeftSelecting()
+		case word && shift:
+			f.MoveWordRightSelecting()
+		case word && left:
+			f.MoveWordLeft()
+		case word:
+			f.MoveWordRight()
+		case shift && left:
+			f.MoveLeftSelecting()
+		case shift:
+			f.MoveRightSelecting()
+		default:
+			// A selection collapses to the edge the arrow points at.
+			if start, end, ok := f.Selection(); ok && left {
+				f.SetCursor(start)
+			} else if ok {
+				f.SetCursor(end)
+			} else if left {
+				f.MoveLeft()
+			} else {
+				f.MoveRight()
+			}
+		}
+	case flatte.KeyHome, flatte.KeyEnd:
+		home := key.Key == flatte.KeyHome
+		switch {
+		case shift && home:
+			f.MoveStartSelecting()
+		case shift:
+			f.MoveEndSelecting()
+		case home:
+			f.MoveStart()
+		default:
+			f.MoveEnd()
+		}
+	case flatte.KeyBackspace:
+		switch {
+		case super:
+			f.DeleteToStart()
+		case word:
+			f.DeleteWordLeft()
+		default:
+			f.Backspace()
+		}
+	case flatte.KeyDelete:
+		switch {
+		case super:
+			f.DeleteToEnd()
+		case word:
+			f.DeleteWordRight()
+		default:
+			f.Delete()
+		}
+	default:
+		return false
+	}
+	return true
+}
+
 func (f *TextField) SetCursor(cursor int) {
 	f.Cursor = cursor
 	f.clampCursor()
@@ -170,6 +354,18 @@ func (f TextField) CursorColumn() int {
 	return lipgloss.Width(f.Value[:f.Cursor])
 }
 
+// Layout returns the field as a layout.Input node with the given ID, showing
+// the value, caret, and selection. focused is the app's focus decision: the
+// focused Input's caret places the frame cursor.
+func (f TextField) Layout(id string, focused bool) layout.Input {
+	f.clampCursor()
+	in := layout.Input{NodeBase: layout.NodeBase{ID: id}, Value: f.Value, Caret: f.Cursor, Focused: focused}
+	if start, end, ok := f.Selection(); ok {
+		in.SelStart, in.SelEnd = start, end
+	}
+	return in
+}
+
 func (f *TextField) startSelection() {
 	f.clampCursor()
 	if !f.selectionActive {
@@ -205,6 +401,26 @@ func (f *TextField) clampCursor() {
 	for f.Cursor > 0 && f.Cursor < len(f.Value) && !utf8.RuneStart(f.Value[f.Cursor]) {
 		f.Cursor--
 	}
+	f.Cursor = graphemeBoundaryAtOrBefore(f.Value, f.Cursor)
+}
+
+// graphemeBoundaryAtOrBefore returns pos when it is a grapheme boundary, or
+// the start of the containing cluster when pos falls inside one. The result
+// is always a byte offset into s and is clamped to [0,len(s)].
+func graphemeBoundaryAtOrBefore(s string, pos int) int {
+	if pos <= 0 {
+		return 0
+	}
+	if pos >= len(s) {
+		return len(s)
+	}
+	// nextGraphemeBoundary is strict (it returns the end of the cluster that
+	// contains pos), so asking about the preceding byte distinguishes an exact
+	// boundary from an offset inside the preceding cluster.
+	if nextGraphemeBoundary(s, pos-1) == pos {
+		return pos
+	}
+	return prevGraphemeBoundary(s, pos)
 }
 
 // prevGraphemeBoundary returns the byte offset of the grapheme-cluster boundary
@@ -324,4 +540,86 @@ func nextWordBoundary(s string, pos int) int {
 		i++
 	}
 	return clusters[i-1].end
+}
+
+// HandleMouse applies pointer editing for the input laid out with id. It
+// handles normal/Shift placement and drag, double-click word selection,
+// triple-click SelectAll, and the native clear affordance. It reports
+// whether the event belonged to this field. Apps still own focus policy.
+func (f *TextField) HandleMouse(id string, e flatte.MouseEvent) bool {
+	if e.Target != id || e.Button != flatte.MouseLeft {
+		return false
+	}
+	if e.Action == flatte.MousePress && e.Clear {
+		f.Value = ""
+		f.SetCursor(0)
+		f.mouseSelecting = false
+		return true
+	}
+	if !e.HasCaret {
+		return false
+	}
+	at := f.clampedOffset(e.Caret)
+	switch e.Action {
+	case flatte.MousePress:
+		f.mouseSelecting = true
+		f.mouseMode = max(e.Clicks, 1)
+		switch {
+		case e.Clicks >= 3:
+			f.SelectAll()
+		case e.Clicks == 2:
+			a, b := fieldWordRange(f.Value, at)
+			f.selectionAnchor, f.selectionActive, f.Cursor = a, true, b
+			f.mouseStart, f.mouseEnd = a, b
+		case e.Mod.Contains(flatte.ModShift):
+			f.startSelection()
+			f.Cursor = at
+		default:
+			f.SetCursor(at)
+		}
+	case flatte.MouseMotion:
+		if !f.mouseSelecting {
+			return false
+		}
+		if f.mouseMode >= 3 {
+			return true
+		}
+		if f.mouseMode == 2 {
+			a, b := fieldWordRange(f.Value, at)
+			f.selectionActive = true
+			if a < f.mouseStart {
+				f.selectionAnchor, f.Cursor = f.mouseEnd, a
+			} else {
+				f.selectionAnchor, f.Cursor = f.mouseStart, b
+			}
+		} else {
+			f.startSelection()
+			f.Cursor = at
+		}
+	case flatte.MouseRelease:
+		f.mouseSelecting = false
+	default:
+		return false
+	}
+	return true
+}
+
+func fieldWordRange(value string, at int) (int, int) {
+	if value == "" {
+		return 0, 0
+	}
+	if at >= len(value) {
+		at = len(value) - 1
+	}
+	offset, state := 0, -1
+	rest := value
+	for rest != "" {
+		word, next, nextState := uniseg.FirstWordInString(rest, state)
+		end := offset + len(word)
+		if at < end {
+			return offset, end
+		}
+		offset, rest, state = end, next, nextState
+	}
+	return len(value), len(value)
 }

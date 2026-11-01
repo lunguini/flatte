@@ -1,9 +1,12 @@
 package flatte
 
-// Event is the closed set of terminal inputs the loop delivers to Handle.
-// It is sealed: the framework defines every implementation, apps only
-// consume them with a type switch. This is not TEA — events are terminal
-// inputs, never app-defined messages; async results remain StateUpdates.
+import "github.com/lunguini/flatte/flatui/layout"
+
+// Event is the closed set of host inputs the loop delivers to Handle:
+// terminal input, resizes, and the solved layout of a Root frame. It is
+// sealed: the framework defines every implementation, apps only consume them
+// with a type switch. This is not TEA — events are host inputs, never
+// app-defined messages; async results remain StateUpdates.
 type Event interface{ isEvent() }
 
 type Key int
@@ -25,6 +28,18 @@ const (
 	KeyEnd
 	KeyPageUp
 	KeyPageDown
+	KeyF1
+	KeyF2
+	KeyF3
+	KeyF4
+	KeyF5
+	KeyF6
+	KeyF7
+	KeyF8
+	KeyF9
+	KeyF10
+	KeyF11
+	KeyF12
 )
 
 // Mod is a bitmask of key modifiers.
@@ -34,20 +49,36 @@ const (
 	ModShift Mod = 1 << iota
 	ModAlt
 	ModCtrl
+	// ModSuper is the Command key on macOS (the Windows or Super key
+	// elsewhere): reported by a window, and by terminals that report it —
+	// as Super, or as the xterm encoding's Meta bit (CSI 1;9D for ⌘←).
+	ModSuper
 )
 
 func (m Mod) Contains(mods Mod) bool { return m&mods == mods }
 
 // KeyEvent is a key press. Rune is set when Key is KeyCharacter.
+//
+// HasCaret reports that the host placed Caret: for KeyUp and KeyDown while
+// a multi-line layout.Input has focus in a host that lays its text out
+// differently from the app's widget (a window wraps by words in its font),
+// Caret is the byte offset into that Input's Value one visual row up or
+// down, at the column the caret is moving along. Pass it to the widget
+// (flatui.Textarea.MoveTo) instead of its own row move. Terminal hosts
+// leave it unset: the widget's rows are the terminal's.
 type KeyEvent struct {
 	Key  Key
 	Rune rune
 	Mod  Mod
+
+	Caret    int
+	HasCaret bool
 }
 
 // ResizeEvent reports the terminal size in cells. The loop delivers one at
-// startup and one per SIGWINCH; sizes fall back to 72×24 when the output is
-// not a terminal.
+// startup and, on Unix, one per SIGWINCH. On Windows, ultraviolet can deliver
+// console window-size events when connected to a real console. Sizes fall back
+// to 72×24 when the output is not a terminal.
 type ResizeEvent struct {
 	Width  int
 	Height int
@@ -84,6 +115,22 @@ const (
 	MouseMotion
 )
 
+// LayoutEvent reports the solved rect of every ID'd node in a Root frame.
+// The host delivers it before painting whenever those rects differ from the
+// ones it last delivered, so state derived from geometry — a list's visible
+// rows, a pane's width — is adopted before the frame is shown. Handle it like
+// ResizeEvent: copy what you need into state, and the next View sees it.
+// Rects is the handler's own copy.
+type LayoutEvent struct {
+	Rects map[string]layout.Rect
+	// PointRects preserves native point geometry before conversion to cells.
+	// Window hosts populate it; terminal hosts leave it nil. Like Rects,
+	// this is the handler's own copy. Prefer it for native measurements.
+	PointRects map[string]layout.PointRect
+	// Window is the window the rects are in ("" the main window).
+	Window string
+}
+
 // MouseEvent is a mouse press/release/motion/wheel; X/Y are zero-based
 // cell coordinates from the top-left of the frame (see WithMouse).
 type MouseEvent struct {
@@ -91,6 +138,44 @@ type MouseEvent struct {
 	Button MouseButton
 	Action MouseAction
 	Mod    Mod
+	// Target is the ID of the topmost ID'd layout node under the pointer in
+	// the last drawn frame, when that frame set Frame.Root. It is "" for
+	// string frames, over an overlay area with no ID'd node, or where no
+	// ID'd node is painted.
+	Target string
+	// TargetRect is the solved rect of Target (zero when Target is ""), so a
+	// click can be made node-local with X - TargetRect.X, Y - TargetRect.Y.
+	TargetRect layout.Rect
+	// HasCaret reports that the pointer is over a layout.Input with an ID
+	// (Target) and Caret is the byte offset into its Value nearest the
+	// pointer, as the host laid the text out — so a click or drag can place
+	// the caret exactly whatever the font. A window keeps reporting carets
+	// for the Input a drag began on, clamped to it.
+	Caret    int
+	HasCaret bool
+	// Clicks is the native consecutive click count (2: word, 3: all).
+	// Zero means a normal single click, as in terminal events.
+	Clicks int
+	// Clear is a press on a clearable input's clear affordance. Target
+	// remains the input ID; the app applies the edit on its loop.
+	Clear bool
+	// Window is the window the pointer is in ("" the main window); X, Y,
+	// Target, and TargetRect are in its frame.
+	Window string
+}
+
+// DropEvent reports files or text dropped on a window (a terminal turns a
+// dropped file into a PasteEvent of its path instead). X, Y, Target, and
+// TargetRect locate the drop as a MouseEvent's do; Paths are the dropped
+// files, and Text is dropped text when there are none.
+type DropEvent struct {
+	X, Y       int
+	Target     string
+	TargetRect layout.Rect
+	Paths      []string
+	Text       string
+	// Window is the window it was dropped on ("" the main window).
+	Window string
 }
 
 func (KeyEvent) isEvent()       {}
@@ -99,3 +184,5 @@ func (PasteEvent) isEvent()     {}
 func (ClipboardEvent) isEvent() {}
 func (FocusEvent) isEvent()     {}
 func (MouseEvent) isEvent()     {}
+func (LayoutEvent) isEvent()    {}
+func (DropEvent) isEvent()      {}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,9 +10,16 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/cmd/internal/dockerapp"
+	"github.com/lunguini/flatte/cmd/internal/persist"
+	"github.com/lunguini/flatte/window"
 )
 
 func main() {
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
+	flag.Parse()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -23,20 +31,33 @@ func main() {
 	}()
 	defer signal.Stop(sigCh)
 
-	session := flatte.LoadState(dockerapp.SessionFile, dockerapp.SessionState{})
+	session, loadErr := persist.Load(dockerapp.SessionFile, dockerapp.SessionState{})
 	state := dockerapp.NewStateFromSession(session)
 
-	err := flatte.Run(ctx, flatte.App[dockerapp.State]{
+	var saveErr error
+	app := flatte.App[dockerapp.State]{
 		State:  state,
 		Init:   dockerapp.Init,
 		Handle: dockerapp.Handle,
 		View:   dockerapp.View,
 		OnExit: func(s *dockerapp.State) {
-			_ = flatte.SaveState(dockerapp.SessionFile, s.Session())
+			saveErr = persist.Save(dockerapp.SessionFile, s.Session(), loadErr)
 		},
-	}, flatte.WithMouse(flatte.MouseModeCellMotion))
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	}
+	runOptions := []flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion)}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "flat-docker", Width: 100, Height: 30})
+	}
+	runErr := flatte.Run(ctx, app, runOptions...)
+	// Run has restored the terminal before returning; report persistence
+	// failures only after that cleanup and fail the process visibly.
+	if runErr != nil {
+		fmt.Fprintln(os.Stderr, runErr)
+	}
+	if saveErr != nil {
+		fmt.Fprintf(os.Stderr, "save state: %v\n", saveErr)
+	}
+	if runErr != nil || saveErr != nil {
 		os.Exit(1)
 	}
 }

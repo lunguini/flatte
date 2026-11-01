@@ -49,14 +49,16 @@ func (r *Recorder) Events() []flatte.Event {
 // only their names are compared. Settle/Advance cadence is NOT captured,
 // so a session that batches several events before settling (e.g. a Latest
 // supersede) will not reproduce identically under per-event settling —
-// drive those with the Driver directly. ResizeEvents are skipped: the
-// fresh Driver delivers its own initial resize at the fixed width.
+// drive those with the Driver directly. ResizeEvents and LayoutEvents are
+// skipped: the fresh Driver delivers its own initial resize at the fixed
+// width and settles its own layout, exactly as the recorded session did.
 func Replay[S any](app flatte.App[S], width int, rec *Recorder) *Recorder {
 	out := &Recorder{}
 	app.Tracer = out
 	d := Start(app, width)
 	for _, ev := range rec.Events() {
-		if _, isResize := ev.(flatte.ResizeEvent); isResize {
+		switch ev.(type) {
+		case flatte.ResizeEvent, flatte.LayoutEvent:
 			continue
 		}
 		d.Send(ev)

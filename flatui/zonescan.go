@@ -4,6 +4,8 @@ package flatui
 // layout geometry via Set — the blessed render path composites through a cell
 // buffer, which drops any inline string markers, so zones are always derived
 // from coordinates rather than scanned out of rendered output.
+//
+// Deprecated: use ZoneMap for new code.
 type ZoneScanner struct {
 	order []string
 	rects map[string]Rect

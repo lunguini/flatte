@@ -10,10 +10,9 @@ import (
 	"fmt"
 	"os"
 
-	"charm.land/lipgloss/v2"
-
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 const prompt = "› "
@@ -26,10 +25,15 @@ type State struct {
 func NewState() *State { return &State{} }
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
-	key, ok := ev.(flatte.KeyEvent)
-	if !ok {
-		return
+	switch ev := ev.(type) {
+	case flatte.PasteEvent:
+		s.input.InsertText(ev.Text)
+	case flatte.KeyEvent:
+		handleKey(s, ev, fx)
 	}
+}
+
+func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	switch key.Key {
 	case flatte.KeyEscape:
 		fx.Quit()
@@ -39,58 +43,13 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 			s.input = flatui.TextField{}
 			s.sent++
 		}
-	case flatte.KeyBackspace:
-		if wordMove(key.Mod) {
-			s.input.DeleteWordLeft()
-		} else {
-			s.input.Backspace()
-		}
-	case flatte.KeyDelete:
-		if wordMove(key.Mod) {
-			s.input.DeleteWordRight()
-		} else {
-			s.input.Delete()
-		}
-	case flatte.KeyLeft:
-		if wordMove(key.Mod) {
-			s.input.MoveWordLeft()
-		} else {
-			s.input.MoveLeft()
-		}
-	case flatte.KeyRight:
-		if wordMove(key.Mod) {
-			s.input.MoveWordRight()
-		} else {
-			s.input.MoveRight()
-		}
-	case flatte.KeyCharacter:
+	default:
+		// Keep the chat's readline aliases ahead of TextField's native editing.
 		if handleWordDeleteKey(key, s.input.DeleteWordLeft, s.input.DeleteWordRight) {
 			return
 		}
-		if handleAltWordKey(key, s.input.MoveWordLeft, s.input.MoveWordRight) {
-			return
-		}
-		s.input.Insert(key.Rune)
+		s.input.Edit(key)
 	}
-}
-
-func wordMove(mod flatte.Mod) bool {
-	return mod.Contains(flatte.ModAlt) || mod.Contains(flatte.ModCtrl)
-}
-
-func handleAltWordKey(key flatte.KeyEvent, moveLeft, moveRight func()) bool {
-	if !key.Mod.Contains(flatte.ModAlt) {
-		return false
-	}
-	switch key.Rune {
-	case 'b', 'B':
-		moveLeft()
-		return true
-	case 'f', 'F':
-		moveRight()
-		return true
-	}
-	return false
 }
 
 func handleWordDeleteKey(key flatte.KeyEvent, deleteLeft, deleteRight func()) bool {
@@ -105,18 +64,16 @@ func handleWordDeleteKey(key flatte.KeyEvent, deleteLeft, deleteRight func()) bo
 	return false
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	lines := []string{
-		flatui.Subtle(fmt.Sprintf("flat-chat — %d sent | enter send · esc quit", s.sent)),
-		prompt + s.input.Value,
-	}
-	frame := flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
-	ox, oy := flatui.CardOrigin()
-	frame.Cursor = &flatte.Cursor{
-		X: ox + lipgloss.Width(prompt) + s.input.CursorColumn(),
-		Y: oy + 1, // the subtle status line precedes the input line
-	}
-	return frame
+// View is the status line over the prompt and input. The input's caret
+// places the cursor, so there is no cursor arithmetic here.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: fmt.Sprintf("flat-chat — %d sent | enter send · esc quit", s.sent), Style: layout.TextStyle{Role: layout.TextSubtle}},
+		layout.Row{Children: []layout.Node{
+			layout.Label{Text: prompt},
+			s.input.Layout("chat.input", true),
+		}},
+	)}
 }
 
 func main() {

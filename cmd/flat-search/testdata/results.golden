@@ -1,13 +1,24 @@
-┌───────────────────────────────────────────┐
-│   Flat Search                             │
-│  input-triggered async sample             │
-│                                           │
-│    query: o                               │
-│    state: idle                            │
-│                                           │
-│    - sonnet                               │
-│    - opus                                 │
-│    - freeform                             │
-│                                           │
-│  enter blur/focus | q quits when blurred  │
-└───────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│   Flat Search                                                        │
+│  input-triggered async sample                                        │
+│                                                                      │
+│    query: o                                                          │
+│    state: idle                                                       │
+│                                                                      │
+│    - sonnet                                                          │
+│    - opus                                                            │
+│    - freeform                                                        │
+│                                                                      │
+│  enter blur/focus | q quits when blurred                             │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘

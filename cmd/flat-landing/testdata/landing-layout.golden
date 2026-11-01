@@ -1,0 +1,28 @@
+  Game   App                                                          Flatte   Layout   UI 
+
+ ╭────────────────────────────────────────────────────────────────────────────────────────╮
+ │ The layout engine                                                                      │
+ │                                                                                        │
+ │ flatui/layout is the app composition vocabulary. Build a Node tree of Row / Col / Text │
+ │ / Spacer, call SolveAndCompose once, and get composed cells plus per-ID rects from the │
+ │ same walk — so hit-testing and pixels never drift.                                     │
+ │                                                                                        │
+ │ ╭──────────────────────╮ ╭──────────────────────────────────────────────╮ ╭──────────╮ │
+ │ │ sidebar              │ │ content                                      │ │ aside    │ │
+ │ │ Grow(1)              │ │ Grow(2)                                      │ │ Fixed(12)│ │
+ │ │                      │ │                                              │ │          │ │
+ │ ╰──────────────────────╯ ╰──────────────────────────────────────────────╯ ╰──────────╯ │
+ │                                                                                        │
+ │ This whole page is one solved node tree; the panel above is a live solve at the full   │
+ │ content width.                                                                         │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ │                                                                                        │
+ ╰────────────────────────────────────────────────────────────────────────────────────────╯
+
+ ▚ Layout · one solved node tree, rects + pixels together  Ctrl+←/→ tabs · click to switch

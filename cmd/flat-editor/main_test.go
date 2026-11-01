@@ -4,19 +4,48 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
+	testkit "github.com/lunguini/flatte/internal/testkit"
 )
+
+// settle sizes the textarea as a run does: compose the view at the frame
+// size and deliver its rects.
+func settle(s *State, width, height int) {
+	_, comp := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, height)
+	Handle(s, flatte.LayoutEvent{Rects: comp.Rects}, flatte.Effects[State]{})
+}
+
+// composed is the frame View gives at width×height, as the host paints it.
+func composed(s *State, width, height int) flatte.Frame {
+	f, _ := flatte.ComposeFrame(View(s, flatte.RenderContext{Width: width}), width, height)
+	return f
+}
 
 func emptyState() *State {
 	s := &State{}
 	s.ta.SetValue("")
-	s.layout(80, 24)
+	s.ta.SetSoftWrap(true)
+	settle(s, 80, 24)
 	return s
+}
+
+// routed delivers ev as a host does: menu shortcuts become MenuEvents.
+func routed(s *State, ev flatte.Event, fx flatte.Effects[State]) {
+	if key, ok := ev.(flatte.KeyEvent); ok {
+		if item, matched := flatte.MenuShortcut(Menus(s), key); matched {
+			if item.Disabled {
+				return
+			}
+			ev = flatte.MenuEvent{ID: item.ID}
+		}
+	}
+	Handle(s, ev, fx)
 }
 
 func typeRunes(s *State, text string) {
@@ -94,6 +123,36 @@ func TestHomeEndMoveToLineBoundaries(t *testing.T) {
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnd}, flatte.Effects[State]{})
 	if s.ta.Row() != 0 || s.ta.Col() != len("hello world") {
 		t.Fatalf("end cursor = (%d,%d), want line end", s.ta.Row(), s.ta.Col())
+	}
+}
+
+func TestEditorUsesTextareaEditing(t *testing.T) {
+	s := emptyState()
+	s.ta.SetValue("hello world")
+	s.ta.MoveTo(len("hello"))
+	edit := func(key flatte.KeyEvent) {
+		Handle(s, key, flatte.Effects[State]{})
+	}
+
+	edit(flatte.KeyEvent{Key: flatte.KeyEnd})
+	if s.ta.Col() != len("hello world") {
+		t.Fatalf("End col = %d, want %d", s.ta.Col(), len("hello world"))
+	}
+	edit(flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModSuper})
+	if s.ta.Col() != 0 {
+		t.Fatalf("Cmd+Left col = %d, want 0", s.ta.Col())
+	}
+	edit(flatte.KeyEvent{Key: flatte.KeyRight, Mod: flatte.ModAlt})
+	if s.ta.Col() != len("hello") {
+		t.Fatalf("Alt+Right col = %d, want %d", s.ta.Col(), len("hello"))
+	}
+	edit(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'u', Mod: flatte.ModCtrl})
+	if s.ta.Value() != " world" || s.ta.Col() != 0 {
+		t.Fatalf("Ctrl+U value = %q col = %d, want %q at 0", s.ta.Value(), s.ta.Col(), " world")
+	}
+	edit(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'k', Mod: flatte.ModCtrl})
+	if s.ta.Value() != "" || s.ta.Col() != 0 {
+		t.Fatalf("Ctrl+K value = %q col = %d, want empty at 0", s.ta.Value(), s.ta.Col())
 	}
 }
 
@@ -271,7 +330,7 @@ func TestRawCtrlWDeletesWordThroughRun(t *testing.T) {
 func TestEscQuits(t *testing.T) {
 	s := emptyState()
 	var quit bool
-	fx := flatte.NewEffects[State](context.Background(), nil, func() { quit = true })
+	fx := testkit.NewHarnessEffects[State](context.Background(), nil, func() { quit = true }, nil, nil)
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyEscape}, fx)
 	if !quit {
 		t.Fatal("esc did not quit")
@@ -280,8 +339,8 @@ func TestEscQuits(t *testing.T) {
 
 func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	s := NewState()
-	s.layout(72, 24)
-	frame := View(s, flatte.RenderContext{Width: 72})
+	settle(s, 72, 24)
+	frame := composed(s, 72, 24)
 	if frame.Cursor == nil {
 		t.Fatal("editor view has no cursor")
 	}
@@ -289,20 +348,20 @@ func TestViewPlacesCursorAtOrigin(t *testing.T) {
 	if frame.Cursor.X != 3 || frame.Cursor.Y != 4 {
 		t.Fatalf("cursor = %+v, want (3,4)", *frame.Cursor)
 	}
-	if frame.Cursor.Style == nil || frame.Cursor.Style.Shape != flatte.CursorShapeBar || frame.Cursor.Style.Blink {
-		t.Fatalf("cursor style = %+v, want steady bar", frame.Cursor.Style)
+	if frame.Cursor.Style == nil || frame.Cursor.Style.Shape != flatte.CursorShapeBlock || !frame.Cursor.Style.Blink || frame.Cursor.Style.Color != nil {
+		t.Fatalf("cursor style = %+v, want a blinking block in the terminal's color", frame.Cursor.Style)
 	}
 }
 
 func TestViewSoftWrapsLongLineAndKeepsCursorInsideTextareaBody(t *testing.T) {
 	s := emptyState()
-	s.layout(18, 10)
+	settle(s, 18, 11)
 	typeRunes(s, "abcdefghijklmnopqrstuvwxyz")
 
 	if got := s.ta.View(); got != "abcdefghijkl\nmnopqrstuvwx\nyz" {
 		t.Fatalf("textarea view = %q, want wrapped rows", got)
 	}
-	frame := View(s, flatte.RenderContext{Width: 18})
+	frame := composed(s, 18, 11)
 	if frame.Cursor == nil {
 		t.Fatal("editor view has no cursor")
 	}
@@ -314,11 +373,11 @@ func TestViewSoftWrapsLongLineAndKeepsCursorInsideTextareaBody(t *testing.T) {
 func TestDebugViewShowsLastDecodedKeyAndAction(t *testing.T) {
 	s := emptyState()
 	s.debugKeys = true
-	s.layout(72, 24)
+	settle(s, 72, 24)
 	typeRunes(s, "hello world")
 	Handle(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'w', Mod: flatte.ModCtrl}, flatte.Effects[State]{})
 
-	frame := View(s, flatte.RenderContext{Width: 72})
+	frame := composed(s, 72, 24)
 	if !strings.Contains(frame.Content, "last: character 'w' ctrl -> delete-word-left") {
 		t.Fatalf("debug footer missing last key/action:\n%s", frame.Content)
 	}
@@ -326,6 +385,412 @@ func TestDebugViewShowsLastDecodedKeyAndAction(t *testing.T) {
 
 func TestInitialSnapshot(t *testing.T) {
 	s := NewState()
-	s.layout(72, 24)
-	flatest.AssertGoldenFrame(t, "testdata/editor.golden", View(s, flatte.RenderContext{Width: 72}))
+	settle(s, 72, 24)
+	flatest.AssertGoldenFrame(t, "testdata/editor.golden", composed(s, 72, 24))
+}
+
+func TestMouseClickAndDragPlaceTheCaret(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello world")
+	press := flatte.MouseEvent{Target: editorID, HasCaret: true, Caret: 6, Button: flatte.MouseLeft, Action: flatte.MousePress}
+	Handle(s, press, flatte.Effects[State]{})
+	if s.ta.Col() != 6 {
+		t.Fatalf("click caret col %d, want 6", s.ta.Col())
+	}
+	drag := press
+	drag.Action, drag.Caret = flatte.MouseMotion, 11
+	Handle(s, drag, flatte.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "world" {
+		t.Fatalf("drag selected %q, want world", got)
+	}
+	// Shift-click extends; clicks elsewhere or without a caret do nothing.
+	shift := press
+	shift.Mod, shift.Caret = flatte.ModShift, 0
+	Handle(s, shift, flatte.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "hello " {
+		t.Fatalf("shift-click selected %q", got)
+	}
+	Handle(s, flatte.MouseEvent{Target: "other", HasCaret: true, Caret: 3, Button: flatte.MouseLeft}, flatte.Effects[State]{})
+	Handle(s, flatte.MouseEvent{Target: editorID, Button: flatte.MouseLeft}, flatte.Effects[State]{})
+	if s.ta.Col() != 0 {
+		t.Fatalf("stray clicks moved the caret to %d", s.ta.Col())
+	}
+}
+
+func TestSuperChordsCopyCutSelectAllAndPaste(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "one two")
+	var clip []string
+	reads := 0
+	fx := testkit.NewHarnessEffectsWithServices[State](context.Background(), nil, nil, nil, nil, nil, flatte.HostServices{
+		SetClipboard:  func(text string) { clip = append(clip, text) },
+		ReadClipboard: func() { reads++ },
+	})
+	super := func(r rune) {
+		routed(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModSuper}, fx)
+	}
+	super('a')
+	super('c')
+	if len(clip) != 1 || clip[0] != "one two" || s.ta.Value() != "one two" {
+		t.Fatalf("copy: clipboard %q, value %q", clip, s.ta.Value())
+	}
+	super('x')
+	if len(clip) != 2 || clip[1] != "one two" || s.ta.Value() != "" {
+		t.Fatalf("cut: clipboard %q, value %q", clip, s.ta.Value())
+	}
+	super('b') // unbound: not text
+	if s.ta.Value() != "" {
+		t.Fatalf("an unbound ⌘ chord typed %q", s.ta.Value())
+	}
+	Handle(s, flatte.PasteEvent{Text: "pasted\nlines"}, fx)
+	if s.ta.Value() != "pasted\nlines" || s.ta.Row() != 1 {
+		t.Fatalf("paste: %q at row %d", s.ta.Value(), s.ta.Row())
+	}
+	// ⌘V is the Paste command: it reads the clipboard, whose answer is
+	// inserted.
+	super('v')
+	Handle(s, flatte.ClipboardEvent{Text: "!"}, fx)
+	if reads != 1 || s.ta.Value() != "pasted\nlines!" {
+		t.Fatalf("⌘V: %d reads, value %q", reads, s.ta.Value())
+	}
+	// Without a selection Cut and Copy are disabled: their keys do nothing.
+	super('c')
+	super('x')
+	if len(clip) != 2 || s.ta.Value() != "pasted\nlines!" {
+		t.Fatalf("disabled cut/copy acted: clip %q value %q", clip, s.ta.Value())
+	}
+}
+
+func TestCopyOnSelectIsOptIn(t *testing.T) {
+	for _, on := range []bool{false, true} {
+		s := emptyState()
+		s.copyOnSelect = on
+		typeRunes(s, "hello")
+		var clip []string
+		fx := testkit.NewHarnessEffectsWithServices[State](context.Background(), nil, nil, nil, nil, nil, flatte.HostServices{
+			SetClipboard: func(text string) { clip = append(clip, text) },
+		})
+		drag := func(caret int, action flatte.MouseAction) {
+			Handle(s, flatte.MouseEvent{Button: flatte.MouseLeft, Action: action, Target: editorID, Caret: caret, HasCaret: true}, fx)
+		}
+		drag(0, flatte.MousePress)
+		drag(4, flatte.MouseMotion)
+		if len(clip) != 0 {
+			t.Fatalf("on=%v: copied mid-drag", on)
+		}
+		drag(4, flatte.MouseRelease)
+		want := 0
+		if on {
+			want = 1
+		}
+		if len(clip) != want || on && clip[0] != "hell" {
+			t.Fatalf("on=%v: clipboard %q after the drag", on, clip)
+		}
+		// A click without a selection copies nothing.
+		drag(2, flatte.MousePress)
+		drag(2, flatte.MouseRelease)
+		if len(clip) != want {
+			t.Fatalf("on=%v: a click copied %q", on, clip)
+		}
+	}
+}
+
+func TestMenus(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello")
+	if ContextMenu(s, "elsewhere") != nil {
+		t.Error("a context menu outside the editor")
+	}
+	items := ContextMenu(s, editorID)
+	if len(items) != 5 || !items[0].Disabled || !items[1].Disabled || items[2].Disabled {
+		t.Fatalf("context menu without a selection: %+v", items)
+	}
+	Handle(s, flatte.MenuEvent{ID: cmdSelectAll, Target: editorID}, flatte.Effects[State]{})
+	if items := ContextMenu(s, editorID); items[0].Disabled || items[1].Disabled {
+		t.Fatal("cut/copy disabled with a selection")
+	}
+	view := Menus(s)[2].Items
+	if !view[0].Checked || view[1].Checked {
+		t.Fatalf("view toggles %+v", view)
+	}
+	Handle(s, flatte.MenuEvent{ID: cmdWrap}, flatte.Effects[State]{})
+	Handle(s, flatte.MenuEvent{ID: cmdKeys}, flatte.Effects[State]{})
+	if s.ta.SoftWrap() || !s.debugKeys || Menus(s)[2].Items[0].Checked || !Menus(s)[2].Items[1].Checked {
+		t.Fatal("view toggles did not toggle")
+	}
+}
+
+// The terminal draws the context menu over the editor and delivers the
+// choice.
+func TestContextMenuInTheTerminal(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello world")
+	d := flatest.Start(flatte.App[State]{State: s, Handle: Handle, View: View, Menus: Menus, ContextMenu: ContextMenu}, 72)
+	d.Send(flatte.ResizeEvent{Width: 72, Height: 20})
+	d.Send(flatte.MenuEvent{ID: cmdSelectAll})
+	_, comp := flatte.ComposeFrame(d.Frame(), 72, 20)
+	r := comp.Rects[editorID]
+	f := d.Send(flatte.MouseEvent{X: r.X + 2, Y: r.Y, Button: flatte.MouseRight, Action: flatte.MousePress})
+	flatest.AssertGoldenFrame(t, "testdata/context-menu.golden", f)
+	d.Send(flatte.KeyEvent{Key: flatte.KeyDown}) // Copy
+	d.Send(flatte.KeyEvent{Key: flatte.KeyDown}) // Paste
+	d.Send(flatte.KeyEvent{Key: flatte.KeyUp})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyUp}) // Cut
+	d.Send(flatte.KeyEvent{Key: flatte.KeyEnter})
+	if s.ta.Value() != "" || s.lastAction != cmdCut {
+		t.Fatalf("cut from the context menu: value %q action %q", s.ta.Value(), s.lastAction)
+	}
+}
+
+func TestVerticalKeysUseTheHostsCaret(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "abc")
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	typeRunes(s, "defgh")
+	// A window computed the row above as offset 1.
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp, HasCaret: true, Caret: 1}, flatte.Effects[State]{})
+	if s.ta.Row() != 0 || s.ta.Col() != 1 {
+		t.Fatalf("host up -> %d:%d, want 0:1", s.ta.Row(), s.ta.Col())
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyDown, Mod: flatte.ModShift, HasCaret: true, Caret: 6}, flatte.Effects[State]{})
+	if got := s.ta.SelectedText(); got != "bc\nde" {
+		t.Fatalf("host shift-down selected %q", got)
+	}
+	// Without one, the textarea's own rows.
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyUp}, flatte.Effects[State]{})
+	if s.ta.Row() != 0 {
+		t.Fatalf("plain up -> row %d", s.ta.Row())
+	}
+}
+
+func TestSuperArrowsMoveAndSelectLinesAndText(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "one two")
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyEnter}, flatte.Effects[State]{})
+	typeRunes(s, "three")
+	super := func(k flatte.Key, mod flatte.Mod) {
+		Handle(s, flatte.KeyEvent{Key: k, Mod: flatte.ModSuper | mod}, flatte.Effects[State]{})
+	}
+	super(flatte.KeyLeft, flatte.ModShift)
+	if got := s.ta.SelectedText(); got != "three" {
+		t.Fatalf("super+shift+left selected %q, want the line", got)
+	}
+	super(flatte.KeyRight, 0)
+	if s.ta.Col() != 5 {
+		t.Fatalf("super+right col %d, want the line end", s.ta.Col())
+	}
+	super(flatte.KeyUp, flatte.ModShift)
+	if got := s.ta.SelectedText(); got != "one two\nthree" {
+		t.Fatalf("super+shift+up selected %q, want everything", got)
+	}
+	super(flatte.KeyDown, 0)
+	if s.ta.Row() != 1 || s.ta.Col() != 5 {
+		t.Fatalf("super+down -> %d:%d, want the end", s.ta.Row(), s.ta.Col())
+	}
+	super(flatte.KeyBackspace, 0)
+	if s.ta.Value() != "one two\n" {
+		t.Fatalf("super+backspace left %q", s.ta.Value())
+	}
+}
+
+func TestCtrlKeysCopyCutQuitAndMoveLines(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello")
+	var clip []string
+	quit := false
+	fx := testkit.NewHarnessEffectsWithServices[State](context.Background(), nil, nil, func() { quit = true }, nil, nil, flatte.HostServices{
+		SetClipboard: func(text string) { clip = append(clip, text) },
+	})
+	ctrl := func(r rune) { routed(s, flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: r, Mod: flatte.ModCtrl}, fx) }
+	ctrl('a')
+	if s.ta.Col() != 0 {
+		t.Fatalf("ctrl+a col %d", s.ta.Col())
+	}
+	ctrl('e')
+	if s.ta.Col() != 5 {
+		t.Fatalf("ctrl+e col %d", s.ta.Col())
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModShift}, fx)
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCtrlC}, fx)
+	if quit || len(clip) != 1 || clip[0] != "o" {
+		t.Fatalf("ctrl+c with a selection: quit %v clip %q", quit, clip)
+	}
+	ctrl('x')
+	if s.ta.Value() != "hell" || len(clip) != 2 {
+		t.Fatalf("ctrl+x: value %q clip %q", s.ta.Value(), clip)
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyCtrlC}, fx)
+	if !quit {
+		t.Fatal("ctrl+c without a selection did not quit")
+	}
+}
+
+func TestCursorIsABarWhileSelecting(t *testing.T) {
+	s := emptyState()
+	typeRunes(s, "hello")
+	if c := composed(s, 72, 24).Cursor; c == nil || c.Style.Shape != flatte.CursorShapeBlock {
+		t.Fatalf("cursor without a selection = %+v, want a block", c)
+	}
+	Handle(s, flatte.KeyEvent{Key: flatte.KeyLeft, Mod: flatte.ModShift}, flatte.Effects[State]{})
+	if c := composed(s, 72, 24).Cursor; c == nil || c.Style.Shape != flatte.CursorShapeBar || !c.Style.Blink {
+		t.Fatalf("cursor while selecting = %+v, want a blinking bar", c)
+	}
+}
+
+func editorDriver() *flatest.Driver[State] {
+	d := flatest.Start(flatte.App[State]{State: NewState(), Handle: Handle, View: View, Menus: Menus, ContextMenu: ContextMenu, Windows: Windows}, 72)
+	d.Send(flatte.ResizeEvent{Width: 72, Height: 20})
+	return d
+}
+
+func TestFileOpenSaveAndNew(t *testing.T) {
+	dir := t.TempDir()
+	note := filepath.Join(dir, "note.txt")
+	if err := os.WriteFile(note, []byte("from disk"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := editorDriver()
+	s := d.State()
+	// ⌘O shows the open dialog; the answer reads the file off the loop.
+	d.Send(super('o'))
+	dlg, ok := d.Dialog()
+	if !ok || dlg.Open == nil {
+		t.Fatalf("no open dialog: %+v", dlg)
+	}
+	d.Answer(flatte.DialogResult{Paths: []string{note}})
+	d.Settle()
+	if s.ta.Value() != "from disk" || s.path != note || s.dirty() {
+		t.Fatalf("open: %q path %q dirty %v", s.ta.Value(), s.path, s.dirty())
+	}
+	if f := d.Frame(); !strings.Contains(flatest.CleanFrame(f.Content), "note.txt — Opened note.txt.") {
+		t.Errorf("file line:\n%s", flatest.CleanFrame(f.Content))
+	}
+	// Edit, then Ctrl+S saves to the same file.
+	d.Send(flatte.KeyEvent{Key: flatte.KeyEnd})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '!'})
+	if !s.dirty() {
+		t.Fatal("an edit is not dirty")
+	}
+	d.Send(ctrl('s'))
+	if _, ok := d.Dialog(); ok {
+		t.Fatal("save of a named file asked where")
+	}
+	d.Settle()
+	if b, _ := os.ReadFile(note); string(b) != "from disk!" || s.dirty() {
+		t.Fatalf("saved %q dirty %v", b, s.dirty())
+	}
+	// Save As writes elsewhere and switches to it.
+	other := filepath.Join(dir, "copy.txt")
+	d.Send(flatte.MenuEvent{ID: cmdSaveAs})
+	dlg, _ = d.Dialog()
+	if dlg.Save == nil || dlg.Save.Name != "note.txt" || dlg.Save.Directory != dir {
+		t.Fatalf("save dialog %+v", dlg.Save)
+	}
+	d.Answer(flatte.DialogResult{Paths: []string{other}})
+	d.Settle()
+	if b, _ := os.ReadFile(other); string(b) != "from disk!" || s.path != other {
+		t.Fatalf("save as: %q path %q", b, s.path)
+	}
+	// New with unsaved changes asks; Cancel keeps the text, Discard clears.
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '?'})
+	d.Send(super('n'))
+	dlg, _ = d.Dialog()
+	if dlg.Alert == nil || dlg.Alert.Buttons[0] != "Discard" || !strings.Contains(dlg.Alert.Message, "copy.txt") {
+		t.Fatalf("alert %+v", dlg.Alert)
+	}
+	d.Answer(flatte.DialogResult{Button: 1})
+	if s.ta.Value() != "from disk!?" {
+		t.Fatalf("cancel changed the text: %q", s.ta.Value())
+	}
+	d.Send(super('n'))
+	d.Answer(flatte.DialogResult{Button: 0})
+	if s.ta.Value() != "" || s.path != "" || s.dirty() {
+		t.Fatalf("new: %q path %q", s.ta.Value(), s.path)
+	}
+}
+
+func TestFileDropAndErrors(t *testing.T) {
+	dir := t.TempDir()
+	note := filepath.Join(dir, "dropped.md")
+	if err := os.WriteFile(note, []byte("dropped"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := editorDriver()
+	s := d.State()
+	d.Send(flatte.DropEvent{Paths: []string{note}})
+	d.Settle()
+	if s.ta.Value() != "dropped" || s.path != note {
+		t.Fatalf("drop: %q %q", s.ta.Value(), s.path)
+	}
+	// A cancelled open changes nothing; a missing file reports the error.
+	d.Send(flatte.MenuEvent{ID: cmdOpen})
+	d.Answer(flatte.DialogResult{})
+	d.Settle()
+	if s.path != note {
+		t.Fatal("cancel changed the file")
+	}
+	missing := filepath.Join(dir, "missing.txt")
+	d.Send(flatte.DropEvent{Paths: []string{missing}})
+	d.Settle()
+	_, openErr := os.Open(missing)
+	if s.path != note || !strings.Contains(s.status, openErr.Error()) {
+		t.Fatalf("missing: path %q status %q", s.path, s.status)
+	}
+}
+
+func TestStatisticsWindow(t *testing.T) {
+	d := editorDriver()
+	s := d.State()
+	d.Send(flatte.MenuEvent{ID: cmdSelectAll})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'a'})
+	typeRunes(s, " b c")
+	// Ctrl+T opens it (as a terminal sends it: 't' with Ctrl); it takes
+	// focus, so typing goes nowhere.
+	f := d.Send(ctrl('t'))
+	if !s.stats || s.focus != statsID {
+		t.Fatalf("stats %v focus %q", s.stats, s.focus)
+	}
+	if !strings.Contains(flatest.CleanFrame(f.Content), "Statistics — untitled") {
+		t.Fatalf("no window box:\n%s", flatest.CleanFrame(f.Content))
+	}
+	wf, ok := d.WindowFrame(statsID)
+	if !ok {
+		t.Fatal("no statistics frame")
+	}
+	plain := flatest.CleanFrame(wf.Content)
+	for _, want := range []string{"Words       3", "Lines       1", "Characters  5", "Selected    0"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("missing %q in\n%s", want, plain)
+		}
+	}
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'z'})
+	d.Send(flatte.PasteEvent{Text: "pasted"})
+	if s.ta.Value() != "a b c" {
+		t.Fatalf("typing reached the editor behind: %q", s.ta.Value())
+	}
+	// Esc closes it; focus returns to the editor, whose counts follow.
+	d.Send(flatte.KeyEvent{Key: flatte.KeyEscape})
+	if s.stats || s.focus != "" {
+		t.Fatalf("esc: stats %v focus %q", s.stats, s.focus)
+	}
+	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: '!'})
+	if s.ta.Value() != "a b c!" {
+		t.Fatalf("editor keys after closing: %q", s.ta.Value())
+	}
+	// Its close mark is a close request, which the editor honours.
+	d.Send(flatte.MenuEvent{ID: cmdStats})
+	f = d.Frame()
+	lines := strings.Split(flatest.CleanFrame(f.Content), "\n")
+	for y, line := range lines {
+		if x := strings.Index(line, "[×]"); x >= 0 {
+			d.Send(flatte.MouseEvent{X: len([]rune(line[:x])) + 1, Y: y, Button: flatte.MouseLeft, Action: flatte.MousePress})
+			break
+		}
+	}
+	if s.stats {
+		t.Fatal("the close mark did not close it")
+	}
+	if _, ok := d.WindowFrame(statsID); ok {
+		t.Fatal("still declared")
+	}
 }

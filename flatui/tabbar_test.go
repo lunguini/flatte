@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lunguini/flatte/flatui/layout"
@@ -45,6 +46,15 @@ func TestTabBarNextPrev(t *testing.T) {
 	tb.Prev()
 	if tb.Active() != 2 {
 		t.Fatal("Prev should wrap to 2")
+	}
+}
+
+func TestTabBarNextPrevEmptyIsInert(t *testing.T) {
+	tb := NewTabBar()
+	tb.Next()
+	tb.Prev()
+	if tb.Active() != 0 || tb.ActiveID() != "" {
+		t.Fatalf("empty tabbar after Next and Prev = active %d id %q, want 0 and empty", tb.Active(), tb.ActiveID())
 	}
 }
 
@@ -98,6 +108,36 @@ func TestTabBarHitTestStripFallback(t *testing.T) {
 	// A point past alpha's band lands on beta.
 	if i, ok := tb.HitTest(rects, 10+tabLabelWidth("alpha")+1, 0); !ok || i != 1 {
 		t.Fatalf("fallback hit tab b = %d,%v want 1,true", i, ok)
+	}
+}
+
+func TestTabBarHitTestStripFallbackUsesGlyphWidths(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		glyph TabGlyphs
+	}{
+		{name: "wide", glyph: TabGlyphs{Left: "界", Right: "界界"}},
+		{name: "empty", glyph: TabGlyphs{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tb := NewTabBar(
+				TabItem{ID: "a", Label: "alpha"},
+				TabItem{ID: "b", Label: "beta"},
+			).WithGlyphs(tc.glyph).WithID("strip")
+			strip := layout.Rect{X: 10, Y: 2, W: layoutWidth(tb), H: 1}
+			rects := map[string]layout.Rect{"strip": strip}
+
+			firstWidth := lipgloss.Width(tc.glyph.Left) + lipgloss.Width("alpha") + 4 + lipgloss.Width(tc.glyph.Right)
+			if got := strip.W; got < firstWidth {
+				t.Fatalf("strip width = %d, want at least first tab width %d", got, firstWidth)
+			}
+			if i, ok := tb.HitTest(rects, strip.X+firstWidth-1, strip.Y); !ok || i != 0 {
+				t.Fatalf("last cell of first tab = %d,%v want 0,true", i, ok)
+			}
+			if i, ok := tb.HitTest(rects, strip.X+firstWidth, strip.Y); !ok || i != 1 {
+				t.Fatalf("first cell of second tab = %d,%v want 1,true", i, ok)
+			}
+		})
 	}
 }
 
@@ -206,5 +246,114 @@ func TestTabBarSideBordersAffectWidthAndHitTesting(t *testing.T) {
 	}
 	if i, ok := tb.HitTest(rects, 1, 0); !ok || i != 0 {
 		t.Fatalf("first content cell after left border = %d,%v want 0,true", i, ok)
+	}
+}
+
+func TestTabBarHitTestFallbackRespectsBorderGeometry(t *testing.T) {
+	border := lipgloss.Border{
+		Top: "══", Bottom: "══", Left: "██", Right: "██",
+		TopLeft: "██", TopRight: "██", BottomLeft: "██", BottomRight: "██",
+	}
+	tb := NewTabBar(TabItem{ID: "a", Label: "alpha"}).
+		WithGlyphs(TabGlyphs{}).
+		WithID("strip").
+		WithBorder(TabBarBorder{Style: border, Top: true, Right: true, Bottom: true, Left: true})
+	strip := layout.Rect{X: 10, Y: 2, W: layoutWidth(tb), H: 3}
+	rects := map[string]layout.Rect{"strip": strip}
+	left, right := border.GetLeftSize(), border.GetRightSize()
+
+	if _, ok := tb.HitTest(rects, strip.X+left-1, strip.Y+1); ok {
+		t.Fatal("left border cells should not hit the first tab")
+	}
+	if i, ok := tb.HitTest(rects, strip.X+left, strip.Y+1); !ok || i != 0 {
+		t.Fatalf("first content cell after wide left border = %d,%v want 0,true", i, ok)
+	}
+	if _, ok := tb.HitTest(rects, strip.X+strip.W-right, strip.Y+1); ok {
+		t.Fatal("right border cells should not hit the last tab")
+	}
+	if _, ok := tb.HitTest(rects, strip.X+left, strip.Y); ok {
+		t.Fatal("top border cells should not hit a tab")
+	}
+	if _, ok := tb.HitTest(rects, strip.X+left, strip.Y+strip.H-1); ok {
+		t.Fatal("bottom border cells should not hit a tab")
+	}
+}
+
+func TestTabBarHitTestFallbackUsesThickTopAndBottomBorders(t *testing.T) {
+	border := lipgloss.Border{
+		Top: "界", Bottom: "界", Left: "│", Right: "│",
+		TopLeft: "界", TopRight: "界", BottomLeft: "界", BottomRight: "界",
+	}
+	tb := NewTabBar(TabItem{ID: "a", Label: "alpha"}).
+		WithGlyphs(TabGlyphs{}).
+		WithID("strip").
+		WithBorder(TabBarBorder{Style: border, Top: true, Right: true, Bottom: true, Left: true})
+	top, bottom := border.GetTopSize(), border.GetBottomSize()
+	strip := layout.Rect{X: 10, Y: 2, W: layoutWidth(tb), H: top + 1 + bottom}
+	if top < 2 || bottom < 2 {
+		t.Fatalf("test border sizes top=%d bottom=%d; want thick border", top, bottom)
+	}
+	rects := map[string]layout.Rect{"strip": strip}
+	for row := 0; row < top; row++ {
+		if _, ok := tb.HitTest(rects, strip.X+1, strip.Y+row); ok {
+			t.Fatalf("top border row %d was treated as a tab hit", row)
+		}
+	}
+	left := border.GetLeftSize()
+	if i, ok := tb.HitTest(rects, strip.X+left, strip.Y+top); !ok || i != 0 {
+		t.Fatalf("content row hit=%d,%v want 0,true", i, ok)
+	}
+	for row := 0; row < bottom; row++ {
+		y := strip.Y + top + 1 + row
+		if _, ok := tb.HitTest(rects, strip.X+left, y); ok {
+			t.Fatalf("bottom border row %d was treated as a tab hit", row)
+		}
+	}
+}
+
+// TestTabBarLayoutIsSemanticAndTerminalIdentical: each tab is an ID'd Row
+// of blank-in-a-window caps around a filled, padded Label — composing to the
+// very cells the string render draws (content and style).
+func TestTabBarLayoutIsSemanticAndTerminalIdentical(t *testing.T) {
+	for _, glyphs := range []TabGlyphs{TabGlyphsPowerline, TabGlyphsSafe} {
+		bar := NewTabBar(TabItem{ID: "a", Label: "alpha"}, TabItem{ID: "b", Label: "beta"}).
+			WithGlyphs(glyphs).WithColors(lipgloss.Color("6"), lipgloss.Color("238"), lipgloss.Color("236")).WithID("tabs")
+		bar.SetActive(1)
+		want := bar.renderTabs()
+		w := lipgloss.Width(want)
+		got, rects := layout.SolveAndCompose(bar.Layout(), w, 1)
+		gb, wb := uv.NewScreenBuffer(w, 1), uv.NewScreenBuffer(w, 1)
+		uv.NewStyledString(got).Draw(gb, gb.Bounds())
+		uv.NewStyledString(want).Draw(wb, wb.Bounds())
+		for x := range w {
+			g, c := gb.CellAt(x, 0), wb.CellAt(x, 0)
+			if g.Content != c.Content || !g.Style.Equal(&c.Style) {
+				t.Fatalf("%v: cell %d = %q %+v, want %q %+v", glyphs, x, g.Content, g.Style, c.Content, c.Style)
+			}
+		}
+		if r := rects["tabs:b"]; r.X != bar.tabWidth(bar.Items[0]) || r.W != bar.tabWidth(bar.Items[1]) {
+			t.Fatalf("tab b rect = %+v", r)
+		}
+		row := bar.Layout().(layout.Row).Children[1].(layout.Row)
+		if left, ok := row.Children[0].(layout.Icon); !ok || left.Name != layout.IconBlank || left.Text != glyphs.Left || len(row.Children) != 3 {
+			t.Fatalf("left cap = %#v, want a blank Icon spelled %q", row.Children[0], glyphs.Left)
+		}
+		if pill, ok := row.Children[1].(layout.Row); !ok || !pill.Box.Round || pill.Box.Background == nil || pill.Children[0].(layout.Label).Text != "beta" {
+			t.Fatalf("tab body = %#v, want a filled, round Row holding the label", row.Children[1])
+		}
+	}
+}
+
+// TestTabBarLayoutClipsLikeTheString: a strip wider than its space is cut
+// at the end, losing padding before label text — as the string render is.
+func TestTabBarLayoutClipsLikeTheString(t *testing.T) {
+	bar := NewTabBar(TabItem{ID: "a", Label: "stats"}, TabItem{ID: "b", Label: "inspect"}).
+		WithColors(lipgloss.Color("6"), lipgloss.Color("238"), lipgloss.Color("236"))
+	full := ansi.Strip(bar.renderTabs())
+	for cut := 1; cut < lipgloss.Width(full); cut++ {
+		got, _ := layout.SolveAndCompose(bar.Layout(), cut, 1)
+		if want := strings.TrimRight(ansi.Cut(full, 0, cut), " "); strings.TrimRight(ansi.Strip(got), " ") != want {
+			t.Fatalf("width %d: %q, want %q", cut, ansi.Strip(got), want)
+		}
 	}
 }

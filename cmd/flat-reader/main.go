@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui"
+	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/window"
 )
 
 // document is fixed so goldens stay deterministic. The long line near the top
@@ -44,31 +46,23 @@ type State struct {
 
 func NewState() *State {
 	s := &State{}
-	s.vp.SetWrappedContent(document) // wrap deferred until first ResizeEvent
+	s.vp.SetWrappedContent(document) // wrap deferred until the first layout
 	return s
 }
 
-// layout sizes the viewport to the space left after the pinned chrome. The
-// card adds a 1-col border + 2-col padding on each side (6 columns total) and
-// a top+bottom border (2 rows); the pinned content rows are title, subtitle, a
-// blank, a blank, and the footer (5 rows). Manual arithmetic on purpose —
-// decision-gate evidence for whether a flatui height-budgeting helper is
-// warranted (see .docs/evaluation.md).
-func (s *State) layout(width, height int) {
-	const pinnedRows = 5 // title, subtitle, blank, blank, footer
-	s.vp.SetSize(
-		max(flatui.CardBodyWidth(width), 1),
-		max(flatui.CardBodyHeight(height, pinnedRows), 1),
-	)
-}
+// bodyID names the node the viewport fills: the card's space left after
+// the pinned rows, as the frame solved it.
+const bodyID = "reader.body"
 
 // wheelLines is how many lines one mouse-wheel notch scrolls.
 const wheelLines = 3
 
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
-	case flatte.ResizeEvent:
-		s.layout(e.Width, e.Height)
+	case flatte.LayoutEvent:
+		// Sized from the body, scrolling over the lines the host laid the
+		// text out in (a window wraps it in its font).
+		s.vp.Adopt(e.Rects, bodyID)
 	case flatte.KeyEvent:
 		handleKey(s, e, fx)
 	case flatte.MouseEvent:
@@ -111,28 +105,39 @@ func handleKey(s *State, key flatte.KeyEvent, fx flatte.Effects[State]) {
 	}
 }
 
-func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	footer := flatui.Subtle(fmt.Sprintf(
-		"j/k line  d/u half  f/b page  g/G ends  q quit   %3.0f%%",
-		s.vp.ScrollPercent()*100))
-
-	lines := []string{
-		flatui.Title("Flat Reader"),
-		flatui.Subtle("scrollable viewport sample"),
-		"",
-	}
-	lines = append(lines, strings.Split(s.vp.View(), "\n")...)
-	lines = append(lines, "", footer)
-
-	return flatte.Frame{Content: flatui.Card(lines, ctx.Width)}
+// View shows the viewport as Viewport.Layout: a Scroll over its lines, so a
+// window draws the text natively. Viewport wraps in cells.
+func View(s *State, _ flatte.RenderContext) flatte.Frame {
+	footer := fmt.Sprintf("j/k line  d/u half  f/b page  g/G ends  q quit   %3.0f%%", s.vp.ScrollPercent()*100)
+	return flatte.Frame{Root: flatui.CardLayout(
+		layout.Label{Text: "Flat Reader", Style: layout.TextStyle{Role: layout.TextTitle}},
+		layout.Label{Text: "scrollable viewport sample", Style: layout.TextStyle{Role: layout.TextSubtle}},
+		layout.Label{},
+		layout.Col{NodeBase: layout.NodeBase{ID: bodyID, H: layout.Grow(1)}, Children: []layout.Node{
+			s.vp.Layout(),
+		}},
+		layout.Label{},
+		layout.Label{Text: footer, Style: layout.TextStyle{Role: layout.TextSubtle}},
+	)}
 }
 
 func main() {
-	if err := flatte.Run(context.Background(), flatte.App[State]{
+	gui := false
+	if window.Supported() {
+		flag.BoolVar(&gui, "gui", false, "run in a native window instead of the terminal")
+	}
+	flag.Parse()
+	app := flatte.App[State]{
 		State:  NewState(),
 		Handle: Handle,
 		View:   View,
-	}, flatte.WithMouse(flatte.MouseModeCellMotion)); err != nil {
+	}
+	runOptions := []flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion)}
+	if gui {
+		runOptions = append(runOptions, window.Options{Title: "Flat Reader", Width: 72, Height: 20})
+	}
+	err := flatte.Run(context.Background(), app, runOptions...)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

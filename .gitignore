@@ -3,3 +3,5 @@
 .idea/
 cmd/tmp/
 *.gob
+/cmd/gui-probe/gui-probe
+*.test
