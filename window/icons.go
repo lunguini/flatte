@@ -82,13 +82,17 @@ func symbol(name layout.IconName, cx, cy, s float64) (cellShape, bool) {
 			line(at(0.26, -0.42), at(0.42, -0.28), at(0.26, -0.14)),
 			line(at(0.26, 0.14), at(0.42, 0.28), at(0.26, 0.42)),
 		}}, true
-	case layout.IconRepeat:
-		return cellShape{polys: []poly{
+	case layout.IconRepeat, layout.IconRepeatOne:
+		g := cellShape{polys: []poly{
 			line(at(-0.42, 0.06), at(-0.42, -0.26), at(0.36, -0.26)),
 			line(at(0.22, -0.4), at(0.38, -0.26), at(0.22, -0.12)),
 			line(at(0.42, -0.06), at(0.42, 0.26), at(-0.36, 0.26)),
 			line(at(-0.22, 0.12), at(-0.38, 0.26), at(-0.22, 0.4)),
-		}}, true
+		}}
+		if name == layout.IconRepeatOne {
+			g.polys = append(g.polys, line(at(-0.08, -0.06), at(0.02, -0.14), at(0.02, 0.14)))
+		}
+		return g, true
 	case layout.IconSpeaker:
 		g := cellShape{polys: []poly{{pts: []point{at(-0.44, -0.14), at(-0.24, -0.14), at(-0.02, -0.36), at(-0.02, 0.36), at(-0.24, 0.14), at(-0.44, 0.14)}, fill: true}}}
 		for _, r := range []float64{0.2, 0.36} {

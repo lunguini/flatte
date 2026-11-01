@@ -11,7 +11,7 @@ import (
 
 var mediaIcons = []layout.IconName{
 	layout.IconPlay, layout.IconPause, layout.IconPrevious, layout.IconNext, layout.IconShuffle,
-	layout.IconRepeat, layout.IconSpeaker, layout.IconHome, layout.IconHeart, layout.IconHeartOutline,
+	layout.IconRepeat, layout.IconRepeatOne, layout.IconSpeaker, layout.IconHome, layout.IconHeart, layout.IconHeartOutline,
 	layout.IconClock, layout.IconEqualizer, layout.IconLibrary,
 }
 

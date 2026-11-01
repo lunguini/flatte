@@ -943,6 +943,7 @@ flatui/layout package layout
   const IconPlus IconName = 9
   const IconPrevious IconName = 28
   const IconRepeat IconName = 31
+  const IconRepeatOne IconName = 39
   const IconSearch IconName = 11
   const IconShuffle IconName = 30
   const IconSpeaker IconName = 32

@@ -64,6 +64,9 @@ const (
 	// A library: two books standing and one leaning (a shelf of saved
 	// things).
 	IconLibrary
+	// Repeat one: the repeat arrows (↻) around a small 1, for repeating a
+	// single item.
+	IconRepeatOne
 )
 
 // Icon is a small symbol with a terminal spelling: the terminal shows Text
