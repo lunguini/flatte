@@ -18,7 +18,8 @@ var (
 )
 
 func TestSupportedMatchesWindowBuild(t *testing.T) {
-	if got, want := Supported(), runtime.GOOS == "darwin"; got != want {
+	want := runtime.GOOS == "darwin" || runtime.GOOS == "js" && runtime.GOARCH == "wasm"
+	if got := Supported(); got != want {
 		t.Fatalf("Supported() = %t on %s, want %t", got, runtime.GOOS, want)
 	}
 }

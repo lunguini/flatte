@@ -15,18 +15,6 @@ import (
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
-type rgba struct{ R, G, B, A float64 }
-
-// rgbaOf is c with straight alpha, as Core Graphics colors take it
-// (color.Color's RGBA is premultiplied).
-func rgbaOf(c color.Color) rgba {
-	r, g, b, a := c.RGBA()
-	if a == 0 {
-		return rgba{}
-	}
-	return rgba{float64(r) / float64(a), float64(g) / float64(a), float64(b) / float64(a), float64(a) / 0xffff}
-}
-
 // theme is a Theme in drawing terms. Roles and Boxes map onto it; explicit
 // colors in a TextStyle or Box override it.
 type theme struct {
@@ -62,15 +50,6 @@ var darkTheme = newTheme(Dark())
 
 // Spacing and stroke sizes in points.
 const (
-	stepPoints = 8.0
-	// borderBand is the space a border takes on each side, as a border
-	// takes a cell in the terminal; its stroke runs down the middle.
-	borderBand  = 12.0
-	strokeWidth = 1.0
-	fieldInset  = 4.0
-	// maxFontSize caps TextStyle.Size; sizes round to a quarter point so
-	// the font cache stays small.
-	maxFontSize = 512.0
 	// CGLineCap and CGLineJoin values.
 	cgLineCapButt   = 0
 	cgLineCapRound  = 1
@@ -177,9 +156,6 @@ var (
 	fontsMu sync.Mutex
 	fonts   = map[fontID]font{}
 )
-
-// The line spacing a TextStyle.Leading may ask for.
-const minLeading, maxLeading = 0.8, 3.0
 
 // fontFor is darkTheme's font for a role and emphasis.
 func fontFor(k fontKey) font { return darkTheme.font(k) }
@@ -430,12 +406,6 @@ func (p *painter) stroke(c rgba) { cgContextSetRGBStrokeColor(p.ctx, c.R, c.G, c
 
 func rectOf(r layout.PointRect) CGRect { return cgRect(r.X, r.Y, r.W, r.H) }
 
-func intersect(a, b layout.PointRect) layout.PointRect {
-	x0, y0 := max(a.X, b.X), max(a.Y, b.Y)
-	x1, y1 := min(a.X+a.W, b.X+b.W), min(a.Y+a.H, b.Y+b.H)
-	return layout.PointRect{X: x0, Y: y0, W: max(x1-x0, 0), H: max(y1-y0, 0)}
-}
-
 // clipped runs f with drawing clipped to r.
 func (p *painter) clipped(r layout.PointRect, f func()) {
 	cgContextSaveGState(p.ctx)
@@ -534,9 +504,6 @@ func boxFillRadius(box layout.Box, r CGRect, th theme) float64 {
 	}
 	return boxRadius(r, false)
 }
-
-// pictureRound is a picture's corner radius over its shorter side.
-const pictureRound = 0.12
 
 // backdrop draws bd's picture covering op's box (rounded like its fill),
 // blurred and at its opacity.
@@ -679,16 +646,7 @@ func strokeRect(r layout.PointRect, band float64) CGRect {
 }
 
 func (p *painter) roleColor(s layout.TextStyle) rgba {
-	if s.Fg != nil {
-		return rgbaOf(s.Fg)
-	}
-	switch s.Role {
-	case layout.TextTitle:
-		return p.th.title
-	case layout.TextSubtle:
-		return p.th.subtle
-	}
-	return p.th.text
+	return roleRGBA(s, p.th.text, p.th.subtle, p.th.title)
 }
 
 // line draws one line of text from x in the row of height h at y, centered
@@ -1069,9 +1027,6 @@ func (w windowText) caretStep(op layout.InputOp, caret, dir int, x float64) int 
 	}
 	return fl.index(to, x)
 }
-
-// runeStart reports whether byte i of s starts a rune (or is the end).
-func runeStart(s string, i int) bool { return i == len(s) || s[i]&0xC0 != 0x80 }
 
 // caretAt draws the caret at x in the row of height h at y, as tall as f's
 // text and centered like it.

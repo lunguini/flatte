@@ -26,8 +26,8 @@ import (
 ## One app, three hosts
 
 Keep application state, `Handle`, and `View` in `app.go`. The same entry point
-uses the terminal by default on native builds, the browser page on js/wasm, or
-a macOS window when `window.Options` is passed:
+uses the terminal by default on native builds, the cell grid on a browser page,
+or the GUI canvas in a browser / native window when `window.Options` is passed:
 
 ```text
 myapp/
@@ -56,12 +56,15 @@ To request a window directly, pass it as an option:
 err := flatte.Run(ctx, app, window.Options{Title: "My app"})
 ```
 
-On macOS this selects a native window. On other native platforms the option
-installs no host and `Run` uses the terminal; js/wasm keeps the browser page as
-the default. `window.Supported()` reports whether this build can open a native
-window. A sample that wants an optional `-gui` flag can define it only when
-`window.Supported()` is true, append `window.Options` when selected, and still
-call `flatte.Run` once:
+On macOS this selects a native window; on js/wasm it selects a canvas host and
+sets `RenderContext.Graphical`. Without the option, the browser keeps the cell
+grid. On other native platforms the option installs no host and `Run` uses the
+terminal. `window.Supported()` is true on macOS and js/wasm. `Theme` and `Fonts`
+apply to both GUI hosts. On a page, `Title` is the fallback document title;
+desktop/window-frame options such as `Desktop`, `Width`, `Height`, `MinWidth`,
+`MinHeight`, `Autosave`, `HideTitleBar`, and `Translucent` are ignored. A sample
+can append `window.Options` when its GUI mode is selected and still call
+`flatte.Run` once:
 
 ```go
 options := []flatte.Option{flatte.WithMouse(flatte.MouseModeCellMotion)}
@@ -223,20 +226,23 @@ that same toolchain's loader:
 
 TinyGo builds use the matching TinyGo runtime loader.
 
-| Support | Terminal | Native window | Browser cell grid |
-|---|---|---|---|
-| Alert / open / save | Cell dialog | Native panel | Cell alert; open/save fold `ErrNoDialogs` |
-| Exec / Suspend / Print | Supported (Print requires inline mode) | Unsupported | Unsupported |
-| Notifications | Best effort | Best effort | Best effort, existing permission only |
-| Clipboard | Terminal OSC 52 | Native clipboard when available | Browser permission/API dependent |
-| Mouse | Off until `WithMouse` | Always on | Off until `WithMouse` |
-| Drop / graphical point layout | No | Drop and point layout | No |
-| Default quit | Ctrl+C exits | `fx.Quit()` closes the window | `fx.Quit()` ends `Run`; the page stays, frozen |
-| Run options | `WithInput`, `WithOutput`, `WithInline`, `WithMouse`, `WithReportFocus` honored | `window.Options` selects the window; terminal input/output/mode options do not apply | `WithMouse` honored; `WithInline`, `WithInput`, `WithOutput`, `WithReportFocus` are ignored |
+| Support | Terminal | Native window | Browser cell grid | Browser GUI canvas |
+|---|---|---|---|---|
+| Alert / open / save | Cell dialog | Native panel | Cell alert; open/save fold `ErrNoDialogs` | Browser alert/confirm; open/save fold `ErrNoDialogs` |
+| Exec / Suspend / Print | Supported (Print requires inline mode) | Unsupported | Unsupported | Unsupported |
+| Notifications | Best effort | Best effort | Best effort, existing permission only | Best effort, existing permission only |
+| Clipboard | Terminal OSC 52 | Native clipboard when available | Browser permission/API dependent | Browser permission/API dependent |
+| Mouse | Off until `WithMouse` | Always on | Off until `WithMouse` | Always on |
+| Drop / graphical point layout | No | Drop and point layout | No | File names/text drops and point layout |
+| Images | No | Native scene images | No | Scene images cached through `createImageBitmap`; source fetching still follows browser CORS |
+| `App.Menus` / `ContextMenu` | Cell menu | Native menu / popup | Cell menu | Menu shortcuts route; no bar or context popup |
+| `App.Windows` | Cell overlay | Secondary native windows | Cell overlays | Not implemented |
+| Default quit | Ctrl+C exits | `fx.Quit()` closes the window | `fx.Quit()` ends `Run`; the page stays, frozen | `fx.Quit()` ends `Run`; the page stays, frozen |
+| Run options | `WithInput`, `WithOutput`, `WithInline`, `WithMouse`, `WithReportFocus` honored | `window.Options` selects the window; terminal input/output/mode options do not apply | `WithMouse` honored; `WithInline`, `WithInput`, `WithOutput`, `WithReportFocus` are ignored | `window.Options` selects the canvas; `Theme`/`Fonts` apply; page-irrelevant window options are ignored |
 
 `fx.Capabilities()` in `Handle` and `RenderContext.Capabilities` in `View`
 report the same host support, so an app can hide actions the host lacks;
-`Graphical` means point-based native rendering. Unsupported effects still
+`Graphical` means point-based GUI rendering. Unsupported effects still
 answer: `Exec` folds `ErrUnsupported`, dialogs fold `ErrNoDialogs`.
 `flatest.StartWith` lets tests set width, height, Graphical, and capabilities,
 while `Driver.Resize(w, h)` updates both Handle and View. Use `flatest` for
@@ -290,8 +296,11 @@ tinygo build -target wasm -o app.wasm ./flat-landing
 ```
 
 Load the `wasm_exec.js` shipped with the matching toolchain. The browser host
-renders the cell grid with DOM text nodes and reports `Graphical: false`; GUI
-scene rendering and images are not supported yet. See
+renders the cell grid with DOM text nodes by default and reports
+`Graphical: false`. Pass `window.Options{}` to select the canvas scene renderer
+(`Graphical: true`); it measures text with Canvas, loads supplied fonts with
+`FontFace`, scales for device pixel ratio, and displays `layout.Image` sources.
+Its browser tests and size checks run through `scripts/wasm-check.sh`. See
 [`cmd/flat-landing/web/README.md`](cmd/flat-landing/web/README.md) for the
 complete build and serve steps.
 
@@ -825,21 +834,20 @@ func Handle(s *State, event flatte.Event, fx flatte.Effects[State]) {
   terminal draws them as boxes over the main frame — `[×]` asks to close,
   a click focuses. `flatest.Driver.WindowFrame(id)` is a window's frame.
 
-## Native Window
+## GUI Window and Browser Canvas
 
-The `window` module (`github.com/lunguini/flatte/window`, macOS, no cgo) runs
-the same `App[S]` in a desktop window. Pass `window.Options` to the single Run
-entry point; on unsupported platforms it installs no host and Run falls back
-to the terminal or browser default:
+The `window` module (`github.com/lunguini/flatte/window`) runs the same `App[S]`
+in a macOS desktop window or a browser canvas (`js/wasm`, no cgo). Pass
+`window.Options` to the single Run entry point; on other native platforms it
+installs no host and Run falls back to the terminal:
 
 ```go
 err := flatte.Run(ctx, app, window.Options{Title: "My App", Width: 80, Height: 24})
 ```
 
-`window.Supported()` reports whether this build can open a window. A selected
-native window must be started from the main goroutine. The window draws
-`Label`s in
-the system font by role (titles semibold), `Box` borders as rounded strokes
+`window.Supported()` reports whether this build supports the GUI host: macOS
+and js/wasm. A selected native window must be started from the main goroutine.
+The GUI draws `Label`s in the theme's font by role, `Box` borders as rounded strokes
 (an overlay's box as a raised surface; a `Title` in the stroke), `Input`s as
 outlined text fields with input-method support (multi-line ones as text
 areas), and `ScrollBar`s as thin thumbs; ANSI `Text`, `Chrome`, and string frames show as
@@ -853,9 +861,9 @@ cells (`X - TargetRect.X` is exact inside the target). Ctrl-C goes to
 `KeyHome`/`KeyEnd` (Shift kept), ⌘V as a `PasteEvent`, and other ⌘ chords
 the menu does not own (⌘Q, ⌘W) as keys with `flatte.ModSuper` — copy, cut,
 and select-all bindings are the app's. Fields' carets blink and stay inside
-their fields. `window.Snapshot` renders
-the first frame to an image for visual tests. Backend authors draw the ops
-of `layout.LayoutScene`.
+their fields. `window.Snapshot` renders the first frame to an image for visual
+tests on macOS; browser calls return `window.ErrUnsupported`. Backend authors
+draw the ops of `layout.LayoutScene`.
 
 `Options.Theme` sets the look: colors for what the app leaves uncolored
 (`Background`, `Surface`, `Text`, `Subtle`, `Title`, `Border`, `Field`,
@@ -864,6 +872,12 @@ of `layout.LayoutScene`.
 (negative: square corners). Start from `window.Dark()` or `window.Light()`
 and change fields; zero fields keep the base's value. Nil follows the
 system's light/dark appearance live; `Snapshot` draws `Dark` when nil.
+`Options.Fonts` are registered before the first frame (CoreText on macOS,
+`FontFace` in the browser). On a page the canvas fills `[data-flatte]`, and
+page dimensions and device pixel ratio set its layout and backing resolution.
+`Desktop`, `Width`, `Height`, `MinWidth`, `MinHeight`, `Autosave`,
+`HideTitleBar`, and `Translucent` are ignored in a page; `Title` supplies the
+fallback document title.
 
 ```go
 th := window.Light()

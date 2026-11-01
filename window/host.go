@@ -26,6 +26,7 @@ type host struct {
 	state   flatte.HostState
 	metrics layout.Metrics
 	cancel  context.CancelFunc
+	page    bool // a browser page has no process quit or native file panels
 
 	// stop ends the platform run loop. It is called on the UI thread.
 	stop     func()
@@ -224,6 +225,10 @@ type clipboard interface {
 	set(text string)
 }
 
+type asyncClipboard interface {
+	getAsync(func(string))
+}
+
 // newHost wires app to a backend. post runs a function on the UI thread
 // (from any goroutine); async updates reach the app through it; invalidate
 // redraws the main window.
@@ -260,6 +265,12 @@ func (h *host) services() flatte.HostServices {
 		},
 		ReadClipboard: func() {
 			if h.clip != nil {
+				if clip, ok := h.clip.(asyncClipboard); ok {
+					clip.getAsync(func(text string) {
+						h.post(func() { h.handle(flatte.ClipboardEvent{Text: text}) })
+					})
+					return
+				}
 				text := h.clip.get()
 				// Answered after the handler returns, like a terminal's reply.
 				h.post(func() { h.handle(flatte.ClipboardEvent{Text: text}) })
@@ -296,6 +307,12 @@ func (h *host) services() flatte.HostServices {
 
 // capabilities is what the window supports with the services attached.
 func (h *host) capabilities() flatte.Capabilities {
+	if h.page {
+		return flatte.Capabilities{
+			Alert: true, Notifications: h.notes != nil, Clipboard: h.clip != nil,
+			Drop: true, Mouse: true,
+		}
+	}
 	return flatte.Capabilities{
 		Alert: true, OpenFile: true, SaveFile: true,
 		Notifications: h.notes != nil, Clipboard: h.clip != nil,
@@ -506,6 +523,12 @@ func (s *surface) key(ev flatte.KeyEvent) {
 	if ev == copyKey && s.copySelection() {
 		return
 	}
+	if h.page {
+		if menu, ok := menuEventForKey(h.state.Menus, ev); ok {
+			h.handle(menu)
+			return
+		}
+	}
 	vertical := (ev.Key == flatte.KeyUp || ev.Key == flatte.KeyDown) && ev.Mod&^flatte.ModShift == 0
 	if op, ok := s.focusedArea(); vertical && ok && h.text != nil {
 		if op.ID != s.goalID || op.Caret != s.goalCaret {
@@ -519,6 +542,14 @@ func (s *surface) key(ev flatte.KeyEvent) {
 		s.goalID, s.goalCaret = op.ID, ev.Caret
 	}
 	h.handle(ev)
+}
+
+func menuEventForKey(menus []flatte.Menu, key flatte.KeyEvent) (flatte.MenuEvent, bool) {
+	item, ok := flatte.MenuShortcut(menus, key)
+	if !ok || item.ID == "" || item.Disabled {
+		return flatte.MenuEvent{}, false
+	}
+	return flatte.MenuEvent{ID: item.ID}, true
 }
 
 // control is the control with id in the scene; ok is false when there is

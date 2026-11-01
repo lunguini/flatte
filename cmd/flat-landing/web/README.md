@@ -2,11 +2,11 @@
 
 This page hosts the same Flatte app used by `go run ./flat-landing`, compiled to
 WebAssembly with either the standard Go toolchain or TinyGo 0.41. Both builds
-call `flatte.Run`; its js/wasm backend mounts the `data-flatte` element and
-handles text-node rendering, keyboard/paste, mouse, focus, resize, cursor,
-clipboard, and permitted notifications. `main_js.go` contains only this page's
-deep-link and leaderboard integration. `index.html` + `styles.css` are the
-static shell.
+call `flatte.Run`; by default its js/wasm backend mounts the `data-flatte`
+element and renders the cell grid with text nodes. Apps that pass
+`window.Options` select the GUI canvas host instead. `main_js.go` contains only
+this page's deep-link and leaderboard integration. `index.html` + `styles.css`
+are the static shell.
 
 The build artifacts (`flat-landing.wasm.gz`, `wasm_exec.js`) are **gitignored** —
 build them locally with the commands below before serving.
@@ -31,15 +31,17 @@ gzip -9 -f flat-landing/web/flat-landing.wasm
 
 Use the `wasm_exec.js` supplied by the same toolchain that built the `.wasm`.
 The Pages workflow continues to publish the standard Go build. From the repo
-root, `scripts/wasm-check.sh` builds both toolchains, prints raw/gzip/Brotli
-sizes, runs the Go browser tests under Node, and runs a TinyGo browser smoke
-through the same DOM shim.
+root, `scripts/wasm-check.sh` builds both toolchains, prints raw, gzip, and
+Brotli sizes for the cell and canvas variants of the same smoke app, runs Go
+browser tests under Node, and runs TinyGo cell and canvas smokes through the
+DOM shim.
 
-The browser currently renders Flatte's terminal cell grid using DOM text nodes;
-`RenderContext.Graphical` is false. It does not draw GUI scenes or images.
-Clipboard access depends on browser support and permission. Notifications are
-sent only when the Web Notifications API is already permitted; otherwise they
-are ignored.
+This landing page stays in cell-grid mode, so `RenderContext.Graphical` is
+false. The canvas host is available to browser apps through `window.Options{}`
+and reports `Graphical: true`; it measures with Canvas fonts, displays GUI
+scene images, and uses a high-DPI backing store. Clipboard access depends on
+browser support and permission. Notifications are sent only when the Web
+Notifications API is already permitted; otherwise they are ignored.
 
 ## Serve
 

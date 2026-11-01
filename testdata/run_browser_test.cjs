@@ -2,8 +2,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 
 const [wasmExec, testWasm, mode = "test"] = process.argv.slice(2);
-if (!wasmExec || !testWasm || !["test", "smoke", "conformance", "landing"].includes(mode)) {
-	throw new Error("usage: node run_browser_test.cjs WASM_EXEC WASM [test|smoke|conformance|landing]");
+if (!wasmExec || !testWasm || !["test", "window-test", "smoke", "conformance", "landing", "canvas"].includes(mode)) {
+	throw new Error("usage: node run_browser_test.cjs WASM_EXEC WASM [test|window-test|smoke|conformance|landing|canvas]");
 }
 
 require(wasmExec);
@@ -11,13 +11,14 @@ require("./browser_dom_shim.cjs");
 
 const go = new Go();
 let browserPassed = false;
-go.argv = mode === "test" ? [testWasm, "-test.run=^(TestBrowser(Run|HostConformance)|TestRunSelectsHostAndOwnsSessionLifecycle)$", "-test.v"] : [testWasm];
+go.argv = mode === "test" ? [testWasm, "-test.run=^(TestBrowser(Run|HostConformance)|TestRunSelectsHostAndOwnsSessionLifecycle)$", "-test.v"] :
+	mode === "window-test" ? [testWasm, "-test.run=^(TestSupportedMatchesWindowBuild|TestBrowserWindowSupported|TestCanvasHostConformance|TestCanvasFontsLoadBeforeCanvasStarts)$", "-test.v"] : [testWasm];
 // Go's js/wasm runtime caps argv+env size; pass only what the test binary
 // needs rather than the (often large) CI environment.
 go.env = { TMPDIR: os.tmpdir() };
 // wasm_exec.js only logs a non-zero exit code by default. Surface it as the
 // process status so a failing test fails CI.
-if (mode === "test") {
+if (mode === "test" || mode === "window-test") {
 	go.exit = (code) => process.exit(code);
 } else {
 	go.exit = (code) => {
@@ -144,6 +145,32 @@ function landingReady() {
 		text.includes("Layout") && text.includes("UI") && text.includes("SNAKE");
 }
 
+function startCanvas() {
+	const dom = globalThis.__flatteTest;
+	if (!dom.input || !dom.canvas) {
+		setTimeout(startCanvas, 1);
+		return;
+	}
+	dom.input.value = "x";
+	dom.input.__emit("input", {});
+	const r = dom.canvasInputRect || { x: 0, y: 32, w: 200, h: 36 };
+	const x = r.x + Math.min(20, r.w / 2), y = r.y + r.h / 2;
+	dom.canvas.__emit("pointerdown", { button: 0, buttons: 1, clientX: x, clientY: y });
+	dom.canvas.__emit("pointerup", { button: 0, clientX: x, clientY: y });
+	dom.canvas.__emit("wheel", { deltaY: -24, clientX: x, clientY: y });
+	dom.flushAnimationFrame();
+}
+
+function canvasReady() {
+	const dom = globalThis.__flatteTest;
+	const calls = dom.canvasDrawCalls.map((call) => call[0]);
+	return dom.canvasSmokeReady && dom.canvasGraphical === true && dom.canvasKeySeen === true &&
+		dom.canvasMouseSeen === true && dom.canvasCaretSeen === true &&
+		dom.canvasTransforms.some((call) => call[1] === 2) &&
+		calls.includes("fillText") && calls.includes("arcTo") && calls.includes("drawImage") &&
+		dom.pendingAnimationFrames === 0;
+}
+
 function startLanding() {
 	const input = globalThis.__flatteTest.input;
 	if (!input) {
@@ -156,7 +183,7 @@ function startLanding() {
 WebAssembly.instantiate(fs.readFileSync(testWasm), go.importObject)
 	.then(({ instance }) => {
 		const run = go.run(instance);
-		if (mode === "test") return run;
+		if (mode === "test" || mode === "window-test") return run;
 		run.catch((error) => {
 			console.error(error);
 			process.exit(1);
@@ -164,17 +191,28 @@ WebAssembly.instantiate(fs.readFileSync(testWasm), go.importObject)
 		if (mode === "smoke") setTimeout(smokeEvents, 0);
 		if (mode === "conformance") setTimeout(conformanceEvents, 0);
 		if (mode === "landing") setTimeout(startLanding, 0);
+		if (mode === "canvas") setTimeout(startCanvas, 0);
 		const deadline = Date.now() + 10000;
 		const poll = () => {
 			if (mode === "conformance") conformanceEvents();
-			const ready = mode === "smoke" ? smokeReady() : mode === "conformance" ? conformanceReady() : landingReady();
+			if (mode === "window-test" || mode === "canvas") globalThis.__flatteTest.flushAnimationFrame();
+			const ready = mode === "smoke" ? smokeReady() : mode === "conformance" ? conformanceReady() : mode === "canvas" ? canvasReady() : landingReady();
 			if (ready) {
 				browserPassed = true;
 				process.exit(0);
 				return;
 			}
 			if (Date.now() >= deadline) {
-				console.error(`browser smoke timed out: ${globalThis.__flatteTest.text}`);
+				const dom = globalThis.__flatteTest;
+				const canvasDetails = mode === "canvas" ? JSON.stringify({
+					ready: dom.canvasSmokeReady, graphical: dom.canvasGraphical, key: dom.canvasKeySeen,
+					mouse: dom.canvasMouseSeen, caret: dom.canvasCaretSeen,
+					mouseTarget: dom.canvasMouseTarget,
+					inputRect: dom.canvasInputRect,
+					calls: dom.canvasDrawCalls.map((call) => call[0]).slice(-40),
+					canvas: !!dom.canvas, input: !!dom.input, raf: dom.pendingAnimationFrames,
+				}) : "";
+				console.error(`browser smoke timed out: ${dom.text} ${canvasDetails}`);
 				process.exit(1);
 				return;
 			}

@@ -204,6 +204,24 @@ func TestHostMouseIsExactInsideTarget(t *testing.T) {
 	}
 }
 
+func TestPageHostRoutesMenuKeysAsMenuEvents(t *testing.T) {
+	s := &testState{content: "ready"}
+	app := testApp(s)
+	app.Menus = func(*testState) []flatte.Menu {
+		return []flatte.Menu{{Title: "Actions", Items: []flatte.MenuItem{{ID: "toggle", Label: "Toggle", Keys: []flatte.KeyEvent{{Key: flatte.KeyCharacter, Rune: 'x'}}}}}}
+	}
+	h, _ := newTestHostWithApp(t, app)
+	h.page = true
+	h.start(160, 80)
+	h.surface.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'x'})
+	if len(s.events) == 0 {
+		t.Fatal("key did not reach the app")
+	}
+	if got, ok := s.events[len(s.events)-1].(flatte.MenuEvent); !ok || got.ID != "toggle" {
+		t.Fatalf("last event = %#v, want MenuEvent{ID: toggle}", s.events[len(s.events)-1])
+	}
+}
+
 func TestHostAsyncUpdatesArriveOnUIThread(t *testing.T) {
 	s := &testState{content: "x"}
 	h, b := newTestHost(t, s)

@@ -7,11 +7,6 @@ import (
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
-// mix is a blended toward b by t (0..1).
-func mix(a, b rgba, t float64) rgba {
-	return rgba{a.R + (b.R-a.R)*t, a.G + (b.G-a.G)*t, a.B + (b.B-a.B)*t, a.A + (b.A-a.A)*t}
-}
-
 // Control sizes in points.
 const (
 	checkSize   = 14.0
