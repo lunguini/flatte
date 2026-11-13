@@ -967,6 +967,7 @@ flatui/layout package layout
   func Auto() Size
   func ClampScroll(offset int, viewport int, content int) int
   func Compose(root Node, width int, height int) Composition
+  func ComposeWithColorProfile(root Node, width int, height int, profile colorprofile.Profile) Composition
   func Fixed(n int) Size
   func Grow(w float64) Size
   func LayoutScene(root Node, width float64, height float64, m Metrics) Scene

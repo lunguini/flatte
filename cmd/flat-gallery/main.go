@@ -1,8 +1,8 @@
 // Command flat-gallery shows the layout vocabulary that is richer in a
 // window: text at point sizes, rich text that wraps and (in a window) can be
-// selected and copied, pictures, and icons. The terminal shows each in its
-// own spelling — the pictures as their descriptions — and, with -gui, a
-// native window draws them.
+// selected and copied, pictures, and icons. Color terminals show the pictures
+// as half-block cells; without color they show their descriptions. With -gui,
+// a native window draws them.
 package main
 
 import (

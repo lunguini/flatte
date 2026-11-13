@@ -3,10 +3,13 @@ package flatte
 import (
 	"bytes"
 	"context"
+	"image"
+	"image/color"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -43,6 +46,24 @@ func TestComposeFrameWithoutRootIsUnchanged(t *testing.T) {
 	}
 	if got, _ := comp.HitTest(0, 0); got != "" {
 		t.Fatalf("HitTest without Root = %q, want \"\"", got)
+	}
+}
+
+func TestSettledRootUsesOutputColorProfileForImages(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	for y := 0; y < 2; y++ {
+		for x := 0; x < 4; x++ {
+			src.SetRGBA(x, y, color.RGBA{R: 255, A: 255})
+		}
+	}
+	root := layout.Image{NodeBase: layout.NodeBase{W: layout.Fixed(2), H: layout.Fixed(1)}, Source: src, Text: "logo"}
+	frame, _, _ := settleFrameWithHeightProfile(
+		func() Frame { return Frame{Root: root} },
+		nil, nil, 2, func(layout.Node) int { return 1 }, colorprofile.ASCII,
+	)
+	want := layout.Compose(layout.Image{NodeBase: root.NodeBase, Text: root.Text}, 2, 1).Frame
+	if frame.Content != want {
+		t.Fatalf("ASCII settled frame = %q, want description text %q", frame.Content, want)
 	}
 }
 

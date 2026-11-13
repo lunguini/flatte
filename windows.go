@@ -148,11 +148,11 @@ func paintWindows[S any](wh *windowHost, app App[S], base RenderContext, frame F
 				handle(ev)
 			}
 		}
-		wf, comp, delivered := settleFrame(func() Frame {
+		wf, comp, delivered := settleFrameWithProfile(func() Frame {
 			ctx := base
 			ctx.Window, ctx.Width, ctx.Height = id, hw.w, hw.h
 			return app.View(app.State, ctx)
-		}, deliver, hw.delivered, hw.w, hw.h)
+		}, deliver, hw.delivered, hw.w, hw.h, base.ColorProfile)
 		hw.comp, hw.delivered, hw.title, hw.frame = comp, delivered, wf.Title, wf
 		frame.Content = layout.OverlayAt(frame.Content, hw.render(id == wh.focus), hw.x, hw.y)
 		if id == wh.focus && wf.Cursor != nil && wf.Cursor.X < hw.w && wf.Cursor.Y < hw.h {

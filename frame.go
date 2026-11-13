@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"maps"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/internal/sessionaccess"
 )
@@ -60,10 +61,14 @@ type CursorStyle struct {
 // calls it before every draw; test harnesses call it to render exactly as
 // Run does.
 func ComposeFrame(frame Frame, width, height int) (Frame, layout.Composition) {
+	return composeFrameWithColorProfile(frame, width, height, colorprofile.Unknown)
+}
+
+func composeFrameWithColorProfile(frame Frame, width, height int, profile colorprofile.Profile) (Frame, layout.Composition) {
 	if frame.Root == nil {
 		return frame, layout.Composition{}
 	}
-	c := layout.Compose(frame.Root, width, height)
+	c := layout.ComposeWithColorProfile(frame.Root, width, height, profile)
 	frame.Content = c.Frame
 	if frame.Cursor == nil {
 		if x, y, ok := c.Cursor(); ok {
@@ -95,18 +100,26 @@ func init() {
 }
 
 func settleFrame(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width, height int) (Frame, layout.Composition, map[string]layout.Rect) {
-	return settleFrameWithHeight(view, handle, last, width, func(layout.Node) int { return height })
+	return settleFrameWithHeightProfile(view, handle, last, width, func(layout.Node) int { return height }, colorprofile.Unknown)
+}
+
+func settleFrameWithProfile(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width, height int, profile colorprofile.Profile) (Frame, layout.Composition, map[string]layout.Rect) {
+	return settleFrameWithHeightProfile(view, handle, last, width, func(layout.Node) int { return height }, profile)
 }
 
 // settleFrameWithHeight supports inline frames, whose height comes from the
 // root's measured content.
 func settleFrameWithHeight(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width int, heightFor func(layout.Node) int) (Frame, layout.Composition, map[string]layout.Rect) {
+	return settleFrameWithHeightProfile(view, handle, last, width, heightFor, colorprofile.Unknown)
+}
+
+func settleFrameWithHeightProfile(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width int, heightFor func(layout.Node) int, profile colorprofile.Profile) (Frame, layout.Composition, map[string]layout.Rect) {
 	for pass := 0; ; pass++ {
 		frame := view()
 		if frame.Root == nil {
 			return frame, layout.Composition{}, last
 		}
-		frame, comp := ComposeFrame(frame, width, heightFor(frame.Root))
+		frame, comp := composeFrameWithColorProfile(frame, width, heightFor(frame.Root), profile)
 		if handle == nil || pass == maxLayoutPasses || maps.Equal(comp.Rects, last) {
 			return frame, comp, last
 		}

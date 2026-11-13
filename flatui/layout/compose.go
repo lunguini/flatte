@@ -1,8 +1,10 @@
 package layout
 
 import (
-	uv "github.com/charmbracelet/ultraviolet"
 	"image/color"
+
+	"github.com/charmbracelet/colorprofile"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // SolveAndCompose walks the tree exactly once. It distributes rects top-down
@@ -114,10 +116,19 @@ func (c Composition) HitTest(x, y int) (string, Rect) {
 // Compose is SolveAndCompose returning a Composition, which adds hit-testing
 // in paint order to the frame, rects, and diagnostics.
 func Compose(root Node, width, height int) Composition {
+	return ComposeWithColorProfile(root, width, height, colorprofile.Unknown)
+}
+
+// ComposeWithColorProfile composes a terminal frame using the output's color
+// profile. Colored profiles keep image RGB values in the styled cell buffer
+// for the terminal renderer to downsample; ASCII and NoTTY images use Text.
+// Unknown leaves RGB styles intact, which is useful for composition before a
+// concrete output terminal is selected.
+func ComposeWithColorProfile(root Node, width, height int, profile colorprofile.Profile) Composition {
 	if width <= 0 || height <= 0 {
 		return Composition{Rects: map[string]Rect{}}
 	}
-	p := &cellPainter{buf: uv.NewScreenBuffer(width, height)}
+	p := &cellPainter{buf: uv.NewScreenBuffer(width, height), profile: profile}
 	s := solveTree[int](cells{}, root, width, height, p)
 	c := Composition{Rects: cellRects(s), Diagnostics: cellDiagnostics(s), caret: p.caret, inputs: p.inputs}
 	c.hits = make([]hit, len(s.hits))
@@ -154,6 +165,9 @@ type caretNode interface {
 // cells the overlay does not paint.
 type cellPainter struct {
 	buf uv.ScreenBuffer
+	// profile is the output terminal's color depth. Image nodes use it only to
+	// select the Text fallback for terminals without color.
+	profile colorprofile.Profile
 	// caret is the last visible focused Input caret in paint order.
 	caret *caretPos
 	// inputs are the ID'd Inputs painted, by ID (the last one wins).
@@ -168,7 +182,13 @@ func (p *cellPainter) leaf(n Node, rr, cc rect[int]) {
 	under := backgrounds(p.buf, vis)
 	// paintClipped bounds an over-wide or over-tall string to its rect and
 	// skips a leaf scrolled out of view.
-	paintClipped(p.buf, r, clip, n.Render)
+	render := n.Render
+	if image, ok := n.(interface {
+		renderWithColorProfile(Rect, colorprofile.Profile) string
+	}); ok {
+		render = func(rect Rect) string { return image.renderWithColorProfile(rect, p.profile) }
+	}
+	paintClipped(p.buf, r, clip, render)
 	if under != nil {
 		keepBackgrounds(p.buf, vis, under)
 	}

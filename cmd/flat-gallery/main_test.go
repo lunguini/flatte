@@ -97,7 +97,7 @@ func TestGallerySnapshot(t *testing.T) {
 		t.Log("\n" + flatest.RenderFrame(f))
 	}
 	flatest.AssertGoldenFrame(t, "testdata/gallery.golden", f)
-	if !strings.Contains(flatest.CleanFrame(f.Content), "bands of waves") {
-		t.Error("the terminal does not describe the pictures")
+	if !strings.Contains(f.Content, "▀") {
+		t.Error("the terminal frame does not draw the pictures as half-block cells")
 	}
 }
