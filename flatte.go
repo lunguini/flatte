@@ -422,6 +422,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	}
 	in, out := cfg.input, cfg.output
 	sink := &outputSink{w: out}
+	terminalEnv := os.Environ()
 
 	// Raw mode enter/restore are reusable: suspend and exec hand the
 	// terminal back to the shell or a subprocess and re-enter afterwards.
@@ -457,9 +458,10 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 
 	renderOut := &bytes.Buffer{}
 	newRenderer := func() *uv.TerminalRenderer {
-		return newTerminalRenderer(renderOut, out, os.Environ(), cfg.inline)
+		return newTerminalRenderer(renderOut, out, terminalEnv, cfg.inline)
 	}
 	renderer := newRenderer()
+	kittyImages := newKittyImageState(kittyImagesEnabled(terminalEnv) && terminalOutputIsTTY(out))
 	flushRenderer := func() error {
 		err := renderer.Flush()
 		sink.record(err)
@@ -532,6 +534,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	}
 	defer func() {
 		drainActions() // actions enqueued on the quit iteration still emit
+		kittyImages.clear(renderer)
 		if lastFrame.Title != "" {
 			_, _ = renderer.WriteString(ansi.SetWindowTitle(""))
 		}
@@ -735,6 +738,17 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 		return ctx
 	}
+	syncKittyImages := func(width, height int) {
+		images := kittyPlacementsForRuntime(
+			session.cell.lastComp,
+			&session.cell.windows,
+			&session.cell.menus,
+			&session.cell.dialogs,
+			width,
+			height,
+		)
+		kittyImages.update(images, renderer)
+	}
 
 	draw := func() {
 		if sink.err != nil {
@@ -748,6 +762,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		frame := step.Frame
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
+			syncKittyImages(renderCtx.Width, renderCtx.Height)
 			if err := flushRenderer(); err == nil {
 				writeFrameOutput()
 			}
@@ -797,6 +812,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 				cursorShown = true
 			}
 		}
+		syncKittyImages(renderCtx.Width, renderCtx.Height)
 		if err := flushRenderer(); err != nil {
 			return
 		}
@@ -812,6 +828,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	// was delivered to us.
 	releaseTerminal := func() {
 		inputStopped = pipe.stop()
+		kittyImages.clear(renderer)
 		resetCursorStyle()
 		_, _ = renderer.WriteString(resetModes(cfg))
 		_, _ = renderer.WriteString("\x1b[?25h")
@@ -878,6 +895,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		if str == "" {
 			return
 		}
+		kittyImages.clear(renderer)
 		// Flush any buffered renderer output first so the inserted lines land in
 		// order relative to a pending frame.
 		if err := flushRenderer(); err != nil {

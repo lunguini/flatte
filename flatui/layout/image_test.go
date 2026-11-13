@@ -219,6 +219,46 @@ func TestImageTerminalCacheHitsAndEvictsLRU(t *testing.T) {
 	}
 }
 
+func TestCompositionReportsOnlyFullyVisibleTerminalImages(t *testing.T) {
+	src := solidImage(8, 8, color.RGBA{R: 255, A: 255})
+	img := Image{NodeBase: NodeBase{W: Fixed(4), H: Fixed(2)}, Source: src, Fit: ImageCover}
+
+	visible := Compose(img, 4, 2)
+	if len(visible.TerminalImages) != 1 {
+		t.Fatalf("visible images = %#v, want one image", visible.TerminalImages)
+	}
+	if got := visible.TerminalImages[0]; got.Rect != (Rect{W: 4, H: 2}) || got.Source != src || got.Fit != ImageCover {
+		t.Fatalf("terminal image = %#v, want content rect {0,0,4,2}, original source and fit", got)
+	}
+	boxed := Compose(Image{
+		NodeBase: NodeBase{W: Fixed(6), H: Fixed(6), Pad: 1, Bordered: true},
+		Source:   src,
+	}, 6, 6)
+	if len(boxed.TerminalImages) != 1 {
+		t.Fatalf("boxed image placements = %#v, want one image", boxed.TerminalImages)
+	}
+	if got := boxed.TerminalImages[0].Rect; got != (Rect{X: 2, Y: 2, W: 2, H: 2}) {
+		t.Fatalf("boxed image content rect = %+v, want {2,2,2,2}", got)
+	}
+
+	scrolled := Scroll{
+		NodeBase: NodeBase{W: Fixed(4), H: Fixed(2)},
+		OffsetY:  1,
+		Child:    Image{NodeBase: NodeBase{W: Fixed(4), H: Fixed(3)}, Source: src},
+	}
+	if got := Compose(scrolled, 4, 2).TerminalImages; len(got) != 0 {
+		t.Fatalf("scroll-clipped image placements = %#v, want none", got)
+	}
+
+	overlaid := Col{Children: []Node{
+		Image{NodeBase: NodeBase{W: Fixed(4), H: Fixed(2)}, Source: src},
+		Text{NodeBase: NodeBase{Overlay: true, W: Fixed(1), H: Fixed(1)}, String: "x"},
+	}}
+	if got := Compose(overlaid, 4, 2).TerminalImages; len(got) != 0 {
+		t.Fatalf("overlay-covered image placements = %#v, want none", got)
+	}
+}
+
 func TestImageTerminalCacheConcurrentUse(t *testing.T) {
 	img := solidImage(4, 2, color.RGBA{R: 255, A: 255})
 	var wg sync.WaitGroup

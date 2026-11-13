@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image"
 	"image/color"
 
 	"github.com/charmbracelet/colorprofile"
@@ -48,9 +49,23 @@ type Composition struct {
 	Frame       string
 	Rects       map[string]Rect
 	Diagnostics []DuplicateIDDiagnostic
-	hits        []hit
-	caret       *caretPos
-	inputs      map[string]placedInput
+	// TerminalImages are image sources whose content boxes are wholly visible
+	// in this composition and are not covered by a later layout overlay.
+	// Terminal hosts can draw these over Frame with a pixel-image protocol;
+	// Frame itself always retains its half-block/text fallback.
+	TerminalImages []TerminalImagePlacement
+	hits           []hit
+	caret          *caretPos
+	inputs         map[string]placedInput
+}
+
+// TerminalImagePlacement is an Image source that is fully visible in the
+// terminal cell composition. Rect is the clipped content box in frame cells;
+// Source and Fit are the original node values for the terminal renderer.
+type TerminalImagePlacement struct {
+	Rect   Rect
+	Source image.Image
+	Fit    ImageFit
 }
 
 // placedInput is an ID'd Input as painted, for caret hit-testing.
@@ -130,7 +145,10 @@ func ComposeWithColorProfile(root Node, width, height int, profile colorprofile.
 	}
 	p := &cellPainter{buf: uv.NewScreenBuffer(width, height), profile: profile}
 	s := solveTree[int](cells{}, root, width, height, p)
-	c := Composition{Rects: cellRects(s), Diagnostics: cellDiagnostics(s), caret: p.caret, inputs: p.inputs}
+	c := Composition{
+		Rects: cellRects(s), Diagnostics: cellDiagnostics(s),
+		TerminalImages: p.visibleTerminalImages(), caret: p.caret, inputs: p.inputs,
+	}
 	c.hits = make([]hit, len(s.hits))
 	for i, h := range s.hits {
 		c.hits[i] = hit{id: h.id, rect: Rect(h.rect), area: Rect(h.area)}
@@ -172,10 +190,24 @@ type cellPainter struct {
 	caret *caretPos
 	// inputs are the ID'd Inputs painted, by ID (the last one wins).
 	inputs map[string]placedInput
+	images []terminalImageCandidate
+	layers []orderedRect
+	order  int
+}
+
+type terminalImageCandidate struct {
+	placement TerminalImagePlacement
+	order     int
+}
+
+type orderedRect struct {
+	rect  Rect
+	order int
 }
 
 func (p *cellPainter) leaf(n Node, rr, cc rect[int]) {
 	r, clip := Rect(rr), Rect(cc)
+	p.order++
 	// A Box's background is behind its content: leaf cells with no
 	// background of their own keep the one painted underneath.
 	vis := r.Intersect(clip)
@@ -189,6 +221,16 @@ func (p *cellPainter) leaf(n Node, rr, cc rect[int]) {
 		render = func(rect Rect) string { return image.renderWithColorProfile(rect, p.profile) }
 	}
 	paintClipped(p.buf, r, clip, render)
+	if img, ok := terminalImageNode(n); ok && !isNilImage(img.Source) {
+		content := r.insetBy(img.insetSides())
+		visible := content.Intersect(clip).Intersect(Rect{W: p.buf.Width(), H: p.buf.Height()})
+		if content.W > 0 && content.H > 0 && visible == content {
+			p.images = append(p.images, terminalImageCandidate{
+				placement: TerminalImagePlacement{Rect: visible, Source: img.Source, Fit: img.Fit},
+				order:     p.order,
+			})
+		}
+	}
 	if under != nil {
 		keepBackgrounds(p.buf, vis, under)
 	}
@@ -247,10 +289,55 @@ func keepBackgrounds(buf uv.ScreenBuffer, r Rect, under []color.Color) {
 	}
 }
 
-func (p *cellPainter) chrome(n Node, r, clip rect[int]) { paintChrome(n, Rect(r), p.buf, Rect(clip)) }
+func (p *cellPainter) chrome(n Node, r, clip rect[int]) {
+	p.order++
+	paintChrome(n, Rect(r), p.buf, Rect(clip))
+}
 
 func (p *cellPainter) layer(r rect[int]) {
+	p.order++
+	visible := Rect(r).Intersect(Rect{W: p.buf.Width(), H: p.buf.Height()})
+	if visible.W > 0 && visible.H > 0 {
+		p.layers = append(p.layers, orderedRect{rect: visible, order: p.order})
+	}
 	p.buf.FillArea(&uv.EmptyCell, uv.Rect(r.X, r.Y, r.W, r.H))
+}
+
+func terminalImageNode(n Node) (Image, bool) {
+	switch image := n.(type) {
+	case Image:
+		return image, true
+	case *Image:
+		if image != nil {
+			return *image, true
+		}
+	}
+	return Image{}, false
+}
+
+func (p *cellPainter) visibleTerminalImages() []TerminalImagePlacement {
+	if len(p.images) == 0 {
+		return nil
+	}
+	out := make([]TerminalImagePlacement, 0, len(p.images))
+	for _, image := range p.images {
+		covered := false
+		for _, layer := range p.layers {
+			if layer.order > image.order && rectsOverlap(layer.rect, image.placement.Rect) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			out = append(out, image.placement)
+		}
+	}
+	return out
+}
+
+func rectsOverlap(a, b Rect) bool {
+	intersection := a.Intersect(b)
+	return intersection.W > 0 && intersection.H > 0
 }
 
 // paintChrome paints a container's own border/background chrome (if any)

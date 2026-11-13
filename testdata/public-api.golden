@@ -1144,10 +1144,11 @@ flatui/layout package layout
   field Composition.Frame string [order=0]
   field Composition.Rects map[string] Rect [order=1]
   field Composition.Diagnostics []DuplicateIDDiagnostic [order=2]
-  field Composition.<unexported> []hit [order=3]
-  field Composition.<unexported> *caretPos [order=4]
-  field Composition.<unexported> map[string] placedInput [order=5]
-  struct Composition fields=6 comparable=false
+  field Composition.TerminalImages []TerminalImagePlacement [order=3]
+  field Composition.<unexported> []hit [order=4]
+  field Composition.<unexported> *caretPos [order=5]
+  field Composition.<unexported> map[string] placedInput [order=6]
+  struct Composition fields=7 comparable=false
   type ControlKind int
   type ControlOp struct
   field ControlOp.ID string [order=0]
@@ -1360,6 +1361,11 @@ flatui/layout package layout
   field Spacer.NodeBase NodeBase [order=0]
   field Spacer.<unexported> color.Color [order=1]
   struct Spacer fields=2 comparable=false
+  type TerminalImagePlacement struct
+  field TerminalImagePlacement.Rect Rect [order=0]
+  field TerminalImagePlacement.Source image.Image [order=1]
+  field TerminalImagePlacement.Fit ImageFit [order=2]
+  struct TerminalImagePlacement fields=3 comparable=true
   type Text struct
   field Text.NodeBase NodeBase [order=0]
   field Text.String string [order=1]

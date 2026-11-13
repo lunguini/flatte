@@ -28,13 +28,15 @@ const (
 )
 
 // Image is a picture. A GUI draws Source in its content box as Fit says, one
-// image pixel to a point on Auto axes. A terminal draws Source as half-block
-// color cells when it has color and the box is at least two cells wide; Text
-// remains the subtle, wrapped fallback and supplies the natural size on Auto
-// axes. Give art an explicit box size. Each terminal cell represents two
-// vertically stacked image pixels. A Round Box does not round terminal art.
-// A GUI reads Source when it first draws it: to change the picture, give a
-// new image rather than changing its pixels.
+// image pixel to a point on Auto axes. A terminal always composes half-block
+// color cells as its fallback. Run also places Source as a pixel image in
+// terminals detected through Kitty's graphics protocol when the complete
+// content box is visible; clipped and covered images keep the cell fallback.
+// Text remains the subtle, wrapped fallback and supplies the natural size on
+// Auto axes. Give art an explicit box size. Each fallback terminal cell
+// represents two vertically stacked image pixels. A Round Box does not round
+// terminal art. A GUI reads Source when it first draws it: to change the
+// picture, give a new image rather than changing its pixels.
 type Image struct {
 	NodeBase
 	Source image.Image

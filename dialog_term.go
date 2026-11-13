@@ -38,8 +38,8 @@ type termDialog struct {
 	hi, top int
 
 	// Where it was last painted, for the mouse.
-	x, y int
-	comp layout.Composition
+	x, y, w, h int
+	comp       layout.Composition
 }
 
 type dirEntry struct {
@@ -369,6 +369,7 @@ func (t *termDialogs) paint(frame Frame, width, height int) Frame {
 	}
 	td.comp = layout.Compose(node, w, h)
 	td.x, td.y = max((width-w)/2, 0), max((height-h)/2, 0)
+	td.w, td.h = w, h
 	frame.Content = layout.OverlayAt(frame.Content, td.comp.Frame, td.x, td.y)
 	frame.Cursor = nil
 	if x, y, ok := td.comp.Cursor(); ok {
