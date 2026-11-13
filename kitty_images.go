@@ -21,6 +21,9 @@ import (
 const (
 	kittyCellPixelWidth  = 8
 	kittyCellPixelHeight = 16
+	// kittyDensity is how many times a nominal cell's pixels a picture is
+	// prepared at, at most.
+	kittyDensity         = 4
 	kittyChunkSize       = 4096
 	kittyImageLimit      = 16
 	kittyImageBytesLimit = 32 << 20
@@ -68,6 +71,8 @@ type kittyImagePlan struct {
 	place   layout.TerminalImagePlacement
 	source  string
 	stable  bool
+	width   int
+	height  int
 	asset   [32]byte
 	data    []byte
 	imageID uint32
@@ -267,7 +272,7 @@ func (r *kittyImageState) update(placements []layout.TerminalImagePlacement, out
 		if isNilKittyImage(placement.Source) || placement.Rect.W <= 0 || placement.Rect.H <= 0 {
 			continue
 		}
-		width, height, ok := kittyPixelSize(placement.Rect)
+		width, height, ok := kittyPixelSize(placement.Rect, placement.Source.Bounds())
 		if !ok {
 			continue
 		}
@@ -277,6 +282,8 @@ func (r *kittyImageState) update(placements []layout.TerminalImagePlacement, out
 			place:  placement,
 			source: source,
 			stable: stable,
+			width:  width,
+			height: height,
 		}
 		old, hasOld := r.placements[plan.key]
 		if stable && hasOld && old.source == source && old.rect == placement.Rect && old.fit == placement.Fit {
@@ -360,8 +367,8 @@ func (r *kittyImageState) update(placements []layout.TerminalImagePlacement, out
 		if plan.stable {
 			r.memo[kittyAssetMemoKey{
 				source: plan.source,
-				width:  plan.place.Rect.W * kittyCellPixelWidth,
-				height: plan.place.Rect.H * kittyCellPixelHeight,
+				width:  plan.width,
+				height: plan.height,
 				fit:    plan.place.Fit,
 			}] = kittyAssetMemo{hash: plan.asset, source: plan.place.Source}
 			if len(r.memo) > kittyImageMemoLimit {
@@ -511,12 +518,23 @@ func allocateKittyID(next *uint32) uint32 {
 	return id
 }
 
-func kittyPixelSize(rect layout.Rect) (width, height int, ok bool) {
+// kittyPixelSize is the pixel size to prepare rect's picture at. A nominal
+// cell is kittyCellPixelWidth×kittyCellPixelHeight, which a high-density
+// screen draws two to three times larger, so pictures are prepared at up
+// to kittyDensity times that, but never above the source's own resolution
+// (the terminal scales the placement to its cells either way).
+func kittyPixelSize(rect layout.Rect, source image.Rectangle) (width, height int, ok bool) {
 	maxInt := int(^uint(0) >> 1)
-	if rect.W <= 0 || rect.H <= 0 || rect.W > maxInt/kittyCellPixelWidth || rect.H > maxInt/kittyCellPixelHeight {
+	if rect.W <= 0 || rect.H <= 0 || rect.W > maxInt/(kittyCellPixelWidth*kittyDensity) || rect.H > maxInt/(kittyCellPixelHeight*kittyDensity) {
 		return 0, 0, false
 	}
 	width, height = rect.W*kittyCellPixelWidth, rect.H*kittyCellPixelHeight
+	for scale := kittyDensity; scale > 1; scale-- {
+		if width*scale <= max(source.Dx(), width) || height*scale <= max(source.Dy(), height) {
+			width, height = width*scale, height*scale
+			break
+		}
+	}
 	if width > kittyImageMaxPixels/height {
 		return 0, 0, false
 	}

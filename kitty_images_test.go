@@ -337,3 +337,20 @@ func kittyTestPNG(t *testing.T, src image.Image, width, height int, fit layout.I
 	}
 	return data
 }
+
+func TestKittyPixelSizePreparesDenseButNotAboveSource(t *testing.T) {
+	for _, tc := range []struct {
+		rect   layout.Rect
+		source image.Rectangle
+		w, h   int
+	}{
+		{layout.Rect{W: 4, H: 2}, image.Rect(0, 0, 96, 96), 96, 96},      // a 96px thumb: 3×
+		{layout.Rect{W: 16, H: 8}, image.Rect(0, 0, 640, 640), 512, 512}, // capped at kittyDensity
+		{layout.Rect{W: 16, H: 8}, image.Rect(0, 0, 64, 64), 128, 128},   // never below nominal
+	} {
+		w, h, ok := kittyPixelSize(tc.rect, tc.source)
+		if !ok || w != tc.w || h != tc.h {
+			t.Errorf("kittyPixelSize(%v, %v) = %d×%d %v, want %d×%d", tc.rect, tc.source, w, h, ok, tc.w, tc.h)
+		}
+	}
+}
