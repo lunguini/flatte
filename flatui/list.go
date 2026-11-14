@@ -95,8 +95,10 @@ func (l *List) Adopt(event flatte.LayoutEvent, id string) {
 		return
 	}
 	rowHeight := 0.0
+	type span struct{ top, height float64 }
+	spans := map[int]span{}
 	prefix := id + ":"
-	row := func(target string, height float64) {
+	row := func(target string, top, height float64) {
 		suffix, ok := strings.CutPrefix(target, prefix)
 		if !ok {
 			return
@@ -106,19 +108,33 @@ func (l *List) Adopt(event flatte.LayoutEvent, id string) {
 			return
 		}
 		rowHeight = max(rowHeight, height)
+		spans[index] = span{top, height}
 	}
 	if native {
 		for target, r := range event.PointRects {
-			row(target, r.H)
+			row(target, r.Y, r.H)
 		}
 	} else {
 		for target, r := range event.Rects {
-			row(target, float64(r.H))
+			row(target, float64(r.Y), float64(r.H))
+		}
+	}
+	// A gap between rows (the Col's Gap) is measured between two whole
+	// neighbouring rows (a clipped row's top says nothing), so a page
+	// counts it.
+	gap := 0.0
+	for i, row := range spans {
+		next, ok := spans[i+1]
+		if !ok || row.height < rowHeight || next.height < rowHeight {
+			continue
+		}
+		if g := next.top - row.top - rowHeight; g > 0 && !math.IsInf(g, 0) {
+			gap = max(gap, g)
 		}
 	}
 	count := 1
 	if rowHeight > 0 {
-		capacity := math.Floor(viewport.H/rowHeight + 1e-9)
+		capacity := math.Floor((viewport.H+gap)/(rowHeight+gap) + 1e-9)
 		if capacity >= maxWidgetDimension {
 			count = maxWidgetDimension
 		} else {

@@ -36,7 +36,7 @@ func TestVectorIconIsAntialiasedShapeInItsColor(t *testing.T) {
 	}
 	edge := false
 	for x := range vectorIconSide {
-		if a := play.At(x, vectorIconSide/4).(color.NRGBA).A; a > 0 && a < 0xff {
+		if a := play.At(x, vectorIconSide*3/8).(color.NRGBA).A; a > 0 && a < 0xff {
 			edge = true
 			break
 		}
@@ -99,6 +99,16 @@ func TestTerminalIconButtonColor(t *testing.T) {
 	} {
 		if got := tc.button.iconColor(); got != tc.want {
 			t.Errorf("%s: color = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestVectorIconKeepsAMargin(t *testing.T) {
+	play := vectorIcon{Name: IconPlay, Color: color.RGBA{R: 0xff, A: 0xff}}
+	edge := vectorIconSide * (1 - vectorIconScale) / 2
+	for _, p := range [][2]int{{int(edge) - 2, vectorIconSide / 2}, {vectorIconSide / 2, int(edge) - 2}, {vectorIconSide - int(edge) + 2, vectorIconSide / 2}} {
+		if a := play.At(p[0], p[1]).(color.NRGBA).A; a != 0 {
+			t.Fatalf("pixel %v in the margin has alpha %d", p, a)
 		}
 	}
 }

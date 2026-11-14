@@ -276,6 +276,10 @@ func segmentDistance(p, a, b iconPoint) float64 {
 	return math.Hypot(p.x-(a.x+t*dx), p.y-(a.y+t*dy))
 }
 
+// vectorIconScale is the share of its square an icon's shape spans: a
+// margin all round, as a GUI draws a button's icon well inside its bezel.
+const vectorIconScale = 0.6
+
 // vectorIconSide is a vectorIcon's side in pixels: more than a terminal
 // prepares an icon button's picture at, so the picture is never upscaled.
 const vectorIconSide = 512
@@ -302,8 +306,8 @@ func (v vectorIcon) At(x, y int) color.Color {
 	if !ok || x < 0 || y < 0 || x >= vectorIconSide || y >= vectorIconSide {
 		return color.NRGBA{}
 	}
-	const px = 1.0 / vectorIconSide
-	u, w := float64(x)*px-0.5, float64(y)*px-0.5
+	const px = 1.0 / vectorIconSide / vectorIconScale
+	u, w := (float64(x)/vectorIconSide-0.5)/vectorIconScale, (float64(y)/vectorIconSide-0.5)/vectorIconScale
 	a := g.coverage(u, w, u+px, w+px, 2)
 	if v.Invert {
 		return blendInverted(v.Color, a)
