@@ -4,6 +4,18 @@ Generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [release-please](https://github.com/googleapis/release-please); entries
 below the first release are automated.
 
+## [0.3.0](https://github.com/lunguini/flatte/compare/v0.2.0...v0.3.0) (2026-11-14)
+
+
+### Features
+
+* terminal pictures, vector icons and richer mouse input ([#34](https://github.com/lunguini/flatte/issues/34)) ([fdb99cb](https://github.com/lunguini/flatte/commit/fdb99cb66ea6af8517cb5b68fe5eddab397d2a61))
+
+
+### Build System
+
+* **window:** require flatte v0.2.0 ([#29](https://github.com/lunguini/flatte/issues/29)) ([11e9c55](https://github.com/lunguini/flatte/commit/11e9c558fc7642e7f0f1cc758dd4eaeefe29b037))
+
 ## [0.2.0](https://github.com/lunguini/flatte/compare/v0.1.2...v0.2.0) (2026-11-01)
 
 
