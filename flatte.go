@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/lunguini/flatte/flatui/layout"
 	"golang.org/x/term"
 )
 
@@ -738,8 +739,11 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 		return ctx
 	}
-	syncKittyImages := func(width, height int) {
-		images := kittyPlacementsForRuntime(
+	kittyPlacements := func(width, height int) []layout.TerminalImagePlacement {
+		if !kittyImages.enabled {
+			return nil
+		}
+		return kittyPlacementsForRuntime(
 			session.cell.lastComp,
 			&session.cell.windows,
 			&session.cell.menus,
@@ -747,7 +751,9 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 			width,
 			height,
 		)
-		kittyImages.update(images, renderer)
+	}
+	syncKittyImages := func(width, height int) {
+		kittyImages.update(kittyPlacements(width, height), renderer)
 	}
 
 	draw := func() {
@@ -802,6 +808,8 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 		screen.Clear()
 		styled.Draw(screen, screen.Bounds())
+		images := kittyPlacements(renderCtx.Width, renderCtx.Height)
+		clearUnderKittyImages(screen, images)
 		renderer.Render(screen.RenderBuffer)
 		if frame.Cursor != nil {
 			applyCursorStyle(frame.Cursor.Style)
@@ -812,7 +820,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 				cursorShown = true
 			}
 		}
-		syncKittyImages(renderCtx.Width, renderCtx.Height)
+		kittyImages.update(images, renderer)
 		if err := flushRenderer(); err != nil {
 			return
 		}

@@ -221,14 +221,10 @@ func (p *cellPainter) leaf(n Node, rr, cc rect[int]) {
 		render = func(rect Rect) string { return image.renderWithColorProfile(rect, p.profile) }
 	}
 	paintClipped(p.buf, r, clip, render)
-	if img, ok := terminalImageNode(n); ok && !isNilImage(img.Source) {
-		content := r.insetBy(img.insetSides())
-		visible := content.Intersect(clip).Intersect(Rect{W: p.buf.Width(), H: p.buf.Height()})
-		if content.W > 0 && content.H > 0 && visible == content {
-			p.images = append(p.images, terminalImageCandidate{
-				placement: TerminalImagePlacement{Rect: visible, Source: img.Source, Fit: img.Fit},
-				order:     p.order,
-			})
+	if placement, ok := terminalImagePlacement(n, r); ok {
+		visible := placement.Rect.Intersect(clip).Intersect(Rect{W: p.buf.Width(), H: p.buf.Height()})
+		if placement.Rect.W > 0 && placement.Rect.H > 0 && visible == placement.Rect {
+			p.images = append(p.images, terminalImageCandidate{placement: placement, order: p.order})
 		}
 	}
 	if under != nil {
@@ -301,6 +297,30 @@ func (p *cellPainter) layer(r rect[int]) {
 		p.layers = append(p.layers, orderedRect{rect: visible, order: p.order})
 	}
 	p.buf.FillArea(&uv.EmptyCell, uv.Rect(r.X, r.Y, r.W, r.H))
+}
+
+// terminalImagePlacement is the picture a leaf in r asks a terminal that
+// shows images to draw: an Image's source, or an icon button's shape.
+func terminalImagePlacement(n Node, r Rect) (TerminalImagePlacement, bool) {
+	if img, ok := terminalImageNode(n); ok && !isNilImage(img.Source) {
+		return TerminalImagePlacement{Rect: r.insetBy(img.insetSides()), Source: img.Source, Fit: img.Fit}, true
+	}
+	var b Button
+	switch button := n.(type) {
+	case Button:
+		b = button
+	case *Button:
+		if button == nil {
+			return TerminalImagePlacement{}, false
+		}
+		b = *button
+	default:
+		return TerminalImagePlacement{}, false
+	}
+	if icon, content, ok := b.terminalIcon(r); ok {
+		return TerminalImagePlacement{Rect: content, Source: icon, Fit: ImageContain}, true
+	}
+	return TerminalImagePlacement{}, false
 }
 
 func terminalImageNode(n Node) (Image, bool) {

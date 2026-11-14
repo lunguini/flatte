@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -351,6 +352,22 @@ func TestKittyPixelSizePreparesDenseButNotAboveSource(t *testing.T) {
 		w, h, ok := kittyPixelSize(tc.rect, tc.source)
 		if !ok || w != tc.w || h != tc.h {
 			t.Errorf("kittyPixelSize(%v, %v) = %d×%d %v, want %d×%d", tc.rect, tc.source, w, h, ok, tc.w, tc.h)
+		}
+	}
+}
+
+func TestClearUnderKittyImagesKeepsBackgrounds(t *testing.T) {
+	screen := uv.NewScreenBuffer(4, 2)
+	uv.NewStyledString("\x1b[41m▀▀\x1b[0m▄▄\n▀▀▀▀").Draw(screen, screen.Bounds())
+	clearUnderKittyImages(screen, []layout.TerminalImagePlacement{{Rect: layout.Rect{X: 1, W: 2, H: 1}}, {Rect: layout.Rect{X: 3, Y: 1, W: 5, H: 5}}})
+	for _, tc := range []struct {
+		x, y    int
+		content string
+		bg      bool
+	}{{0, 0, "▀", true}, {1, 0, " ", true}, {2, 0, " ", false}, {3, 0, "▄", false}, {2, 1, "▀", false}, {3, 1, " ", false}} {
+		c := screen.CellAt(tc.x, tc.y)
+		if c.Content != tc.content || (c.Style.Bg != nil) != tc.bg {
+			t.Errorf("cell (%d,%d) = %q bg %v, want %q bg %v", tc.x, tc.y, c.Content, c.Style.Bg, tc.content, tc.bg)
 		}
 	}
 }

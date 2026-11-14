@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -195,6 +196,25 @@ func kittyPlacementsForRuntime(main layout.Composition, windows *windowHost, men
 		}
 	}
 	return out
+}
+
+// clearUnderKittyImages blanks the cell fallback under each picture,
+// keeping the cells' backgrounds, so a picture's transparent pixels show
+// the background rather than the half-block cells drawn for terminals
+// without images.
+func clearUnderKittyImages(screen uv.ScreenBuffer, images []layout.TerminalImagePlacement) {
+	for _, image := range images {
+		r := image.Rect.Intersect(layout.Rect{W: screen.Width(), H: screen.Height()})
+		for y := r.Y; y < r.Y+r.H; y++ {
+			for x := r.X; x < r.X+r.W; x++ {
+				blank := uv.EmptyCell
+				if c := screen.CellAt(x, y); c != nil {
+					blank.Style.Bg = c.Style.Bg
+				}
+				screen.SetCell(x, y, &blank)
+			}
+		}
+	}
 }
 
 func translateKittyPlacement(placement layout.TerminalImagePlacement, x, y int, bounds layout.Rect) (layout.TerminalImagePlacement, bool) {
