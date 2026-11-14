@@ -132,6 +132,14 @@ func translateButton(button uv.MouseButton) MouseButton {
 		return MouseWheelUp
 	case uv.MouseWheelDown:
 		return MouseWheelDown
+	case uv.MouseWheelLeft:
+		return MouseWheelLeft
+	case uv.MouseWheelRight:
+		return MouseWheelRight
+	case uv.MouseBackward:
+		return MouseBack
+	case uv.MouseForward:
+		return MouseForward
 	}
 	return MouseNone
 }

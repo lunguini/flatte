@@ -40,6 +40,10 @@ func browserMouseButtonValue(button int) MouseButton {
 		return MouseMiddle
 	case 2:
 		return MouseRight
+	case 3:
+		return MouseBack
+	case 4:
+		return MouseForward
 	default:
 		return MouseNone
 	}

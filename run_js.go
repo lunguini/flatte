@@ -145,6 +145,8 @@ type browserHost struct {
 	padLeft, padRight, padTop, padBottom float64
 	wheel                                browserWheelAccumulator
 	wheelDelta                           float64
+	hwheel                               browserWheelAccumulator
+	hwheelDelta                          float64
 	wheelX, wheelY                       float64
 	wheelMod                             Mod
 	frameID                              js.Value
@@ -348,14 +350,17 @@ func (h *browserHost) bindMouse() {
 	h.listen(h.surface, "pointermove", pointer(MouseMotion))
 	h.listen(h.surface, "wheel", func(ev js.Value) {
 		ev.Call("preventDefault")
-		delta := ev.Get("deltaY").Float()
+		delta, across := ev.Get("deltaY").Float(), ev.Get("deltaX").Float()
 		switch ev.Get("deltaMode").Int() {
 		case 1: // DOM_DELTA_LINE
 			delta *= h.lineHeight
+			across *= h.lineHeight
 		case 2: // DOM_DELTA_PAGE
 			delta *= float64(h.surface.Get("clientHeight").Int())
+			across *= float64(h.surface.Get("clientWidth").Int())
 		}
 		h.wheelDelta += delta
+		h.hwheelDelta += across
 		h.wheelX, h.wheelY = ev.Get("clientX").Float(), ev.Get("clientY").Float()
 		h.wheelMod = browserMod(ev)
 		h.scheduleWheel()
@@ -386,28 +391,30 @@ func (h *browserHost) flushWheel() {
 	if h.closed {
 		return
 	}
-	delta := h.wheelDelta
-	h.wheelDelta = 0
-	notches := h.wheel.notches(delta, h.lineHeight)
-	if notches == 0 {
-		return
-	}
-	button := MouseWheelDown
-	if notches < 0 {
-		button = MouseWheelUp
-		notches = -notches
-	}
-	// Bound one frame's batch so a malformed DOM event cannot allocate an
-	// unbounded event slice. Any discarded whole notches are already consumed.
-	if notches > 1024 {
-		notches = 1024
-	}
+	down, across := h.wheelDelta, h.hwheelDelta
+	h.wheelDelta, h.hwheelDelta = 0, 0
 	x, y := h.cellAt(h.wheelX, h.wheelY)
-	events := make([]Event, notches)
-	for i := range events {
-		events[i] = MouseEvent{X: x, Y: y, Button: button, Action: MousePress, Mod: h.wheelMod}
+	var events []Event
+	for _, axis := range []struct {
+		notches    int
+		less, more MouseButton
+	}{
+		{h.wheel.notches(down, h.lineHeight), MouseWheelUp, MouseWheelDown},
+		{h.hwheel.notches(across, h.lineHeight), MouseWheelLeft, MouseWheelRight},
+	} {
+		notches, button := axis.notches, axis.more
+		if notches < 0 {
+			notches, button = -notches, axis.less
+		}
+		// Bound one frame's batch so a malformed DOM event cannot allocate an
+		// unbounded event slice. Any discarded whole notches are already consumed.
+		for range min(notches, 1024) {
+			events = append(events, MouseEvent{X: x, Y: y, Button: button, Action: MousePress, Mod: h.wheelMod})
+		}
 	}
-	h.emitBatch(events)
+	if len(events) > 0 {
+		h.emitBatch(events)
+	}
 }
 
 func browserMouseButton(ev js.Value) MouseButton {

@@ -40,6 +40,8 @@ flatte package flatte
   const ModCtrl Mod = 4
   const ModShift Mod = 1
   const ModSuper Mod = 8
+  const MouseBack MouseButton = 8
+  const MouseForward MouseButton = 9
   const MouseLeft MouseButton = 1
   const MouseMiddle MouseButton = 2
   const MouseModeAllMotion MouseMode = 2
@@ -51,6 +53,8 @@ flatte package flatte
   const MouseRelease MouseAction = 1
   const MouseRight MouseButton = 3
   const MouseWheelDown MouseButton = 5
+  const MouseWheelLeft MouseButton = 6
+  const MouseWheelRight MouseButton = 7
   const MouseWheelUp MouseButton = 4
   const WindowCloseRequest WindowEventKind = 1
   const WindowFocused WindowEventKind = 0
