@@ -282,7 +282,7 @@ const vectorIconScale = 0.6
 
 // vectorIconSide is a vectorIcon's side in pixels: more than a terminal
 // prepares an icon button's picture at, so the picture is never upscaled.
-const vectorIconSide = 512
+const vectorIconSide = 256
 
 // vectorIcon is an icon's shape as a square image in one color: what a
 // terminal that shows images draws for an icon button. Each pixel is

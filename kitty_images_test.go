@@ -408,3 +408,28 @@ func TestKittyPlacesAScreenOfThumbnails(t *testing.T) {
 		t.Fatalf("placed %d of 40 thumbnails", got)
 	}
 }
+
+func TestKittyShrinkAveragesEverySourcePixel(t *testing.T) {
+	// A fine checker of red and blue: a shrink must average to violet,
+	// where four-sample bilinear lands on single pixels.
+	src := image.NewRGBA(image.Rect(0, 0, 400, 400))
+	for y := range 400 {
+		for x := range 400 {
+			c := color.RGBA{R: 255, A: 255}
+			if (x+y)%2 == 1 {
+				c = color.RGBA{B: 255, A: 255}
+			}
+			src.SetRGBA(x, y, c)
+		}
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, 7, 7))
+	resizeKitty(dst, src, 0, 0, 400, 400, dst.Bounds())
+	for y := range 7 {
+		for x := range 7 {
+			c := dst.RGBAAt(x, y)
+			if c.R < 110 || c.R > 145 || c.B < 110 || c.B > 145 || c.A != 255 {
+				t.Fatalf("pixel %d,%d = %v, want an even mix", x, y, c)
+			}
+		}
+	}
+}

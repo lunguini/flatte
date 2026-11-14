@@ -657,11 +657,52 @@ func resizeKitty(dst *image.RGBA, src image.Image, sourceX, sourceY, sourceW, so
 	if target.Empty() || sourceW <= 0 || sourceH <= 0 {
 		return
 	}
+	if sourceW > float64(target.Dx()) || sourceH > float64(target.Dy()) {
+		shrinkKitty(dst, src, sourceX, sourceY, sourceW, sourceH, target)
+		return
+	}
 	for y := target.Min.Y; y < target.Max.Y; y++ {
 		sy := sourceY + (float64(y-target.Min.Y)+0.5)*sourceH/float64(target.Dy()) - 0.5
 		for x := target.Min.X; x < target.Max.X; x++ {
 			sx := sourceX + (float64(x-target.Min.X)+0.5)*sourceW/float64(target.Dx()) - 0.5
 			dst.SetRGBA(x, y, sampleKittyBilinear(src, sx, sy))
+		}
+	}
+}
+
+// shrinkKitty scales a source area down to target by averaging every source
+// pixel each target pixel covers (premultiplied, weighted by coverage):
+// bilinear sampling reads only four, which skips most of a much larger
+// source and smears it.
+func shrinkKitty(dst *image.RGBA, src image.Image, sourceX, sourceY, sourceW, sourceH float64, target image.Rectangle) {
+	bounds := src.Bounds()
+	sx, sy := sourceW/float64(target.Dx()), sourceH/float64(target.Dy())
+	for y := target.Min.Y; y < target.Max.Y; y++ {
+		y0 := sourceY + float64(y-target.Min.Y)*sy
+		y1 := y0 + sy
+		for x := target.Min.X; x < target.Max.X; x++ {
+			x0 := sourceX + float64(x-target.Min.X)*sx
+			x1 := x0 + sx
+			var r, g, b, a, weight float64
+			for py := max(int(math.Floor(y0)), bounds.Min.Y); py < min(int(math.Ceil(y1)), bounds.Max.Y); py++ {
+				wy := min(y1, float64(py+1)) - max(y0, float64(py))
+				for px := max(int(math.Floor(x0)), bounds.Min.X); px < min(int(math.Ceil(x1)), bounds.Max.X); px++ {
+					w := wy * (min(x1, float64(px+1)) - max(x0, float64(px)))
+					if w <= 0 {
+						continue
+					}
+					pr, pg, pb, pa := src.At(px, py).RGBA()
+					r, g, b, a = r+float64(pr)*w, g+float64(pg)*w, b+float64(pb)*w, a+float64(pa)*w
+					weight += w
+				}
+			}
+			if weight == 0 {
+				continue
+			}
+			dst.SetRGBA(x, y, color.RGBA{
+				R: uint8(math.Round(r / weight / 257)), G: uint8(math.Round(g / weight / 257)),
+				B: uint8(math.Round(b / weight / 257)), A: uint8(math.Round(a / weight / 257)),
+			})
 		}
 	}
 }
