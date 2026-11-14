@@ -159,12 +159,13 @@ func cellFrame[S any](session *Session, app App[S], cell *sessionCell, ctx Rende
 			session.handle(event)
 		}
 	}
-	frame, comp, delivered := settleFrameWithHeight(
+	frame, comp, delivered := settleFrameWithHeightProfile(
 		func() Frame { return session.view(ctx) },
 		handleLayout,
 		cell.lastLayout,
 		ctx.Width,
 		func(root layout.Node) int { return rootHeight(root, ctx.Height, session.inline) },
+		ctx.ColorProfile,
 	)
 	cell.lastLayout, cell.lastComp = delivered, comp
 	if session.quittingNow() {

@@ -40,6 +40,8 @@ flatte package flatte
   const ModCtrl Mod = 4
   const ModShift Mod = 1
   const ModSuper Mod = 8
+  const MouseBack MouseButton = 8
+  const MouseForward MouseButton = 9
   const MouseLeft MouseButton = 1
   const MouseMiddle MouseButton = 2
   const MouseModeAllMotion MouseMode = 2
@@ -51,6 +53,8 @@ flatte package flatte
   const MouseRelease MouseAction = 1
   const MouseRight MouseButton = 3
   const MouseWheelDown MouseButton = 5
+  const MouseWheelLeft MouseButton = 6
+  const MouseWheelRight MouseButton = 7
   const MouseWheelUp MouseButton = 4
   const WindowCloseRequest WindowEventKind = 1
   const WindowFocused WindowEventKind = 0
@@ -221,8 +225,9 @@ flatte package flatte
   field Frame.Cursor *Cursor [order=1]
   field Frame.CursorStyle *CursorStyle [order=2]
   field Frame.Title string [order=3]
-  field Frame.Root layout.Node [order=4]
-  struct Frame fields=5 comparable=true
+  field Frame.CellImages bool [order=4]
+  field Frame.Root layout.Node [order=5]
+  struct Frame fields=6 comparable=true
   type Host interface
   interface Host method Run(context.Context, *Session) error
   type HostServices struct
@@ -967,6 +972,7 @@ flatui/layout package layout
   func Auto() Size
   func ClampScroll(offset int, viewport int, content int) int
   func Compose(root Node, width int, height int) Composition
+  func ComposeWithColorProfile(root Node, width int, height int, profile colorprofile.Profile) Composition
   func Fixed(n int) Size
   func Grow(w float64) Size
   func LayoutScene(root Node, width float64, height float64, m Metrics) Scene
@@ -1025,6 +1031,7 @@ flatui/layout package layout
   method ScrollBar.OffsetAt(y int, height int) int
   method ScrollBar.Render(r Rect) string
   method ScrollBar.Size()(Size, Size)
+  method ScrollBar.Thumb(height int)(pos int, size int, ok bool)
   method Slider.Render(r Rect) string
   method Slider.Size()(Size, Size)
   method Slider.ValueAt(x int, width int) float64
@@ -1143,10 +1150,11 @@ flatui/layout package layout
   field Composition.Frame string [order=0]
   field Composition.Rects map[string] Rect [order=1]
   field Composition.Diagnostics []DuplicateIDDiagnostic [order=2]
-  field Composition.<unexported> []hit [order=3]
-  field Composition.<unexported> *caretPos [order=4]
-  field Composition.<unexported> map[string] placedInput [order=5]
-  struct Composition fields=6 comparable=false
+  field Composition.TerminalImages []TerminalImagePlacement [order=3]
+  field Composition.<unexported> []hit [order=4]
+  field Composition.<unexported> *caretPos [order=5]
+  field Composition.<unexported> map[string] placedInput [order=6]
+  struct Composition fields=7 comparable=false
   type ControlKind int
   type ControlOp struct
   field ControlOp.ID string [order=0]
@@ -1359,6 +1367,11 @@ flatui/layout package layout
   field Spacer.NodeBase NodeBase [order=0]
   field Spacer.<unexported> color.Color [order=1]
   struct Spacer fields=2 comparable=false
+  type TerminalImagePlacement struct
+  field TerminalImagePlacement.Rect Rect [order=0]
+  field TerminalImagePlacement.Source image.Image [order=1]
+  field TerminalImagePlacement.Fit ImageFit [order=2]
+  struct TerminalImagePlacement fields=3 comparable=true
   type Text struct
   field Text.NodeBase NodeBase [order=0]
   field Text.String string [order=1]

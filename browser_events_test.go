@@ -71,7 +71,7 @@ func TestBrowserWheelAccumulatorAndCellCoordinates(t *testing.T) {
 	if x != 0 || y != 0 {
 		t.Fatalf("negative browser cell = (%d,%d), want (0,0)", x, y)
 	}
-	for value, want := range map[int]MouseButton{0: MouseLeft, 1: MouseMiddle, 2: MouseRight, 3: MouseNone} {
+	for value, want := range map[int]MouseButton{0: MouseLeft, 1: MouseMiddle, 2: MouseRight, 3: MouseBack, 4: MouseForward, 5: MouseNone} {
 		if got := browserMouseButtonValue(value); got != want {
 			t.Errorf("browser mouse button %d = %v, want %v", value, got, want)
 		}

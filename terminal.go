@@ -64,6 +64,11 @@ func terminalSize(out io.Writer) (width, height int) {
 	return width, height
 }
 
+func terminalOutputIsTTY(out io.Writer) bool {
+	file, ok := out.(fdWriter)
+	return ok && term.IsTerminal(int(file.Fd()))
+}
+
 // renderContextFor reports the terminal facts available to View. It mirrors
 // renderer color-profile detection so apps can pick theme styles without
 // owning terminal probing.

@@ -147,3 +147,15 @@ func TestScrollBarOffsetAt(t *testing.T) {
 		t.Fatalf("nothing to scroll changed the offset to %d", got)
 	}
 }
+
+func TestScrollBarThumbMatchesItsDrawing(t *testing.T) {
+	b := ScrollBar{Offset: 50, Visible: 10, Total: 100}
+	pos, size, ok := b.Thumb(20)
+	rows := strings.Split(ansi.Strip(b.Render(Rect{W: 1, H: 20})), "\n")
+	if !ok || size != 2 || rows[pos] != "█" || rows[pos+size-1] != "█" || (pos > 0 && rows[pos-1] != "░") || rows[pos+size] != "░" {
+		t.Fatalf("Thumb = %d,%d,%v; drawn %q", pos, size, ok, rows)
+	}
+	if _, _, ok := (ScrollBar{Visible: 10, Total: 5}).Thumb(20); ok {
+		t.Fatal("a thumb for content that fits")
+	}
+}

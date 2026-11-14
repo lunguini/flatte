@@ -105,6 +105,13 @@ const (
 	MouseRight
 	MouseWheelUp
 	MouseWheelDown
+	// MouseWheelLeft and MouseWheelRight are horizontal scrolling, as a
+	// trackpad's sideways swipe or a tilted wheel reports it.
+	MouseWheelLeft
+	MouseWheelRight
+	// MouseBack and MouseForward are a mouse's side buttons.
+	MouseBack
+	MouseForward
 )
 
 type MouseAction int

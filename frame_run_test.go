@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runFrameApp drives Run over a pipe with the given View, feeding it the
@@ -45,8 +46,12 @@ func runFrameApp(t *testing.T, view func(*testState, RenderContext) Frame, input
 		}, append([]Option{WithInput(reader), WithOutput(&out)}, opts...)...)
 	}()
 
-	if _, err := writer.Write([]byte(input)); err != nil {
-		t.Fatal(err)
+	// Keys arrive as typed, one draw apart: a burst would be drawn once.
+	for _, key := range []byte(input) {
+		if _, err := writer.Write([]byte{key}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)

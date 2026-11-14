@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -28,7 +29,11 @@ import (
 // it Points sizes for a square, which a Default button draws as a circle.
 // Plain draws no bezel until the pointer is over it (a toolbar button), and
 // in the terminal spaces instead of the brackets. An icon button's terminal
-// brackets are tight ("[▶]"), so it fits a square of its own.
+// brackets are tight ("[▶]"), so it fits a square of its own. A terminal
+// icon button with two or more lines inside its padding and border centers
+// its Label there, and a terminal that shows images draws the icon's shape
+// over it, as large as the space allows, in Style's color (reversed when
+// Focused).
 type Button struct {
 	NodeBase
 	Label                      string
@@ -169,6 +174,11 @@ func controlStyle(s TextStyle, disabled bool) lipgloss.Style {
 }
 
 func (b Button) Render(r Rect) string {
+	return fillBox(b.styledSpelling(), r, b.padSides(), b.box())
+}
+
+// styledSpelling is the button's terminal spelling in its style.
+func (b Button) styledSpelling() string {
 	st := b.Style
 	st.Bold = st.Bold || b.Default
 	base := controlStyle(st, b.Disabled)
@@ -177,7 +187,46 @@ func (b Button) Render(r Rect) string {
 		label = base.Reverse(true).Render(b.Label)
 	}
 	open, closing := b.ends()
-	return fillBox(base.Render(open)+label+base.Render(closing), r, b.padSides(), b.box())
+	return base.Render(open) + label + base.Render(closing)
+}
+
+// renderWithColorProfile centers an icon button's Label in the room its
+// shape is drawn in; otherwise, as Render.
+func (b Button) renderWithColorProfile(r Rect, profile colorprofile.Profile) string {
+	_, content, ok := b.terminalIcon(r)
+	if !ok {
+		return b.Render(r)
+	}
+	label := lipgloss.Place(content.W, content.H, lipgloss.Center, lipgloss.Center, b.styledSpelling())
+	return fillBox(label, r, b.padSides(), b.box())
+}
+
+// terminalIcon is the shape a terminal draws for an icon button in r, and
+// the cells it fills; false when the button has no shape or too little
+// room (one line inside its padding and border), so it shows its Label.
+func (b Button) terminalIcon(r Rect) (vectorIcon, Rect, bool) {
+	content := r.insetBy(b.insetSides())
+	if b.Icon == IconNone || content.W < 2 || content.H < 2 {
+		return vectorIcon{}, Rect{}, false
+	}
+	if _, ok := vectorIconGeometry(b.Icon); !ok {
+		return vectorIcon{}, Rect{}, false
+	}
+	return vectorIcon{Name: b.Icon, Color: b.iconColor(), Invert: b.Focused && !b.Disabled}, content, true
+}
+
+// iconColor is the color a terminal draws an icon button's shape in: its
+// Style's Fg, or the terminal's subtle or default text color as near as an
+// RGB value goes.
+func (b Button) iconColor() color.RGBA {
+	switch {
+	case b.Disabled || b.Style.Fg == nil && b.Style.Role == TextSubtle:
+		return color.RGBA{R: 0x80, G: 0x80, B: 0x80, A: 0xff}
+	case b.Style.Fg != nil:
+		r, g, bl, _ := b.Style.Fg.RGBA()
+		return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(bl >> 8), A: 0xff}
+	}
+	return color.RGBA{R: 0xe4, G: 0xe4, B: 0xe4, A: 0xff}
 }
 
 func (t Toggle) Render(r Rect) string {

@@ -53,6 +53,12 @@ func (b ScrollBar) Render(r Rect) string {
 	return fillBox(bar, r, b.padSides(), b.box())
 }
 
+// Thumb is the thumb's first line and length on a bar height lines tall
+// (node-local, as for OffsetAt), or ok false when the content fits: for
+// telling a press on the thumb, which drags it from where it was grabbed,
+// from a press on the track.
+func (b ScrollBar) Thumb(height int) (pos, size int, ok bool) { return b.thumb(height) }
+
 // thumb is the thumb's first line and length on a track height lines
 // long, or ok false when the content fits (nothing to scroll).
 func (b ScrollBar) thumb(height int) (pos, size int, ok bool) {

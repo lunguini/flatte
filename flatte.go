@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/lunguini/flatte/flatui/layout"
 	"golang.org/x/term"
 )
 
@@ -422,6 +423,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	}
 	in, out := cfg.input, cfg.output
 	sink := &outputSink{w: out}
+	terminalEnv := os.Environ()
 
 	// Raw mode enter/restore are reusable: suspend and exec hand the
 	// terminal back to the shell or a subprocess and re-enter afterwards.
@@ -457,9 +459,10 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 
 	renderOut := &bytes.Buffer{}
 	newRenderer := func() *uv.TerminalRenderer {
-		return newTerminalRenderer(renderOut, out, os.Environ(), cfg.inline)
+		return newTerminalRenderer(renderOut, out, terminalEnv, cfg.inline)
 	}
 	renderer := newRenderer()
+	kittyImages := newKittyImageState(kittyImagesEnabled(terminalEnv) && terminalOutputIsTTY(out))
 	flushRenderer := func() error {
 		err := renderer.Flush()
 		sink.record(err)
@@ -532,6 +535,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	}
 	defer func() {
 		drainActions() // actions enqueued on the quit iteration still emit
+		kittyImages.clear(renderer)
 		if lastFrame.Title != "" {
 			_, _ = renderer.WriteString(ansi.SetWindowTitle(""))
 		}
@@ -735,6 +739,22 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 		return ctx
 	}
+	kittyPlacements := func(frame Frame, width, height int) []layout.TerminalImagePlacement {
+		if !kittyImages.enabled || frame.CellImages {
+			return nil
+		}
+		return kittyPlacementsForRuntime(
+			session.cell.lastComp,
+			&session.cell.windows,
+			&session.cell.menus,
+			&session.cell.dialogs,
+			width,
+			height,
+		)
+	}
+	syncKittyImages := func(frame Frame, width, height int) {
+		kittyImages.update(kittyPlacements(frame, width, height), renderer)
+	}
 
 	draw := func() {
 		if sink.err != nil {
@@ -748,6 +768,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		frame := step.Frame
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
+			syncKittyImages(frame, renderCtx.Width, renderCtx.Height)
 			if err := flushRenderer(); err == nil {
 				writeFrameOutput()
 			}
@@ -787,6 +808,8 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 		screen.Clear()
 		styled.Draw(screen, screen.Bounds())
+		images := kittyPlacements(frame, renderCtx.Width, renderCtx.Height)
+		clearUnderKittyImages(screen, images)
 		renderer.Render(screen.RenderBuffer)
 		if frame.Cursor != nil {
 			applyCursorStyle(frame.Cursor.Style)
@@ -797,6 +820,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 				cursorShown = true
 			}
 		}
+		kittyImages.update(images, renderer)
 		if err := flushRenderer(); err != nil {
 			return
 		}
@@ -812,6 +836,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	// was delivered to us.
 	releaseTerminal := func() {
 		inputStopped = pipe.stop()
+		kittyImages.clear(renderer)
 		resetCursorStyle()
 		_, _ = renderer.WriteString(resetModes(cfg))
 		_, _ = renderer.WriteString("\x1b[?25h")
@@ -878,6 +903,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		if str == "" {
 			return
 		}
+		kittyImages.clear(renderer)
 		// Flush any buffered renderer output first so the inserted lines land in
 		// order relative to a pending frame.
 		if err := flushRenderer(); err != nil {
@@ -1004,28 +1030,43 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		case <-runCtx.Done():
 			return nil
 		case result, ok := <-pipe.events:
-			if !ok {
-				return nil
-			}
-			if result.err != nil {
-				// The terminal reader has already returned, but the dispatcher
-				// may still be unwinding after its unbuffered error send. Join it
-				// before closing the owned CancelReader.
-				pipe.finish()
-				return result.err
-			}
-			if _, ok := result.event.(ResizeEvent); ok {
-				// A resize can arrive through the input stream (notably the
-				// Windows console path), rather than SIGWINCH. Both paths
-				// invalidate the renderer's screen model and require a full
-				// repaint, even when the frame content is unchanged.
-				forceRepaint = true
-			}
-			step := session.Step(StepInput{
-				Events: []Event{result.event}, UpdatesPending: true, RenderContext: eventRenderContext(),
-			})
-			if step.Quit {
-				return nil
+			// Input already waiting is handled before the next draw: a burst
+			// of wheel or drag events, read faster than a slow terminal
+			// takes frames, is one frame instead of a backlog that keeps
+			// scrolling after the hand stops.
+			for n := 0; ; n++ {
+				if !ok {
+					return nil
+				}
+				if result.err != nil {
+					// The terminal reader has already returned, but the dispatcher
+					// may still be unwinding after its unbuffered error send. Join it
+					// before closing the owned CancelReader.
+					pipe.finish()
+					return result.err
+				}
+				if _, ok := result.event.(ResizeEvent); ok {
+					// A resize can arrive through the input stream (notably the
+					// Windows console path), rather than SIGWINCH. Both paths
+					// invalidate the renderer's screen model and require a full
+					// repaint, even when the frame content is unchanged.
+					forceRepaint = true
+				}
+				step := session.Step(StepInput{
+					Events: []Event{result.event}, UpdatesPending: true, RenderContext: eventRenderContext(),
+				})
+				if step.Quit || session.quittingNow() {
+					return nil
+				}
+				if n+1 >= maxInputBatch || len(pending) > 0 {
+					break // queued output (a print, a clipboard write) goes out in order
+				}
+				select {
+				case result, ok = <-pipe.events:
+					continue
+				default:
+				}
+				break
 			}
 		case <-resize:
 			forceRepaint = true
@@ -1071,6 +1112,13 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 	}
 }
+
+// inputBuffer is how many translated input events wait for the loop.
+const inputBuffer = 64
+
+// maxInputBatch bounds the input events handled between two draws, so a
+// stream of input cannot hold the screen still.
+const maxInputBatch = 256
 
 // setModes returns the terminal-mode escapes for the configured
 // capabilities; resetModes returns their inverses. Mouse reset clears
@@ -1163,7 +1211,9 @@ type inputResult struct {
 // as the final result). The done channel closes only once no goroutine can
 // touch the reader anymore — Run waits on it before returning.
 func readInput(ctx context.Context, in io.Reader) (<-chan inputResult, <-chan struct{}) {
-	results := make(chan inputResult)
+	// Buffered, so input read while a frame is drawn waits ready for the
+	// loop to take in one batch (see maxInputBatch).
+	results := make(chan inputResult, inputBuffer)
 	done := make(chan struct{})
 	rawEvents := make(chan uv.Event)
 	reader := uv.NewTerminalReader(in, os.Getenv("TERM"))
