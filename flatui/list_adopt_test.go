@@ -134,3 +134,19 @@ func TestListAdoptCountsTheGapBetweenRows(t *testing.T) {
 		t.Fatalf("rows %d, want 4 with a one-line gap", list.Height())
 	}
 }
+
+func TestListAdoptCountsTheRoomAboveTheFirstRow(t *testing.T) {
+	var list List
+	list.SetCount(20)
+	// A line of room, then two-line rows a line apart, in an 11-line
+	// viewport: three rows fit (1+2+1+2+1+2 = 9; a fourth needs 12).
+	event := flatte.LayoutEvent{Rects: map[string]layout.Rect{
+		"songs":   {Y: 5, W: 30, H: 11},
+		"songs:0": {Y: 6, W: 30, H: 2},
+		"songs:1": {Y: 9, W: 30, H: 2},
+	}}
+	list.Adopt(event, "songs")
+	if list.Height() != 3 {
+		t.Fatalf("rows %d, want 3 below a line of room", list.Height())
+	}
+}

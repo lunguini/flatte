@@ -132,9 +132,22 @@ func (l *List) Adopt(event flatte.LayoutEvent, id string) {
 			gap = max(gap, g)
 		}
 	}
+	// Room above the first row (a line before the list's rows) is
+	// measured from the first row's top, and leaves less for the rows.
+	lead, first := 0.0, -1
+	for i := range spans {
+		if first < 0 || i < first {
+			first = i
+		}
+	}
+	if first >= 0 {
+		if l := spans[first].top - viewport.Y; l > 0 && l < viewport.H {
+			lead = l
+		}
+	}
 	count := 1
 	if rowHeight > 0 {
-		capacity := math.Floor((viewport.H+gap)/(rowHeight+gap) + 1e-9)
+		capacity := math.Floor((viewport.H-lead+gap)/(rowHeight+gap) + 1e-9)
 		if capacity >= maxWidgetDimension {
 			count = maxWidgetDimension
 		} else {
