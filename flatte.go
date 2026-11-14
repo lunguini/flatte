@@ -1030,28 +1030,43 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		case <-runCtx.Done():
 			return nil
 		case result, ok := <-pipe.events:
-			if !ok {
-				return nil
-			}
-			if result.err != nil {
-				// The terminal reader has already returned, but the dispatcher
-				// may still be unwinding after its unbuffered error send. Join it
-				// before closing the owned CancelReader.
-				pipe.finish()
-				return result.err
-			}
-			if _, ok := result.event.(ResizeEvent); ok {
-				// A resize can arrive through the input stream (notably the
-				// Windows console path), rather than SIGWINCH. Both paths
-				// invalidate the renderer's screen model and require a full
-				// repaint, even when the frame content is unchanged.
-				forceRepaint = true
-			}
-			step := session.Step(StepInput{
-				Events: []Event{result.event}, UpdatesPending: true, RenderContext: eventRenderContext(),
-			})
-			if step.Quit {
-				return nil
+			// Input already waiting is handled before the next draw: a burst
+			// of wheel or drag events, read faster than a slow terminal
+			// takes frames, is one frame instead of a backlog that keeps
+			// scrolling after the hand stops.
+			for n := 0; ; n++ {
+				if !ok {
+					return nil
+				}
+				if result.err != nil {
+					// The terminal reader has already returned, but the dispatcher
+					// may still be unwinding after its unbuffered error send. Join it
+					// before closing the owned CancelReader.
+					pipe.finish()
+					return result.err
+				}
+				if _, ok := result.event.(ResizeEvent); ok {
+					// A resize can arrive through the input stream (notably the
+					// Windows console path), rather than SIGWINCH. Both paths
+					// invalidate the renderer's screen model and require a full
+					// repaint, even when the frame content is unchanged.
+					forceRepaint = true
+				}
+				step := session.Step(StepInput{
+					Events: []Event{result.event}, UpdatesPending: true, RenderContext: eventRenderContext(),
+				})
+				if step.Quit || session.quittingNow() {
+					return nil
+				}
+				if n+1 >= maxInputBatch || len(pending) > 0 {
+					break // queued output (a print, a clipboard write) goes out in order
+				}
+				select {
+				case result, ok = <-pipe.events:
+					continue
+				default:
+				}
+				break
 			}
 		case <-resize:
 			forceRepaint = true
@@ -1097,6 +1112,10 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 	}
 }
+
+// maxInputBatch bounds the input events handled between two draws, so a
+// stream of input cannot hold the screen still.
+const maxInputBatch = 256
 
 // setModes returns the terminal-mode escapes for the configured
 // capabilities; resetModes returns their inverses. Mouse reset clears

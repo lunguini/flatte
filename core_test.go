@@ -575,3 +575,57 @@ func receiveCoreUpdate[S any](t *testing.T, updates <-chan StateUpdate[S]) State
 		return nil
 	}
 }
+
+func TestRunDrawsABurstOfInputOnce(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+
+	state := testState{}
+	done := make(chan error, 1)
+	var out bytes.Buffer
+	go func() {
+		done <- Run(context.Background(), App[testState]{
+			State: &state,
+			Handle: func(s *testState, ev Event, fx Effects[testState]) {
+				if key, ok := ev.(KeyEvent); ok && key.Key == KeyCharacter {
+					if key.Rune == 'q' {
+						fx.Quit()
+						return
+					}
+					s.count++
+				}
+			},
+			View: func(s *testState, ctx RenderContext) Frame {
+				return Frame{Content: fmt.Sprintf("count:%d", s.count)}
+			},
+		}, WithInput(reader), WithOutput(&out))
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+	if _, err := writer.Write([]byte(strings.Repeat("a", 40))); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if _, err := writer.Write([]byte("q")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for Run")
+	}
+	if state.count != 40 {
+		t.Fatalf("count = %d, want every key handled", state.count)
+	}
+	// The initial paint, then the burst: a few draws at most, not forty.
+	if got := strings.Count(out.String(), "\x1b[?2026h"); got > 4 {
+		t.Fatalf("draw count = %d for one burst of 40 keys", got)
+	}
+}
