@@ -19,7 +19,7 @@ func TestKittyProtocolBytes(t *testing.T) {
 	if got, want := kittyTransmit(7, []byte{0x00, 0xff, 0x10}), "\x1b_Ga=t,f=100,t=d,i=7,m=0,q=1;AP8Q\x1b\\"; got != want {
 		t.Fatalf("transmit = %q, want %q", got, want)
 	}
-	if got, want := kittyPlace(7, 9, layout.Rect{X: 2, Y: 3, W: 4, H: 5}), "\x1b_Ga=p,i=7,p=9,c=4,r=5,C=1,z=1,q=1\x1b\\"; got != want {
+	if got, want := kittyPlace(7, 9, layout.Rect{X: 2, Y: 3, W: 4, H: 5}), "\x1b_Ga=p,i=7,p=9,c=4,r=5,C=1,z=-1,q=1\x1b\\"; got != want {
 		t.Fatalf("place = %q, want %q", got, want)
 	}
 	if got, want := kittyDeletePlacement(7, 9), "\x1b_Ga=d,d=i,i=7,p=9,q=1\x1b\\"; got != want {

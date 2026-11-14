@@ -271,11 +271,15 @@ func kittyTransmit(id uint32, pngBytes []byte) string {
 	return out.String()
 }
 
+// kittyPlace places a picture under the text (z=-1), above cell
+// backgrounds: the cells under it are blank, so it shows, and Warp, which
+// keeps clicks on pictures above the text for itself, passes the ones on
+// pictures under it to the app.
 func kittyPlace(imageID, placementID uint32, rect layout.Rect) string {
 	if imageID == 0 || placementID == 0 || rect.W <= 0 || rect.H <= 0 {
 		return ""
 	}
-	return fmt.Sprintf("\x1b_Ga=p,i=%d,p=%d,c=%d,r=%d,C=1,z=1,q=1\x1b\\", imageID, placementID, rect.W, rect.H)
+	return fmt.Sprintf("\x1b_Ga=p,i=%d,p=%d,c=%d,r=%d,C=1,z=-1,q=1\x1b\\", imageID, placementID, rect.W, rect.H)
 }
 
 func kittyDeletePlacement(imageID, placementID uint32) string {
