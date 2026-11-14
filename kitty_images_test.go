@@ -87,14 +87,14 @@ func TestKittyImageDiffSkipsUnchangedAndDeletesMovedOrRemoved(t *testing.T) {
 	moved := plan
 	moved.Rect.X++
 	state.update([]layout.TerminalImagePlacement{moved}, renderer)
-	want = kittyDeletePlacement(7, 9) + "\x1b[2;4H" + kittyPlace(7, 9, moved.Rect) + "\x1b[1;1H"
+	want = kittyDeletePlacement(7, 9) + "\x1b[2;4H" + kittyPlace(7, 10, moved.Rect) + "\x1b[1;1H"
 	if got := renderer.String(); got != want {
 		t.Fatalf("move output = %q, want %q", got, want)
 	}
 
 	renderer.Reset()
 	state.update(nil, renderer)
-	if got, want := renderer.String(), kittyDeletePlacement(7, 9); got != want {
+	if got, want := renderer.String(), kittyDeletePlacement(7, 10); got != want {
 		t.Fatalf("remove output = %q, want %q", got, want)
 	}
 }
@@ -369,5 +369,26 @@ func TestClearUnderKittyImagesKeepsBackgrounds(t *testing.T) {
 		if c.Content != tc.content || (c.Style.Bg != nil) != tc.bg {
 			t.Errorf("cell (%d,%d) = %q bg %v, want %q bg %v", tc.x, tc.y, c.Content, c.Style.Bg, tc.content, tc.bg)
 		}
+	}
+}
+
+func TestKittyPlacementsSurviveAnInsertedPictureBeforeThem(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	other := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	other.Pix[3] = 0xff
+	state := newKittyImageState(true)
+	renderer := &kittyBufferRenderer{}
+	keep := layout.TerminalImagePlacement{Rect: layout.Rect{X: 4, Y: 4, W: 2, H: 1}, Source: src}
+	state.update([]layout.TerminalImagePlacement{keep}, renderer)
+	renderer.Reset()
+	state.update([]layout.TerminalImagePlacement{{Rect: layout.Rect{W: 2, H: 1}, Source: other}, keep}, renderer)
+	if got := renderer.String(); strings.Contains(got, "a=d") || strings.Count(got, "a=p") != 1 {
+		t.Fatalf("inserting a picture re-placed the others: %q", got)
+	}
+}
+
+func TestCellImagesFrameRepaintsWhenToggled(t *testing.T) {
+	if framesEqual(Frame{Content: "x"}, Frame{Content: "x", CellImages: true}) {
+		t.Fatal("frames differing only in CellImages compare equal; the cleared cells would never be redrawn")
 	}
 }

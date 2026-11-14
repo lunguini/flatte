@@ -739,8 +739,8 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 		return ctx
 	}
-	kittyPlacements := func(width, height int) []layout.TerminalImagePlacement {
-		if !kittyImages.enabled {
+	kittyPlacements := func(frame Frame, width, height int) []layout.TerminalImagePlacement {
+		if !kittyImages.enabled || frame.CellImages {
 			return nil
 		}
 		return kittyPlacementsForRuntime(
@@ -752,8 +752,8 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 			height,
 		)
 	}
-	syncKittyImages := func(width, height int) {
-		kittyImages.update(kittyPlacements(width, height), renderer)
+	syncKittyImages := func(frame Frame, width, height int) {
+		kittyImages.update(kittyPlacements(frame, width, height), renderer)
 	}
 
 	draw := func() {
@@ -768,7 +768,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		frame := step.Frame
 		if drew && !forceRepaint && framesEqual(frame, lastFrame) && screenWidth == renderCtx.Width {
 			// Identical frame: only queued one-shot actions (if any) go out.
-			syncKittyImages(renderCtx.Width, renderCtx.Height)
+			syncKittyImages(frame, renderCtx.Width, renderCtx.Height)
 			if err := flushRenderer(); err == nil {
 				writeFrameOutput()
 			}
@@ -808,7 +808,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		}
 		screen.Clear()
 		styled.Draw(screen, screen.Bounds())
-		images := kittyPlacements(renderCtx.Width, renderCtx.Height)
+		images := kittyPlacements(frame, renderCtx.Width, renderCtx.Height)
 		clearUnderKittyImages(screen, images)
 		renderer.Render(screen.RenderBuffer)
 		if frame.Cursor != nil {

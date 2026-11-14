@@ -45,7 +45,15 @@ type kittyAssetMemoKey struct {
 	fit           layout.ImageFit
 }
 
-type kittyPlacementKey struct{ index int }
+// kittyPlacementKey identifies a placement across frames: its picture and
+// cells, so a frame that only repaints moves nothing; a source that cannot
+// be keyed is identified by its paint order instead.
+type kittyPlacementKey struct {
+	source string
+	rect   layout.Rect
+	fit    layout.ImageFit
+	n      int // which of several identical placements, or the paint order
+}
 
 type kittyImageAsset struct {
 	hash    [32]byte
@@ -288,6 +296,7 @@ func (r *kittyImageState) update(placements []layout.TerminalImagePlacement, out
 	preparedByKey := make(map[kittyAssetMemoKey]kittyAssetMemo)
 	preparedByHash := make(map[[32]byte][]byte)
 	preparedBytes := 0
+	seen := make(map[kittyPlacementKey]int, len(placements))
 	for i, placement := range placements {
 		if isNilKittyImage(placement.Source) || placement.Rect.W <= 0 || placement.Rect.H <= 0 {
 			continue
@@ -298,12 +307,18 @@ func (r *kittyImageState) update(placements []layout.TerminalImagePlacement, out
 		}
 		source, stable := kittySourceKey(placement.Source)
 		plan := kittyImagePlan{
-			key:    kittyPlacementKey{index: i},
+			key:    kittyPlacementKey{n: i},
 			place:  placement,
 			source: source,
 			stable: stable,
 			width:  width,
 			height: height,
+		}
+		if stable {
+			plan.key = kittyPlacementKey{source: source, rect: placement.Rect, fit: placement.Fit}
+			n := seen[plan.key]
+			seen[plan.key] = n + 1
+			plan.key.n = n
 		}
 		old, hasOld := r.placements[plan.key]
 		if stable && hasOld && old.source == source && old.rect == placement.Rect && old.fit == placement.Fit {

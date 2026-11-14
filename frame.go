@@ -24,6 +24,10 @@ type Frame struct {
 	// Title sets the terminal window title when non-empty. It is emitted
 	// only when it changes, and reset on exit if it was ever set.
 	Title string
+	// CellImages draws images as half-block cells even in a terminal that
+	// shows pictures (and icon buttons as their glyphs): for an app that
+	// lets its user turn pictures off.
+	CellImages bool
 	// Root, when set, is the frame's layout tree. The host solves and paints
 	// it at the frame size, so View needs no Solve call or size bookkeeping,
 	// and MouseEvent.Target names the ID'd node under the pointer. Frames
@@ -146,7 +150,7 @@ func rootHeight(root layout.Node, terminalHeight int, inline bool) int {
 // framesEqual reports whether two frames would render identically,
 // comparing the cursor by value rather than by pointer.
 func framesEqual(a, b Frame) bool {
-	if a.Content != b.Content || a.Title != b.Title {
+	if a.Content != b.Content || a.Title != b.Title || a.CellImages != b.CellImages {
 		return false
 	}
 	return cursorsEqual(a.Cursor, b.Cursor)
