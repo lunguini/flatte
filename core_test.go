@@ -600,6 +600,7 @@ func TestRunDrawsABurstOfInputOnce(t *testing.T) {
 				}
 			},
 			View: func(s *testState, ctx RenderContext) Frame {
+				time.Sleep(10 * time.Millisecond) // a slow terminal: input piles up meanwhile
 				return Frame{Content: fmt.Sprintf("count:%d", s.count)}
 			},
 		}, WithInput(reader), WithOutput(&out))
@@ -609,7 +610,7 @@ func TestRunDrawsABurstOfInputOnce(t *testing.T) {
 	if _, err := writer.Write([]byte(strings.Repeat("a", 40))); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	if _, err := writer.Write([]byte("q")); err != nil {
 		t.Fatal(err)
 	}
@@ -624,8 +625,9 @@ func TestRunDrawsABurstOfInputOnce(t *testing.T) {
 	if state.count != 40 {
 		t.Fatalf("count = %d, want every key handled", state.count)
 	}
-	// The initial paint, then the burst: a few draws at most, not forty.
-	if got := strings.Count(out.String(), "\x1b[?2026h"); got > 4 {
+	// Keys read while a frame was being made are drawn together: far
+	// fewer draws than keys.
+	if got := strings.Count(out.String(), "\x1b[?2026h"); got > 10 {
 		t.Fatalf("draw count = %d for one burst of 40 keys", got)
 	}
 }

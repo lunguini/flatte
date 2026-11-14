@@ -1113,6 +1113,9 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	}
 }
 
+// inputBuffer is how many translated input events wait for the loop.
+const inputBuffer = 64
+
 // maxInputBatch bounds the input events handled between two draws, so a
 // stream of input cannot hold the screen still.
 const maxInputBatch = 256
@@ -1208,7 +1211,9 @@ type inputResult struct {
 // as the final result). The done channel closes only once no goroutine can
 // touch the reader anymore — Run waits on it before returning.
 func readInput(ctx context.Context, in io.Reader) (<-chan inputResult, <-chan struct{}) {
-	results := make(chan inputResult)
+	// Buffered, so input read while a frame is drawn waits ready for the
+	// loop to take in one batch (see maxInputBatch).
+	results := make(chan inputResult, inputBuffer)
 	done := make(chan struct{})
 	rawEvents := make(chan uv.Event)
 	reader := uv.NewTerminalReader(in, os.Getenv("TERM"))
