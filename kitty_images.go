@@ -23,14 +23,18 @@ const (
 	kittyCellPixelWidth  = 8
 	kittyCellPixelHeight = 16
 	// kittyDensity is how many times a nominal cell's pixels a picture is
-	// prepared at, at most.
+	// prepared at, at most; kittySmallDensity for one of at most
+	// kittySmallCells cells (a thumbnail), which a high-density screen
+	// still draws pixel for pixel at a fraction of the bytes.
 	kittyDensity         = 4
+	kittySmallDensity    = 2
+	kittySmallCells      = 16
 	kittyChunkSize       = 4096
-	kittyImageLimit      = 16
+	kittyImageLimit      = 128
 	kittyImageBytesLimit = 32 << 20
 	kittyImageMaxBytes   = 8 << 20
 	kittyImageMaxPixels  = 4 << 20
-	kittyImageMemoLimit  = 64
+	kittyImageMemoLimit  = 256
 )
 
 type kittyImageOutput interface {
@@ -556,7 +560,8 @@ func allocateKittyID(next *uint32) uint32 {
 // kittyPixelSize is the pixel size to prepare rect's picture at. A nominal
 // cell is kittyCellPixelWidth×kittyCellPixelHeight, which a high-density
 // screen draws two to three times larger, so pictures are prepared at up
-// to kittyDensity times that, but never above the source's own resolution
+// to kittyDensity times that (kittySmallDensity for a thumbnail), but never
+// above the source's own resolution
 // (the terminal scales the placement to its cells either way).
 func kittyPixelSize(rect layout.Rect, source image.Rectangle) (width, height int, ok bool) {
 	maxInt := int(^uint(0) >> 1)
@@ -564,7 +569,11 @@ func kittyPixelSize(rect layout.Rect, source image.Rectangle) (width, height int
 		return 0, 0, false
 	}
 	width, height = rect.W*kittyCellPixelWidth, rect.H*kittyCellPixelHeight
-	for scale := kittyDensity; scale > 1; scale-- {
+	density := kittyDensity
+	if rect.W*rect.H <= kittySmallCells {
+		density = kittySmallDensity
+	}
+	for scale := density; scale > 1; scale-- {
 		if width*scale <= max(source.Dx(), width) || height*scale <= max(source.Dy(), height) {
 			width, height = width*scale, height*scale
 			break

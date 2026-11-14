@@ -345,7 +345,8 @@ func TestKittyPixelSizePreparesDenseButNotAboveSource(t *testing.T) {
 		source image.Rectangle
 		w, h   int
 	}{
-		{layout.Rect{W: 4, H: 2}, image.Rect(0, 0, 96, 96), 96, 96},      // a 96px thumb: 3×
+		{layout.Rect{W: 4, H: 2}, image.Rect(0, 0, 96, 96), 64, 64},      // a thumbnail: kittySmallDensity
+		{layout.Rect{W: 6, H: 3}, image.Rect(0, 0, 640, 640), 192, 192},  // past kittySmallCells: 4×
 		{layout.Rect{W: 16, H: 8}, image.Rect(0, 0, 640, 640), 512, 512}, // capped at kittyDensity
 		{layout.Rect{W: 16, H: 8}, image.Rect(0, 0, 64, 64), 128, 128},   // never below nominal
 	} {
@@ -390,5 +391,20 @@ func TestKittyPlacementsSurviveAnInsertedPictureBeforeThem(t *testing.T) {
 func TestCellImagesFrameRepaintsWhenToggled(t *testing.T) {
 	if framesEqual(Frame{Content: "x"}, Frame{Content: "x", CellImages: true}) {
 		t.Fatal("frames differing only in CellImages compare equal; the cleared cells would never be redrawn")
+	}
+}
+
+func TestKittyPlacesAScreenOfThumbnails(t *testing.T) {
+	state := newKittyImageState(true)
+	renderer := &kittyBufferRenderer{}
+	var placements []layout.TerminalImagePlacement
+	for i := range 40 {
+		src := image.NewRGBA(image.Rect(0, 0, 64, 64))
+		src.Pix[0] = uint8(i)
+		placements = append(placements, layout.TerminalImagePlacement{Rect: layout.Rect{X: 0, Y: i * 2, W: 4, H: 2}, Source: src})
+	}
+	state.update(placements, renderer)
+	if got := strings.Count(renderer.String(), "a=p,"); got != 40 {
+		t.Fatalf("placed %d of 40 thumbnails", got)
 	}
 }
