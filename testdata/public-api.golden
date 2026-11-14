@@ -1027,6 +1027,7 @@ flatui/layout package layout
   method ScrollBar.OffsetAt(y int, height int) int
   method ScrollBar.Render(r Rect) string
   method ScrollBar.Size()(Size, Size)
+  method ScrollBar.Thumb(height int)(pos int, size int, ok bool)
   method Slider.Render(r Rect) string
   method Slider.Size()(Size, Size)
   method Slider.ValueAt(x int, width int) float64
