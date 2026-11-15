@@ -31,6 +31,19 @@ type theme struct {
 	controlHeight                    float64
 }
 
+// fill is th's color for a Box.Fill role, and whether the role has one.
+func (th theme) fill(f layout.Fill) (rgba, bool) {
+	switch f {
+	case layout.FillSurface:
+		return th.surface, true
+	case layout.FillField:
+		return th.field, true
+	case layout.FillSeparator:
+		return th.border, true
+	}
+	return rgba{}, false
+}
+
 func newTheme(t Theme) theme {
 	t = t.over(Dark())
 	return theme{
@@ -565,6 +578,8 @@ func (p *painter) box(op layout.BoxOp) {
 	bg, hasBg := rgba{}, false
 	if op.Box.Background != nil && op.Box.Background != color.Transparent {
 		bg, hasBg = rgbaOf(op.Box.Background), true
+	} else if c, ok := p.th.fill(op.Box.Fill); ok {
+		bg, hasBg = c, true
 	} else if raised {
 		bg, hasBg = p.th.surface, true
 	}

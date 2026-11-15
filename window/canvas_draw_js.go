@@ -253,6 +253,9 @@ func (p *canvasPainter) box(op layout.BoxOp) {
 		p.fillRounded(op.Rect, canvasSelectionRadius(op.Rect, p.theme), p.theme.Selection)
 	}
 	bg, hasBG := op.Box.Background, op.Box.Background != nil && op.Box.Background != color.Transparent
+	if c := p.theme.fillColor(op.Box.Fill); !hasBG && c != nil {
+		bg, hasBG = c, true
+	}
 	if !hasBG && raised {
 		bg, hasBG = p.theme.Surface, true
 	}

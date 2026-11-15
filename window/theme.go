@@ -1,6 +1,10 @@
 package window
 
-import "image/color"
+import (
+	"image/color"
+
+	"github.com/lunguini/flatte/flatui/layout"
+)
 
 // Theme is a window's look: the colors of everything the app does not color
 // itself — the window, raised surfaces, text roles, borders, fields, and the
@@ -104,4 +108,18 @@ func themeFor(opts *Theme, dark bool) Theme {
 		return Dark()
 	}
 	return Light()
+}
+
+// fillColor is t's color for a Box.Fill role; nil for FillNone and roles
+// it does not know.
+func (t Theme) fillColor(f layout.Fill) color.Color {
+	switch f {
+	case layout.FillSurface:
+		return t.Surface
+	case layout.FillField:
+		return t.Field
+	case layout.FillSeparator:
+		return t.Border
+	}
+	return nil
 }

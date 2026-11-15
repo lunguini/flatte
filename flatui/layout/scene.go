@@ -527,7 +527,7 @@ func (p *scenePainter) box(r, clip rect[float64], b Box) {
 		in = min(in, r.H/2)
 		r.Y, r.H = r.Y+in, r.H-2*in
 	}
-	if b.hasBorder() || b.hasBackground() || b.Selected || b.Hover != nil || b.Interactive || b.Backdrop != nil {
+	if b.hasBorder() || b.hasBackground() || b.Fill != FillNone || b.Selected || b.Hover != nil || b.Interactive || b.Backdrop != nil {
 		p.ops = append(p.ops, BoxOp{Rect: PointRect(r), Clip: PointRect(clip), Box: b, ID: p.id})
 	}
 }

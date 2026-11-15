@@ -913,6 +913,10 @@ flatui/layout package layout
   const ControlRadio ControlKind = 3
   const ControlSlider ControlKind = 4
   const ControlSwitch ControlKind = 2
+  const FillField Fill = 2
+  const FillNone Fill = 0
+  const FillSeparator Fill = 3
+  const FillSurface Fill = 1
   const IconArrowDown IconName = 17
   const IconArrowLeft IconName = 18
   const IconArrowRight IconName = 19
@@ -1117,7 +1121,8 @@ flatui/layout package layout
   field Box.Interactive bool [order=8]
   field Box.Backdrop *Backdrop [order=9]
   field Box.InsetY float64 [order=10]
-  struct Box fields=11 comparable=true
+  field Box.Fill Fill [order=11]
+  struct Box fields=12 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
@@ -1178,6 +1183,7 @@ flatui/layout package layout
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
   field DuplicateIDDiagnostic.Duplicate Rect [order=2]
   struct DuplicateIDDiagnostic fields=3 comparable=true
+  type Fill int
   type Icon struct
   field Icon.NodeBase NodeBase [order=0]
   field Icon.Name IconName [order=1]

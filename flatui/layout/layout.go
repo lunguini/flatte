@@ -282,6 +282,12 @@ const (
 // bottom, in a GUI — a gap between the rows of a list without changing
 // their layout (clicks in the gap still reach the node); terminals ignore
 // it.
+//
+// Fill is a background by theme role, for when Background is nil: a GUI
+// paints the current theme's color for the role and follows the system's
+// light/dark switch, so the app never picks a color that only reads on one
+// appearance. Background wins when both are set. Terminals ignore Fill:
+// their own background shows.
 type Box struct {
 	Border      BorderKind
 	BorderColor color.Color
@@ -297,7 +303,25 @@ type Box struct {
 	Interactive bool
 	Backdrop    *Backdrop
 	InsetY      float64
+	Fill        Fill
 }
+
+// Fill is a box background named by its role in the theme rather than by
+// color (see Box.Fill).
+type Fill int
+
+const (
+	// FillNone paints no role background.
+	FillNone Fill = iota
+	// FillSurface is a raised surface: panels and popovers (Theme.Surface).
+	FillSurface
+	// FillField is an inset content area: text fields, editors, lists
+	// (Theme.Field).
+	FillField
+	// FillSeparator is a divider line's color (Theme.Border): give the node
+	// a hairline size, such as Points(1).
+	FillSeparator
+)
 
 // Backdrop is a picture filling a box in a GUI: Source blurred by Blur
 // points and drawn at Opacity (0 means 1). Sharp (Blur 0), it is cropped to
