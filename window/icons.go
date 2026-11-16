@@ -174,6 +174,27 @@ func symbol(name layout.IconName, cx, cy, s float64) (cellShape, bool) {
 			line(at(-0.32, -0.45), at(0.1, -0.45), at(0.32, -0.23), at(0.32, 0.45), at(-0.32, 0.45), at(-0.32, -0.45)),
 			line(at(0.1, -0.45), at(0.1, -0.23), at(0.32, -0.23)),
 		}}, true
+	case layout.IconTerminal:
+		return cellShape{polys: []poly{
+			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
+			line(at(-0.28, -0.14), at(-0.1, 0.02), at(-0.28, 0.18)),
+			line(at(0.0, 0.18), at(0.26, 0.18)),
+		}}, true
+	case layout.IconPanelBottom:
+		return cellShape{polys: []poly{
+			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
+			line(at(-0.45, 0.1), at(0.45, 0.1)),
+		}}, true
+	case layout.IconSidebarLeft:
+		return cellShape{polys: []poly{
+			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
+			line(at(-0.14, -0.36), at(-0.14, 0.36)),
+		}}, true
+	case layout.IconSidebarRight:
+		return cellShape{polys: []poly{
+			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
+			line(at(0.14, -0.36), at(0.14, 0.36)),
+		}}, true
 	}
 	return cellShape{}, false
 }

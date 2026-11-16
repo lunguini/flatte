@@ -67,6 +67,13 @@ const (
 	// Repeat one: the repeat arrows (↻) around a small 1, for repeating a
 	// single item.
 	IconRepeatOne
+	// IDE shapes: a terminal prompt (>_ in a window), a window with a bottom
+	// panel, and windows with a left or right sidebar (toolbar toggles for
+	// panes).
+	IconTerminal
+	IconPanelBottom
+	IconSidebarLeft
+	IconSidebarRight
 )
 
 // Icon is a small symbol with a terminal spelling: the terminal shows Text

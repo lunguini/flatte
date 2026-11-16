@@ -958,6 +958,7 @@ flatui/layout package layout
   const IconMinus IconName = 10
   const IconNext IconName = 29
   const IconNone IconName = 0
+  const IconPanelBottom IconName = 41
   const IconPause IconName = 27
   const IconPlay IconName = 26
   const IconPlus IconName = 9
@@ -966,7 +967,10 @@ flatui/layout package layout
   const IconRepeatOne IconName = 39
   const IconSearch IconName = 11
   const IconShuffle IconName = 30
+  const IconSidebarLeft IconName = 42
+  const IconSidebarRight IconName = 43
   const IconSpeaker IconName = 32
+  const IconTerminal IconName = 40
   const IconWarning IconName = 14
   const ImageContain ImageFit = 0
   const ImageCover ImageFit = 1
