@@ -203,9 +203,11 @@ func (s textSel) in(i int, op layout.TextOp) (int, int) {
 type pointer int
 
 const (
-	pointerArrow pointer = iota
-	pointerHand          // over a control
-	pointerText          // over a text field
+	pointerArrow         pointer = iota
+	pointerHand                  // over a control
+	pointerText                  // over a text field
+	pointerResizeColumns         // over a vertical splitter (Box.Resize)
+	pointerResizeRows            // over a horizontal splitter
 )
 
 // textLayout is where a backend puts carets in the text fields it draws.
@@ -571,6 +573,20 @@ func (s *surface) control(id string) (layout.ControlOp, bool) {
 	return layout.ControlOp{}, false
 }
 
+// resizeBox is the axis of the splitter named id (ResizeNone when id is no
+// splitter).
+func (s *surface) resizeBox(id string) layout.Resize {
+	if id == "" {
+		return layout.ResizeNone
+	}
+	for i := len(s.scene.Ops) - 1; i >= 0; i-- {
+		if box, ok := s.scene.Ops[i].(layout.BoxOp); ok && box.ID == id {
+			return box.Box.Resize
+		}
+	}
+	return layout.ResizeNone
+}
+
 // interactiveBox reports a named custom item that requests native hover.
 func (s *surface) interactiveBox(id string) bool {
 	if id == "" {
@@ -603,10 +619,17 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 		}
 	}
 	if !inputHovered {
-		if _, ok := s.control(id); ok || s.interactiveBox(id) {
-			shape = pointerHand
-		} else {
-			id = ""
+		switch r := s.resizeBox(id); {
+		case r == layout.ResizeColumns:
+			shape, id = pointerResizeColumns, ""
+		case r == layout.ResizeRows:
+			shape, id = pointerResizeRows, ""
+		default:
+			if _, ok := s.control(id); ok || s.interactiveBox(id) {
+				shape = pointerHand
+			} else {
+				id = ""
+			}
 		}
 	}
 	if shape == pointerArrow {

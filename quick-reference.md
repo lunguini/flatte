@@ -1023,7 +1023,9 @@ interactive GUI rows by default. Named boxes can opt in with
 `Box{Interactive: true}`. The host supplies a theme-aware hover fill and
 pointing-hand cursor, respecting clipping and overlays. Explicit `Box.Hover`
 overrides the default; `color.Transparent` disables the fill. Plain panels
-and labels are unchanged. Menu surfaces opt out of extra panel padding; their border band supplies
+and labels are unchanged. A named box with `Box{Resize: layout.ResizeColumns}`
+(or `ResizeRows`) is a splitter: a window shows a resize pointer over it
+(↔ or ↕); it draws nothing, and the app moves the border on `MouseMotion`. Menu surfaces opt out of extra panel padding; their border band supplies
 the outer gap while option content keeps its item insets.
 
 For single-line fields, apply pointer edits on the app loop:

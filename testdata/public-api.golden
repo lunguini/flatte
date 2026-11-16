@@ -977,6 +977,9 @@ flatui/layout package layout
   const ImageStretch ImageFit = 2
   const PointsPerColumn untyped int = 8
   const PointsPerLine untyped int = 16
+  const ResizeColumns Resize = 1
+  const ResizeNone Resize = 0
+  const ResizeRows Resize = 2
   const SizeAuto SizeKind = 0
   const SizeContent SizeKind = 3
   const SizeFixed SizeKind = 1
@@ -1137,7 +1140,8 @@ flatui/layout package layout
   field Box.Backdrop *Backdrop [order=9]
   field Box.InsetY float64 [order=10]
   field Box.Fill Fill [order=11]
-  struct Box fields=12 comparable=true
+  field Box.Resize Resize [order=12]
+  struct Box fields=13 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
@@ -1345,6 +1349,7 @@ flatui/layout package layout
   field Rect.W int [order=2]
   field Rect.H int [order=3]
   struct Rect fields=4 comparable=true
+  type Resize int
   type Row struct
   field Row.NodeBase NodeBase [order=0]
   field Row.Children []Node [order=1]

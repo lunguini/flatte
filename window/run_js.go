@@ -616,6 +616,10 @@ func canvasCursor(p pointer) string {
 		return "pointer"
 	case pointerText:
 		return "text"
+	case pointerResizeColumns:
+		return "col-resize"
+	case pointerResizeRows:
+		return "row-resize"
 	default:
 		return "default"
 	}

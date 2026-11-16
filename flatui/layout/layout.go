@@ -304,7 +304,23 @@ type Box struct {
 	Backdrop    *Backdrop
 	InsetY      float64
 	Fill        Fill
+	// Resize marks a named box as a splitter the app drags (a pane
+	// border): a window shows a resize pointer along its axis over it. It
+	// draws nothing; the app moves the border on MouseMotion.
+	Resize Resize
 }
+
+// Resize is the axis a splitter box (Box.Resize) moves along.
+type Resize int
+
+const (
+	// ResizeNone is not a splitter.
+	ResizeNone Resize = iota
+	// ResizeColumns is a vertical border dragged left and right.
+	ResizeColumns
+	// ResizeRows is a horizontal border dragged up and down.
+	ResizeRows
+)
 
 // Fill is a box background named by its role in the theme rather than by
 // color (see Box.Fill).

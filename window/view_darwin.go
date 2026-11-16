@@ -60,6 +60,10 @@ func (st *windowState) showPointer(view objc.ID, shape pointer, tooltip string) 
 		name = "pointingHandCursor"
 	case pointerText:
 		name = "IBeamCursor"
+	case pointerResizeColumns:
+		name = "resizeLeftRightCursor"
+	case pointerResizeRows:
+		name = "resizeUpDownCursor"
 	}
 	class("NSCursor").Send(sel(name)).Send(sel("set"))
 	if tooltip != st.tooltip {
