@@ -1,7 +1,9 @@
 package window
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"image/color"
+	"math"
 	"reflect"
 	"testing"
 )
@@ -59,4 +61,59 @@ func TestControlHeightThemeDefaultAndOverride(t *testing.T) {
 	if got := themeFor(&Theme{ControlHeight: -1}, true); got.ControlHeight != -1 {
 		t.Fatal("minimum optout lost")
 	}
+}
+
+// Cell grids draw the 16 ANSI colors in the theme's palette, tuned to read
+// on its background; other colors pass through.
+func TestThemeMapsANSIColors(t *testing.T) {
+	for name, th := range map[string]Theme{"dark": Dark(), "light": Light()} {
+		for i := range 16 {
+			if th.ANSI[i] == nil {
+				t.Fatalf("%s: ANSI[%d] unset", name, i)
+			}
+			if got := th.cellColor(ansi.BasicColor(i)); got != th.ANSI[i] {
+				t.Fatalf("%s: basic %d → %v, want the palette's", name, i, got)
+			}
+			if got := th.cellColor(ansi.IndexedColor(i)); got != th.ANSI[i] {
+				t.Fatalf("%s: indexed %d → %v, want the palette's", name, i, got)
+			}
+		}
+		// Normal text colors must read on the background (WCAG 3:1 for
+		// large-ish mono text); black on dark and white on light are the
+		// exceptions every terminal palette has.
+		for i := 1; i <= 6; i++ {
+			if r := contrast(th.ANSI[i], th.Field); r < 3 {
+				t.Errorf("%s: ANSI %d contrast %.2f on the field", name, i, r)
+			}
+		}
+		for _, c := range []color.Color{ansi.IndexedColor(16), ansi.IndexedColor(208), color.RGBA{1, 2, 3, 255}} {
+			if got := th.cellColor(c); got != c {
+				t.Fatalf("%s: %v changed to %v", name, c, got)
+			}
+		}
+	}
+	// A partial palette keeps the base's other entries.
+	custom := Theme{ANSI: [16]color.Color{4: color.RGBA{9, 9, 9, 255}}}.over(Dark())
+	if custom.ANSI[4] != (color.RGBA{9, 9, 9, 255}) || custom.ANSI[1] != Dark().ANSI[1] {
+		t.Fatal("partial palette not merged over the base")
+	}
+}
+
+func contrast(a, b color.Color) float64 {
+	lum := func(c color.Color) float64 {
+		r, g, bl, _ := c.RGBA()
+		ch := func(v uint32) float64 {
+			x := float64(v) / 0xffff
+			if x <= 0.03928 {
+				return x / 12.92
+			}
+			return math.Pow((x+0.055)/1.055, 2.4)
+		}
+		return 0.2126*ch(r) + 0.7152*ch(g) + 0.0722*ch(bl)
+	}
+	la, lb := lum(a), lum(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
 }

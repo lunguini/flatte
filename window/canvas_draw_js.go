@@ -830,10 +830,10 @@ func canvasCellText(c *uv.Cell) string {
 func (p *canvasPainter) cellColors(style uv.Style) (fg, bg rgba, hasBG bool) {
 	fg = rgbaOf(p.theme.Text)
 	if style.Fg != nil {
-		fg = rgbaOf(style.Fg)
+		fg = rgbaOf(p.theme.cellColor(style.Fg))
 	}
 	if style.Bg != nil {
-		bg, hasBG = rgbaOf(style.Bg), true
+		bg, hasBG = rgbaOf(p.theme.cellColor(style.Bg)), true
 	}
 	if style.Attrs&uv.AttrReverse != 0 {
 		if !hasBG {

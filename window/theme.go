@@ -4,6 +4,8 @@ import (
 	"image/color"
 	"math"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
 )
@@ -39,6 +41,46 @@ type Theme struct {
 	// Radius is a plain border's corner radius in points (a rounded border
 	// is twice as round); negative draws square corners.
 	Radius float64
+	// ANSI is the palette cell grids draw the 16 ANSI colors in (0–7
+	// normal, 8–15 bright), as a terminal profile does: program output
+	// asks for "blue", and the theme decides which blue reads on its
+	// background. Nil entries take the base theme's. Colors 16–255 and
+	// true colors are drawn as given.
+	ANSI [16]color.Color
+}
+
+// cellColor is c as a cell grid draws it: an ANSI color 0–15 in t's
+// palette, anything else unchanged.
+func (t Theme) cellColor(c color.Color) color.Color { return ansiColor(&t.ANSI, c) }
+
+func ansiColor(pal *[16]color.Color, c color.Color) color.Color {
+	i := -1
+	switch v := c.(type) {
+	case ansi.BasicColor:
+		i = int(v)
+	case ansi.IndexedColor:
+		i = int(v)
+	}
+	if i >= 0 && i < 16 && pal[i] != nil {
+		return pal[i]
+	}
+	return c
+}
+
+// darkANSI reads on Dark's field: softened hues, a visible "black".
+var darkANSI = [16]color.Color{
+	rgb(0x54, 0x58, 0x62), rgb(0xe0, 0x6c, 0x75), rgb(0x98, 0xc3, 0x79), rgb(0xe5, 0xc0, 0x7b),
+	rgb(0x61, 0xaf, 0xef), rgb(0xc6, 0x78, 0xdd), rgb(0x56, 0xb6, 0xc2), rgb(0xdc, 0xdf, 0xe4),
+	rgb(0x7f, 0x84, 0x8e), rgb(0xff, 0x7b, 0x86), rgb(0xb5, 0xe8, 0x90), rgb(0xf0, 0xd5, 0x8a),
+	rgb(0x7c, 0xc4, 0xff), rgb(0xd7, 0x9b, 0xf0), rgb(0x72, 0xd3, 0xde), rgb(0xff, 0xff, 0xff),
+}
+
+// lightANSI reads on Light's white field: deep hues, and "white" a gray.
+var lightANSI = [16]color.Color{
+	rgb(0x24, 0x29, 0x2f), rgb(0xcf, 0x22, 0x2e), rgb(0x11, 0x63, 0x29), rgb(0x9a, 0x67, 0x00),
+	rgb(0x05, 0x50, 0xae), rgb(0x82, 0x50, 0xdf), rgb(0x1b, 0x7c, 0x83), rgb(0x6e, 0x77, 0x81),
+	rgb(0x57, 0x60, 0x6a), rgb(0xa4, 0x0e, 0x26), rgb(0x1a, 0x7f, 0x37), rgb(0x7d, 0x4e, 0x00),
+	rgb(0x09, 0x69, 0xda), rgb(0xa4, 0x75, 0xf9), rgb(0x31, 0x92, 0xaa), rgb(0x8c, 0x95, 0x9f),
 }
 
 // Dark is the default dark theme.
@@ -50,6 +92,7 @@ func Dark() Theme {
 		Accent: rgb(0x66, 0xa7, 0xff), Selection: color.NRGBA{0x66, 0xa7, 0xff, 0x38},
 		Track:    rgb(0x3f, 0x41, 0x47),
 		FontSize: 13, TitleSize: 15, LineSpacing: 1.25, Radius: 4, ControlHeight: 32,
+		ANSI: darkANSI,
 	}
 }
 
@@ -62,6 +105,7 @@ func Light() Theme {
 		Accent: rgb(0x00, 0x6e, 0xe6), Selection: color.NRGBA{0x00, 0x6e, 0xe6, 0x2e},
 		Track:    rgb(0xdd, 0xdd, 0xe1),
 		FontSize: 13, TitleSize: 15, LineSpacing: 1.25, Radius: 4, ControlHeight: 32,
+		ANSI: lightANSI,
 	}
 }
 
@@ -87,7 +131,12 @@ func (t Theme) over(base Theme) Theme {
 		}
 		return v
 	}
+	var pal [16]color.Color
+	for i := range pal {
+		pal[i] = pick(t.ANSI[i], base.ANSI[i])
+	}
 	return Theme{
+		ANSI:       pal,
 		Background: pick(t.Background, base.Background), Surface: pick(t.Surface, base.Surface),
 		Text: pick(t.Text, base.Text), Subtle: pick(t.Subtle, base.Subtle), Title: pick(t.Title, base.Title),
 		Border: pick(t.Border, base.Border), Field: pick(t.Field, base.Field),

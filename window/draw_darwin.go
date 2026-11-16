@@ -31,6 +31,8 @@ type theme struct {
 	body, titleSize, spacing, radius float64
 	controlHeight                    float64
 	appearance                       flatte.Appearance
+	// ansi is the palette cell grids draw ANSI colors 0–15 in.
+	ansi [16]color.Color
 }
 
 // fill is th's color for a Box.Fill role, and whether the role has one.
@@ -58,6 +60,7 @@ func newTheme(t Theme) theme {
 		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
 		controlHeight: t.ControlHeight,
 		appearance:    t.appearance(),
+		ansi:          t.ANSI,
 	}
 }
 
@@ -1136,10 +1139,10 @@ func cellText(c *uv.Cell) string {
 func (p *painter) cellColors(st uv.Style) (fg, bg rgba, hasBg bool) {
 	fg = p.th.text
 	if st.Fg != nil {
-		fg = rgbaOf(st.Fg)
+		fg = rgbaOf(ansiColor(&p.th.ansi, st.Fg))
 	}
 	if st.Bg != nil {
-		bg, hasBg = rgbaOf(st.Bg), true
+		bg, hasBg = rgbaOf(ansiColor(&p.th.ansi, st.Bg)), true
 	}
 	if st.Attrs&uv.AttrReverse != 0 {
 		if !hasBg {

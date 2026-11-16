@@ -875,8 +875,11 @@ draw the ops of `layout.LayoutScene`.
 `Options.Theme` sets the look: colors for what the app leaves uncolored
 (`Background`, `Surface`, `Text`, `Subtle`, `Title`, `Border`, `Field`,
 `Accent` for focus, carets, and meters, `Selection`, `Track`), `Font` and
-`MonoFont` families, `FontSize`, `TitleSize`, `LineSpacing`, and `Radius`
-(negative: square corners). Start from `window.Dark()` or `window.Light()`
+`MonoFont` families, `FontSize`, `TitleSize`, `LineSpacing`, `Radius`
+(negative: square corners), and `ANSI`, the 16-color palette cell grids draw
+ANSI colors 0–15 in, as a terminal profile does (`Dark` and `Light` carry
+palettes tuned to read on their fields; colors 16–255 and true colors draw as
+given). Start from `window.Dark()` or `window.Light()`
 and change fields; zero fields keep the base's value. Nil follows the
 system's light/dark appearance live; `Snapshot` draws `Dark` when nil.
 `Options.Fonts` are registered before the first frame (CoreText on macOS,
