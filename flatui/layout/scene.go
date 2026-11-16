@@ -204,6 +204,13 @@ type ImageOp struct {
 // Input/tooltip barriers are independent of this painting behavior.
 type LayerOp struct{ Rect PointRect }
 
+// CaretOp is a further caret of a Text (Text.Carets): a GUI draws its
+// blinking caret bar at Cell's left edge, clipped to Clip, alongside the
+// primary caret.
+type CaretOp struct{ Cell, Clip PointRect }
+
+func (CaretOp) isOp() {}
+
 func (BoxOp) isOp()       {}
 func (TextOp) isOp()      {}
 func (ImageOp) isOp()     {}
@@ -615,11 +622,18 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 	default:
 		before := len(p.ops)
 		p.cells(r, clip, n.Render)
-		if t, ok := n.(Text); ok && t.Caret != nil && len(p.ops) > before {
+		if t, ok := n.(Text); ok && (t.Caret != nil || len(t.Carets) > 0) && len(p.ops) > before {
 			op := p.ops[len(p.ops)-1].(CellsOp)
-			if x, y, ok := t.caret(Rect{W: op.Cols, H: op.Lines}); ok {
+			grid := Rect{W: op.Cols, H: op.Lines}
+			if x, y, ok := t.caret(grid); ok {
 				op.Caret = &Caret{X: x, Y: y}
-				p.ops[len(p.ops)-1] = op
+			}
+			p.ops[len(p.ops)-1] = op
+			for _, c := range t.Carets {
+				if x, y, ok := t.place(c, grid); ok {
+					cell := PointRect{X: op.Rect.X + float64(x)*p.m.Column, Y: op.Rect.Y + float64(y)*p.m.Line, W: p.m.Column, H: p.m.Line}
+					p.ops = append(p.ops, CaretOp{Cell: cell, Clip: PointRect(intersectOf[float64](p.m, r, clip))})
+				}
 			}
 		}
 	}

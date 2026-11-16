@@ -97,6 +97,13 @@ func (p *canvasPainter) draw(scene layout.Scene, width, height float64, pres pre
 			p.withClip(intersect(op.Rect, op.Clip), func() { p.scrollBar(op) })
 		case layout.CellsOp:
 			p.withClip(intersect(op.Rect, op.Clip), func() { p.cells(op) })
+		case layout.CaretOp:
+			if p.caretOn {
+				p.withClip(op.Clip, func() {
+					p.fill(p.theme.Accent)
+					p.ctx.Call("fillRect", op.Cell.X, op.Cell.Y, 1.5, op.Cell.H)
+				})
+			}
 		}
 		if _, ok := item.(layout.LayerOp); !ok {
 			if _, isBox := item.(layout.BoxOp); !isBox {

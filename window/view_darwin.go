@@ -1,6 +1,7 @@
 package window
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ type windowState struct {
 	marked  string
 	caret   CGRect
 	caretOK bool
+	extra   []CGRect // further carets, last drawn (they blink with caret)
 	wheel   wheelAccumulator
 	// caretMoved is when the caret last moved; blink redraws at its next
 	// blink phase.
@@ -281,9 +283,9 @@ func viewMethods() []objc.MethodDef {
 				p.clip = layout.PointRect{W: b.Size.Width, H: b.Size.Height}
 				p.caretAt(float64(c.X)*st.m.Column, float64(c.Y)*st.m.Line, st.m.Line, st.th.font(fontKey{mono: true}))
 			}
-			if p.caretOK {
+			if p.caretOK || len(p.extra) > 0 {
 				now := time.Now()
-				if !st.caretOK || p.caret != st.caret {
+				if !st.caretOK || p.caret != st.caret || !slices.Equal(p.extra, st.extra) {
 					st.caretMoved = now // a moved caret shows at once
 				}
 				if caretOn(now.Sub(st.caretMoved)) {
@@ -291,7 +293,7 @@ func viewMethods() []objc.MethodDef {
 				}
 				st.blinkIn(caretBlink - now.Sub(st.caretMoved)%caretBlink)
 			}
-			st.caret, st.caretOK = p.caret, p.caretOK
+			st.caret, st.caretOK, st.extra = p.caret, p.caretOK, p.extra
 			st.setTitle(st.ui.frameTitle())
 		}},
 		{Cmd: sel("keyDown:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {

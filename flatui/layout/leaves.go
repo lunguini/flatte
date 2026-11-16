@@ -17,10 +17,16 @@ import (
 // (Frame.CursorStyle shapes it). A caret outside the content, or clipped
 // away, shows nowhere. Like a focused Input's, the last visible caret in
 // paint order wins.
+//
+// Carets are further carets for multi-cursor editing: a GUI draws each as
+// the same blinking bar. A terminal has one hardware cursor (Caret) and
+// ignores them; draw their cells yourself there (RenderContext.Graphical
+// tells the hosts apart).
 type Text struct {
 	NodeBase
 	String string
 	Caret  *Caret
+	Carets []Caret
 }
 
 // Caret is a cell in a Text's content: column X of line Y, from 0.
@@ -32,11 +38,16 @@ func (t Text) caret(r Rect) (x, y int, ok bool) {
 	if t.Caret == nil {
 		return 0, 0, false
 	}
+	return t.place(*t.Caret, r)
+}
+
+// place puts content cell c in r, t's rect; ok is false outside the content.
+func (t Text) place(c Caret, r Rect) (x, y int, ok bool) {
 	in := r.insetBy(t.insetSides())
-	if t.Caret.X < 0 || t.Caret.Y < 0 || t.Caret.X >= in.W || t.Caret.Y >= in.H {
+	if c.X < 0 || c.Y < 0 || c.X >= in.W || c.Y >= in.H {
 		return 0, 0, false
 	}
-	return satAdd(in.X, t.Caret.X), satAdd(in.Y, t.Caret.Y), true
+	return satAdd(in.X, c.X), satAdd(in.Y, c.Y), true
 }
 
 func (t Text) Size() (Size, Size) {

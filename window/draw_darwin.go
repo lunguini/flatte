@@ -406,6 +406,10 @@ type painter struct {
 	caret     CGRect
 	caretOK   bool
 	caretClip layout.PointRect
+	// extra are further carets (layout.CaretOp) and extraClip their clips;
+	// they blink with the caret.
+	extra     []CGRect
+	extraClip []layout.PointRect
 	// clip is the clip of the op being drawn.
 	clip layout.PointRect
 	// presentation is what the host draws itself: hovered and pressed
@@ -485,6 +489,10 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.scrollBar(op) })
 		case layout.CellsOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.cells(op) })
+		case layout.CaretOp:
+			f := p.th.font(fontKey{mono: true})
+			p.extra = append(p.extra, cgRect(op.Cell.X, op.Cell.Y+(op.Cell.H-f.lineHeight())/2, 1.5, f.lineHeight()))
+			p.extraClip = append(p.extraClip, op.Clip)
 		}
 	}
 }
@@ -1056,13 +1064,18 @@ func (p *painter) caretAt(x, y, h float64, f font) {
 // paintCaret draws the caret placed while drawing, clipped to its field. It
 // is separate so a window can blink it.
 func (p *painter) paintCaret() {
-	if !p.caretOK {
-		return
+	if p.caretOK {
+		p.clipped(p.caretClip, func() {
+			p.fill(p.th.caret)
+			cgContextFillRect(p.ctx, p.caret)
+		})
 	}
-	p.clipped(p.caretClip, func() {
-		p.fill(p.th.caret)
-		cgContextFillRect(p.ctx, p.caret)
-	})
+	for i, r := range p.extra {
+		p.clipped(p.extraClip[i], func() {
+			p.fill(p.th.caret)
+			cgContextFillRect(p.ctx, r)
+		})
+	}
 }
 
 // cells draws terminal content as a monospace grid: runs of same-styled

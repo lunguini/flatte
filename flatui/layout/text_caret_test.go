@@ -63,3 +63,23 @@ func TestSceneCellsOpCarriesCaret(t *testing.T) {
 		}
 	}
 }
+
+func TestSceneEmitsCaretOpsForExtraCarets(t *testing.T) {
+	m := Metrics{Column: 10, Line: 20, Border: 10}
+	root := Text{NodeBase: NodeBase{PadLeft: 1}, String: "abc\ndef", Caret: &Caret{}, Carets: []Caret{{X: 2, Y: 0}, {X: 1, Y: 1}, {X: 40, Y: 0}}}
+	scene := LayoutScene(root, 200, 100, m)
+	var cells []PointRect
+	for _, op := range scene.Ops {
+		if c, ok := op.(CaretOp); ok {
+			cells = append(cells, c.Cell)
+		}
+	}
+	want := []PointRect{{X: 30, Y: 0, W: 10, H: 20}, {X: 20, Y: 20, W: 10, H: 20}} // padding included; out of range dropped
+	if len(cells) != len(want) || cells[0] != want[0] || cells[1] != want[1] {
+		t.Fatalf("caret cells = %v, want %v", cells, want)
+	}
+	// A terminal has one cursor: the primary.
+	if x, y, ok := Compose(root, 20, 2).Cursor(); !ok || x != 1 || y != 0 {
+		t.Fatalf("terminal cursor = %d,%d,%v", x, y, ok)
+	}
+}

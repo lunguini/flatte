@@ -35,3 +35,25 @@ func TestSnapshotDrawsTextCaret(t *testing.T) {
 		t.Fatal("caret drawn without a Caret")
 	}
 }
+
+// TestSnapshotDrawsExtraCarets: Text.Carets draw as further caret bars.
+func TestSnapshotDrawsExtraCarets(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	root := func() layout.Node {
+		return layout.Text{String: "abcdef\nghijkl\nmnopqr", Caret: &layout.Caret{X: 1}, Carets: []layout.Caret{{X: 4, Y: 1}, {X: 2, Y: 2}}}
+	}
+	m := metrics()
+	img, err := Snapshot(snapApp(root), Options{Width: 20, Height: 4}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	accent := toColor(darkTheme.caret)
+	for _, c := range []layout.Caret{{X: 1}, {X: 4, Y: 1}, {X: 2, Y: 2}} {
+		bar := layout.PointRect{X: float64(c.X)*m.Column - 1, Y: float64(c.Y)*m.Line + 2, W: 3, H: m.Line - 4}
+		if !region(img, bar, 2, accent, 40) {
+			t.Errorf("no caret bar at %+v", c)
+		}
+	}
+}
