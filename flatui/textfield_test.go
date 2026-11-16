@@ -277,3 +277,18 @@ func TestTextFieldEditReadlineAltKeys(t *testing.T) {
 		t.Fatal("Edit claimed an unbound Alt key")
 	}
 }
+
+// A selection that collapsed (SelectAll on an empty field, or a shift-move
+// back onto the anchor) must not resurrect around the next typed text.
+func TestTextFieldCollapsedSelectionDoesNotSwallowTyping(t *testing.T) {
+	var f TextField
+	f.SelectAll()
+	f.Insert('a')
+	f.Insert('b')
+	if f.Value != "ab" {
+		t.Fatalf("after SelectAll on empty: Value = %q, want ab", f.Value)
+	}
+	if _, _, ok := f.Selection(); ok {
+		t.Fatal("typing left a selection")
+	}
+}

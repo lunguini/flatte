@@ -600,6 +600,7 @@ func (t *Textarea) startSelection() {
 func (t *Textarea) deleteSelection() bool {
 	rng, ok := t.Selection()
 	if !ok {
+		t.ClearSelection() // a collapsed selection must not outlive an edit
 		return false
 	}
 	if rng.Start.Row == rng.End.Row {

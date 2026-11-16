@@ -377,6 +377,7 @@ func (f *TextField) startSelection() {
 func (f *TextField) deleteSelection() bool {
 	start, end, ok := f.Selection()
 	if !ok {
+		f.ClearSelection() // a collapsed selection must not outlive an edit
 		return false
 	}
 	f.Value = f.Value[:start] + f.Value[end:]

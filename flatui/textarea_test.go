@@ -454,3 +454,16 @@ func TestTextareaValueRoundTrips(t *testing.T) {
 		t.Fatalf("Value() = %q, want round-trip", ta.Value())
 	}
 }
+
+func TestTextareaCollapsedSelectionDoesNotSwallowTyping(t *testing.T) {
+	var ta Textarea
+	ta.SelectAll()
+	ta.Insert('a')
+	ta.Insert('b')
+	if got := ta.Value(); got != "ab" {
+		t.Fatalf("after SelectAll on empty: Value = %q, want ab", got)
+	}
+	if _, ok := ta.Selection(); ok {
+		t.Fatal("typing left a selection")
+	}
+}
