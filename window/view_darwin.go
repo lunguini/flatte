@@ -264,6 +264,7 @@ func viewMethods() []objc.MethodDef {
 			}
 			b := objc.Send[CGRect](self, sel("bounds"))
 			st.ui.resize(b.Size.Width, b.Size.Height)
+			st.ui.setAppearance(st.th.appearance)
 			scene := st.ui.render()
 			ctx := uintptr(class("NSGraphicsContext").Send(sel("currentContext")).Send(sel("CGContext")))
 			scale := objc.Send[float64](st.window, sel("backingScaleFactor"))

@@ -12,6 +12,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/ebitengine/purego/objc"
 
+	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -29,6 +30,7 @@ type theme struct {
 	family, mono                     string
 	body, titleSize, spacing, radius float64
 	controlHeight                    float64
+	appearance                       flatte.Appearance
 }
 
 // fill is th's color for a Box.Fill role, and whether the role has one.
@@ -55,6 +57,7 @@ func newTheme(t Theme) theme {
 		family: t.Font, mono: t.MonoFont,
 		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
 		controlHeight: t.ControlHeight,
+		appearance:    t.appearance(),
 	}
 }
 

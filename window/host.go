@@ -67,6 +67,8 @@ type surface struct {
 	id         string
 	invalidate func()
 
+	// appearance is the active theme's, passed to View.
+	appearance    flatte.Appearance
 	width, height float64 // view size in points
 	scene         layout.Scene
 	title         string
@@ -149,6 +151,9 @@ type ui interface {
 	hit(x, y float64) string
 	wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod)
 	render() layout.Scene
+	// setAppearance is the active theme's, reported to View from the next
+	// render on.
+	setAppearance(flatte.Appearance)
 	frameTitle() string
 	frameCursor() *flatte.Cursor
 }
@@ -1083,7 +1088,7 @@ func (s *surface) render() layout.Scene {
 func (s *surface) view() flatte.Frame {
 	return s.h.session.Step(flatte.StepInput{FrameDue: true, RenderContext: flatte.RenderContext{
 		Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor,
-		Window: s.id, Graphical: true, Capabilities: s.h.state.Capabilities,
+		Window: s.id, Graphical: true, Capabilities: s.h.state.Capabilities, Appearance: s.appearance,
 	}}).Frame
 }
 
@@ -1104,6 +1109,8 @@ func (w *wheelAccumulator) notches(delta, line float64) int {
 }
 
 // frameTitle is the last rendered frame's title.
+func (s *surface) setAppearance(a flatte.Appearance) { s.appearance = a }
+
 func (s *surface) frameTitle() string { return s.title }
 
 // frameCursor is the last rendered string frame's cursor, in cells.

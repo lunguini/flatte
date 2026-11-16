@@ -442,6 +442,7 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	h := newSessionHost(context.Background(), session, m, func(func()) {}, func() {}, func() {})
 	defer h.cancel()
 	defer session.Cancel()
+	h.surface.setAppearance(th.appearance)
 	h.start(width, height)
 	scene := h.render()
 	return renderImage(scene, th, m, width, height, scale, h.frameCursor(), presentation{}), nil

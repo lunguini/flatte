@@ -484,6 +484,7 @@ func (p *canvasPage) draw() {
 	if p.closed || p.host == nil {
 		return
 	}
+	p.host.surface.setAppearance(p.painter.theme.appearance())
 	scene := p.host.surface.render()
 	p.painter.marked = p.marked
 	p.painter.caretOn = p.caretOn

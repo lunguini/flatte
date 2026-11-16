@@ -26,6 +26,12 @@ type RenderContext struct {
 	// a view can size generously for one and compactly for the other.
 	Graphical    bool
 	Capabilities Capabilities
+	// Appearance is whether the host draws on a light or a dark background,
+	// for colors the app must choose itself (a syntax palette, say) where a
+	// text or fill role cannot say it. A window reports its active theme's
+	// and draws again when the system switches; terminals report
+	// AppearanceUnknown, so apps pick a default.
+	Appearance Appearance
 }
 
 // Capabilities reports which effects and inputs the current host supports,

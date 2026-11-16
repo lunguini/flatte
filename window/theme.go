@@ -2,7 +2,9 @@ package window
 
 import (
 	"image/color"
+	"math"
 
+	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -122,4 +124,25 @@ func (t Theme) fillColor(f layout.Fill) color.Color {
 		return t.Border
 	}
 	return nil
+}
+
+// appearance is light or dark by the Background's relative luminance, so a
+// custom theme reports what it looks like, not which base it started from.
+func (t Theme) appearance() flatte.Appearance {
+	bg := t.Background
+	if bg == nil {
+		bg = Dark().Background
+	}
+	r, g, b, _ := bg.RGBA()
+	lin := func(c uint32) float64 {
+		v := float64(c) / 0xffff
+		if v <= 0.04045 {
+			return v / 12.92
+		}
+		return math.Pow((v+0.055)/1.055, 2.4)
+	}
+	if 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b) > 0.18 {
+		return flatte.AppearanceLight
+	}
+	return flatte.AppearanceDark
 }

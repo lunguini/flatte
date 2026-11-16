@@ -244,6 +244,11 @@ TinyGo builds use the matching TinyGo runtime loader.
 report the same host support, so an app can hide actions the host lacks;
 `Graphical` means point-based GUI rendering. Unsupported effects still
 answer: `Exec` folds `ErrUnsupported`, dialogs fold `ErrNoDialogs`.
+`RenderContext.Appearance` (`AppearanceLight`, `AppearanceDark`, or
+`AppearanceUnknown` in terminals) is the window's active theme, by its
+background's luminance; the window calls `View` again when the system switches.
+Use it only for colors no text or fill role covers (a syntax palette, say), and
+`Appearance.Dark()` to treat unknown as dark.
 `flatest.StartWith` lets tests set width, height, Graphical, and capabilities,
 while `Driver.Resize(w, h)` updates both Handle and View. Use `flatest` for
 event and state behavior; native point metrics remain covered by

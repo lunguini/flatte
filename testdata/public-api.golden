@@ -1,4 +1,7 @@
 flatte package flatte
+  const AppearanceDark Appearance = 2
+  const AppearanceLight Appearance = 1
+  const AppearanceUnknown Appearance = 0
   const CursorShapeBar CursorShape = 3
   const CursorShapeBlock CursorShape = 1
   const CursorShapeDefault CursorShape = 0
@@ -100,6 +103,7 @@ flatte package flatte
   method *Session.UseHostServices(services HostServices)
   method *Session.UsesNowPlaying() bool
   method *Session.WindowFrame(id string)(Frame, bool)
+  method Appearance.Dark() bool
   method Effects[S].Capabilities() Capabilities
   method Effects[S].Ctx() context.Context
   method Effects[S].Desktop(command DesktopCommand)
@@ -133,6 +137,7 @@ flatte package flatte
   field App.Windows func(*S)[]Window [order=8]
   field App.NowPlaying func(*S) *NowPlaying [order=9]
   struct App fields=10 comparable=false
+  type Appearance int
   type Capabilities struct
   field Capabilities.Exec bool [order=0]
   field Capabilities.Suspend bool [order=1]
@@ -333,7 +338,8 @@ flatte package flatte
   field RenderContext.Window string [order=3]
   field RenderContext.Graphical bool [order=4]
   field RenderContext.Capabilities Capabilities [order=5]
-  struct RenderContext fields=6 comparable=true
+  field RenderContext.Appearance Appearance [order=6]
+  struct RenderContext fields=7 comparable=true
   type ResizeEvent struct
   field ResizeEvent.Width int [order=0]
   field ResizeEvent.Height int [order=1]
