@@ -762,6 +762,7 @@ func (p *canvasPainter) slider(op layout.ControlOp, hot, down bool) {
 }
 
 func (p *canvasPainter) cells(op layout.CellsOp) {
+	defer p.cellsCaret(op)
 	buf := uv.NewScreenBuffer(op.Cols, op.Lines)
 	uv.NewStyledString(op.Content).Draw(buf, buf.Bounds())
 	for y := range op.Lines {
@@ -1008,3 +1009,14 @@ func (p *canvasPainter) pruneImages() {
 }
 
 var _ = strings.Builder{}
+
+// cellsCaret draws a cell grid's text caret (CellsOp.Caret) as a blinking
+// bar at the cell's left edge, in the accent color, like an Input's caret.
+func (p *canvasPainter) cellsCaret(op layout.CellsOp) {
+	c := op.Caret
+	if c == nil || !p.caretOn || c.X < 0 || c.Y < 0 || c.X >= op.Cols || c.Y >= op.Lines {
+		return
+	}
+	p.fill(p.theme.Accent)
+	p.ctx.Call("fillRect", op.Rect.X+float64(c.X)*p.metrics.Column, op.Rect.Y+float64(c.Y)*p.metrics.Line, 1.5, p.metrics.Line)
+}

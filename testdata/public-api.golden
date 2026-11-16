@@ -1145,13 +1145,18 @@ flatui/layout package layout
   field Button.Icon IconName [order=6]
   field Button.Plain bool [order=7]
   struct Button fields=8 comparable=false
+  type Caret struct
+  field Caret.X int [order=0]
+  field Caret.Y int [order=1]
+  struct Caret fields=2 comparable=true
   type CellsOp struct
   field CellsOp.Rect PointRect [order=0]
   field CellsOp.Clip PointRect [order=1]
   field CellsOp.Cols int [order=2]
   field CellsOp.Lines int [order=3]
   field CellsOp.Content string [order=4]
-  struct CellsOp fields=5 comparable=true
+  field CellsOp.Caret *Caret [order=5]
+  struct CellsOp fields=6 comparable=true
   type Col struct
   field Col.NodeBase NodeBase [order=0]
   field Col.Children []Node [order=1]
@@ -1387,7 +1392,8 @@ flatui/layout package layout
   type Text struct
   field Text.NodeBase NodeBase [order=0]
   field Text.String string [order=1]
-  struct Text fields=2 comparable=false
+  field Text.Caret *Caret [order=2]
+  struct Text fields=3 comparable=false
   type TextOp struct
   field TextOp.Rect PointRect [order=0]
   field TextOp.Clip PointRect [order=1]

@@ -185,6 +185,9 @@ type CellsOp struct {
 	Rect, Clip  PointRect
 	Cols, Lines int
 	Content     string
+	// Caret is a text caret's cell in the grid (a Text's Caret, padding
+	// included); nil for none.
+	Caret *Caret
 }
 
 // ImageOp draws an Image's Source in Rect (its content box) as Fit says.
@@ -610,7 +613,15 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		}
 		p.box(r, clip, Box{Background: bg})
 	default:
+		before := len(p.ops)
 		p.cells(r, clip, n.Render)
+		if t, ok := n.(Text); ok && t.Caret != nil && len(p.ops) > before {
+			op := p.ops[len(p.ops)-1].(CellsOp)
+			if x, y, ok := t.caret(Rect{W: op.Cols, H: op.Lines}); ok {
+				op.Caret = &Caret{X: x, Y: y}
+				p.ops[len(p.ops)-1] = op
+			}
+		}
 	}
 }
 

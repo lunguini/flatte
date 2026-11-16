@@ -1069,6 +1069,7 @@ func (p *painter) paintCaret() {
 // cells as one shaped line each, wide cells on their own so the grid stays
 // aligned whatever the font's advance for them.
 func (p *painter) cells(op layout.CellsOp) {
+	defer p.cellsCaret(op)
 	buf := uv.NewScreenBuffer(op.Cols, op.Lines)
 	uv.NewStyledString(op.Content).Draw(buf, buf.Bounds())
 	for y := range op.Lines {
@@ -1309,4 +1310,16 @@ func (p *painter) shape(g cellShape, fg rgba) {
 			cgContextSetLineJoin(p.ctx, cgLineJoinMiter)
 		}
 	}
+}
+
+// cellsCaret places a cell grid's text caret (CellsOp.Caret) as the
+// window's caret: a bar at the cell's left edge, as tall as the grid's
+// font, clipped to the grid and blinking like an Input's.
+func (p *painter) cellsCaret(op layout.CellsOp) {
+	c := op.Caret
+	if c == nil || c.X < 0 || c.Y < 0 || c.X >= op.Cols || c.Y >= op.Lines {
+		return
+	}
+	p.clip = intersect(op.Rect, op.Clip)
+	p.caretAt(op.Rect.X+float64(c.X)*p.m.Column, op.Rect.Y+float64(c.Y)*p.m.Line, p.m.Line, p.th.font(fontKey{mono: true}))
 }

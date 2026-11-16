@@ -9,9 +9,34 @@ import (
 
 // Text is a leaf carrying a pre-rendered string. Auto-sizes to the
 // string's dimensions unless explicit W/H is set on the embedded NodeBase.
+//
+// Caret, when set, is a text caret at a cell of the content (inside the
+// node's padding), for apps that draw editable text as a cell grid — a code
+// editor or a terminal emulator. A GUI draws it as its blinking caret bar at
+// the cell's left edge; a terminal places the hardware cursor there
+// (Frame.CursorStyle shapes it). A caret outside the content, or clipped
+// away, shows nowhere. Like a focused Input's, the last visible caret in
+// paint order wins.
 type Text struct {
 	NodeBase
 	String string
+	Caret  *Caret
+}
+
+// Caret is a cell in a Text's content: column X of line Y, from 0.
+type Caret struct{ X, Y int }
+
+// caret places t's caret in r, t's rect; ok is false without a caret or
+// when it falls outside the content.
+func (t Text) caret(r Rect) (x, y int, ok bool) {
+	if t.Caret == nil {
+		return 0, 0, false
+	}
+	in := r.insetBy(t.insetSides())
+	if t.Caret.X < 0 || t.Caret.Y < 0 || t.Caret.X >= in.W || t.Caret.Y >= in.H {
+		return 0, 0, false
+	}
+	return satAdd(in.X, t.Caret.X), satAdd(in.Y, t.Caret.Y), true
 }
 
 func (t Text) Size() (Size, Size) {
