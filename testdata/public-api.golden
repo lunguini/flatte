@@ -88,6 +88,7 @@ flatte package flatte
   func WithInput(in io.Reader) Option
   func WithMouse(mode MouseMode) Option
   func WithOutput(out io.Writer) Option
+  func WithQuitRequests() Option
   func WithReportFocus() Option
   func WithoutBracketedPaste() Option
   func WithoutDefaultQuit() Option
@@ -97,6 +98,7 @@ flatte package flatte
   method *Scope.Ctx() context.Context
   method *Session.Cancel()
   method *Session.ContextMenu(target string)[]MenuItem
+  method *Session.QuitRequests() bool
   method *Session.State() HostState
   method *Session.Step(input StepInput) StepResult
   method *Session.Updates() <-chan struct{}
@@ -331,6 +333,8 @@ flatte package flatte
   type PasteEvent struct
   field PasteEvent.Text string [order=0]
   struct PasteEvent fields=1 comparable=true
+  type QuitRequest struct
+  struct QuitRequest fields=0 comparable=true
   type RenderContext struct
   field RenderContext.Width int [order=0]
   field RenderContext.Height int [order=1]
@@ -388,9 +392,10 @@ flatte package flatte
   field Session.<unexported> bool [order=23]
   field Session.<unexported> bool [order=24]
   field Session.<unexported> bool [order=25]
-  field Session.<unexported> func(*NowPlaying) [order=26]
-  field Session.<unexported> *sessionCell [order=27]
-  struct Session fields=28 comparable=false
+  field Session.<unexported> bool [order=26]
+  field Session.<unexported> func(*NowPlaying) [order=27]
+  field Session.<unexported> *sessionCell [order=28]
+  struct Session fields=29 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string

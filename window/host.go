@@ -1115,3 +1115,14 @@ func (s *surface) frameTitle() string { return s.title }
 
 // frameCursor is the last rendered string frame's cursor, in cells.
 func (s *surface) frameCursor() *flatte.Cursor { return s.cursor }
+
+// quitRequested is the user asking to quit (⌘Q, the main window's close
+// button): the app answers it when it opted in with WithQuitRequests (and
+// quits with Effects.Quit, or keeps running); otherwise the host stops.
+func (h *host) quitRequested() {
+	if !h.session.QuitRequests() {
+		h.stop()
+		return
+	}
+	h.handle(flatte.QuitRequest{})
+}

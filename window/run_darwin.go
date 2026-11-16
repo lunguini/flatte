@@ -297,6 +297,10 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	h.active = opts.Desktop == nil // regular windows activate below
 	delegateActive = h.activated
 	defer func() { delegateActive = nil }()
+	if session.QuitRequests() {
+		delegateQuit = h.quitRequested
+		defer func() { delegateQuit = nil }()
+	}
 	h.windows = nativeWindows{cls: cls, m: m, th: func() theme { return st.th }, follow: opts.Theme == nil, delegate: delegate,
 		focused: h.focused, closeRequested: h.closeRequested}
 	barChosen = h.menuChosen
@@ -311,6 +315,10 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 		h.desktop = desktop
 		h.menus = desktopMenus{nativeMenus: menus, desktop: desktop}
 		st.closeRequested = func() { h.closeRequested("") }
+	}
+	if desktop == nil && session.QuitRequests() {
+		// The main window's close button asks the app, like ⌘Q.
+		st.closeRequested = h.quitRequested
 	}
 
 	done := make(chan struct{})
@@ -358,6 +366,8 @@ var (
 	delegateClassErr  error
 	delegateStop      func()
 	delegateActive    func(bool)
+	// delegateQuit, when set, answers ⌘Q instead of stopping (WithQuitRequests).
+	delegateQuit func()
 )
 
 // newDelegate is the app and window delegate: quitting from the menu or
@@ -370,6 +380,10 @@ func newDelegate(stop func()) (objc.ID, error) {
 			[]*objc.Protocol{objc.GetProtocol("NSApplicationDelegate"), objc.GetProtocol("NSWindowDelegate")}, nil,
 			[]objc.MethodDef{
 				{Cmd: sel("applicationShouldTerminate:"), Fn: func(objc.ID, objc.SEL, objc.ID) uint {
+					if delegateQuit != nil {
+						delegateQuit()
+						return nsTerminateCancel
+					}
 					if delegateStop != nil {
 						delegateStop()
 					}

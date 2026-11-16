@@ -80,8 +80,11 @@ func stepSession[S any](session *Session, app App[S], cell *sessionCell, input S
 		for _, routed := range events {
 			session.dirty = true
 			if key, ok := routed.(KeyEvent); ok && key.Key == KeyCtrlC && session.defaultQuit {
-				session.trace(routed)
-				return StepResult{Quit: true}
+				if !session.quitRequests {
+					session.trace(routed)
+					return StepResult{Quit: true}
+				}
+				routed = QuitRequest{} // the app decides
 			}
 			session.handle(routed)
 			if session.quittingNow() {

@@ -44,6 +44,8 @@ type Access struct {
 	ConfigureTests func(HarnessEffects)
 	Close          func()
 	RunTerminal    func(context.Context, Media) error
+	// SetQuitRequests turns WithQuitRequests on or off for host tests.
+	SetQuitRequests func(bool)
 }
 
 type Helpers struct {
@@ -107,4 +109,12 @@ func RunTerminal(ctx context.Context, session any, media Media) error {
 		return access.RunTerminal(ctx, media)
 	}
 	return errors.New("sessionaccess: terminal driver is unavailable")
+}
+
+// SetQuitRequests sets a session's WithQuitRequests policy, for host tests
+// that build sessions with NewSession.
+func SetQuitRequests(session any, on bool) {
+	if access, ok := For(session); ok && access.SetQuitRequests != nil {
+		access.SetQuitRequests(on)
+	}
 }

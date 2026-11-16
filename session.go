@@ -32,6 +32,7 @@ type HostServices struct {
 
 type sessionPolicy struct {
 	defaultQuit                    bool
+	quitRequests                   bool
 	inline                         bool
 	dialogResizeRoutesThroughMenus bool
 }
@@ -63,6 +64,7 @@ type Session struct {
 	runTerminal   func(context.Context, ...Option) error
 	cellSurface   bool
 	defaultQuit   bool
+	quitRequests  bool
 	inline        bool
 	dirty         bool
 	publishMedia  func(*NowPlaying)
@@ -185,6 +187,7 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 	}
 	s.step = func(input StepInput) StepResult { return stepSession(s, app, s.cell, input) }
 	sessionaccess.Register(s, sessionaccess.Access{
+		SetQuitRequests: func(on bool) { s.quitRequests = on },
 		SetAsync: func(dispatch func(func()), clock sessionaccess.Clock) {
 			fx.dispatch, fx.clock = dispatch, clock
 		},
@@ -275,6 +278,7 @@ func (s *Session) UseHostServices(services HostServices) { s.services(services) 
 
 func (s *Session) useCellPolicy(policy sessionPolicy) {
 	s.defaultQuit = policy.defaultQuit
+	s.quitRequests = policy.quitRequests
 	s.inline = policy.inline
 	s.cell.dialogResizeRoutesThroughMenus = policy.dialogResizeRoutesThroughMenus
 }
@@ -306,6 +310,7 @@ func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool
 		return false, nil
 	}
 	session := newSession(ctx, app)
+	session.quitRequests = config.config.quitRequests
 	session.runTerminal = func(runCtx context.Context, options ...Option) error {
 		runConfig := applyRunOptions(config.config, options...).config
 		terminalApp := app

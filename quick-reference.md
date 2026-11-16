@@ -266,6 +266,7 @@ Use these names for every app:
 | Input handling | `Handle(s *State, ev flatte.Event, fx flatte.Effects[State])` |
 | Rendering | `View(s *State, ctx flatte.RenderContext) flatte.Frame` |
 | Quit | `fx.Quit()` |
+| Ask before quitting (unsaved work) | `flatte.WithQuitRequests()`: ⌘Q, the main window's close button, and the default Ctrl+C arrive as `flatte.QuitRequest`; call `fx.Quit()` when ready, or keep running |
 | Window size | handle `flatte.ResizeEvent` |
 | Keyboard | type switch to `flatte.KeyEvent` |
 | Mouse | `flatte.WithMouse(...)` plus `flatte.MouseEvent` |

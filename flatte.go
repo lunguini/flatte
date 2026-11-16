@@ -335,6 +335,7 @@ type runConfig struct {
 	input          io.Reader
 	output         io.Writer
 	defaultQuit    bool
+	quitRequests   bool
 	bracketedPaste bool
 	mouse          MouseMode
 	reportFocus    bool
@@ -576,7 +577,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		CellSurface:  true,
 		PublishMedia: cfg.publishMedia,
 	})
-	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, inline: cfg.inline})
+	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, quitRequests: cfg.quitRequests, inline: cfg.inline})
 
 	// The input pipeline is restartable: suspend and exec stop it before
 	// handing the terminal away (the subprocess must own stdin) and start
