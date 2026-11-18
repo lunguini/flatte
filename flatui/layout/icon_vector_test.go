@@ -10,7 +10,7 @@ import (
 )
 
 func TestVectorIconGeometryCoversEveryLargeShape(t *testing.T) {
-	for name := IconCheck; name <= IconSidebarRight; name++ {
+	for name := IconCheck; name <= IconSparkle; name++ {
 		if name >= IconChevronLeft && name <= IconChevronDown {
 			continue // first-column shapes, as IconChevronRight
 		}

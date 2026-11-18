@@ -195,6 +195,8 @@ func symbol(name layout.IconName, cx, cy, s float64) (cellShape, bool) {
 			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
 			line(at(0.14, -0.36), at(0.14, 0.36)),
 		}}, true
+	case layout.IconSparkle:
+		return cellShape{polys: []poly{line(at(0, -0.45), at(0.1, -0.1), at(0.45, 0), at(0.1, 0.1), at(0, 0.45), at(-0.1, 0.1), at(-0.45, 0), at(-0.1, -0.1), at(0, -0.45))}}, true
 	}
 	return cellShape{}, false
 }

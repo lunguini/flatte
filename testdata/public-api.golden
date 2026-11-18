@@ -979,6 +979,7 @@ flatui/layout package layout
   const IconShuffle IconName = 30
   const IconSidebarLeft IconName = 42
   const IconSidebarRight IconName = 43
+  const IconSparkle IconName = 44
   const IconSpeaker IconName = 32
   const IconTerminal IconName = 40
   const IconWarning IconName = 14

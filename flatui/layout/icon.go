@@ -74,6 +74,8 @@ const (
 	IconPanelBottom
 	IconSidebarLeft
 	IconSidebarRight
+	// A four-point sparkle (✦): an assistant or agent.
+	IconSparkle
 )
 
 // Icon is a small symbol with a terminal spelling: the terminal shows Text

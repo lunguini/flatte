@@ -233,6 +233,8 @@ func buildIconGeometry(name IconName) (iconGeometry, bool) {
 			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
 			line(at(0.14, -0.36), at(0.14, 0.36)),
 		}}, true
+	case IconSparkle:
+		return iconGeometry{strokes: []iconStroke{line(at(0, -0.45), at(0.1, -0.1), at(0.45, 0), at(0.1, 0.1), at(0, 0.45), at(-0.1, 0.1), at(-0.45, 0), at(-0.1, -0.1), at(0, -0.45))}}, true
 	}
 	return iconGeometry{}, false
 }
