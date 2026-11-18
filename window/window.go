@@ -43,7 +43,8 @@ type Options struct {
 	// Zero or less than the system's TitleBarHeight keeps the system's.
 	TitleBarHeight int
 	// Translucent shows the desktop, blurred, through the window wherever
-	// the frame draws no background of its own.
+	// the frame draws no background of its own — for good; a frame's
+	// Frame.Translucent turns it on frame by frame instead.
 	Translucent bool
 	// Fonts are font files (TrueType or OpenType) for this process to use
 	// before the window draws, so Theme.Font can name a family the system

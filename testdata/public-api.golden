@@ -237,8 +237,9 @@ flatte package flatte
   field Frame.CursorStyle *CursorStyle [order=2]
   field Frame.Title string [order=3]
   field Frame.CellImages bool [order=4]
-  field Frame.Root layout.Node [order=5]
-  struct Frame fields=6 comparable=true
+  field Frame.Translucent bool [order=5]
+  field Frame.Root layout.Node [order=6]
+  struct Frame fields=7 comparable=true
   type Host interface
   interface Host method Run(context.Context, *Session) error
   type HostServices struct

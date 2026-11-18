@@ -65,7 +65,10 @@ desktop/window-frame options such as `Desktop`, `Width`, `Height`, `MinWidth`,
 `MinHeight`, `Autosave`, `HideTitleBar`, `TitleBarHeight`, and `Translucent` are ignored. A
 macOS window with `HideTitleBar` and a taller app-drawn strip sets
 `TitleBarHeight` to its height in points: the whole strip drags the window and
-the window buttons sit in its middle. A sample
+the window buttons sit in its middle. `Translucent` shows what is behind a
+macOS window, blurred, wherever the frame draws no background; a frame's
+`Frame.Translucent` does the same frame by frame, so an app can switch it live
+(either turns it on; terminals and pages ignore the frame field). A sample
 can append `window.Options` when its GUI mode is selected and still call
 `flatte.Run` once:
 
