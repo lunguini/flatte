@@ -37,6 +37,48 @@ const (
 	nsWindowCollectionBehaviorFullScreenPrimary = 1 << 7
 )
 
+// newEffect is the blur a translucent window's view draws over: what is
+// behind the window, always active. The caller releases it.
+func newEffect(width, height float64) objc.ID {
+	effect := alloc("NSVisualEffectView").Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
+	effect.Send(sel("setMaterial:"), int(nsMaterialUnderWindow))
+	effect.Send(sel("setBlendingMode:"), int(nsBlendBehindWindow))
+	effect.Send(sel("setState:"), int(nsEffectActive))
+	return effect
+}
+
+// putBehind makes effect the window's content, view drawn over it, and the
+// window see-through.
+func putBehind(win, view, effect objc.ID, dark bool) {
+	view.Send(sel("retain"))
+	view.Send(sel("removeFromSuperview"))
+	effect.Send(sel("setFrame:"), objc.Send[CGRect](win.Send(sel("contentView")), sel("frame")))
+	win.Send(sel("setContentView:"), effect)
+	view.Send(sel("setFrame:"), objc.Send[CGRect](effect, sel("bounds")))
+	view.Send(sel("setAutoresizingMask:"), uint(nsViewSizable))
+	effect.Send(sel("addSubview:"), view)
+	view.Send(sel("release"))
+	win.Send(sel("setOpaque:"), false)
+	win.Send(sel("setBackgroundColor:"), class("NSColor").Send(sel("clearColor")))
+	appearance := "NSAppearanceNameAqua"
+	if dark {
+		appearance = "NSAppearanceNameDarkAqua"
+	}
+	win.Send(sel("setAppearance:"), class("NSAppearance").Send(sel("appearanceNamed:"), nsString(appearance)))
+	win.Send(sel("makeFirstResponder:"), view)
+}
+
+// takeOut makes view the window's content again, opaque.
+func takeOut(win, view objc.ID) {
+	view.Send(sel("retain"))
+	view.Send(sel("removeFromSuperview"))
+	win.Send(sel("setContentView:"), view)
+	view.Send(sel("release"))
+	win.Send(sel("setOpaque:"), true)
+	win.Send(sel("setBackgroundColor:"), class("NSColor").Send(sel("windowBackgroundColor")))
+	win.Send(sel("makeFirstResponder:"), view)
+}
+
 // --- running functions on the main thread ---
 
 var (
@@ -128,25 +170,11 @@ func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, min
 		win.Send(sel("setTitlebarAppearsTransparent:"), true)
 		win.Send(sel("setTitleVisibility:"), int(nsWindowTitleHidden))
 	}
+	win.Send(sel("setContentView:"), view)
 	if ch.translucent {
-		// The view draws over a blur of what is behind the window.
-		effect := alloc("NSVisualEffectView").Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
-		effect.Send(sel("setMaterial:"), int(nsMaterialUnderWindow))
-		effect.Send(sel("setBlendingMode:"), int(nsBlendBehindWindow))
-		effect.Send(sel("setState:"), int(nsEffectActive))
-		view.Send(sel("setAutoresizingMask:"), uint(nsViewSizable))
-		effect.Send(sel("addSubview:"), view)
-		win.Send(sel("setContentView:"), effect)
+		effect := newEffect(width, height)
+		putBehind(win, view, effect, ch.dark)
 		effect.Send(sel("release"))
-		win.Send(sel("setOpaque:"), false)
-		win.Send(sel("setBackgroundColor:"), class("NSColor").Send(sel("clearColor")))
-		appearance := "NSAppearanceNameAqua"
-		if ch.dark {
-			appearance = "NSAppearanceNameDarkAqua"
-		}
-		win.Send(sel("setAppearance:"), class("NSAppearance").Send(sel("appearanceNamed:"), nsString(appearance)))
-	} else {
-		win.Send(sel("setContentView:"), view)
 	}
 	win.Send(sel("setCollectionBehavior:"), uint(nsWindowCollectionBehaviorFullScreenPrimary))
 	win.Send(sel("setContentMinSize:"), CGSize{Width: float64(max(minCols, 20)) * m.Column, Height: float64(max(minLines, 4)) * m.Line})
@@ -260,7 +288,10 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	}
 	h := newSessionHost(ctx, session, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
 	defer h.cancel()
-	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts)}
+	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, always: opts.Translucent, hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts)}
+	if opts.Translucent {
+		st.effect = win.Send(sel("contentView")).Send(sel("retain"))
+	}
 	st.focused = func() { h.focused("") }
 	register(st)
 	defer func() {
@@ -459,12 +490,19 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	h.surface.setAppearance(th.appearance)
 	h.start(width, height)
 	scene := h.render()
-	return renderImage(scene, th, m, width, height, scale, h.frameCursor(), presentation{}), nil
+	img := renderScene(scene, th, m, width, height, scale, h.frameCursor(), presentation{}, opts.Translucent || h.surface.frameTranslucent())
+	return img, nil
 }
 
 // renderImage draws scene offscreen into an RGBA image of width×height
 // points at scale pixels per point, with pres drawn over it.
 func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation) *image.RGBA {
+	return renderScene(scene, th, m, width, height, scale, cursor, pres, false)
+}
+
+// renderScene is renderImage, translucent leaving the background
+// unpainted (transparent) as a translucent window does.
+func renderScene(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation, translucent bool) *image.RGBA {
 	pw, ph := int(math.Ceil(width*scale)), int(math.Ceil(height*scale))
 	cs := cgColorSpaceCreateDeviceRGB()
 	defer cgColorSpaceRelease(cs)
@@ -473,7 +511,7 @@ func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, 
 	// Top-left origin points, as in the flipped view.
 	cgContextTranslateCTM(ctx, 0, float64(ph))
 	cgContextScaleCTM(ctx, scale, -scale)
-	p := &painter{ctx: ctx, m: m, th: th, scale: scale, presentation: pres}
+	p := &painter{ctx: ctx, m: m, th: th, scale: scale, presentation: pres, translucent: translucent}
 	withPool(func() {
 		// Fill the whole bitmap, including the partial pixel the point size
 		// rounds up to.

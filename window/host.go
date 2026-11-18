@@ -72,6 +72,7 @@ type surface struct {
 	width, height float64 // view size in points
 	scene         layout.Scene
 	title         string
+	translucent   bool // the last frame's Translucent
 	// cursor is a string frame's Frame.Cursor, in cells; Root frames show the
 	// focused Input's caret instead.
 	cursor          *flatte.Cursor
@@ -159,6 +160,7 @@ type ui interface {
 	// render on.
 	setAppearance(flatte.Appearance)
 	frameTitle() string
+	frameTranslucent() bool
 	frameCursor() *flatte.Cursor
 }
 
@@ -1123,6 +1125,7 @@ func (s *surface) render() layout.Scene {
 	for pass := 0; ; pass++ {
 		frame := s.view()
 		s.title = frame.Title
+		s.translucent = frame.Translucent
 		s.cursor = nil
 		root := frame.Root
 		if root == nil {
@@ -1189,6 +1192,9 @@ func (w *wheelAccumulator) notches(delta, line float64) int {
 func (s *surface) setAppearance(a flatte.Appearance) { s.appearance = a }
 
 func (s *surface) frameTitle() string { return s.title }
+
+// frameTranslucent reports the last frame's Translucent.
+func (s *surface) frameTranslucent() bool { return s.translucent }
 
 // frameCursor is the last rendered string frame's cursor, in cells.
 func (s *surface) frameCursor() *flatte.Cursor { return s.cursor }

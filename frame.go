@@ -28,6 +28,11 @@ type Frame struct {
 	// shows pictures (and icon buttons as their glyphs): for an app that
 	// lets its user turn pictures off.
 	CellImages bool
+	// Translucent, in a native window, shows what is behind the window,
+	// blurred, wherever the frame draws no background — as the window's
+	// Options.Translucent does (either turns it on), but changeable frame
+	// by frame: a setting can switch it live. Terminals ignore it.
+	Translucent bool
 	// Root, when set, is the frame's layout tree. The host solves and paints
 	// it at the frame size, so View needs no Solve call or size bookkeeping,
 	// and MouseEvent.Target names the ID'd node under the pointer. Frames

@@ -33,9 +33,13 @@ type windowState struct {
 	// hideTitle has the content under the title bar, its strip dragging the
 	// window where nothing is.
 	translucent, hideTitle bool
-	titleH                 float64 // the strip's height in points, with hideTitle
-	window                 objc.ID
-	title                  string
+	// always: Options.Translucent (frames cannot turn it off); effect is
+	// the blur view, once made.
+	always bool
+	effect objc.ID
+	titleH float64 // the strip's height in points, with hideTitle
+	window objc.ID
+	title  string
 	// marked is the input method's uncommitted text; caret is where the
 	// focused input's caret was last drawn, in view coordinates.
 	marked  string
@@ -139,6 +143,10 @@ func register(st *windowState) {
 func unregister(st *windowState) {
 	delete(states, st.view)
 	delete(byWindow, st.window)
+	if st.effect != 0 {
+		st.effect.Send(sel("release"))
+		st.effect = 0
+	}
 	if st.frame != nil {
 		st.frame.Stop()
 	}
@@ -151,6 +159,25 @@ func unregister(st *windowState) {
 func isDark(view objc.ID) bool {
 	name := plainString(view.Send(sel("effectiveAppearance")).Send(sel("name")))
 	return strings.Contains(name, "Dark")
+}
+
+// setTranslucent puts the window's view over the blur, or takes it out,
+// as the frames ask.
+func (st *windowState) setTranslucent(on bool) {
+	if on == st.translucent || states[st.view] != st {
+		return // done meanwhile, or the window closed
+	}
+	st.translucent = on
+	if on {
+		if st.effect == 0 {
+			b := objc.Send[CGRect](st.view, sel("bounds"))
+			st.effect = newEffect(b.Size.Width, b.Size.Height)
+		}
+		putBehind(st.window, st.view, st.effect, st.dark)
+	} else {
+		takeOut(st.window, st.view)
+	}
+	st.view.Send(sel("setNeedsDisplay:"), true)
 }
 
 func (st *windowState) setTitle(t string) {
@@ -303,6 +330,9 @@ func viewMethods() []objc.MethodDef {
 			}
 			st.caret, st.caretOK, st.extra = p.caret, p.caretOK, p.extra
 			st.setTitle(st.ui.frameTitle())
+			if on := st.always || st.ui.frameTranslucent(); on != st.translucent {
+				post(func() { st.setTranslucent(on) }) // not while drawing
+			}
 		}},
 		{Cmd: sel("keyDown:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
 			st := stateOf(self)
