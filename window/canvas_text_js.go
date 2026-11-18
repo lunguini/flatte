@@ -25,6 +25,7 @@ type canvasFont struct {
 
 func (t canvasTextLayout) font(style layout.TextStyle) canvasFont {
 	th := t.theme
+	style = resolveStyle(style, th.palette(), th.typeScale())
 	size := th.FontSize
 	family := th.Font
 	if style.Role == layout.TextTitle {

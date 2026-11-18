@@ -11,7 +11,9 @@ func TestThemeFillColor(t *testing.T) {
 		cases := map[layout.Fill]any{
 			layout.FillSurface:   th.Surface,
 			layout.FillField:     th.Field,
-			layout.FillSeparator: th.Border,
+			layout.FillSeparator: th.palette().Divider, // the design's divider, not the control border
+			layout.FillChrome:    th.palette().Chrome,
+			layout.FillAccent:    th.palette().Accent,
 		}
 		for f, want := range cases {
 			if got := th.fillColor(f); got != want {

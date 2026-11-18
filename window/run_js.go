@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/lunguini/flatte"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // Options selects the canvas host in a browser page.
@@ -45,6 +46,7 @@ type canvasPage struct {
 	host                                *host
 	painter                             *canvasPainter
 	options                             Options
+	design                              *ds.Theme
 	listeners                           []canvasListener
 	observer                            js.Value
 	observerFn                          js.Func
@@ -85,7 +87,8 @@ func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error
 	if win.IsUndefined() || win.IsNull() {
 		win = js.Global()
 	}
-	th := themeFor(opts.Theme, browserDarkMode(win))
+	design := session.Theme(true)
+	th := themeFor(opts.Theme, browserDarkMode(win), design)
 	if err := loadCanvasFonts(doc, th, opts.Fonts); err != nil {
 		return err
 	}
@@ -135,7 +138,8 @@ func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error
 		page.restore()
 		return errors.New("window: browser canvas 2D context is unavailable")
 	}
-	th = themeFor(opts.Theme, browserDarkMode(win))
+	th = themeFor(opts.Theme, browserDarkMode(win), design)
+	page.design = design
 	page.ctx = ctx2d
 	painter := newCanvasPainter(ctx2d, th)
 	page.painter = painter
@@ -432,7 +436,7 @@ func (p *canvasPage) refreshTheme() {
 	if p.closed {
 		return
 	}
-	th := themeFor(p.options.Theme, browserDarkMode(p.win))
+	th := themeFor(p.options.Theme, browserDarkMode(p.win), p.design)
 	ctx := p.ctx
 	p.painter.close()
 	p.painter = newCanvasPainter(ctx, th)

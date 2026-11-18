@@ -157,6 +157,7 @@ func canvasColor(c color.Color) string {
 }
 
 func (p *canvasPainter) roleColor(style layout.TextStyle) rgba {
+	style = resolveStyle(style, p.theme.palette(), p.theme.typeScale())
 	return roleRGBA(style, rgbaOf(p.theme.Text), rgbaOf(p.theme.Subtle), rgbaOf(p.theme.Title))
 }
 

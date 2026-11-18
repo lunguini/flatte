@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/lunguini/flatte/internal/sessionaccess"
+	"github.com/lunguini/flatte/theme"
 )
 
 // Host runs an App through a platform-specific driver selected by Run.
@@ -71,6 +72,44 @@ type Session struct {
 	dirty            bool
 	publishMedia     func(*NowPlaying)
 	cell             *sessionCell
+	// theme is the app's design system (WithTheme, UseTheme); nil: the
+	// host's default.
+	theme        *theme.Theme
+	defaultTheme *theme.Theme
+}
+
+// UseTheme sets the design system the session's views see in
+// RenderContext and its host draws with. Run sets it from WithTheme; an
+// offscreen host (a snapshot) calls it before the first step.
+func (s *Session) UseTheme(t theme.Theme) { s.theme = &t }
+
+// Theme is the design system the host draws with: the app's (WithTheme),
+// or, for a graphical host, theme.Default(); nil in a terminal without one.
+func (s *Session) Theme(graphical bool) *theme.Theme {
+	if s.theme != nil {
+		return s.theme
+	}
+	if !graphical {
+		return nil
+	}
+	if s.defaultTheme == nil {
+		d := theme.Default()
+		s.defaultTheme = &d
+	}
+	return s.defaultTheme
+}
+
+// themed fills ctx's Theme and Palette from the session's theme.
+func (s *Session) themed(ctx RenderContext) RenderContext {
+	t := s.Theme(ctx.Graphical)
+	if t == nil {
+		return ctx
+	}
+	if ctx.Appearance == AppearanceUnknown {
+		ctx.Appearance = AppearanceDark
+	}
+	ctx.Theme, ctx.Palette = t, t.Palette(ctx.Appearance == AppearanceDark)
+	return ctx
 }
 
 // NewSession wraps an app for an offscreen host. Run constructs sessions
@@ -151,7 +190,7 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 		}
 	}
 	s.trace = func(ev Event) { app.Tracer.Event(ev) }
-	s.view = func(ctx RenderContext) Frame { return app.View(app.State, ctx) }
+	s.view = func(ctx RenderContext) Frame { return app.View(app.State, s.themed(ctx)) }
 	s.services = func(host HostServices) {
 		fx = withHostCapabilities(fx, host.Capabilities)
 		fx = withHostClipboard(fx, host.SetClipboard, host.ReadClipboard)
@@ -326,6 +365,7 @@ func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool
 	session := newSession(ctx, app)
 	session.quitRequests = config.config.quitRequests
 	session.preciseScrolling = config.config.preciseScrolling
+	session.theme = config.config.theme
 	session.runTerminal = func(runCtx context.Context, options ...Option) error {
 		runConfig := applyRunOptions(config.config, options...).config
 		terminalApp := app

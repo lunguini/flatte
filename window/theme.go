@@ -8,6 +8,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // Theme is a window's look: the colors of everything the app does not color
@@ -47,6 +48,11 @@ type Theme struct {
 	// background. Nil entries take the base theme's. Colors 16–255 and
 	// true colors are drawn as given.
 	ANSI [16]color.Color
+
+	// design is the design system this Theme was made from (fromDesign):
+	// the palette layout's newer roles resolve in, and its type scale.
+	design *ds.Theme
+	dark   bool
 }
 
 // cellColor is c as a cell grid draws it: an ANSI color 0–15 in t's
@@ -67,46 +73,55 @@ func ansiColor(pal *[16]color.Color, c color.Color) color.Color {
 	return c
 }
 
-// darkANSI reads on Dark's field: softened hues, a visible "black".
-var darkANSI = [16]color.Color{
-	rgb(0x54, 0x58, 0x62), rgb(0xe0, 0x6c, 0x75), rgb(0x98, 0xc3, 0x79), rgb(0xe5, 0xc0, 0x7b),
-	rgb(0x61, 0xaf, 0xef), rgb(0xc6, 0x78, 0xdd), rgb(0x56, 0xb6, 0xc2), rgb(0xdc, 0xdf, 0xe4),
-	rgb(0x7f, 0x84, 0x8e), rgb(0xff, 0x7b, 0x86), rgb(0xb5, 0xe8, 0x90), rgb(0xf0, 0xd5, 0x8a),
-	rgb(0x7c, 0xc4, 0xff), rgb(0xd7, 0x9b, 0xf0), rgb(0x72, 0xd3, 0xde), rgb(0xff, 0xff, 0xff),
-}
+// Dark is the default dark theme: theme.Default()'s dark palette.
+func Dark() Theme { return fromDesign(&defaultDesign, true) }
 
-// lightANSI reads on Light's white field: deep hues, and "white" a gray.
-var lightANSI = [16]color.Color{
-	rgb(0x24, 0x29, 0x2f), rgb(0xcf, 0x22, 0x2e), rgb(0x11, 0x63, 0x29), rgb(0x9a, 0x67, 0x00),
-	rgb(0x05, 0x50, 0xae), rgb(0x82, 0x50, 0xdf), rgb(0x1b, 0x7c, 0x83), rgb(0x6e, 0x77, 0x81),
-	rgb(0x57, 0x60, 0x6a), rgb(0xa4, 0x0e, 0x26), rgb(0x1a, 0x7f, 0x37), rgb(0x7d, 0x4e, 0x00),
-	rgb(0x09, 0x69, 0xda), rgb(0xa4, 0x75, 0xf9), rgb(0x31, 0x92, 0xaa), rgb(0x8c, 0x95, 0x9f),
-}
+// Light is the default light theme: theme.Default()'s light palette.
+func Light() Theme { return fromDesign(&defaultDesign, false) }
 
-// Dark is the default dark theme.
-func Dark() Theme {
+var defaultDesign = ds.Default()
+
+// fromDesign is the window Theme for design's palette in an appearance.
+// The window ground is Chrome (an app that fills nothing reads as a
+// sidebar would); Surface is Raised; Subtle is TextSecondary; Border is
+// the control outline (separators use the Divider through FillSeparator).
+func fromDesign(design *ds.Theme, dark bool) Theme {
+	p := design.Palette(dark)
+	var pal [16]color.Color
+	for i, c := range p.ANSI {
+		pal[i] = c
+	}
+	radius := design.Radius.Sm
+	if radius <= 0 {
+		radius = -1 // square
+	}
 	return Theme{
-		Background: rgb(0x1e, 0x1f, 0x22), Surface: rgb(0x29, 0x2a, 0x2e),
-		Text: rgb(0xde, 0xe0, 0xe5), Subtle: rgb(0x8d, 0x91, 0x9b), Title: rgb(0xf2, 0xf3, 0xf5),
-		Border: rgb(0x4c, 0x4e, 0x55), Field: rgb(0x17, 0x18, 0x1b),
-		Accent: rgb(0x66, 0xa7, 0xff), Selection: color.NRGBA{0x66, 0xa7, 0xff, 0x38},
-		Track:    rgb(0x3f, 0x41, 0x47),
-		FontSize: 13, TitleSize: 15, LineSpacing: 1.25, Radius: 4, ControlHeight: 32,
-		ANSI: darkANSI,
+		Background: p.Chrome, Surface: p.Raised,
+		Text: p.Text, Subtle: p.TextSecondary, Title: p.Text,
+		Border: p.ControlBorder, Field: p.Field,
+		Accent: p.Accent, Selection: p.SelectionActive, Track: p.SelectionInactive,
+		Font: design.Font, MonoFont: design.MonoFont,
+		FontSize: design.Type.Body.Size, TitleSize: design.Type.Title.Size, LineSpacing: 1.25,
+		Radius: radius, ControlHeight: design.Size.Control,
+		ANSI:   pal,
+		design: design, dark: dark,
 	}
 }
 
-// Light is the default light theme.
-func Light() Theme {
-	return Theme{
-		Background: rgb(0xf6, 0xf6, 0xf7), Surface: rgb(0xff, 0xff, 0xff),
-		Text: rgb(0x1d, 0x1d, 0x1f), Subtle: rgb(0x6e, 0x6e, 0x73), Title: rgb(0x0b, 0x0b, 0x0d),
-		Border: rgb(0xc9, 0xc9, 0xce), Field: rgb(0xff, 0xff, 0xff),
-		Accent: rgb(0x00, 0x6e, 0xe6), Selection: color.NRGBA{0x00, 0x6e, 0xe6, 0x2e},
-		Track:    rgb(0xdd, 0xdd, 0xe1),
-		FontSize: 13, TitleSize: 15, LineSpacing: 1.25, Radius: 4, ControlHeight: 32,
-		ANSI: lightANSI,
+// palette is the design palette t's roles resolve in.
+func (t Theme) palette() *ds.Palette {
+	if t.design == nil {
+		return defaultDesign.Palette(t.appearance() == flatte.AppearanceDark)
 	}
+	return t.design.Palette(t.dark)
+}
+
+// typeScale is the design type scale t's text roles are set in.
+func (t Theme) typeScale() ds.TypeScale {
+	if t.design == nil {
+		return defaultDesign.Type
+	}
+	return t.design.Type
 }
 
 func rgb(r, g, b uint8) color.Color { return color.RGBA{r, g, b, 0xff} }
@@ -135,7 +150,12 @@ func (t Theme) over(base Theme) Theme {
 	for i := range pal {
 		pal[i] = pick(t.ANSI[i], base.ANSI[i])
 	}
+	design, dark := t.design, t.dark
+	if design == nil {
+		design, dark = base.design, base.dark
+	}
 	return Theme{
+		design: design, dark: dark,
 		ANSI:       pal,
 		Background: pick(t.Background, base.Background), Surface: pick(t.Surface, base.Surface),
 		Text: pick(t.Text, base.Text), Subtle: pick(t.Subtle, base.Subtle), Title: pick(t.Title, base.Title),
@@ -150,15 +170,16 @@ func (t Theme) over(base Theme) Theme {
 }
 
 // themeFor is the theme a window draws with: opts' theme over Dark, or —
-// with none — the system's appearance (dark reports it).
-func themeFor(opts *Theme, dark bool) Theme {
+// with none — design (the app's flatte.WithTheme, else theme.Default())
+// in the system's appearance (dark reports it).
+func themeFor(opts *Theme, dark bool, design *ds.Theme) Theme {
+	if design == nil {
+		design = &defaultDesign
+	}
 	if opts != nil {
-		return opts.over(Dark())
+		return opts.over(fromDesign(design, true))
 	}
-	if dark {
-		return Dark()
-	}
-	return Light()
+	return fromDesign(design, dark)
 }
 
 // fillColor is t's color for a Box.Fill role; nil for FillNone and roles
@@ -170,7 +191,10 @@ func (t Theme) fillColor(f layout.Fill) color.Color {
 	case layout.FillField:
 		return t.Field
 	case layout.FillSeparator:
-		return t.Border
+		return t.palette().Divider
+	}
+	if c, ok := layout.FillColor(t.palette(), f); ok {
+		return c
 	}
 	return nil
 }

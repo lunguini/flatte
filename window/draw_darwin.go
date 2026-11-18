@@ -14,6 +14,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // theme is a Theme in drawing terms. Roles and Boxes map onto it; explicit
@@ -33,6 +34,10 @@ type theme struct {
 	appearance                       flatte.Appearance
 	// ansi is the palette cell grids draw ANSI colors 0–15 in.
 	ansi [16]color.Color
+	// pal and ts are the design palette and type scale layout's newer
+	// roles resolve in (resolveStyle).
+	pal *ds.Palette
+	ts  ds.TypeScale
 }
 
 // fill is th's color for a Box.Fill role, and whether the role has one.
@@ -43,7 +48,10 @@ func (th theme) fill(f layout.Fill) (rgba, bool) {
 	case layout.FillField:
 		return th.field, true
 	case layout.FillSeparator:
-		return th.border, true
+		return rgbaOf(th.pal.Divider), true
+	}
+	if c, ok := layout.FillColor(th.pal, f); ok {
+		return rgbaOf(c), true
 	}
 	return rgba{}, false
 }
@@ -61,6 +69,7 @@ func newTheme(t Theme) theme {
 		controlHeight: t.ControlHeight,
 		appearance:    t.appearance(),
 		ansi:          t.ANSI,
+		pal:           t.palette(), ts: t.typeScale(),
 	}
 }
 
@@ -246,6 +255,7 @@ func (th theme) font(k fontKey) font {
 }
 
 func (th theme) styleFont(s layout.TextStyle) font {
+	s = resolveStyle(s, th.pal, th.ts)
 	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic, size: s.Size, leading: s.Leading})
 }
 
@@ -675,6 +685,7 @@ func strokeRect(r layout.PointRect, band float64) CGRect {
 }
 
 func (p *painter) roleColor(s layout.TextStyle) rgba {
+	s = resolveStyle(s, p.th.pal, p.th.ts)
 	return roleRGBA(s, p.th.text, p.th.subtle, p.th.title)
 }
 

@@ -2,6 +2,7 @@ package window
 
 import (
 	"github.com/charmbracelet/x/ansi"
+	ds "github.com/lunguini/flatte/theme"
 	"image/color"
 	"math"
 	"reflect"
@@ -32,13 +33,13 @@ func TestBaseThemesAreComplete(t *testing.T) {
 }
 
 func TestThemeFor(t *testing.T) {
-	if !reflect.DeepEqual(themeFor(nil, true), Dark()) || !reflect.DeepEqual(themeFor(nil, false), Light()) {
+	if !reflect.DeepEqual(themeFor(nil, true, nil), Dark()) || !reflect.DeepEqual(themeFor(nil, false, nil), Light()) {
 		t.Fatal("no theme should follow the system appearance")
 	}
 	// A partial theme keeps the base's other fields; a custom one is not
 	// switched by the system.
 	red := color.RGBA{0xff, 0, 0, 0xff}
-	got := themeFor(&Theme{Accent: red, FontSize: 16, Radius: -1}, false)
+	got := themeFor(&Theme{Accent: red, FontSize: 16, Radius: -1}, false, nil)
 	want := Dark()
 	want.Accent, want.FontSize, want.Radius = red, 16, -1
 	if !reflect.DeepEqual(got, want) {
@@ -46,19 +47,19 @@ func TestThemeFor(t *testing.T) {
 	}
 	light := Light()
 	light.Accent = red
-	if got := themeFor(&light, true); !reflect.DeepEqual(got, light) {
+	if got := themeFor(&light, true, nil); !reflect.DeepEqual(got, light) {
 		t.Fatal("an explicit light theme followed the dark system appearance")
 	}
 }
 
 func TestControlHeightThemeDefaultAndOverride(t *testing.T) {
-	if Dark().ControlHeight != 32 || Light().ControlHeight != 32 {
+	if want := ds.Default().Size.Control; Dark().ControlHeight != want || Light().ControlHeight != want {
 		t.Fatal("themes do not share regular control height")
 	}
-	if got := themeFor(&Theme{ControlHeight: 40}, true); got.ControlHeight != 40 {
+	if got := themeFor(&Theme{ControlHeight: 40}, true, nil); got.ControlHeight != 40 {
 		t.Fatalf("control height override %+v", got)
 	}
-	if got := themeFor(&Theme{ControlHeight: -1}, true); got.ControlHeight != -1 {
+	if got := themeFor(&Theme{ControlHeight: -1}, true, nil); got.ControlHeight != -1 {
 		t.Fatal("minimum optout lost")
 	}
 }

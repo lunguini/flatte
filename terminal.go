@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/colorprofile"
 	"golang.org/x/term"
+
+	"github.com/lunguini/flatte/theme"
 )
 
 const (
@@ -30,8 +32,16 @@ type RenderContext struct {
 	// for colors the app must choose itself (a syntax palette, say) where a
 	// text or fill role cannot say it. A window reports its active theme's
 	// and draws again when the system switches; terminals report
-	// AppearanceUnknown, so apps pick a default.
+	// AppearanceUnknown, so apps pick a default — or, with a theme
+	// (WithTheme), AppearanceDark, the palette their cells are drawn in.
 	Appearance Appearance
+	// Theme is the app's design system (WithTheme; a native window's
+	// default theme.Default() without one), and Palette its colors for
+	// Appearance: what a view reads for colors no role covers, such as a
+	// code view's syntax or a diff's. Both are nil in a terminal without a
+	// theme. Read only.
+	Theme   *theme.Theme
+	Palette *theme.Palette
 }
 
 // Capabilities reports which effects and inputs the current host supports,

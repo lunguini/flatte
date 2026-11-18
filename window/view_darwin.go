@@ -10,6 +10,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // windowState is the Go side of one window. AppKit calls the view's methods
@@ -33,6 +34,9 @@ type windowState struct {
 	// hideTitle has the content under the title bar, its strip dragging the
 	// window where nothing is.
 	translucent, hideTitle bool
+	// design is the app's design system (flatte.WithTheme; nil: the
+	// default), followed across appearance switches.
+	design *ds.Theme
 	// always: Options.Translucent (frames cannot turn it off); effect is
 	// the blur view, once made.
 	always bool
@@ -293,7 +297,7 @@ func viewMethods() []objc.MethodDef {
 			}
 			if st.follow {
 				if dark := isDark(self); dark != st.dark {
-					st.dark, st.th = dark, newTheme(themeFor(nil, dark))
+					st.dark, st.th = dark, newTheme(themeFor(nil, dark, st.design))
 				}
 			}
 			if st.hideTitle {

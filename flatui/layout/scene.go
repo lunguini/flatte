@@ -435,7 +435,7 @@ func (p pointMetric) leaf(n Node, width float64) (w, h sized[float64]) {
 		return p.content(l.NodeBase, tw, th)
 	case Icon:
 		// Columns, not the GUI font: an icon lines up with the terminal.
-		cw, ch := measureString(l.Style.Render(l.Text))
+		cw, ch := measureString(l.Style.Render(cased(l.Text, l.Style)))
 		return p.content(l.NodeBase, p.cols(cw), p.lines(ch))
 	case Meter:
 		w, h = p.content(l.NodeBase, 0, p.Line)
@@ -480,7 +480,7 @@ func (p pointMetric) content(nb NodeBase, w, h float64) (sw, sh sized[float64]) 
 // label measures a Label's text (see text).
 func (p pointMetric) label(l Label, maxWidth float64) (float64, float64) {
 	if len(l.Runs) == 0 {
-		return p.text(l.Text, l.Style, maxWidth)
+		return p.text(cased(l.Text, l.Style), l.Style, maxWidth)
 	}
 	if p.MeasureRuns != nil {
 		return p.MeasureRuns(l.runs(), maxWidth)
@@ -580,7 +580,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		control(ControlOp{ID: l.ID, Kind: ControlSlider, Value: l.value(), Fill: l.Fill, Disabled: l.Disabled, Focused: l.Focused}, l.box())
 	case Label:
 		p.box(r, clip, l.box())
-		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap, ID: l.ID, HoverFg: l.HoverFg}
+		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: cased(l.Text, l.Style), Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap, ID: l.ID, HoverFg: l.HoverFg}
 		if len(l.Runs) > 0 {
 			op.Text, op.Runs = l.plain(), l.runs()
 		}

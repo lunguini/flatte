@@ -34,7 +34,7 @@ func TestSnapshotPaintsFillRoles(t *testing.T) {
 			t.Fatal(err)
 		}
 		rects := layout.LayoutScene(root(), 40*m.Column, 6*m.Line, m).Rects
-		want := map[string]color.Color{"surface": th.Surface, "field": th.Field, "sep": th.Border, "both": color.RGBA{255, 0, 0, 255}}
+		want := map[string]color.Color{"surface": th.Surface, "field": th.Field, "sep": th.palette().Divider, "both": color.RGBA{255, 0, 0, 255}}
 		for id, c := range want {
 			r := rects[id]
 			got := img.At(int(r.X+r.W/2), int(r.Y+r.H/2))

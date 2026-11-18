@@ -261,7 +261,8 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	// Dark and Light share their type, so following the system changes
 	// colors only, never the metrics.
 	dark := isDark(nsApp)
-	th := newTheme(themeFor(opts.Theme, dark))
+	design := session.Theme(true)
+	th := newTheme(themeFor(opts.Theme, dark, design))
 	m := th.metrics()
 	title := opts.Title
 	if opts.Desktop != nil && opts.Desktop.Title != "" {
@@ -288,7 +289,7 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	}
 	h := newSessionHost(ctx, session, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
 	defer h.cancel()
-	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, always: opts.Translucent, hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts)}
+	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, always: opts.Translucent, hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts), design: design}
 	if opts.Translucent {
 		st.effect = win.Send(sel("contentView")).Send(sel("retain"))
 	}
@@ -478,7 +479,7 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	if err := registerFonts(opts.Fonts); err != nil {
 		return nil, err
 	}
-	th := newTheme(themeFor(opts.Theme, true))
+	th := newTheme(themeFor(opts.Theme, true, nil))
 	m := th.metrics()
 	cols, lines := opts.size()
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line

@@ -1,0 +1,40 @@
+                                                                                                                        
+  Flatte                 Space & shape                                                                                  
+                         Every gap, inset, height and corner comes from these steps; a terminal reads them as whole     
+  DESIGN SYSTEM          cells.                                                                                         
+  Colors                                                                                                                
+  Type                   SPACING                                                                                        
+  Space & shape                                                                                                         
+                         space-1         4pt        icon to label                                                       
+                         space-2         8pt         items in a row                                                     
+                         space-3         12pt         pane inset                                                        
+                         space-4         16pt          groups in a pane                                                 
+                         space-5         24pt            sections                                                       
+                         space-6         32pt              page margins                                                 
+                                                                                                                        
+                         SIZES                                                                                          
+                                                                                                                        
+                         row             24pt            list, tree and tab rows                                        
+                         control         28pt             buttons, fields                                               
+                         bar             36pt               pane headers, tab strips                                    
+                         header          44pt                 the window header                                         
+                         icon            16pt          icons in rows                                                    
+                                                                                                                        
+                         RADIUS AND STROKES                                                                             
+                                                                                                                        
+                         radius-sm       4pt        rows, tabs, badges                                                  
+                         radius-md       6pt        controls                                                            
+                         radius-lg       10pt        popovers                                                           
+                         divider         1pt        separators                                                          
+                         focus           2pt        the focus ring                                                      
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        

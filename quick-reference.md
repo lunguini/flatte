@@ -547,6 +547,40 @@ role. `Size` sets the font size in points in a window (0: the role's size;
 lines grow to fit it); terminals ignore it. `TextStyle.Render(s)` is the terminal look, and `flatui.Title` /
 `flatui.Subtle` are those roles for string frames, so both paths match.
 
+The design-system roles add `TextCaption` (small, semibold, upper case,
+muted), `TextMeta` (paths, counts, a row's second line), `TextStrong` and
+`TextPageTitle`, and `TextStyle.Color` names a color by role
+(`ColorSecondary`, `ColorMuted`, `ColorAccent`, `ColorOnAccent`,
+`ColorSuccess`, `ColorWarning`, `ColorDanger`, `ColorInfo`, …). Box fills by
+role follow the same palette: `FillCanvas`, `FillChrome` (headers,
+sidebars), `FillContent` (where work is read), `FillRaised`, `FillAccent`,
+`FillSelection` / `FillSelectionInactive`, `FillPressed`, the status tints,
+`FillCurrentLine`, `FillMatch` and the diff fills.
+
+### Themes
+
+`theme.Default()` is Flatte's design system as data: a light and a dark
+`theme.Palette` (surfaces, text levels, accent, focus, selection, status,
+diff, syntax and ANSI colors) and the shared scales — `Type`, `Space`
+(4…32pt), `Size` (row 24, control 28, bar 36, header 44), `Radius`,
+`Stroke`. Seeds change the identity in one step and keep every pair
+readable:
+
+```go
+teal := theme.Pair{Light: theme.Hex("#0e7468"), Dark: theme.Hex("#4fd1c0")}
+t := theme.Default().With(theme.Seeds{Accent: &teal, Density: theme.Compact, Roundness: theme.Square})
+if problems := t.Check(); len(problems) > 0 { /* a pair below 4.5:1 (3:1 for outlines and focus) */ }
+flatte.Run(ctx, app, flatte.WithTheme(t))
+```
+
+A native window and the browser canvas draw the roles in the theme
+(`theme.Default()` without `WithTheme`), following the system's light or
+dark appearance; a terminal draws its cells in true color from the dark
+palette only with `WithTheme` (without it, cells keep the terminal's own
+colors). `RenderContext.Theme` and `RenderContext.Palette` carry the theme
+to View for colors no role covers (a syntax or diff palette).
+`flatest.Options.Theme` gives a test driver the same theme.
+
 ### Controls
 
 Give controls IDs: clicks arrive as `MouseEvent`s targeting them, and keys

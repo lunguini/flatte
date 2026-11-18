@@ -15,6 +15,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/theme"
 	"golang.org/x/term"
 )
 
@@ -360,6 +361,16 @@ type runConfig struct {
 	reportFocus      bool
 	inline           bool
 	suspendProcess   func() // test seam; defaults to the platform suspend
+	theme            *theme.Theme
+}
+
+// WithTheme gives the app a design system: a native window draws layout's
+// roles in it (following the system's light or dark appearance), a
+// terminal draws its cells in true color from its dark palette, and
+// RenderContext carries it to View. Without it, a window uses
+// theme.Default() and a terminal its own colors.
+func WithTheme(t theme.Theme) Option {
+	return optionFunc(func(c *runConfig) { c.theme = &t })
 }
 
 // withSuspendProcess overrides the process-suspension call. Test seam:
@@ -588,6 +599,11 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	session := newSession(runCtx, app)
+	if cfg.theme != nil {
+		session.UseTheme(*cfg.theme)
+		layout.UseCellTheme(&session.theme.Dark)
+		defer layout.UseCellTheme(nil)
+	}
 	session.setActionSink(func(a action) { pending = append(pending, a) })
 	session.cell.dialogs.home, _ = os.UserHomeDir()
 	session.UseHostServices(HostServices{

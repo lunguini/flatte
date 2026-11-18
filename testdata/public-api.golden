@@ -91,6 +91,7 @@ flatte package flatte
   func WithPreciseScrolling() Option
   func WithQuitRequests() Option
   func WithReportFocus() Option
+  func WithTheme(t theme.Theme) Option
   func WithoutBracketedPaste() Option
   func WithoutDefaultQuit() Option
   method *RunConfig.UseFallbackHost(host Host)
@@ -103,8 +104,10 @@ flatte package flatte
   method *Session.QuitRequests() bool
   method *Session.State() HostState
   method *Session.Step(input StepInput) StepResult
+  method *Session.Theme(graphical bool) *theme.Theme
   method *Session.Updates() <-chan struct{}
   method *Session.UseHostServices(services HostServices)
+  method *Session.UseTheme(t theme.Theme)
   method *Session.UsesNowPlaying() bool
   method *Session.WindowFrame(id string)(Frame, bool)
   method Appearance.Dark() bool
@@ -361,7 +364,9 @@ flatte package flatte
   field RenderContext.Graphical bool [order=4]
   field RenderContext.Capabilities Capabilities [order=5]
   field RenderContext.Appearance Appearance [order=6]
-  struct RenderContext fields=7 comparable=true
+  field RenderContext.Theme *theme.Theme [order=7]
+  field RenderContext.Palette *theme.Palette [order=8]
+  struct RenderContext fields=9 comparable=true
   type ResizeEvent struct
   field ResizeEvent.Width int [order=0]
   field ResizeEvent.Height int [order=1]
@@ -414,7 +419,9 @@ flatte package flatte
   field Session.<unexported> bool [order=27]
   field Session.<unexported> func(*NowPlaying) [order=28]
   field Session.<unexported> *sessionCell [order=29]
-  struct Session fields=30 comparable=false
+  field Session.<unexported> *theme.Theme [order=30]
+  field Session.<unexported> *theme.Theme [order=31]
+  struct Session fields=32 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string
@@ -497,13 +504,15 @@ flatest package flatest
   field Driver.<unexported> func() [order=9]
   field Driver.<unexported> []pendingDialog [order=10]
   field Driver.<unexported> []flatte.Notification [order=11]
-  struct Driver fields=12 comparable=false
+  field Driver.<unexported> bool [order=12]
+  struct Driver fields=13 comparable=false
   type Options struct
   field Options.Width int [order=0]
   field Options.Height int [order=1]
   field Options.Graphical bool [order=2]
   field Options.Capabilities flatte.Capabilities [order=3]
-  struct Options fields=4 comparable=true
+  field Options.Theme *theme.Theme [order=4]
+  struct Options fields=5 comparable=true
   type Recorder struct
   field Recorder.Steps []Step [order=0]
   struct Recorder fields=1 comparable=false
@@ -939,15 +948,46 @@ flatui/layout package layout
   const BorderNone BorderKind = 0
   const BorderNormal BorderKind = 2
   const BorderRounded BorderKind = 1
+  const ColorAccent TextColor = 5
+  const ColorDanger TextColor = 10
+  const ColorDefault TextColor = 0
+  const ColorDisabled TextColor = 4
+  const ColorInfo TextColor = 7
+  const ColorMuted TextColor = 3
+  const ColorOnAccent TextColor = 6
+  const ColorPrimary TextColor = 1
+  const ColorSecondary TextColor = 2
+  const ColorSuccess TextColor = 8
+  const ColorWarning TextColor = 9
   const ControlButton ControlKind = 0
   const ControlCheckbox ControlKind = 1
   const ControlRadio ControlKind = 3
   const ControlSlider ControlKind = 4
   const ControlSwitch ControlKind = 2
+  const FillAccent Fill = 8
+  const FillCanvas Fill = 4
+  const FillChrome Fill = 5
+  const FillContent Fill = 6
+  const FillCurrentLine Fill = 16
+  const FillDangerTint Fill = 15
+  const FillDiffAdd Fill = 18
+  const FillDiffAddWord Fill = 19
+  const FillDiffBlank Fill = 23
+  const FillDiffDel Fill = 20
+  const FillDiffDelWord Fill = 21
+  const FillDiffFold Fill = 22
   const FillField Fill = 2
+  const FillInfoTint Fill = 12
+  const FillMatch Fill = 17
   const FillNone Fill = 0
+  const FillPressed Fill = 11
+  const FillRaised Fill = 7
+  const FillSelection Fill = 9
+  const FillSelectionInactive Fill = 10
   const FillSeparator Fill = 3
+  const FillSuccessTint Fill = 13
   const FillSurface Fill = 1
+  const FillWarningTint Fill = 14
   const IconArrowDown IconName = 17
   const IconArrowLeft IconName = 18
   const IconArrowRight IconName = 19
@@ -1007,6 +1047,10 @@ flatui/layout package layout
   const SizeGrow SizeKind = 2
   const SizePoints SizeKind = 4
   const TextBody TextRole = 0
+  const TextCaption TextRole = 3
+  const TextMeta TextRole = 4
+  const TextPageTitle TextRole = 6
+  const TextStrong TextRole = 5
   const TextSubtle TextRole = 2
   const TextTitle TextRole = 1
   const ToggleCheckbox ToggleKind = 0
@@ -1016,6 +1060,7 @@ flatui/layout package layout
   func ClampScroll(offset int, viewport int, content int) int
   func Compose(root Node, width int, height int) Composition
   func ComposeWithColorProfile(root Node, width int, height int, profile colorprofile.Profile) Composition
+  func FillColor(p*theme.Palette, f Fill)(c color.NRGBA, ok bool)
   func Fixed(n int) Size
   func Grow(w float64) Size
   func LayoutScene(root Node, width float64, height float64, m Metrics) Scene
@@ -1028,6 +1073,8 @@ flatui/layout package layout
   func SolveAndCompose(root Node, width int, height int)(string, map[string] Rect)
   func SolveAndComposeWithDiagnostics(root Node, width int, height int)(string, map[string] Rect, []DuplicateIDDiagnostic)
   func SolveWithDiagnostics(root Node, width int, height int)(map[string] Rect, []DuplicateIDDiagnostic)
+  func TextColorOf(p*theme.Palette, s TextStyle) color.Color
+  func UseCellTheme(p*theme.Palette)
   method *Spacer.Render(r Rect) string
   method *Spacer.WithBackground(c color.Color) *Spacer
   method Button.Render(r Rect) string
@@ -1435,6 +1482,7 @@ flatui/layout package layout
   field Text.Carets []Caret [order=3]
   field Text.OffsetY float64 [order=4]
   struct Text fields=5 comparable=false
+  type TextColor int
   type TextOp struct
   field TextOp.Rect PointRect [order=0]
   field TextOp.Clip PointRect [order=1]
@@ -1450,15 +1498,16 @@ flatui/layout package layout
   type TextRole int
   type TextStyle struct
   field TextStyle.Role TextRole [order=0]
-  field TextStyle.Fg color.Color [order=1]
-  field TextStyle.Bg color.Color [order=2]
-  field TextStyle.Size float64 [order=3]
-  field TextStyle.Leading float64 [order=4]
-  field TextStyle.Bold bool [order=5]
-  field TextStyle.Italic bool [order=6]
-  field TextStyle.Underline bool [order=7]
-  field TextStyle.Strikethrough bool [order=8]
-  struct TextStyle fields=9 comparable=true
+  field TextStyle.Color TextColor [order=1]
+  field TextStyle.Fg color.Color [order=2]
+  field TextStyle.Bg color.Color [order=3]
+  field TextStyle.Size float64 [order=4]
+  field TextStyle.Leading float64 [order=5]
+  field TextStyle.Bold bool [order=6]
+  field TextStyle.Italic bool [order=7]
+  field TextStyle.Underline bool [order=8]
+  field TextStyle.Strikethrough bool [order=9]
+  struct TextStyle fields=10 comparable=true
   type Toggle struct
   field Toggle.NodeBase NodeBase [order=0]
   field Toggle.Kind ToggleKind [order=1]
@@ -1469,3 +1518,132 @@ flatui/layout package layout
   field Toggle.Focused bool [order=6]
   struct Toggle fields=7 comparable=false
   type ToggleKind int
+theme package theme
+  const Comfortable Density = 2
+  const Compact Density = 1
+  const Regular Density = 0
+  const Round Roundness = 2
+  const Square Roundness = 1
+  const Subtle Roundness = 0
+  func Contrast(fg color.NRGBA, bg color.NRGBA) float64
+  func Default() Theme
+  func Hex(s string) color.NRGBA
+  func Mix(a color.NRGBA, b color.NRGBA, t float64) color.NRGBA
+  func Over(c color.NRGBA, bg color.NRGBA) color.NRGBA
+  method *Theme.Palette(dark bool) *Palette
+  method Problem.String() string
+  method Theme.Check()[]Problem
+  method Theme.With(s Seeds) Theme
+  type Density int
+  type DiffColors struct
+  field DiffColors.Add color.NRGBA [order=0]
+  field DiffColors.AddWord color.NRGBA [order=1]
+  field DiffColors.Del color.NRGBA [order=2]
+  field DiffColors.DelWord color.NRGBA [order=3]
+  field DiffColors.Fold color.NRGBA [order=4]
+  field DiffColors.Blank color.NRGBA [order=5]
+  struct DiffColors fields=6 comparable=true
+  type Pair struct
+  field Pair.Light color.NRGBA [order=0]
+  field Pair.Dark color.NRGBA [order=1]
+  struct Pair fields=2 comparable=true
+  type Palette struct
+  field Palette.Canvas color.NRGBA [order=0]
+  field Palette.Chrome color.NRGBA [order=1]
+  field Palette.Content color.NRGBA [order=2]
+  field Palette.Field color.NRGBA [order=3]
+  field Palette.Raised color.NRGBA [order=4]
+  field Palette.Text color.NRGBA [order=5]
+  field Palette.TextSecondary color.NRGBA [order=6]
+  field Palette.TextMuted color.NRGBA [order=7]
+  field Palette.TextDisabled color.NRGBA [order=8]
+  field Palette.OnAccent color.NRGBA [order=9]
+  field Palette.Accent color.NRGBA [order=10]
+  field Palette.AccentHover color.NRGBA [order=11]
+  field Palette.Focus color.NRGBA [order=12]
+  field Palette.Hover color.NRGBA [order=13]
+  field Palette.Pressed color.NRGBA [order=14]
+  field Palette.SelectionActive color.NRGBA [order=15]
+  field Palette.SelectionInactive color.NRGBA [order=16]
+  field Palette.TextSelection color.NRGBA [order=17]
+  field Palette.Match color.NRGBA [order=18]
+  field Palette.CurrentLine color.NRGBA [order=19]
+  field Palette.Divider color.NRGBA [order=20]
+  field Palette.ControlBorder color.NRGBA [order=21]
+  field Palette.Info color.NRGBA [order=22]
+  field Palette.InfoTint color.NRGBA [order=23]
+  field Palette.Success color.NRGBA [order=24]
+  field Palette.SuccessTint color.NRGBA [order=25]
+  field Palette.Warning color.NRGBA [order=26]
+  field Palette.WarningTint color.NRGBA [order=27]
+  field Palette.Danger color.NRGBA [order=28]
+  field Palette.DangerTint color.NRGBA [order=29]
+  field Palette.Diff DiffColors [order=30]
+  field Palette.Syntax SyntaxColors [order=31]
+  field Palette.Shadow color.NRGBA [order=32]
+  field Palette.ANSI [16] color.NRGBA [order=33]
+  struct Palette fields=34 comparable=true
+  type Problem struct
+  field Problem.Appearance string [order=0]
+  field Problem.Fg string [order=1]
+  field Problem.Bg string [order=2]
+  field Problem.Ratio float64 [order=3]
+  field Problem.Need float64 [order=4]
+  struct Problem fields=5 comparable=true
+  type Radii struct
+  field Radii.Sm float64 [order=0]
+  field Radii.Md float64 [order=1]
+  field Radii.Lg float64 [order=2]
+  struct Radii fields=3 comparable=true
+  type Roundness int
+  type Seeds struct
+  field Seeds.Accent *Pair [order=0]
+  field Seeds.Density Density [order=1]
+  field Seeds.Roundness Roundness [order=2]
+  struct Seeds fields=3 comparable=true
+  type Sizes struct
+  field Sizes.Row float64 [order=0]
+  field Sizes.Control float64 [order=1]
+  field Sizes.Bar float64 [order=2]
+  field Sizes.Header float64 [order=3]
+  field Sizes.Icon float64 [order=4]
+  field Sizes.Popover float64 [order=5]
+  struct Sizes fields=6 comparable=true
+  type Strokes struct
+  field Strokes.Divider float64 [order=0]
+  field Strokes.Control float64 [order=1]
+  field Strokes.Focus float64 [order=2]
+  struct Strokes fields=3 comparable=true
+  type SyntaxColors struct
+  field SyntaxColors.Keyword color.NRGBA [order=0]
+  field SyntaxColors.String color.NRGBA [order=1]
+  field SyntaxColors.Comment color.NRGBA [order=2]
+  field SyntaxColors.Number color.NRGBA [order=3]
+  field SyntaxColors.Type color.NRGBA [order=4]
+  field SyntaxColors.Func color.NRGBA [order=5]
+  struct SyntaxColors fields=6 comparable=true
+  type TextSpec struct
+  field TextSpec.Size float64 [order=0]
+  field TextSpec.Line float64 [order=1]
+  field TextSpec.Weight int [order=2]
+  field TextSpec.Tracking float64 [order=3]
+  struct TextSpec fields=4 comparable=true
+  type Theme struct
+  field Theme.Light Palette [order=0]
+  field Theme.Dark Palette [order=1]
+  field Theme.Type TypeScale [order=2]
+  field Theme.Space [6] float64 [order=3]
+  field Theme.Size Sizes [order=4]
+  field Theme.Radius Radii [order=5]
+  field Theme.Stroke Strokes [order=6]
+  field Theme.Font string [order=7]
+  field Theme.MonoFont string [order=8]
+  struct Theme fields=9 comparable=true
+  type TypeScale struct
+  field TypeScale.PageTitle TextSpec [order=0]
+  field TypeScale.Title TextSpec [order=1]
+  field TypeScale.Body TextSpec [order=2]
+  field TypeScale.Meta TextSpec [order=3]
+  field TypeScale.Caption TextSpec [order=4]
+  field TypeScale.Code TextSpec [order=5]
+  struct TypeScale fields=6 comparable=true

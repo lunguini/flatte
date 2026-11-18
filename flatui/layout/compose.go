@@ -443,7 +443,7 @@ func getPadSides(n Node) sides {
 func getBox(n Node) Box {
 	type boxer interface{ box() Box }
 	if b, ok := n.(boxer); ok {
-		return b.box()
+		return cellBox(b.box())
 	}
 	return Box{}
 }

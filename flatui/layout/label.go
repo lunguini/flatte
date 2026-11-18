@@ -19,12 +19,26 @@ const (
 	TextBody TextRole = iota
 	TextTitle
 	TextSubtle
+	// TextCaption is a pane or section caption: small, semibold, upper
+	// case, muted (theme.TypeScale.Caption).
+	TextCaption
+	// TextMeta is secondary information beside or under a name: paths,
+	// counts, a row's second line (Meta, secondary color).
+	TextMeta
+	// TextStrong is body text that needs weight: the active tab, a
+	// selected row's name, a setting's name.
+	TextStrong
+	// TextPageTitle is a page's one heading (PageTitle).
+	TextPageTitle
 )
 
 // TextStyle is a role plus optional overrides applied on top of it. Nil
 // colors and false flags leave the role's look unchanged.
 type TextStyle struct {
-	Role   TextRole
+	Role TextRole
+	// Color is the text color by theme role (ColorDefault: the role's
+	// own); Fg wins when set. A themed host resolves it per appearance.
+	Color  TextColor
 	Fg, Bg color.Color
 	// Size is the font size in points (0: the role's size). A GUI sets the
 	// text at it, and its lines are that much taller; terminals ignore it.
@@ -46,11 +60,14 @@ func (s TextStyle) Render(text string) string {
 // zero reports whether s sets nothing. (Colors are interfaces, which ==
 // would panic on for an uncomparable implementation.)
 func (s TextStyle) zero() bool {
-	return s.Role == TextBody && s.Size == 0 && s.Leading == 0 && s.Fg == nil && s.Bg == nil && !s.Bold && !s.Italic && !s.Underline && !s.Strikethrough
+	return s.Role == TextBody && s.Color == ColorDefault && s.Size == 0 && s.Leading == 0 && s.Fg == nil && s.Bg == nil && !s.Bold && !s.Italic && !s.Underline && !s.Strikethrough
 }
 
 func (s TextStyle) lipgloss() lipgloss.Style {
 	st := lipgloss.NewStyle()
+	if p := cellPalette.Load(); p != nil {
+		return s.themed(st, p)
+	}
 	switch s.Role {
 	case TextTitle:
 		st = st.Bold(true).Foreground(lipgloss.Color("230")).Background(lipgloss.Color("235")).Padding(0, 1)
@@ -121,25 +138,35 @@ type Run struct {
 // one run of Text in Style.
 func (l Label) runs() []Run {
 	if len(l.Runs) == 0 {
-		return []Run{{Text: l.Text, Style: l.Style}}
+		return []Run{{Text: cased(l.Text, l.Style), Style: l.Style}}
 	}
 	out := make([]Run, len(l.Runs))
 	for i, r := range l.Runs {
 		if r.Style.zero() {
 			r.Style = l.Style
 		}
+		r.Text = cased(r.Text, r.Style)
 		out[i] = r
 	}
 	return out
 }
 
-// plain is the label's unstyled text.
+// cased is text as its role shows it: captions in upper case, in every
+// renderer (so a GUI measures what it draws).
+func cased(text string, s TextStyle) string {
+	if s.Role == TextCaption {
+		return strings.ToUpper(text)
+	}
+	return text
+}
+
+// plain is the label's unstyled text, as its roles show it.
 func (l Label) plain() string {
 	if len(l.Runs) == 0 {
-		return l.Text
+		return cased(l.Text, l.Style)
 	}
 	var b strings.Builder
-	for _, r := range l.Runs {
+	for _, r := range l.runs() {
 		b.WriteString(r.Text)
 	}
 	return b.String()

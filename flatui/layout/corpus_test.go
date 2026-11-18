@@ -190,7 +190,12 @@ func (g *treeGen) node(depth int) Node {
 			}
 			return Label{NodeBase: g.base(), Text: strings.Join(words, " "), Wrap: true}
 		}
-		return Label{NodeBase: g.base(), Text: g.word(), Style: TextStyle{Role: TextRole(g.rng.IntN(4))}}
+		base, word := g.base(), g.word() // in the original draw order
+		role := TextRole(g.rng.IntN(4))
+		if role == 3 { // the corpus's unknown role (3 became TextCaption): kept unknown so the frames stay identical
+			role = 99
+		}
+		return Label{NodeBase: base, Text: word, Style: TextStyle{Role: role}}
 	case 7:
 		v := g.word()
 		return Input{NodeBase: g.base(), Value: v, Caret: g.rng.IntN(len(v) + 2), Focused: g.rng.IntN(2) == 0, Placeholder: "ph"}
