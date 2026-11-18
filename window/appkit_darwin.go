@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"strings"
 	"structs"
 	"sync"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -267,8 +269,13 @@ func class(name string) objc.ID { return objc.ID(objc.GetClass(name)) }
 
 func alloc(name string) objc.ID { return class(name).Send(sel("alloc")) }
 
-// nsString returns an autoreleased NSString copy of s.
+// nsString returns an autoreleased NSString copy of s. Invalid UTF-8 (a
+// terminal's stray byte, a title cut mid-character) becomes U+FFFD: for it
+// stringWithUTF8String: answers nil, and AppKit throws on a nil string.
 func nsString(s string) objc.ID {
+	if !utf8.ValidString(s) {
+		s = strings.ToValidUTF8(s, "\uFFFD")
+	}
 	return class("NSString").Send(sel("stringWithUTF8String:"), s)
 }
 
