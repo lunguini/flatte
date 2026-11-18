@@ -289,6 +289,22 @@ and print them after `Run` returns. A context cancellation is not returned as
 `context.Canceled`, is not an update-drain barrier, and `OnExit` observes only
 the updates the loop applied before selecting cancellation.
 
+`App.Panic` (opt-in) keeps a panic in app code from ending the process: Init,
+Handle, View, Menus, ContextMenu, Windows, NowPlaying, an update as it applies,
+and the off-loop work of `Go`/`Latest`/`Stream` and their Scope forms are run
+under `recover`, and the hook runs on the loop with a `flatte.Panic` (`In` names
+what was running, `Value`, `Stack`; `Where()` is the first stack frame in the
+app's own code). The app goes on from its state as the panic left it; a View
+that panics shows its last frame and reports once until it draws again; work
+that panics folds nothing. Without the hook, panics end the process as before.
+
+```go
+app.Panic = func(s *State, p flatte.Panic, fx flatte.Effects[State]) {
+	log.Printf("%v\n%s", p, p.Stack)
+	s.notice = "Something went wrong (" + p.Where() + ")"
+}
+```
+
 Input limitations are explicit: F1–F12 key presses are supported, but key
 release events and terminal capability/keyboard-enhancement reports are not
 currently delivered. IME/composite key text is reduced to its first rune.

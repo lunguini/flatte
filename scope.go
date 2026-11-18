@@ -54,7 +54,7 @@ func ScopeGo[S, T any](scope *Scope, fx Effects[S], work func(context.Context) (
 	if !fx.hasUpdateTransport() {
 		return
 	}
-	fx.spawn(func() {
+	fx.spawn(scope.name+":go", func() {
 		value, err := work(scope.ctx)
 		if scope.ctx.Err() != nil {
 			return
@@ -77,7 +77,7 @@ func ScopeStream[S, T any](scope *Scope, fx Effects[S], source func(context.Cont
 	if !fx.hasUpdateTransport() {
 		return
 	}
-	fx.spawn(func() {
+	fx.spawn(scope.name+":stream", func() {
 		source(scope.ctx, func(value T) {
 			update := Named(scope.name+":stream", func(state *S) {
 				if scope.ctx.Err() != nil {

@@ -124,6 +124,8 @@ flatte package flatte
   method MouseEvent.ScrollLines() float64
   method NoopTracer.Event(Event)
   method NoopTracer.Update(string)
+  method Panic.Error() string
+  method Panic.Where() string
   method UpdateTracer.Event(Event)
   method UpdateTracer.Update(name string)
   type AlertDialog struct
@@ -142,7 +144,8 @@ flatte package flatte
   field App.ContextMenu func(s*S, target string)[]MenuItem [order=7]
   field App.Windows func(*S)[]Window [order=8]
   field App.NowPlaying func(*S) *NowPlaying [order=9]
-  struct App fields=10 comparable=false
+  field App.Panic func(*S, Panic, Effects[S]) [order=10]
+  struct App fields=11 comparable=false
   type Appearance int
   type Capabilities struct
   field Capabilities.Exec bool [order=0]
@@ -221,7 +224,8 @@ flatte package flatte
   field Effects.<unexported> func(Notification) [order=11]
   field Effects.<unexported> func(DesktopCommand) [order=12]
   field Effects.<unexported> Capabilities [order=13]
-  struct Effects fields=14 comparable=false
+  field Effects.<unexported> *catcher [order=14]
+  struct Effects fields=15 comparable=false
   type Event interface
   interface Event method isEvent()
   type FileSelection struct
@@ -339,6 +343,11 @@ flatte package flatte
   struct OpenDialog fields=5 comparable=false
   type Option interface
   interface Option method ConfigureRun(*RunConfig)
+  type Panic struct
+  field Panic.In string [order=0]
+  field Panic.Value any [order=1]
+  field Panic.Stack []byte [order=2]
+  struct Panic fields=3 comparable=false
   type PasteEvent struct
   field PasteEvent.Text string [order=0]
   struct PasteEvent fields=1 comparable=true

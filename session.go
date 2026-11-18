@@ -99,6 +99,17 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 		s.mu.Unlock()
 	})
 	s.actionSink = func(enqueue func(action)) { fx.enqueue = enqueue }
+	// With App.Panic, app code runs under catch: a panic is reported to the
+	// hook on the loop, as an update of its own.
+	var catch *catcher
+	if app.Panic != nil {
+		catch = &catcher{}
+		catch.report = func(p Panic) {
+			s.enqueue(func() { guardPanicHook(p, func() { app.Panic(app.State, p, fx) }) })
+		}
+		fx.catch = catch
+		app = guardApp(app, catch)
+	}
 	fx.sendUpdate = func(sendCtx context.Context, update StateUpdate[S]) bool {
 		if sendCtx != nil {
 			select {
@@ -107,7 +118,7 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 			default:
 			}
 		}
-		s.enqueue(func() { ApplyUpdate(app.State, app.Tracer, update) })
+		s.enqueue(func() { catch.run("update "+update.Name(), func() { ApplyUpdate(app.State, app.Tracer, update) }) })
 		return true
 	}
 	s.start = func(size ResizeEvent) {

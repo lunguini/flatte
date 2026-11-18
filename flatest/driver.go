@@ -137,6 +137,7 @@ func (d *Driver[S]) applyUpdates() {
 // body so Latest's apply-time guard sees a superseded ctx and drops the
 // stale result.
 func (d *Driver[S]) Settle() flatte.Frame {
+	d.applyUpdates() // updates queued outside an event (a panic report from View)
 	for len(d.pending) > 0 {
 		batch := d.pending
 		d.pending = nil
@@ -145,6 +146,7 @@ func (d *Driver[S]) Settle() flatte.Frame {
 			d.applyUpdates()
 		}
 	}
+	d.applyUpdates() // what applying queued (a panic report from a fold)
 	return d.render()
 }
 

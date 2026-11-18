@@ -49,6 +49,17 @@ type App[S any] struct {
 	// for it. A native host publishes it to the system media controls; nil
 	// opts out. The callback is read on the app's state loop after changes.
 	NowPlaying func(*S) *NowPlaying
+	// Panic, when set, catches a panic in the app's code instead of
+	// letting it end the process: in Init, Handle, View, Menus, ContextMenu,
+	// Windows, NowPlaying, a fold or other update as it applies, and the
+	// off-loop work of Go, Latest, Stream and their Scope forms. Panic then
+	// runs on the loop with what happened (show it, log it), and the app
+	// goes on from its state as the panic left it. A View that panics
+	// shows the last frame it drew (reported once until View draws
+	// again); work that panics folds nothing. A panic in Panic itself is
+	// printed to stderr and dropped. Nil: panics end the process, as
+	// before.
+	Panic func(*S, Panic, Effects[S])
 }
 
 // action is a one-shot terminal capability request, queued by Effects
@@ -91,6 +102,8 @@ type Effects[S any] struct {
 	desktop func(DesktopCommand)
 	// caps is what the host supports.
 	caps Capabilities
+	// catch recovers panics in off-loop work for App.Panic (nil: none).
+	catch *catcher
 }
 
 // Capabilities reports what the current host supports; the zero value on
@@ -160,7 +173,11 @@ func withHostClipboard[S any](fx Effects[S], set func(text string), read func())
 
 // spawn runs f on a goroutine by default, or through the injected dispatch
 // (tests defer it to a controlled queue).
-func (fx Effects[S]) spawn(f func()) {
+func (fx Effects[S]) spawn(in string, f func()) {
+	if fx.catch != nil {
+		g := f
+		f = func() { fx.catch.run("work "+in, g) }
+	}
 	if fx.dispatch != nil {
 		fx.dispatch(f)
 		return
