@@ -267,16 +267,8 @@ func (p *canvasPage) bind() {
 		case 2:
 			delta *= p.height()
 		}
-		n := p.wheel.notches(-delta, p.host.metrics.Line)
-		if n == 0 {
-			return
-		}
-		button := flatte.MouseWheelUp
-		if n < 0 {
-			button, n = flatte.MouseWheelDown, -n
-		}
 		x, y := p.point(ev)
-		p.host.surface.wheel(x, y, button, n, canvasModifiers(ev))
+		p.host.surface.scrollPoints(x, y, -delta, &p.wheel, canvasModifiers(ev))
 	})
 	p.listen(p.canvas, "dragover", func(ev js.Value) { ev.Call("preventDefault") })
 	p.listen(p.canvas, "drop", func(ev js.Value) {

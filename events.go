@@ -169,6 +169,41 @@ type MouseEvent struct {
 	// Window is the window the pointer is in ("" the main window); X, Y,
 	// Target, and TargetRect are in its frame.
 	Window string
+	// Scroll is how many lines a wheel event scrolls, toward the end
+	// (down or right) when positive: ±1 per notch, or a fraction of a line
+	// from a trackpad in an app run WithPreciseScrolling. Read it with
+	// ScrollLines, which also covers events that leave it zero.
+	Scroll float64
+	// HasPrecise reports that PreciseX, PreciseY is the pointer in
+	// fractional cells (a window's points over the cell size), in the same
+	// frame as X, Y — which are those rounded down. A terminal has whole
+	// cells only; read the pointer with Point to cover both.
+	PreciseX, PreciseY float64
+	HasPrecise         bool
+}
+
+// ScrollLines is how many lines a wheel event scrolls, toward the end
+// when positive: Scroll when set, else one notch for a wheel button, else
+// zero.
+func (m MouseEvent) ScrollLines() float64 {
+	switch {
+	case m.Scroll != 0:
+		return m.Scroll
+	case m.Button == MouseWheelDown || m.Button == MouseWheelRight:
+		return 1
+	case m.Button == MouseWheelUp || m.Button == MouseWheelLeft:
+		return -1
+	}
+	return 0
+}
+
+// Point is the pointer in fractional cells: PreciseX, PreciseY when the
+// host had them, else X, Y.
+func (m MouseEvent) Point() (x, y float64) {
+	if m.HasPrecise {
+		return m.PreciseX, m.PreciseY
+	}
+	return float64(m.X), float64(m.Y)
 }
 
 // DropEvent reports files or text dropped on a window (a terminal turns a

@@ -356,15 +356,8 @@ func viewMethods() []objc.MethodDef {
 			if !objc.Send[bool](event, sel("hasPreciseScrollingDeltas")) {
 				dy *= st.m.Line // whole lines from a notched wheel
 			}
-			n := st.wheel.notches(dy, st.m.Line)
-			button := flatte.MouseWheelUp
-			if n < 0 {
-				button, n = flatte.MouseWheelDown, -n
-			}
-			if n > 0 {
-				p := location(self, event)
-				st.ui.wheel(p.X, p.Y, button, n, eventMods(event))
-			}
+			p := location(self, event)
+			st.ui.scrollPoints(p.X, p.Y, dy, &st.wheel, eventMods(event))
 		}},
 
 		// NSTextInputClient. The "document" is the composition alone:

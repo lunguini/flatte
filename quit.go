@@ -17,6 +17,19 @@ func WithQuitRequests() Option {
 	return optionFunc(func(c *runConfig) { c.quitRequests = true })
 }
 
+// WithPreciseScrolling asks a window for scrolling as it happens: a
+// trackpad's wheel events carry fractions of a line in MouseEvent.Scroll,
+// gathered into one event per frame, so the app can scroll smoothly (see
+// layout.Text.OffsetY). Without it a window sends one event per whole line,
+// as a wheel does. Terminals always send whole notches.
+func WithPreciseScrolling() Option {
+	return optionFunc(func(c *runConfig) { c.preciseScrolling = true })
+}
+
+// PreciseScrolling reports whether the app asked (WithPreciseScrolling)
+// for fractional wheel events. Window hosts call it.
+func (s *Session) PreciseScrolling() bool { return s.preciseScrolling }
+
 // QuitRequests reports whether the app asked (WithQuitRequests) to receive
 // a QuitRequest instead of quitting. Hosts call it when the user asks to
 // quit: false means stop now; true means deliver QuitRequest and keep

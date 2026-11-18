@@ -330,17 +330,19 @@ const (
 )
 
 type runConfig struct {
-	mediaCommands  <-chan MediaEvent
-	publishMedia   func(*NowPlaying)
-	input          io.Reader
-	output         io.Writer
-	defaultQuit    bool
-	quitRequests   bool
-	bracketedPaste bool
-	mouse          MouseMode
-	reportFocus    bool
-	inline         bool
-	suspendProcess func() // test seam; defaults to the platform suspend
+	mediaCommands <-chan MediaEvent
+	publishMedia  func(*NowPlaying)
+	input         io.Reader
+	output        io.Writer
+	defaultQuit   bool
+	quitRequests  bool
+	// preciseScrolling: see WithPreciseScrolling.
+	preciseScrolling bool
+	bracketedPaste   bool
+	mouse            MouseMode
+	reportFocus      bool
+	inline           bool
+	suspendProcess   func() // test seam; defaults to the platform suspend
 }
 
 // withSuspendProcess overrides the process-suspension call. Test seam:

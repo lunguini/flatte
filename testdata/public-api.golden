@@ -88,6 +88,7 @@ flatte package flatte
   func WithInput(in io.Reader) Option
   func WithMouse(mode MouseMode) Option
   func WithOutput(out io.Writer) Option
+  func WithPreciseScrolling() Option
   func WithQuitRequests() Option
   func WithReportFocus() Option
   func WithoutBracketedPaste() Option
@@ -98,6 +99,7 @@ flatte package flatte
   method *Scope.Ctx() context.Context
   method *Session.Cancel()
   method *Session.ContextMenu(target string)[]MenuItem
+  method *Session.PreciseScrolling() bool
   method *Session.QuitRequests() bool
   method *Session.State() HostState
   method *Session.Step(input StepInput) StepResult
@@ -118,6 +120,8 @@ flatte package flatte
   method Effects[S].SetClipboard(text string)
   method Effects[S].Suspend()
   method Mod.Contains(mods Mod) bool
+  method MouseEvent.Point()(x float64, y float64)
+  method MouseEvent.ScrollLines() float64
   method NoopTracer.Event(Event)
   method NoopTracer.Update(string)
   method UpdateTracer.Event(Event)
@@ -303,7 +307,11 @@ flatte package flatte
   field MouseEvent.Clicks int [order=9]
   field MouseEvent.Clear bool [order=10]
   field MouseEvent.Window string [order=11]
-  struct MouseEvent fields=12 comparable=true
+  field MouseEvent.Scroll float64 [order=12]
+  field MouseEvent.PreciseX float64 [order=13]
+  field MouseEvent.PreciseY float64 [order=14]
+  field MouseEvent.HasPrecise bool [order=15]
+  struct MouseEvent fields=16 comparable=true
   type MouseMode int
   type NoopTracer struct
   struct NoopTracer fields=0 comparable=true
@@ -393,9 +401,10 @@ flatte package flatte
   field Session.<unexported> bool [order=24]
   field Session.<unexported> bool [order=25]
   field Session.<unexported> bool [order=26]
-  field Session.<unexported> func(*NowPlaying) [order=27]
-  field Session.<unexported> *sessionCell [order=28]
-  struct Session fields=29 comparable=false
+  field Session.<unexported> bool [order=27]
+  field Session.<unexported> func(*NowPlaying) [order=28]
+  field Session.<unexported> *sessionCell [order=29]
+  struct Session fields=30 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string
@@ -1412,7 +1421,8 @@ flatui/layout package layout
   field Text.String string [order=1]
   field Text.Caret *Caret [order=2]
   field Text.Carets []Caret [order=3]
-  struct Text fields=4 comparable=false
+  field Text.OffsetY float64 [order=4]
+  struct Text fields=5 comparable=false
   type TextOp struct
   field TextOp.Rect PointRect [order=0]
   field TextOp.Clip PointRect [order=1]

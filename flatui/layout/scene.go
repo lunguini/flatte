@@ -621,6 +621,13 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		p.box(r, clip, Box{Background: bg})
 	default:
 		before := len(p.ops)
+		if t, ok := n.(Text); ok && t.shift() > 0 {
+			// A fraction of a line higher, with a line more below, clipped
+			// to the node.
+			clip = intersectOf[float64](p.m, r, clip)
+			r.Y -= t.shift() * p.m.Line
+			r.H += p.m.Line
+		}
 		p.cells(r, clip, n.Render)
 		if t, ok := n.(Text); ok && (t.Caret != nil || len(t.Carets) > 0) && len(p.ops) > before {
 			op := p.ops[len(p.ops)-1].(CellsOp)

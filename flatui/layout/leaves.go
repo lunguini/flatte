@@ -22,11 +22,27 @@ import (
 // the same blinking bar. A terminal has one hardware cursor (Caret) and
 // ignores them; draw their cells yourself there (RenderContext.Graphical
 // tells the hosts apart).
+//
+// OffsetY is smooth scrolling: a GUI draws the text OffsetY lines higher
+// (0 ≤ OffsetY < 1; outside that, 0), clipped to the node, with one more
+// line of String showing below — the fraction of a line a scroll is part
+// way through. Give String one line more than the node holds so the bottom
+// stays filled. Carets move with the text. A terminal draws whole lines and
+// ignores it.
 type Text struct {
 	NodeBase
-	String string
-	Caret  *Caret
-	Carets []Caret
+	String  string
+	Caret   *Caret
+	Carets  []Caret
+	OffsetY float64
+}
+
+// shift is the fraction of a line a GUI draws t higher.
+func (t Text) shift() float64 {
+	if t.OffsetY > 0 && t.OffsetY < 1 {
+		return t.OffsetY
+	}
+	return 0
 }
 
 // Caret is a cell in a Text's content: column X of line Y, from 0.

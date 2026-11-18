@@ -46,6 +46,9 @@ type Access struct {
 	RunTerminal    func(context.Context, Media) error
 	// SetQuitRequests turns WithQuitRequests on or off for host tests.
 	SetQuitRequests func(bool)
+	// SetPreciseScrolling turns WithPreciseScrolling on or off for host
+	// tests.
+	SetPreciseScrolling func(bool)
 }
 
 type Helpers struct {
@@ -109,6 +112,14 @@ func RunTerminal(ctx context.Context, session any, media Media) error {
 		return access.RunTerminal(ctx, media)
 	}
 	return errors.New("sessionaccess: terminal driver is unavailable")
+}
+
+// SetPreciseScrolling sets a session's WithPreciseScrolling policy, for
+// host tests that build sessions with NewSession.
+func SetPreciseScrolling(session any, on bool) {
+	if access, ok := For(session); ok && access.SetPreciseScrolling != nil {
+		access.SetPreciseScrolling(on)
+	}
 }
 
 // SetQuitRequests sets a session's WithQuitRequests policy, for host tests

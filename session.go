@@ -65,10 +65,12 @@ type Session struct {
 	cellSurface   bool
 	defaultQuit   bool
 	quitRequests  bool
-	inline        bool
-	dirty         bool
-	publishMedia  func(*NowPlaying)
-	cell          *sessionCell
+	// preciseScrolling: see WithPreciseScrolling.
+	preciseScrolling bool
+	inline           bool
+	dirty            bool
+	publishMedia     func(*NowPlaying)
+	cell             *sessionCell
 }
 
 // NewSession wraps an app for an offscreen host. Run constructs sessions
@@ -187,7 +189,8 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 	}
 	s.step = func(input StepInput) StepResult { return stepSession(s, app, s.cell, input) }
 	sessionaccess.Register(s, sessionaccess.Access{
-		SetQuitRequests: func(on bool) { s.quitRequests = on },
+		SetQuitRequests:     func(on bool) { s.quitRequests = on },
+		SetPreciseScrolling: func(on bool) { s.preciseScrolling = on },
 		SetAsync: func(dispatch func(func()), clock sessionaccess.Clock) {
 			fx.dispatch, fx.clock = dispatch, clock
 		},
@@ -311,6 +314,7 @@ func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool
 	}
 	session := newSession(ctx, app)
 	session.quitRequests = config.config.quitRequests
+	session.preciseScrolling = config.config.preciseScrolling
 	session.runTerminal = func(runCtx context.Context, options ...Option) error {
 		runConfig := applyRunOptions(config.config, options...).config
 		terminalApp := app
