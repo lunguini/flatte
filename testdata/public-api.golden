@@ -105,6 +105,7 @@ flatte package flatte
   method *Session.State() HostState
   method *Session.Step(input StepInput) StepResult
   method *Session.Theme(graphical bool) *theme.Theme
+  method *Session.ThemeVersion() uint64
   method *Session.Updates() <-chan struct{}
   method *Session.UseHostServices(services HostServices)
   method *Session.UseTheme(t theme.Theme)
@@ -245,8 +246,9 @@ flatte package flatte
   field Frame.Title string [order=3]
   field Frame.CellImages bool [order=4]
   field Frame.Translucent bool [order=5]
-  field Frame.Root layout.Node [order=6]
-  struct Frame fields=7 comparable=true
+  field Frame.Theme *theme.Theme [order=6]
+  field Frame.Root layout.Node [order=7]
+  struct Frame fields=8 comparable=true
   type Host interface
   interface Host method Run(context.Context, *Session) error
   type HostServices struct
@@ -421,7 +423,10 @@ flatte package flatte
   field Session.<unexported> *sessionCell [order=29]
   field Session.<unexported> *theme.Theme [order=30]
   field Session.<unexported> *theme.Theme [order=31]
-  struct Session fields=32 comparable=false
+  field Session.<unexported> *theme.Theme [order=32]
+  field Session.<unexported> uint64 [order=33]
+  field Session.<unexported> bool [order=34]
+  struct Session fields=35 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string
@@ -1345,6 +1350,11 @@ flatui/layout package layout
   field InputOp.Clearable bool [order=14]
   field InputOp.Field PointRect [order=15]
   struct InputOp fields=16 comparable=true
+  type Insets struct
+  field Insets.Vertical float64 [order=0]
+  field Insets.Horizontal float64 [order=1]
+  field Insets.Panel float64 [order=2]
+  struct Insets fields=3 comparable=true
   type Label struct
   field Label.NodeBase NodeBase [order=0]
   field Label.Text string [order=1]
@@ -1380,7 +1390,8 @@ flatui/layout package layout
   field Metrics.MeasureRuns func(runs[]Run, maxWidth float64)(w float64, h float64) [order=5]
   field Metrics.DefaultPadding bool [order=6]
   field Metrics.ControlHeight float64 [order=7]
-  struct Metrics fields=8 comparable=false
+  field Metrics.Insets Insets [order=8]
+  struct Metrics fields=9 comparable=false
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)

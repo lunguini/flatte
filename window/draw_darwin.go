@@ -31,7 +31,11 @@ type theme struct {
 	family, mono                     string
 	body, titleSize, spacing, radius float64
 	controlHeight                    float64
-	appearance                       flatte.Appearance
+	// step is one Pad or Gap and insets the default component insets, in
+	// points (Theme.spacing).
+	step       float64
+	insets     layout.Insets
+	appearance flatte.Appearance
 	// ansi is the palette cell grids draw ANSI colors 0–15 in.
 	ansi [16]color.Color
 	// pal and ts are the design palette and type scale layout's newer
@@ -58,6 +62,7 @@ func (th theme) fill(f layout.Fill) (rgba, bool) {
 
 func newTheme(t Theme) theme {
 	t = t.over(Dark())
+	step, insets := t.spacing()
 	return theme{
 		bg: rgbaOf(t.Background), surface: rgbaOf(t.Surface),
 		text: rgbaOf(t.Text), subtle: rgbaOf(t.Subtle), title: rgbaOf(t.Title),
@@ -67,9 +72,10 @@ func newTheme(t Theme) theme {
 		family: t.Font, mono: t.MonoFont,
 		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
 		controlHeight: t.ControlHeight,
-		appearance:    t.appearance(),
-		ansi:          t.ANSI,
-		pal:           t.palette(), ts: t.typeScale(),
+		step:          step, insets: insets,
+		appearance: t.appearance(),
+		ansi:       t.ANSI,
+		pal:        t.palette(), ts: t.typeScale(),
 	}
 }
 
@@ -310,7 +316,8 @@ func (th theme) metrics() layout.Metrics {
 		ControlHeight:  th.controlHeight,
 		Column:         zero.width,
 		Line:           th.font(fontKey{}).pitch(),
-		Step:           stepPoints,
+		Step:           th.step,
+		Insets:         th.insets,
 		Border:         borderBand,
 		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
 			f := th.styleFont(style)

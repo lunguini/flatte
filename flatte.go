@@ -602,8 +602,12 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	if cfg.theme != nil {
 		session.UseTheme(*cfg.theme)
 		layout.UseCellTheme(&session.theme.Dark)
-		defer layout.UseCellTheme(nil)
 	}
+	defer func() {
+		if cfg.theme != nil || session.cellThemed { // a frame's Theme installs one too
+			layout.UseCellTheme(nil)
+		}
+	}()
 	session.setActionSink(func(a action) { pending = append(pending, a) })
 	session.cell.dialogs.home, _ = os.UserHomeDir()
 	session.UseHostServices(HostServices{

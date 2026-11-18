@@ -2,6 +2,7 @@ package window
 
 import (
 	"github.com/charmbracelet/x/ansi"
+	"github.com/lunguini/flatte/flatui/layout"
 	ds "github.com/lunguini/flatte/theme"
 	"image/color"
 	"math"
@@ -117,4 +118,22 @@ func contrast(a, b color.Color) float64 {
 		la, lb = lb, la
 	}
 	return (la + 0.05) / (lb + 0.05)
+}
+
+// Density sets the layout step and default insets: regular is today's
+// 8pt step with 4×8 control insets and 12pt panels.
+func TestThemeSpacingFollowsDensity(t *testing.T) {
+	step, in := Dark().spacing()
+	if step != 8 || in != (layout.Insets{Vertical: 4, Horizontal: 8, Panel: 12}) {
+		t.Fatalf("regular spacing %v %+v", step, in)
+	}
+	compact := ds.Default().With(ds.Seeds{Density: ds.Compact})
+	step, in = themeFor(nil, true, &compact).spacing()
+	if step != compact.Space[1] || in != (layout.Insets{Vertical: compact.Space[0], Horizontal: compact.Space[1], Panel: compact.Space[2]}) || step >= 8 {
+		t.Fatalf("compact spacing %v %+v", step, in)
+	}
+	// A partial custom theme keeps the base's design spacing.
+	if step, _ := themeFor(&Theme{FontSize: 15}, true, &compact).spacing(); step != compact.Space[1] {
+		t.Fatalf("custom theme lost the design step: %v", step)
+	}
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 	"github.com/lunguini/flatte/window/internal/appkit"
 )
 
@@ -189,9 +190,10 @@ func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, min
 // nativeWindows is the window's windowBackend: secondary windows, each with
 // its own view and state, sharing the main window's look.
 type nativeWindows struct {
-	cls      objc.Class
-	m        layout.Metrics
-	th       func() theme
+	cls objc.Class
+	// main is the main window's state, whose metrics, theme and design
+	// (restyled live) a new window takes.
+	main     func() *windowState
 	follow   bool
 	delegate objc.ID
 	// focused and closeRequested report window id becoming key and the
@@ -207,9 +209,9 @@ func (n nativeWindows) openWindow(w flatte.Window, s ui) func() {
 	if lines <= 0 {
 		lines = 20
 	}
-	win, view := makeWindow(n.cls, n.m, w.ID, max(cols, w.MinWidth), max(lines, w.MinHeight), w.MinWidth, w.MinHeight, w.Autosave, chrome{})
-	th := n.th()
-	st := &windowState{ui: s, m: n.m, th: th, follow: n.follow, dark: isDark(view), window: win, view: view, id: w.ID, title: w.ID}
+	main := n.main()
+	win, view := makeWindow(n.cls, main.m, w.ID, max(cols, w.MinWidth), max(lines, w.MinHeight), w.MinWidth, w.MinHeight, w.Autosave, chrome{})
+	st := &windowState{ui: s, m: main.m, th: main.th, follow: n.follow, dark: isDark(view), window: win, view: view, id: w.ID, title: w.ID, design: main.design}
 	id := w.ID
 	st.focused = func() { n.focused(id) }
 	st.closeRequested = func() { n.closeRequested(id) }
@@ -333,7 +335,15 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 		delegateQuit = h.quitRequested
 		defer func() { delegateQuit = nil }()
 	}
-	h.windows = nativeWindows{cls: cls, m: m, th: func() theme { return st.th }, follow: opts.Theme == nil, delegate: delegate,
+	h.restyle = func(d *ds.Theme) layout.Metrics {
+		for _, o := range states {
+			o.design = d
+			o.th = newTheme(themeFor(opts.Theme, o.dark, d))
+			o.m = o.th.metrics()
+		}
+		return st.m
+	}
+	h.windows = nativeWindows{cls: cls, main: func() *windowState { return st }, follow: opts.Theme == nil, delegate: delegate,
 		focused: h.focused, closeRequested: h.closeRequested}
 	barChosen = h.menuChosen
 	defer func() { barChosen = nil }()

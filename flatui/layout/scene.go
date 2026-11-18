@@ -31,6 +31,29 @@ type Metrics struct {
 	// non-Bare single-line inputs, in points. Zero or negative means no
 	// minimum; explicit H values, Bare inputs and text areas are unchanged.
 	ControlHeight float64
+	// Insets are the component insets DefaultPadding gives, in points
+	// (a zero field: 4pt vertical and 8pt horizontal for controls and
+	// item rows, 12pt for decorated panels).
+	Insets Insets
+}
+
+// Insets are a points backend's default component insets: Vertical and
+// Horizontal for controls, inputs and ItemPadding rows, Panel on every
+// side of a decorated Row or Col. A design system's density sets them.
+type Insets struct{ Vertical, Horizontal, Panel float64 }
+
+// orDefault is i with its zero fields at the built-in insets.
+func (i Insets) orDefault() Insets {
+	if i.Vertical <= 0 {
+		i.Vertical = 4
+	}
+	if i.Horizontal <= 0 {
+		i.Horizontal = 8
+	}
+	if i.Panel <= 0 {
+		i.Panel = 12
+	}
+	return i
 }
 
 // PointRect is a rect in points.
@@ -334,20 +357,22 @@ func (p pointMetric) padding(n Node) sidesOf[float64] {
 	if np, ok := n.(interface{ noPadding() bool }); ok && np.noPadding() {
 		return s
 	}
+	in := p.Insets.orDefault()
+	item := sidesOf[float64]{in.Vertical, in.Horizontal, in.Vertical, in.Horizontal}
 	switch l := n.(type) {
 	case Button, Toggle:
-		return sidesOf[float64]{4, 8, 4, 8}
+		return item
 	case Input:
 		if !l.Bare {
-			return sidesOf[float64]{4, 8, 4, 8}
+			return item
 		}
 	case Row, Col, *Row, *Col:
-		if item, ok := n.(interface{ itemPadding() bool }); ok && item.itemPadding() {
-			return sidesOf[float64]{4, 8, 4, 8}
+		if it, ok := n.(interface{ itemPadding() bool }); ok && it.itemPadding() {
+			return item
 		}
 		box := getBox(n)
 		if box.Backdrop == nil && (box.hasBorder() || box.hasBackground()) {
-			return sidesOf[float64]{12, 12, 12, 12}
+			return sidesOf[float64]{in.Panel, in.Panel, in.Panel, in.Panel}
 		}
 	}
 	return s

@@ -242,7 +242,7 @@ func (d *Driver[S]) Quit() bool { return d.quit }
 // Close calls the app's OnExit hook, mirroring what Run does on loop exit.
 // Call it at the end of a test to verify state-save callbacks.
 func (d *Driver[S]) Close() {
-	if d.themedCells {
+	if d.themedCells || (!d.graphical && d.session.ThemeVersion() > 0) {
 		layout.UseCellTheme(nil)
 		d.themedCells = false
 	}

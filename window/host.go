@@ -12,6 +12,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // maxLayoutPasses bounds how many LayoutEvents one render delivers, as in
@@ -55,7 +56,12 @@ type host struct {
 	// main window).
 	windows windowBackend
 	open    map[string]*surface
-	focus   string
+	// restyle switches the backend to a design system a frame chose
+	// (Frame.Theme) and returns its metrics; nil: the backend keeps its
+	// style. themeVersion is the session's ThemeVersion it styled for.
+	restyle      func(*ds.Theme) layout.Metrics
+	themeVersion uint64
+	focus        string
 }
 
 // surface is one window's share of the host: its view's size, the scene
@@ -1116,6 +1122,31 @@ func (s *surface) pointerAt(x, y float64, id string, r layout.PointRect) flatte.
 	return ev
 }
 
+// followTheme restyles the backend when the theme in effect changed (a
+// frame set Frame.Theme). New cell sizes reach the app as a ResizeEvent
+// after this render, as a window resize would.
+func (h *host) followTheme() {
+	v := h.session.ThemeVersion()
+	if v == h.themeVersion {
+		return
+	}
+	h.themeVersion = v
+	if h.restyle == nil {
+		return
+	}
+	old := h.metrics
+	h.metrics = h.restyle(h.session.Theme(true))
+	if old.Column == h.metrics.Column && old.Line == h.metrics.Line {
+		return
+	}
+	h.post(func() {
+		for _, s := range append([]*surface{h.surface}, slices.Collect(maps.Values(h.open))...) {
+			s.width = -1 // the next resize delivers the new cell size
+			s.invalidate()
+		}
+	})
+}
+
 // render produces the scene to draw, settling layout first: while the
 // solved rects (in cells) differ from the last delivered, deliver them as a
 // LayoutEvent and render again, at most maxLayoutPasses times.
@@ -1124,6 +1155,7 @@ func (s *surface) render() layout.Scene {
 	s.flushWheel()
 	for pass := 0; ; pass++ {
 		frame := s.view()
+		h.followTheme()
 		s.title = frame.Title
 		s.translucent = frame.Translucent
 		s.cursor = nil

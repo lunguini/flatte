@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui/layout"
 	ds "github.com/lunguini/flatte/theme"
 )
 
@@ -176,6 +177,7 @@ func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error
 	h.notes = canvasNotifier{win: win}
 	h.dialogs = canvasDialogs{win: win}
 	page.host = h
+	h.restyle = page.restyle
 	h.surface.clock = time.Now
 	page.bind()
 	page.observeSize()
@@ -432,17 +434,23 @@ func (p *canvasPage) setSize(notify bool) {
 	p.invalidate()
 }
 
+// restyle draws in design from now on (the system's appearance applied)
+// and returns its metrics.
+func (p *canvasPage) restyle(design *ds.Theme) layout.Metrics {
+	p.design = design
+	th := themeFor(p.options.Theme, browserDarkMode(p.win), design)
+	p.painter.close()
+	p.painter = newCanvasPainter(p.ctx, th)
+	p.painter.invalidate = p.invalidate
+	p.host.text = canvasTextLayout{ctx: p.ctx, theme: th}
+	return p.painter.metrics
+}
+
 func (p *canvasPage) refreshTheme() {
 	if p.closed {
 		return
 	}
-	th := themeFor(p.options.Theme, browserDarkMode(p.win), p.design)
-	ctx := p.ctx
-	p.painter.close()
-	p.painter = newCanvasPainter(ctx, th)
-	p.painter.invalidate = p.invalidate
-	p.host.metrics = p.painter.metrics
-	p.host.text = canvasTextLayout{ctx: ctx, theme: th}
+	p.host.metrics = p.restyle(p.design)
 	p.host.surface.delivered = nil
 	p.host.surface.deliveredPoints = nil
 	p.host.handle(flatte.ResizeEvent{Width: p.host.cols(p.width()), Height: p.host.lines(p.height())})

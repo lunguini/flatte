@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/internal/sessionaccess"
+	"github.com/lunguini/flatte/theme"
 )
 
 // Frame is what View returns: rendered content plus terminal metadata.
@@ -33,6 +34,11 @@ type Frame struct {
 	// Options.Translucent does (either turns it on), but changeable frame
 	// by frame: a setting can switch it live. Terminals ignore it.
 	Translucent bool
+	// Theme, when set, is the design system the host draws this frame and
+	// the next in (nil: the app's WithTheme, else the host's default), so
+	// a setting can restyle the app live: View returns the theme its state
+	// holds. Views see it in RenderContext from the frame that sets it on.
+	Theme *theme.Theme
 	// Root, when set, is the frame's layout tree. The host solves and paints
 	// it at the frame size, so View needs no Solve call or size bookkeeping,
 	// and MouseEvent.Target names the ID'd node under the pointer. Frames

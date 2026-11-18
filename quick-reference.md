@@ -581,6 +581,21 @@ colors). `RenderContext.Theme` and `RenderContext.Palette` carry the theme
 to View for colors no role covers (a syntax or diff palette).
 `flatest.Options.Theme` gives a test driver the same theme.
 
+Density sets the spacing in a window: one `Pad` or `Gap` step is
+`Space[1]` (8pt regular, 6 compact, 10 comfortable), controls and
+`ItemPadding` rows are inset by `Space[0]`×`Space[1]`, and decorated panels
+by `Space[2]` (`layout.Metrics.Insets` for other point backends). Terminal
+padding stays in cells.
+
+To restyle live (a settings dial), keep the theme in state and return it
+from View: `Frame.Theme` overrides `WithTheme` from that frame on — every
+host restyles (palette, fonts, spacing) and the frame that sets it is
+already viewed in it; `nil` goes back to the app's theme.
+
+```go
+return flatte.Frame{Root: root, Theme: &s.theme} // s.theme = theme.Default().With(s.seeds)
+```
+
 ### Controls
 
 Give controls IDs: clicks arrive as `MouseEvent`s targeting them, and keys

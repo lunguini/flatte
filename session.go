@@ -3,8 +3,10 @@ package flatte
 import (
 	"context"
 	"maps"
+	"reflect"
 	"sync"
 
+	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/internal/sessionaccess"
 	"github.com/lunguini/flatte/theme"
 )
@@ -76,6 +78,11 @@ type Session struct {
 	// host's default.
 	theme        *theme.Theme
 	defaultTheme *theme.Theme
+	// frameTheme is the last frame's Theme (a copy; nil: none), which wins
+	// over theme; themeVersion counts the changes of the theme in effect.
+	frameTheme   *theme.Theme
+	themeVersion uint64
+	cellThemed   bool // the session installed the cell palette (cell surfaces)
 }
 
 // UseTheme sets the design system the session's views see in
@@ -83,9 +90,43 @@ type Session struct {
 // offscreen host (a snapshot) calls it before the first step.
 func (s *Session) UseTheme(t theme.Theme) { s.theme = &t }
 
+// ThemeVersion counts the changes of the theme in effect (Theme) since the
+// session started, as frames set Frame.Theme: a host compares it after a
+// view to restyle.
+func (s *Session) ThemeVersion() uint64 { return s.themeVersion }
+
+// adoptFrameTheme makes t, a frame's Theme, the theme in effect and
+// reports whether that changed it. A cell surface's palette follows.
+func (s *Session) adoptFrameTheme(t *theme.Theme) bool {
+	switch {
+	case t == nil && s.frameTheme == nil:
+		return false
+	case t == nil:
+		s.frameTheme = nil
+	case s.frameTheme != nil && reflect.DeepEqual(*t, *s.frameTheme):
+		return false
+	default:
+		c := *t
+		s.frameTheme = &c
+	}
+	s.themeVersion++
+	if s.cellSurface {
+		if cur := s.Theme(false); cur != nil {
+			layout.UseCellTheme(&cur.Dark)
+			s.cellThemed = true
+		} else if s.cellThemed {
+			layout.UseCellTheme(nil)
+		}
+	}
+	return true
+}
+
 // Theme is the design system the host draws with: the app's (WithTheme),
 // or, for a graphical host, theme.Default(); nil in a terminal without one.
 func (s *Session) Theme(graphical bool) *theme.Theme {
+	if s.frameTheme != nil {
+		return s.frameTheme
+	}
 	if s.theme != nil {
 		return s.theme
 	}
@@ -190,7 +231,14 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 		}
 	}
 	s.trace = func(ev Event) { app.Tracer.Event(ev) }
-	s.view = func(ctx RenderContext) Frame { return app.View(app.State, s.themed(ctx)) }
+	s.view = func(ctx RenderContext) Frame {
+		f := app.View(app.State, s.themed(ctx))
+		if s.adoptFrameTheme(f.Theme) {
+			// Once more, so the frame is viewed in the theme it chose.
+			f = app.View(app.State, s.themed(ctx))
+		}
+		return f
+	}
 	s.services = func(host HostServices) {
 		fx = withHostCapabilities(fx, host.Capabilities)
 		fx = withHostClipboard(fx, host.SetClipboard, host.ReadClipboard)
