@@ -260,7 +260,7 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	}
 	h := newSessionHost(ctx, session, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
 	defer h.cancel()
-	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, hideTitle: opts.HideTitleBar}
+	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts)}
 	st.focused = func() { h.focused("") }
 	register(st)
 	defer func() {

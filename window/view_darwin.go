@@ -33,6 +33,7 @@ type windowState struct {
 	// hideTitle has the content under the title bar, its strip dragging the
 	// window where nothing is.
 	translucent, hideTitle bool
+	titleH                 float64 // the strip's height in points, with hideTitle
 	window                 objc.ID
 	title                  string
 	// marked is the input method's uncommitted text; caret is where the
@@ -198,7 +199,7 @@ func mouseHandler(button flatte.MouseButton, action flatte.MouseAction) func(obj
 			// Under a hidden title bar, a press on nothing in the strip is
 			// the title bar's: it drags the window, and a double click
 			// zooms it.
-			if st.hideTitle && button == flatte.MouseLeft && action == flatte.MousePress && p.Y < TitleBarHeight && st.ui.hit(p.X, p.Y) == "" {
+			if st.hideTitle && button == flatte.MouseLeft && action == flatte.MousePress && p.Y < st.titleH && st.ui.hit(p.X, p.Y) == "" {
 				if objc.Send[int](event, sel("clickCount")) == 2 {
 					st.window.Send(sel("performZoom:"), objc.ID(0))
 				} else {
@@ -267,6 +268,9 @@ func viewMethods() []objc.MethodDef {
 				if dark := isDark(self); dark != st.dark {
 					st.dark, st.th = dark, newTheme(themeFor(nil, dark))
 				}
+			}
+			if st.hideTitle {
+				placeTitleButtons(st.window, st.titleH)
 			}
 			b := objc.Send[CGRect](self, sel("bounds"))
 			st.ui.resize(b.Size.Width, b.Size.Height)

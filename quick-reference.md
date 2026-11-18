@@ -62,7 +62,10 @@ grid. On other native platforms the option installs no host and `Run` uses the
 terminal. `window.Supported()` is true on macOS and js/wasm. `Theme` and `Fonts`
 apply to both GUI hosts. On a page, `Title` is the fallback document title;
 desktop/window-frame options such as `Desktop`, `Width`, `Height`, `MinWidth`,
-`MinHeight`, `Autosave`, `HideTitleBar`, and `Translucent` are ignored. A sample
+`MinHeight`, `Autosave`, `HideTitleBar`, `TitleBarHeight`, and `Translucent` are ignored. A
+macOS window with `HideTitleBar` and a taller app-drawn strip sets
+`TitleBarHeight` to its height in points: the whole strip drags the window and
+the window buttons sit in its middle. A sample
 can append `window.Options` when its GUI mode is selected and still call
 `flatte.Run` once:
 

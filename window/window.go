@@ -37,6 +37,11 @@ type Options struct {
 	// corner, which the app leaves clear (TitleBarHeight tall,
 	// TitleBarButtonsWidth wide). The strip still drags the window.
 	HideTitleBar bool
+	// TitleBarHeight, with HideTitleBar, is the strip's height in points
+	// when the app draws a taller one (a toolbar, a tab strip): the whole
+	// strip drags the window and the window buttons sit in its middle.
+	// Zero or less than the system's TitleBarHeight keeps the system's.
+	TitleBarHeight int
 	// Translucent shows the desktop, blurred, through the window wherever
 	// the frame draws no background of its own.
 	Translucent bool
