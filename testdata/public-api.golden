@@ -636,6 +636,7 @@ flatui package flatui
   method *Timer.Tick(delta time.Duration)
   method *Tree.MoveDown()
   method *Tree.MoveUp()
+  method *Tree.Scroll(rows int)
   method *Tree.SelectVisible(i int)
   method *Tree.SetHeight(h int)
   method *Tree.SetNodes(nodes[]TreeNode)
