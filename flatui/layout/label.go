@@ -74,6 +74,9 @@ func (s TextStyle) lipgloss() lipgloss.Style {
 	case TextSubtle:
 		st = st.Foreground(lipgloss.Color("244"))
 	}
+	if c := ansiRole(s.Color); c != nil {
+		st = st.Foreground(c)
+	}
 	if s.Fg != nil {
 		st = st.Foreground(s.Fg)
 	}
@@ -278,4 +281,27 @@ func wrapCells(text string, width int) string {
 		return text
 	}
 	return ansi.Wrap(text, width, "")
+}
+
+// ansiRole is a Color role in an unthemed terminal: the terminal's own
+// palette (its ANSI colors and greys), so status and accent text keep their
+// meaning without a theme; nil for the default and primary text.
+func ansiRole(c TextColor) color.Color {
+	switch c {
+	case ColorSecondary:
+		return lipgloss.Color("244")
+	case ColorMuted:
+		return lipgloss.Color("242")
+	case ColorDisabled:
+		return lipgloss.Color("239")
+	case ColorAccent, ColorInfo:
+		return ansi.BasicColor(4) // blue
+	case ColorSuccess:
+		return ansi.BasicColor(2)
+	case ColorWarning:
+		return ansi.BasicColor(3)
+	case ColorDanger:
+		return ansi.BasicColor(1)
+	}
+	return nil
 }

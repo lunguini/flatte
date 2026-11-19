@@ -60,3 +60,16 @@ func TestFillColorCoversEveryRole(t *testing.T) {
 		t.Error("FillNone has a color")
 	}
 }
+
+// Without a theme, color roles draw in the terminal's own palette, so a
+// warning or a match keeps its color in an unthemed terminal.
+func TestUnthemedCellsKeepColorRoles(t *testing.T) {
+	for c, want := range map[TextColor]string{ColorWarning: "33", ColorDanger: "31", ColorSuccess: "32", ColorInfo: "34", ColorAccent: "34", ColorSecondary: "38;5;244"} {
+		if out := (TextStyle{Color: c}).Render("x"); !strings.Contains(out, "\x1b["+want+"m") && !strings.Contains(out, ";"+want+"m") {
+			t.Errorf("role %d: %q, want SGR %s", c, out, want)
+		}
+	}
+	if out := (TextStyle{Color: ColorPrimary}).Render("x"); out != "x" {
+		t.Errorf("primary text is styled: %q", out)
+	}
+}
