@@ -276,7 +276,9 @@ type NodeBase struct {
 	// centered on the frame: just below it and left-aligned to it, above
 	// it when there is no room below, kept inside the frame — for a
 	// dropdown or a context menu. An anchor that is not laid out (or an
-	// empty one) centers the overlay as usual.
+	// empty one) centers the overlay as usual. In a GUI a bordered
+	// overlay's drawn border, not its band, lines up with the anchor's left
+	// edge a few points below it.
 	Anchor string
 
 	// NoPadding disables a GUI host's default component padding. Explicit

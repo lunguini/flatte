@@ -351,11 +351,19 @@ func LayoutScene(root Node, width, height float64, m Metrics) Scene {
 // pointMetric is the metric for Metrics.
 type pointMetric struct{ Metrics }
 
-func (p pointMetric) cols(n int) float64            { return float64(n) * p.Column }
-func (p pointMetric) lines(n int) float64           { return float64(n) * p.Line }
-func (p pointMetric) steps(n int) float64           { return float64(n) * p.Step }
-func (p pointMetric) points(n int, _ bool) float64  { return float64(n) }
-func (p pointMetric) border() float64               { return p.Border }
+func (p pointMetric) cols(n int) float64           { return float64(n) * p.Column }
+func (p pointMetric) lines(n int) float64          { return float64(n) * p.Line }
+func (p pointMetric) steps(n int) float64          { return float64(n) * p.Step }
+func (p pointMetric) points(n int, _ bool) float64 { return float64(n) }
+func (p pointMetric) border() float64              { return p.Border }
+
+// anchorGap is the space between an anchor and a bordered overlay's drawn
+// border, in points.
+const anchorGap = 3.0
+
+func (p pointMetric) anchorPull() (x, y float64) {
+	return p.Border / 2, max(p.Border/2-anchorGap, 0)
+}
 func (p pointMetric) token(t Token, _ bool) float64 { return p.Sizes.of(t) }
 func (pointMetric) add(a, b float64) float64        { return a + b }
 func (pointMetric) sub(a, b float64) float64        { return a - b }

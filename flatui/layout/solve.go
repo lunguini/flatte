@@ -23,6 +23,11 @@ type metric[T unit] interface {
 	// token is a SizeToken length.
 	token(t Token, horizontal bool) T
 	border() T // one border edge
+	// anchorPull is how far a bordered overlay moves left and up toward
+	// its anchor so its drawn border, not its band, sits by the anchor: a
+	// GUI strokes a border in the middle of its band; cells draw it at the
+	// edge (zero).
+	anchorPull() (x, y T)
 	padding(n Node) sidesOf[T]
 
 	add(a, b T) T
@@ -114,6 +119,8 @@ func (c cells) token(t Token, horizontal bool) int {
 	return c.points(int(t.regularPoints()), true)
 }
 func (cells) border() int { return 1 }
+
+func (cells) anchorPull() (x, y int) { return 0, 0 }
 func (cells) padding(n Node) sidesOf[int] {
 	p := getPadSides(n)
 	return sidesOf[int]{p.top, p.right, p.bottom, p.left}
@@ -566,11 +573,11 @@ func centeredOf[T unit](m metric[T], n Node, vpW, vpH T) rect[T] {
 
 // anchoredOf places a layer of r's size just below anchor, left-aligned to
 // it — above it when there is no room below — and inside the frame.
-func anchoredOf[T unit](r, anchor rect[T], vpW, vpH T) rect[T] {
-	r.X = min(max(anchor.X, 0), max(vpW-r.W, 0))
-	r.Y = anchor.Y + anchor.H
-	if r.Y+r.H > vpH && anchor.Y-r.H >= 0 {
-		r.Y = anchor.Y - r.H
+func anchoredOf[T unit](r, anchor rect[T], vpW, vpH, pullX, pullY T) rect[T] {
+	r.X = min(max(anchor.X-pullX, 0), max(vpW-r.W, 0))
+	r.Y = anchor.Y + anchor.H - pullY
+	if r.Y+r.H > vpH && anchor.Y-r.H+pullY >= 0 {
+		r.Y = anchor.Y - r.H + pullY
 	}
 	r.Y = min(max(r.Y, 0), max(vpH-r.H, 0))
 	return r
@@ -640,7 +647,11 @@ func solveTree[T unit](m metric[T], root Node, w, h T, p painter[T]) *solver[T] 
 	for _, o := range findOverlays(root) {
 		r := centeredOf(m, o, w, h)
 		if a, ok := s.rects[getAnchor(o)]; ok {
-			r = anchoredOf(r, a, w, h)
+			var px, py T
+			if getBox(o).hasBorder() {
+				px, py = m.anchorPull()
+			}
+			r = anchoredOf(r, a, w, h, px, py)
 		}
 		if p != nil {
 			p.layer(r)

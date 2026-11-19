@@ -327,7 +327,8 @@ type Popover struct {
 
 func (p Popover) Layout() layout.Node {
 	return layout.Col{
-		NodeBase: layout.NodeBase{ID: p.ID, Overlay: true, Anchor: p.Anchor, W: p.Width, Pad: 1,
+		// The border band is the inset: no padding on top of it.
+		NodeBase: layout.NodeBase{ID: p.ID, Overlay: true, Anchor: p.Anchor, W: p.Width, NoPadding: true,
 			Box: layout.Box{Border: layout.BorderRounded, Fill: layout.FillRaised}},
 		Children: p.Children,
 	}
