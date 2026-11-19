@@ -72,14 +72,27 @@ type PaneHeader struct {
 	Title   string
 	Meta    string
 	Actions []layout.Node
+	// Active brightens the caption while its pane has keyboard focus.
+	Active bool
+	// Body follows the title and takes the room before the actions: a
+	// panel's tab strip (kit.Tabs), a filter field.
+	Body layout.Node
 }
 
 func (h PaneHeader) Layout() layout.Node {
-	kids := []layout.Node{layout.Label{Text: h.Title, Style: layout.TextStyle{Role: layout.TextCaption}, Truncate: true}}
+	caption := layout.TextStyle{Role: layout.TextCaption}
+	if h.Active {
+		caption.Color = layout.ColorPrimary
+	}
+	kids := []layout.Node{layout.Label{Text: h.Title, Style: caption, Truncate: true}}
 	if h.Meta != "" {
 		kids = append(kids, layout.Label{Text: h.Meta, Style: layout.TextStyle{Role: layout.TextMeta}, Truncate: true})
 	}
-	kids = append(kids, &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
+	if h.Body != nil {
+		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1), NoPadding: true}, Align: layout.AlignStretch, Children: []layout.Node{h.Body}})
+	} else {
+		kids = append(kids, &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
+	}
 	kids = append(kids, h.Actions...)
 	return layout.Row{
 		NodeBase: layout.NodeBase{ID: h.ID, H: layout.BarSize(), Gap: 1, PadLeft: 1, PadRight: 1, Box: layout.Box{Fill: layout.FillChrome}},
@@ -160,8 +173,8 @@ func (r ListRow) Layout() layout.Node {
 		kids = append(kids, icon(r.Icon, iconColor(r)))
 	}
 	title := layout.TextStyle{Color: color, Italic: r.Italic}
-	if r.Selected && r.Active {
-		title.Role = layout.TextStrong
+	if r.Selected && r.Active { // readable on the strong selection, dimmed or not
+		title.Role, title.Color = layout.TextStrong, layout.ColorDefault
 	}
 	kids = append(kids, layout.Label{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Text: r.Title, Style: title, Truncate: true})
 	if r.Meta != "" {
@@ -187,10 +200,10 @@ const disclosurePoints = 8
 
 func iconColor(r ListRow) layout.TextColor {
 	switch {
-	case r.Disabled || r.TitleColor == layout.ColorDisabled:
-		return layout.ColorDisabled
 	case r.Selected && r.Active:
 		return layout.ColorAccent
+	case r.Disabled || r.TitleColor == layout.ColorDisabled:
+		return layout.ColorDisabled
 	}
 	return layout.ColorSecondary
 }
@@ -358,7 +371,7 @@ type Setting struct {
 }
 
 func (s Setting) Layout() layout.Node {
-	text := []layout.Node{layout.Label{Text: s.Name, Style: layout.TextStyle{Role: layout.TextStrong}}}
+	text := []layout.Node{layout.Label{Text: s.Name, Style: layout.TextStyle{Role: layout.TextStrong}, Wrap: true}}
 	if s.Description != "" {
 		text = append(text, layout.Label{Text: s.Description, Style: layout.TextStyle{Role: layout.TextMeta}, Wrap: true})
 	}
@@ -377,6 +390,9 @@ type EmptyState struct {
 	Title   string
 	Hint    string
 	Actions []layout.Node
+	// Inline sets it at the top left with the hint wrapping, for a narrow
+	// sidebar, instead of centered in the pane.
+	Inline bool
 }
 
 func (e EmptyState) Layout() layout.Node {
@@ -385,13 +401,20 @@ func (e EmptyState) Layout() layout.Node {
 		kids = append(kids, icon(e.Icon, layout.ColorMuted))
 	}
 	if e.Title != "" {
-		kids = append(kids, layout.Label{Text: e.Title, Style: layout.TextStyle{Role: layout.TextTitle}})
+		role := layout.TextTitle
+		if e.Inline { // a sidebar's title is strong body text, not a page title
+			role = layout.TextStrong
+		}
+		kids = append(kids, layout.Label{Text: e.Title, Style: layout.TextStyle{Role: role}})
 	}
 	if e.Hint != "" {
-		kids = append(kids, layout.Label{Text: e.Hint, Style: layout.TextStyle{Role: layout.TextMeta}})
+		kids = append(kids, layout.Label{Text: e.Hint, Style: layout.TextStyle{Role: layout.TextMeta}, Wrap: e.Inline})
 	}
 	if len(e.Actions) > 0 {
 		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: e.Actions})
+	}
+	if e.Inline {
+		return layout.Col{NodeBase: layout.NodeBase{ID: e.ID, W: layout.Grow(1), PadLeft: 1, PadRight: 1, PadTop: 1, Gap: 1}, Align: layout.AlignStart, Children: kids}
 	}
 	return layout.Col{
 		NodeBase: layout.NodeBase{ID: e.ID, W: layout.Grow(1), H: layout.Grow(1)},

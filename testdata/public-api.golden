@@ -984,7 +984,8 @@ flatui/kit package kit
   field EmptyState.Title string [order=2]
   field EmptyState.Hint string [order=3]
   field EmptyState.Actions []layout.Node [order=4]
-  struct EmptyState fields=5 comparable=false
+  field EmptyState.Inline bool [order=5]
+  struct EmptyState fields=6 comparable=false
   type ListRow struct
   field ListRow.ID string [order=0]
   field ListRow.Icon layout.IconName [order=1]
@@ -1004,7 +1005,9 @@ flatui/kit package kit
   field PaneHeader.Title string [order=1]
   field PaneHeader.Meta string [order=2]
   field PaneHeader.Actions []layout.Node [order=3]
-  struct PaneHeader fields=4 comparable=false
+  field PaneHeader.Active bool [order=4]
+  field PaneHeader.Body layout.Node [order=5]
+  struct PaneHeader fields=6 comparable=false
   type Popover struct
   field Popover.ID string [order=0]
   field Popover.Anchor string [order=1]

@@ -263,3 +263,48 @@ func TestTreeRowDisclosure(t *testing.T) {
 }
 
 func stripANSI(s string) string { return ansi.Strip(s) }
+
+// A pane header's Body sits between the title and the actions and takes
+// the room; Active brightens the caption.
+func TestPaneHeaderBodyAndActive(t *testing.T) {
+	h := PaneHeader{ID: "h", Title: "Terminal", Active: true,
+		Body:    layout.Label{NodeBase: layout.NodeBase{ID: "body"}, Text: "zsh"},
+		Actions: []layout.Node{Action{ID: "hide", Icon: layout.IconChevronDown}.Layout()}}
+	s := layout.LayoutScene(h.Layout(), 400, 36, points)
+	body, hide := s.Rects["body"], s.Rects["hide"]
+	if body.X <= 0 || hide.X <= body.X || hide.X+hide.W > 400 {
+		t.Errorf("body %+v, action %+v", body, hide)
+	}
+	cap := h.Layout().(layout.Row).Children[0].(layout.Label)
+	if cap.Style.Color != layout.ColorPrimary {
+		t.Errorf("active caption %+v", cap.Style)
+	}
+}
+
+// Inline empty states sit at the top left and wrap their hint.
+func TestInlineEmptyState(t *testing.T) {
+	e := EmptyState{ID: "e", Title: "No agent sessions", Hint: "Run claude in a terminal; its sessions show here with their state.", Inline: true}
+	s := layout.LayoutScene(layout.Col{Children: []layout.Node{e.Layout(), layout.NewSpacer()}}, 200, 400, points)
+	var hint layout.TextOp
+	for _, op := range s.Ops {
+		if t, ok := op.(layout.TextOp); ok && t.Wrap {
+			hint = t
+		}
+	}
+	if hint.Text == "" || hint.Rect.W > 200 {
+		t.Fatalf("hint not wrapped: %+v", hint)
+	}
+	if r := s.Rects["e"]; r.Y != 0 || r.H > 200 {
+		t.Errorf("inline state %+v, want at the top, content-tall", r)
+	}
+}
+
+// A dimmed row reads normally while it is the focused selection.
+func TestDimmedRowSelected(t *testing.T) {
+	r := ListRow{Title: "build", TitleColor: layout.ColorDisabled, Selected: true, Active: true}.Layout().(layout.Row)
+	for _, k := range r.Children {
+		if l, ok := k.(layout.Label); ok && l.Style.Color == layout.ColorDisabled {
+			t.Errorf("selected title still disabled-grey: %+v", l.Style)
+		}
+	}
+}

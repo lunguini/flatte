@@ -718,6 +718,11 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 		cw, ch := intrinsic(m, c)
 		var cr rect[T]
 		if horizontal {
+			if align != AlignStretch {
+				// Height for the width it got: a wrapping Label inside
+				// takes the lines it wraps to, as the row's own height does.
+				_, ch = measure(m, c, mainSizes[i])
+			}
 			size := alignedCross(align, ch, inner.H)
 			cr = rect[T]{pos, m.add(inner.Y, crossOffset(m, align, size, inner.H)), mainSizes[i], size}
 		} else {
