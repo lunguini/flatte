@@ -248,7 +248,7 @@ func intersectOf[T unit](m metric[T], r, s rect[T]) rect[T] {
 // insetsOf is a node's full per-side inset: padding steps plus the border.
 func insetsOf[T unit](m metric[T], n Node) sidesOf[T] {
 	s := m.padding(n)
-	if getBox(n).hasBorder() {
+	if nodeBox(n).hasBorder() {
 		b := m.border()
 		s = sidesOf[T]{m.add(s.top, b), m.add(s.right, b), m.add(s.bottom, b), m.add(s.left, b)}
 	}
@@ -648,7 +648,7 @@ func solveTree[T unit](m metric[T], root Node, w, h T, p painter[T]) *solver[T] 
 		r := centeredOf(m, o, w, h)
 		if a, ok := s.rects[getAnchor(o)]; ok {
 			var px, py T
-			if getBox(o).hasBorder() {
+			if nodeBox(o).hasBorder() {
 				px, py = m.anchorPull()
 			}
 			r = anchoredOf(r, a, w, h, px, py)

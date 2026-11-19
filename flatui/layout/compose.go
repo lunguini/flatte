@@ -440,10 +440,15 @@ func getPadSides(n Node) sides {
 	return sides{}
 }
 
-func getBox(n Node) Box {
+// getBox is n's box as terminal cells paint it (cellBox).
+func getBox(n Node) Box { return cellBox(nodeBox(n)) }
+
+// nodeBox is n's own box, as a GUI scene draws it: a cell theme is for
+// terminal cells only.
+func nodeBox(n Node) Box {
 	type boxer interface{ box() Box }
 	if b, ok := n.(boxer); ok {
-		return cellBox(b.box())
+		return b.box()
 	}
 	return Box{}
 }

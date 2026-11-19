@@ -38,6 +38,34 @@ func TestThemedCellsResolveRoles(t *testing.T) {
 	}
 }
 
+// A cell theme is for terminal cells only: a GUI scene of selected and
+// filled boxes lays out and paints the same with or without one (a
+// selected box given the cell background would gain panel padding).
+func TestCellThemeLeavesGUIScenesAlone(t *testing.T) {
+	root := Col{NodeBase: NodeBase{W: Fixed(30)}, Children: []Node{
+		Row{NodeBase: NodeBase{ID: "sel", Box: Box{Selected: true}}, Children: []Node{Label{Text: "selected"}}},
+		Row{NodeBase: NodeBase{ID: "fill", Box: Box{Fill: FillChrome}}, Children: []Node{Label{Text: "chrome"}}},
+	}}
+	m := Metrics{Column: 8, Line: 20, Step: 4, Border: 1, DefaultPadding: true, ControlHeight: 32}
+	UseCellTheme(nil)
+	want := LayoutScene(root, 240, 200, m)
+	d := theme.Default()
+	withCellTheme(t, &d.Dark)
+	got := LayoutScene(root, 240, 200, m)
+	for _, id := range []string{"sel", "fill"} {
+		if got.Rects[id] != want.Rects[id] {
+			t.Errorf("%s laid out at %v with a cell theme, %v without", id, got.Rects[id], want.Rects[id])
+		}
+	}
+	for i, op := range got.Ops {
+		if b, ok := op.(BoxOp); ok && b.Box.Background != nil && i < len(want.Ops) {
+			if w, ok := want.Ops[i].(BoxOp); !ok || w.Box.Background == nil {
+				t.Errorf("op %d: a GUI box painted the cell background %v", i, b.Box.Background)
+			}
+		}
+	}
+}
+
 func TestUnthemedCellsKeepTheTerminalsColors(t *testing.T) {
 	UseCellTheme(nil)
 	if out := (TextStyle{Role: TextSubtle}).Render("x"); !strings.Contains(out, "38;5;244") {
