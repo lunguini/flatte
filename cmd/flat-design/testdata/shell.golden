@@ -1,0 +1,40 @@
+ FLATTE design system       Compact  Regular  Comfortable    Square  Subtle  Round    Blue  Teal  Violet  Graphite      
+  ○  Colors                                                                                                             
+  i  Type                                                                                                               
+  •  Space & shape         App shell                                                                                    
+  ⚙  Components            An IDE's frame from the kit alone: no colors or sizes of its own.                            
+  •  App shell                                                                                                          
+                           ╭─────────────────────────────────────────────────────────────────────────────────────────╮  
+                           │ FILES                 +    main.go  theme.go ●               AGENTS 2                   │  
+                           │ ▸  cmd                                                       Design system     working  │  
+                           │  ▸  flat-design            1    package main                 Fix the tree    needs you  │  
+                           │   ▤  main.go               2                                                            │  
+                           │   ▤  main_test.go          3    import "github.com/lunguini                             │  
+                           │ ▸  theme                   4                                                            │  
+                           │  ▤  theme.go               5    func row(name string) layou                             │  
+                           │  ▤  seeds.go               6        return kit.ListRow{Titl                             │  
+                           │                            7    }                                                       │  
+                           │                                                                                         │  
+                           │                                                                                         │  
+                           │                                                                                         │  
+                           │                                                                                         │  
+                           │                                                                                         │  
+                           ╰─────────────────────────────────────────────────────────────────────────────────────────╯  
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        

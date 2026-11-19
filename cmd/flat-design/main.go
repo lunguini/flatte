@@ -1,6 +1,7 @@
 // Command flat-design is Flatte's design system shown by Flatte itself: the
-// palettes, the type scale and the spacing, size, radius and stroke
-// scales of theme.Default(), in a terminal (themed cells), with -gui in a
+// palettes, the type scale, the spacing, size, radius and stroke scales,
+// the flatui/kit components and an app shell, restyled live by density,
+// shape and accent dials, in a terminal (themed cells), with -gui in a
 // native window, and compiled to WebAssembly on a browser canvas.
 package main
 
@@ -11,8 +12,11 @@ import (
 	"image/color"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui/kit"
 	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/theme"
 	"github.com/lunguini/flatte/window"
@@ -23,26 +27,77 @@ const (
 	pageColors = iota
 	pageType
 	pageShape
+	pageComponents
+	pageShell
 	pageCount
 )
 
-var pageNames = [pageCount]string{"Colors", "Type", "Space & shape"}
+var pageNames = [pageCount]string{"Colors", "Type", "Space & shape", "Components", "App shell"}
+var pageIcons = [pageCount]layout.IconName{layout.IconCircle, layout.IconInfo, layout.IconPanelBottom, layout.IconGear, layout.IconSidebarLeft}
 
 // Layout IDs.
 const (
 	idSidebar  = "sidebar"
 	pagePrefix = "page:"
+	idDensity  = "density"
+	idShape    = "shape"
+	idAccent   = "accent"
+	rowPrefix  = "row:"
+	tabPrefix  = "tab:"
+	idChoice   = "choice"
+	idWrap     = "wrap"
+	idPopover  = "popover"
+	idOpen     = "open"
 )
 
-// State is the page shown.
-type State struct {
-	page int
+// accents are the showcase's accent seeds (all pass theme.Check).
+var accents = []struct {
+	name string
+	pair theme.Pair
+}{
+	{"Blue", theme.Pair{}}, // the theme's own
+	{"Teal", theme.Pair{Light: theme.Hex("#0e7468"), Dark: theme.Hex("#4fd1c0")}},
+	{"Violet", theme.Pair{Light: theme.Hex("#6d3fd8"), Dark: theme.Hex("#b69bff")}},
+	{"Graphite", theme.Pair{Light: theme.Hex("#3d4450"), Dark: theme.Hex("#c3c9d3")}},
 }
 
-// NewState opens on the colors.
-func NewState() *State { return &State{} }
+var (
+	densityNames = []string{"Compact", "Regular", "Comfortable"}
+	densities    = []theme.Density{theme.Compact, theme.Regular, theme.Comfortable}
+	shapeNames   = []string{"Square", "Subtle", "Round"}
+	shapes       = []theme.Roundness{theme.Square, theme.Subtle, theme.Round}
+)
 
-// Handle moves between pages (↑/↓, 1–3, a click) and quits (q).
+// State is the page shown, the dials, and the component demos' state.
+type State struct {
+	page                   int
+	density, shape, accent int // indexes into densities, shapes, accents
+	theme                  theme.Theme
+
+	row, tab, choice int
+	wrap, popover    bool
+}
+
+// NewState opens on the colors in the default theme.
+func NewState() *State {
+	s := &State{density: 1, shape: 1, tab: 0, choice: 1, wrap: true}
+	s.restyle()
+	return s
+}
+
+// restyle derives the theme from the dials; View returns it, so every
+// host restyles live.
+func (s *State) restyle() {
+	seeds := theme.Seeds{Density: densities[s.density], Roundness: shapes[s.shape]}
+	if s.accent > 0 {
+		pair := accents[s.accent].pair
+		seeds.Accent = &pair
+	}
+	s.theme = theme.Default().With(seeds)
+}
+
+// Handle moves between pages (↑/↓, 1–5, a click), turns the dials (d, r,
+// a, or their segments) and quits (q).
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
 	case flatte.KeyEvent:
@@ -53,6 +108,17 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 			s.page = (s.page + 1) % pageCount
 		case e.Key == flatte.KeyCharacter && e.Rune >= '1' && e.Rune < '1'+pageCount:
 			s.page = int(e.Rune - '1')
+		case e.Key == flatte.KeyCharacter && e.Rune == 'd':
+			s.density = (s.density + 1) % len(densities)
+			s.restyle()
+		case e.Key == flatte.KeyCharacter && e.Rune == 'r':
+			s.shape = (s.shape + 1) % len(shapes)
+			s.restyle()
+		case e.Key == flatte.KeyCharacter && e.Rune == 'a':
+			s.accent = (s.accent + 1) % len(accents)
+			s.restyle()
+		case e.Key == flatte.KeyEscape:
+			s.popover = false
 		case e.Key == flatte.KeyCharacter && e.Rune == 'q', e.Key == flatte.KeyCtrlC:
 			fx.Quit()
 		}
@@ -60,67 +126,227 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		if e.Action != flatte.MousePress || e.Button != flatte.MouseLeft {
 			return
 		}
-		for i := range pageCount {
-			if e.Target == pageID(i) {
-				s.page = i
+		click(s, e.Target)
+	}
+}
+
+func click(s *State, target string) {
+	for i := range pageCount {
+		if target == pageID(i) {
+			s.page = i
+		}
+	}
+	dial := func(id string, n int, set *int) {
+		for i := range n {
+			if target == kit.OptionID(id, i) {
+				*set = i
+				s.restyle()
 			}
 		}
+	}
+	dial(idDensity, len(densities), &s.density)
+	dial(idShape, len(shapes), &s.shape)
+	dial(idAccent, len(accents), &s.accent)
+	for i := range 3 {
+		if target == kit.OptionID(idChoice, i) {
+			s.choice = i
+		}
+	}
+	switch {
+	case strings.HasPrefix(target, rowPrefix):
+		s.row, _ = strconv.Atoi(target[len(rowPrefix):])
+	case strings.HasPrefix(target, tabPrefix):
+		s.tab, _ = strconv.Atoi(target[len(tabPrefix):])
+	case target == idWrap:
+		s.wrap = !s.wrap
+	case target == idOpen:
+		s.popover = !s.popover
 	}
 }
 
 func pageID(i int) string { return fmt.Sprintf("%s%d", pagePrefix, i) }
 
-// View is the sidebar and the page, both from the theme in ctx (the
-// default one when the host has none to give).
+// View is the sidebar, the dials and the page, in the theme the dials
+// make (Frame.Theme: the host restyles to it).
 func View(s *State, ctx flatte.RenderContext) flatte.Frame {
-	t := ctx.Theme
-	if t == nil {
-		d := theme.Default()
-		t = &d
-	}
+	t := &s.theme
 	var page layout.Node
 	switch s.page {
 	case pageType:
 		page = typePage(t, ctx.Graphical)
 	case pageShape:
 		page = shapePage(t, ctx.Graphical)
+	case pageComponents:
+		page = componentsPage(s)
+	case pageShell:
+		page = shellPage(s)
 	default:
 		page = colorsPage(t, ctx.Graphical)
 	}
-	return flatte.Frame{Title: "Flatte design system", Root: layout.Row{
+	root := layout.Row{
 		NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1)},
 		Children: []layout.Node{
-			sidebar(s, ctx.Graphical),
-			layout.Col{NodeBase: layout.NodeBase{W: layout.Points(1), H: layout.Grow(1), Box: layout.Box{Fill: layout.FillSeparator}}},
-			layout.Scroll{
-				NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1), Box: layout.Box{Fill: layout.FillContent}},
-				Child:    page,
-			},
+			sidebar(s),
+			divider(true),
+			layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1)}, Children: []layout.Node{
+				dials(s),
+				divider(false),
+				layout.Scroll{
+					NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1), Box: layout.Box{Fill: layout.FillContent}},
+					Child:    page,
+				},
+			}},
 		},
+	}
+	return flatte.Frame{Title: "Flatte design system", Theme: t, Root: root}
+}
+
+// divider is a hairline between panes, vertical or horizontal.
+func divider(vertical bool) layout.Node {
+	nb := layout.NodeBase{W: layout.Grow(1), H: layout.Points(1), Box: layout.Box{Fill: layout.FillSeparator}}
+	if vertical {
+		nb.W, nb.H = layout.Points(1), layout.Grow(1)
+	}
+	return layout.Col{NodeBase: nb}
+}
+
+func sidebar(s *State) layout.Node {
+	rows := make([]layout.Node, pageCount)
+	for i, name := range pageNames {
+		rows[i] = kit.ListRow{ID: pageID(i), Icon: pageIcons[i], Title: name, Selected: i == s.page, Active: true}.Layout()
+	}
+	return layout.Col{NodeBase: layout.NodeBase{ID: idSidebar, W: layout.Fixed(24), H: layout.Grow(1), Box: layout.Box{Fill: layout.FillChrome}}, Children: []layout.Node{
+		kit.PaneHeader{Title: "Flatte", Meta: "design system"}.Layout(),
+		layout.Col{NodeBase: layout.NodeBase{PadLeft: 1, PadRight: 1}, Children: rows},
 	}}
 }
 
-func sidebar(s *State, g bool) layout.Node {
-	kids := []layout.Node{
-		layout.Label{NodeBase: layout.NodeBase{PadLeft: 1, PadTop: 1, PadBottom: 1}, Text: "Flatte", Style: layout.TextStyle{Role: layout.TextTitle}},
-		layout.Label{NodeBase: layout.NodeBase{PadLeft: 1}, Text: "Design system", Style: layout.TextStyle{Role: layout.TextCaption}},
+// dials are the three seeds — density, shape, accent — as segmented
+// choices (named in their tooltips): the whole showcase restyles as they
+// turn.
+func dials(s *State) layout.Node {
+	dial := func(name, id string, options []string, selected int) layout.Node {
+		seg := kit.Segmented{ID: id, Options: options, Selected: selected}.Layout().(layout.Row)
+		seg.Tooltip = name
+		return seg
 	}
-	for i, name := range pageNames {
-		fill := layout.FillNone
-		style := layout.TextStyle{}
-		if i == s.page {
-			fill, style.Role = layout.FillSelection, layout.TextStrong
-		}
-		h := layout.Fixed(1)
-		if g {
-			h = layout.Points(int(theme.Default().Size.Row))
-		}
-		kids = append(kids, layout.Label{
-			NodeBase: layout.NodeBase{ID: pageID(i), H: h, PadLeft: 1, PadRight: 1, Box: layout.Box{Fill: fill, Round: true, Interactive: true}},
-			Text:     name, Style: style,
-		})
+	names := make([]string, len(accents))
+	for i, a := range accents {
+		names[i] = a.name
 	}
-	return layout.Col{NodeBase: layout.NodeBase{ID: idSidebar, W: layout.Fixed(22), H: layout.Grow(1), PadLeft: 1, PadRight: 1, Gap: 0, Box: layout.Box{Fill: layout.FillChrome}}, Children: kids}
+	return layout.Row{
+		NodeBase: layout.NodeBase{H: layout.BarSize(), Gap: 2, PadLeft: 2, PadRight: 2, Box: layout.Box{Fill: layout.FillChrome}},
+		Align:    layout.AlignCenter,
+		Children: []layout.Node{
+			dial("Density", idDensity, densityNames, s.density),
+			dial("Shape", idShape, shapeNames, s.shape),
+			dial("Accent", idAccent, names, s.accent),
+		},
+	}
+}
+
+// componentsPage shows every kit component and the controls in the theme.
+func componentsPage(s *State) layout.Node {
+	files := []string{"main.go", "theme.go", "kit.go", "README.md"}
+	rows := make([]layout.Node, len(files))
+	for i, f := range files {
+		var trailing []layout.Node
+		if i == 1 {
+			trailing = []layout.Node{kit.Badge{Text: "M", Tone: kit.ToneWarning}.Layout()}
+		}
+		rows[i] = kit.ListRow{ID: rowPrefix + strconv.Itoa(i), Icon: layout.IconFile, Title: f, Meta: "cmd/flat-design", Selected: i == s.row, Active: true, Trailing: trailing}.Layout()
+	}
+	inactive := kit.ListRow{Title: "selected, list not focused", Selected: true}.Layout()
+	tabs := []kit.Tab{{ID: tabPrefix + "0", Label: "main.go"}, {ID: tabPrefix + "1", Label: "theme.go", Modified: true}, {ID: tabPrefix + "2", Label: "kit.go"}}
+	buttons := layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+		layout.Button{NodeBase: layout.NodeBase{ID: "primary"}, Label: "Commit", Default: true},
+		layout.Button{NodeBase: layout.NodeBase{ID: "secondary"}, Label: "Discard"},
+		layout.Button{NodeBase: layout.NodeBase{ID: "quiet"}, Label: "Later", Plain: true},
+		layout.Button{NodeBase: layout.NodeBase{ID: "icon"}, Icon: layout.IconSearch, Label: "search"},
+	}}
+	badges := layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+		kit.Badge{Text: "idle"}.Layout(), kit.Badge{Text: "working", Tone: kit.ToneInfo}.Layout(),
+		kit.Badge{Text: "ready", Tone: kit.ToneSuccess}.Layout(), kit.Badge{Text: "needs you", Tone: kit.ToneWarning}.Layout(),
+		kit.Badge{Text: "failed", Tone: kit.ToneDanger}.Layout(), kit.Badge{Text: "3", Tone: kit.ToneAccent}.Layout(),
+	}}
+	settings := kit.Section{Title: "Editor", Children: []layout.Node{
+		kit.Setting{ID: "set:wrap", Name: "Wrap lines", Description: "Soft-wrap lines longer than the pane.", Control: layout.Toggle{NodeBase: layout.NodeBase{ID: idWrap}, Kind: layout.ToggleSwitch, Checked: s.wrap}}.Layout(),
+		kit.Setting{ID: "set:tabs", Name: "Indent with", Control: kit.Segmented{ID: idChoice, Options: []string{"Tabs", "2 spaces", "4 spaces"}, Selected: s.choice}.Layout()}.Layout(),
+		kit.Setting{ID: "set:font", Name: "Font", Control: layout.Input{NodeBase: layout.NodeBase{ID: "font", W: layout.Fixed(20)}, Value: "Menlo"}}.Layout(),
+	}}
+	body := layout.Col{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+		group("Pane header", kit.PaneHeader{Title: "Changes", Meta: "4 files", Actions: []layout.Node{
+			layout.Button{NodeBase: layout.NodeBase{ID: "refresh"}, Icon: layout.IconRepeat, Label: "↻", Plain: true},
+		}}.Layout()),
+		group("Tabs", kit.Tabs{Tabs: tabs, Active: s.tab}.Layout()),
+		group("List rows", layout.Col{Children: append(rows, inactive)}),
+		group("Buttons", buttons),
+		group("Badges", badges),
+		group("Settings", settings.Layout()),
+		group("Popover", layout.Row{Children: []layout.Node{
+			layout.Button{NodeBase: layout.NodeBase{ID: idOpen}, Label: "Open popover"},
+		}}),
+		group("Empty state", layout.Col{NodeBase: layout.NodeBase{H: layout.Fixed(8), Box: layout.Box{Fill: layout.FillCanvas, Round: true}}, Children: []layout.Node{
+			kit.EmptyState{Icon: layout.IconFolder, Title: "No folder open", Hint: "Open a folder to browse its files.", Actions: []layout.Node{
+				layout.Button{NodeBase: layout.NodeBase{ID: "openFolder"}, Label: "Open Folder…", Default: true},
+			}}.Layout(),
+		}}),
+	}}
+	kids := []layout.Node{body}
+	if s.popover {
+		kids = append(kids, kit.Popover{ID: idPopover, Anchor: idOpen, Width: layout.Fixed(36), Children: []layout.Node{
+			kit.ListRow{Icon: layout.IconFile, Title: "main.go", Meta: "cmd/flat-design", Selected: true, Active: true}.Layout(),
+			kit.ListRow{Icon: layout.IconFile, Title: "theme.go", Meta: "theme"}.Layout(),
+			kit.ListRow{Icon: layout.IconFile, Title: "kit.go", Meta: "flatui/kit"}.Layout(),
+		}}.Layout())
+	}
+	return page("Components", "flatui/kit: every piece below is built from the theme's roles and sizes — turn the dials above.",
+		layout.Col{Children: kids})
+}
+
+// group is a component's caption over its sample.
+func group(title string, sample layout.Node) layout.Node {
+	return layout.Col{Children: []layout.Node{
+		layout.Label{NodeBase: layout.NodeBase{PadBottom: 1}, Text: title, Style: layout.TextStyle{Role: layout.TextCaption}},
+		sample,
+	}}
+}
+
+// shellPage is an app's frame from the kit alone: a files sidebar, an
+// editor with tabs, and a sessions sidebar, as an IDE lays them out.
+func shellPage(s *State) layout.Node {
+	files := []struct {
+		name  string
+		depth int
+		icon  layout.IconName
+	}{{"cmd", 0, layout.IconFolder}, {"flat-design", 1, layout.IconFolder}, {"main.go", 2, layout.IconFile}, {"main_test.go", 2, layout.IconFile},
+		{"theme", 0, layout.IconFolder}, {"theme.go", 1, layout.IconFile}, {"seeds.go", 1, layout.IconFile}}
+	tree := []layout.Node{kit.PaneHeader{Title: "Files", Actions: []layout.Node{layout.Button{NodeBase: layout.NodeBase{ID: "newFile"}, Icon: layout.IconPlus, Label: "+", Plain: true}}}.Layout()}
+	for i, f := range files {
+		tree = append(tree, kit.ListRow{ID: rowPrefix + strconv.Itoa(i), Icon: f.icon, Title: f.name, Indent: f.depth, Selected: i == s.row, Active: true}.Layout())
+	}
+	code := []string{"package main", "", "import \"github.com/lunguini/flatte/flatui/kit\"", "", "func row(name string) layout.Node {", "\treturn kit.ListRow{Title: name}.Layout()", "}"}
+	lines := make([]layout.Node, len(code))
+	for i, l := range code {
+		lines[i] = layout.Row{NodeBase: layout.NodeBase{Gap: 2}, Children: []layout.Node{
+			layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(3)}, Text: strconv.Itoa(i + 1), Style: layout.TextStyle{Color: layout.ColorMuted}},
+			layout.Label{Text: strings.ReplaceAll(l, "\t", "    "), Style: layout.TextStyle{Fg: nil}},
+		}}
+	}
+	editor := layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1)}, Children: []layout.Node{
+		kit.Tabs{Tabs: []kit.Tab{{ID: tabPrefix + "0", Label: "main.go"}, {ID: tabPrefix + "1", Label: "theme.go", Modified: true}}, Active: s.tab}.Layout(),
+		layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1), PadLeft: 1, PadTop: 1, Box: layout.Box{Fill: layout.FillContent}}, Children: lines},
+	}}
+	sessions := layout.Col{NodeBase: layout.NodeBase{W: layout.Fixed(28), H: layout.Grow(1), Box: layout.Box{Fill: layout.FillChrome}}, Children: []layout.Node{
+		kit.PaneHeader{Title: "Agents", Meta: "2"}.Layout(),
+		kit.ListRow{Title: "Design system", Trailing: []layout.Node{kit.Badge{Text: "working", Tone: kit.ToneInfo}.Layout()}}.Layout(),
+		kit.ListRow{Title: "Fix the tree", Trailing: []layout.Node{kit.Badge{Text: "needs you", Tone: kit.ToneWarning}.Layout()}}.Layout(),
+	}}
+	shell := layout.Row{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Fixed(16), Box: layout.Box{Border: layout.BorderRounded}}, Children: []layout.Node{
+		layout.Col{NodeBase: layout.NodeBase{W: layout.Fixed(26), H: layout.Grow(1), Box: layout.Box{Fill: layout.FillChrome}}, Children: tree},
+		divider(true), editor, divider(true), sessions,
+	}}
+	return page("App shell", "An IDE's frame from the kit alone: no colors or sizes of its own.", shell)
 }
 
 // swatch is a named palette color, with what it is for (the design docs

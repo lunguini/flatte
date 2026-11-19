@@ -945,6 +945,87 @@ flatui package flatui
   var SpinnerLine []string
   var TabGlyphsPowerline TabGlyphs
   var TabGlyphsSafe TabGlyphs
+flatui/kit package kit
+  const ToneAccent Tone = 1
+  const ToneDanger Tone = 5
+  const ToneInfo Tone = 2
+  const ToneNeutral Tone = 0
+  const ToneSuccess Tone = 3
+  const ToneWarning Tone = 4
+  func OptionID(id string, i int) string
+  method Badge.Layout() layout.Node
+  method EmptyState.Layout() layout.Node
+  method ListRow.Layout() layout.Node
+  method PaneHeader.Layout() layout.Node
+  method Popover.Layout() layout.Node
+  method Section.Layout() layout.Node
+  method Segmented.Layout() layout.Node
+  method Setting.Layout() layout.Node
+  method Tabs.Layout() layout.Node
+  type Badge struct
+  field Badge.Text string [order=0]
+  field Badge.Tone Tone [order=1]
+  struct Badge fields=2 comparable=true
+  type EmptyState struct
+  field EmptyState.ID string [order=0]
+  field EmptyState.Icon layout.IconName [order=1]
+  field EmptyState.Title string [order=2]
+  field EmptyState.Hint string [order=3]
+  field EmptyState.Actions []layout.Node [order=4]
+  struct EmptyState fields=5 comparable=false
+  type ListRow struct
+  field ListRow.ID string [order=0]
+  field ListRow.Icon layout.IconName [order=1]
+  field ListRow.Title string [order=2]
+  field ListRow.Meta string [order=3]
+  field ListRow.Trailing []layout.Node [order=4]
+  field ListRow.Selected bool [order=5]
+  field ListRow.Active bool [order=6]
+  field ListRow.Indent int [order=7]
+  field ListRow.Disabled bool [order=8]
+  struct ListRow fields=9 comparable=false
+  type PaneHeader struct
+  field PaneHeader.ID string [order=0]
+  field PaneHeader.Title string [order=1]
+  field PaneHeader.Meta string [order=2]
+  field PaneHeader.Actions []layout.Node [order=3]
+  struct PaneHeader fields=4 comparable=false
+  type Popover struct
+  field Popover.ID string [order=0]
+  field Popover.Anchor string [order=1]
+  field Popover.Width layout.Size [order=2]
+  field Popover.Children []layout.Node [order=3]
+  struct Popover fields=4 comparable=false
+  type Section struct
+  field Section.ID string [order=0]
+  field Section.Title string [order=1]
+  field Section.Children []layout.Node [order=2]
+  struct Section fields=3 comparable=false
+  type Segmented struct
+  field Segmented.ID string [order=0]
+  field Segmented.Options []string [order=1]
+  field Segmented.Selected int [order=2]
+  field Segmented.Focused bool [order=3]
+  struct Segmented fields=4 comparable=false
+  type Setting struct
+  field Setting.ID string [order=0]
+  field Setting.Name string [order=1]
+  field Setting.Description string [order=2]
+  field Setting.Control layout.Node [order=3]
+  struct Setting fields=4 comparable=true
+  type Tab struct
+  field Tab.ID string [order=0]
+  field Tab.Label string [order=1]
+  field Tab.Icon layout.IconName [order=2]
+  field Tab.Modified bool [order=3]
+  struct Tab fields=4 comparable=true
+  type Tabs struct
+  field Tabs.ID string [order=0]
+  field Tabs.Tabs []Tab [order=1]
+  field Tabs.Active int [order=2]
+  field Tabs.Trailing []layout.Node [order=3]
+  struct Tabs fields=4 comparable=false
+  type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2
   const AlignEnd Align = 3
@@ -1051,6 +1132,7 @@ flatui/layout package layout
   const SizeFixed SizeKind = 1
   const SizeGrow SizeKind = 2
   const SizePoints SizeKind = 4
+  const SizeToken SizeKind = 5
   const TextBody TextRole = 0
   const TextCaption TextRole = 3
   const TextMeta TextRole = 4
@@ -1061,19 +1143,27 @@ flatui/layout package layout
   const ToggleCheckbox ToggleKind = 0
   const ToggleRadio ToggleKind = 2
   const ToggleSwitch ToggleKind = 1
+  const TokenBar Token = 3
+  const TokenControl Token = 2
+  const TokenHeader Token = 4
+  const TokenRow Token = 1
   func Auto() Size
+  func BarSize() Size
   func ClampScroll(offset int, viewport int, content int) int
   func Compose(root Node, width int, height int) Composition
   func ComposeWithColorProfile(root Node, width int, height int, profile colorprofile.Profile) Composition
+  func ControlSize() Size
   func FillColor(p*theme.Palette, f Fill)(c color.NRGBA, ok bool)
   func Fixed(n int) Size
   func Grow(w float64) Size
+  func HeaderSize() Size
   func LayoutScene(root Node, width float64, height float64, m Metrics) Scene
   func NewSpacer() *Spacer
   func Overlay(base string, layer string) string
   func OverlayAt(base string, layer string, x int, y int) string
   func OverlayOrigin(base string, layer string)(x int, y int)
   func Points(n int) Size
+  func RowSize() Size
   func Solve(root Node, width int, height int) map[string] Rect
   func SolveAndCompose(root Node, width int, height int)(string, map[string] Rect)
   func SolveAndComposeWithDiagnostics(root Node, width int, height int)(string, map[string] Rect, []DuplicateIDDiagnostic)
@@ -1391,7 +1481,8 @@ flatui/layout package layout
   field Metrics.DefaultPadding bool [order=6]
   field Metrics.ControlHeight float64 [order=7]
   field Metrics.Insets Insets [order=8]
-  struct Metrics fields=9 comparable=false
+  field Metrics.Sizes Sizes [order=9]
+  struct Metrics fields=10 comparable=false
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)
@@ -1470,6 +1561,12 @@ flatui/layout package layout
   field Size.Weight float64 [order=2]
   struct Size fields=3 comparable=true
   type SizeKind int
+  type Sizes struct
+  field Sizes.Row float64 [order=0]
+  field Sizes.Control float64 [order=1]
+  field Sizes.Bar float64 [order=2]
+  field Sizes.Header float64 [order=3]
+  struct Sizes fields=4 comparable=true
   type Slider struct
   field Slider.NodeBase NodeBase [order=0]
   field Slider.Value float64 [order=1]
@@ -1529,6 +1626,7 @@ flatui/layout package layout
   field Toggle.Focused bool [order=6]
   struct Toggle fields=7 comparable=false
   type ToggleKind int
+  type Token int
 theme package theme
   const Comfortable Density = 2
   const Compact Density = 1

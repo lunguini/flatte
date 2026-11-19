@@ -26,6 +26,10 @@ type Options struct {
 	// Theme is the window's look. Nil follows the system's appearance,
 	// switching between Dark and Light as it changes; Snapshot draws Dark.
 	Theme *Theme
+	// Appearance fixes the design system's appearance (AppearanceLight or
+	// AppearanceDark) instead of following the system; Unknown follows it
+	// (Snapshot draws Dark). It applies when Theme is nil.
+	Appearance flatte.Appearance
 	// MinWidth and MinHeight are the smallest content size in columns and
 	// lines (at least 20×4).
 	MinWidth, MinHeight int
@@ -57,6 +61,21 @@ const (
 	TitleBarHeight       = 28
 	TitleBarButtonsWidth = 78
 )
+
+// dark is whether the window draws its design's dark palette, given the
+// system's appearance.
+func (o Options) dark(system bool) bool {
+	switch o.Appearance {
+	case flatte.AppearanceLight:
+		return false
+	case flatte.AppearanceDark:
+		return true
+	}
+	return system
+}
+
+// follows reports whether the window follows the system's appearance.
+func (o Options) follows() bool { return o.Theme == nil && o.Appearance == flatte.AppearanceUnknown }
 
 func (o Options) size() (cols, lines int) {
 	cols, lines = o.Width, o.Height

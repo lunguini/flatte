@@ -262,7 +262,7 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	}
 	// Dark and Light share their type, so following the system changes
 	// colors only, never the metrics.
-	dark := isDark(nsApp)
+	dark := opts.dark(isDark(nsApp))
 	design := session.Theme(true)
 	th := newTheme(themeFor(opts.Theme, dark, design))
 	m := th.metrics()
@@ -291,7 +291,7 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	}
 	h := newSessionHost(ctx, session, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
 	defer h.cancel()
-	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, always: opts.Translucent, hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts), design: design}
+	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.follows(), dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, always: opts.Translucent, hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts), design: design}
 	if opts.Translucent {
 		st.effect = win.Send(sel("contentView")).Send(sel("retain"))
 	}
@@ -343,7 +343,7 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 		}
 		return st.m
 	}
-	h.windows = nativeWindows{cls: cls, main: func() *windowState { return st }, follow: opts.Theme == nil, delegate: delegate,
+	h.windows = nativeWindows{cls: cls, main: func() *windowState { return st }, follow: opts.follows(), delegate: delegate,
 		focused: h.focused, closeRequested: h.closeRequested}
 	barChosen = h.menuChosen
 	defer func() { barChosen = nil }()
@@ -489,13 +489,19 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	if err := registerFonts(opts.Fonts); err != nil {
 		return nil, err
 	}
-	th := newTheme(themeFor(opts.Theme, true, nil))
+	// The first frame only: async results are dropped, quitting is moot.
+	session := flatte.NewSession(context.Background(), app)
+	dark := opts.dark(true)
+	th := newTheme(themeFor(opts.Theme, dark, session.Theme(true)))
 	m := th.metrics()
 	cols, lines := opts.size()
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line
-	// The first frame only: async results are dropped, quitting is moot.
-	session := flatte.NewSession(context.Background(), app)
 	h := newSessionHost(context.Background(), session, m, func(func()) {}, func() {}, func() {})
+	h.restyle = func(d *ds.Theme) layout.Metrics { // the frame's Theme
+		th = newTheme(themeFor(opts.Theme, dark, d))
+		m = th.metrics()
+		return m
+	}
 	defer h.cancel()
 	defer session.Cancel()
 	h.surface.setAppearance(th.appearance)

@@ -35,6 +35,30 @@ type Metrics struct {
 	// (a zero field: 4pt vertical and 8pt horizontal for controls and
 	// item rows, 12pt for decorated panels).
 	Insets Insets
+	// Sizes are the design system's lengths SizeToken reads, in points (a
+	// zero field: its regular size — row 24, control 28, bar 36, header 44).
+	Sizes Sizes
+}
+
+// Sizes are a points backend's design-system lengths (theme.Sizes).
+type Sizes struct{ Row, Control, Bar, Header float64 }
+
+func (s Sizes) of(t Token) float64 {
+	v := 0.0
+	switch t {
+	case TokenRow:
+		v = s.Row
+	case TokenControl:
+		v = s.Control
+	case TokenBar:
+		v = s.Bar
+	case TokenHeader:
+		v = s.Header
+	}
+	if v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+		return t.regularPoints()
+	}
+	return v
 }
 
 // Insets are a points backend's default component insets: Vertical and
@@ -327,16 +351,17 @@ func LayoutScene(root Node, width, height float64, m Metrics) Scene {
 // pointMetric is the metric for Metrics.
 type pointMetric struct{ Metrics }
 
-func (p pointMetric) cols(n int) float64           { return float64(n) * p.Column }
-func (p pointMetric) lines(n int) float64          { return float64(n) * p.Line }
-func (p pointMetric) steps(n int) float64          { return float64(n) * p.Step }
-func (p pointMetric) points(n int, _ bool) float64 { return float64(n) }
-func (p pointMetric) border() float64              { return p.Border }
-func (pointMetric) add(a, b float64) float64       { return a + b }
-func (pointMetric) sub(a, b float64) float64       { return a - b }
-func (pointMetric) times(a float64, k int) float64 { return a * float64(k) }
-func (pointMetric) half(a float64) float64         { return a / 2 }
-func (pointMetric) one() float64                   { return 0 }
+func (p pointMetric) cols(n int) float64            { return float64(n) * p.Column }
+func (p pointMetric) lines(n int) float64           { return float64(n) * p.Line }
+func (p pointMetric) steps(n int) float64           { return float64(n) * p.Step }
+func (p pointMetric) points(n int, _ bool) float64  { return float64(n) }
+func (p pointMetric) border() float64               { return p.Border }
+func (p pointMetric) token(t Token, _ bool) float64 { return p.Sizes.of(t) }
+func (pointMetric) add(a, b float64) float64        { return a + b }
+func (pointMetric) sub(a, b float64) float64        { return a - b }
+func (pointMetric) times(a float64, k int) float64  { return a * float64(k) }
+func (pointMetric) half(a float64) float64          { return a / 2 }
+func (pointMetric) one() float64                    { return 0 }
 func (pointMetric) spread(rem float64, n int) (float64, int) {
 	return rem / float64(n), 0
 }

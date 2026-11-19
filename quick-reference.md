@@ -596,6 +596,31 @@ already viewed in it; `nil` goes back to the app's theme.
 return flatte.Frame{Root: root, Theme: &s.theme} // s.theme = theme.Default().With(s.seeds)
 ```
 
+Lengths that should follow density are tokens: `layout.RowSize()`,
+`ControlSize()`, `BarSize()` and `HeaderSize()` read the theme's sizes in
+points in a window (`layout.Metrics.Sizes`) and one line in a terminal.
+`window.Options.Appearance` fixes light or dark instead of following the
+system (Snapshot draws dark by default) while keeping the design's colors.
+
+### Components (`flatui/kit`)
+
+Design-system pieces as plain structs whose `Layout()` builds the tree
+from roles and tokens only, so the theme restyles them: `PaneHeader`
+(caption title, meta, trailing actions on the chrome bar), `Tabs` (active
+tab on the content surface; tab node IDs are `Tab.ID`), `ListRow` (icon,
+title, meta, trailing nodes; `Selected` + `Active` is the strong
+selection, `Selected` alone the quiet one; `Indent` for trees), `Segmented`
+(option IDs from `kit.OptionID(id, i)`), `Badge` with a `Tone`, `Section`,
+`Setting` (name, description, control), `EmptyState` and `Popover`.
+Stateless: selection and values are app state, clicks are MouseEvents on
+the IDs. Buttons stay `layout.Button` (`Default` primary, plain secondary,
+`Plain` quiet).
+
+```go
+kit.ListRow{ID: "file:3", Icon: layout.IconFile, Title: name, Meta: dir,
+	Selected: i == s.cursor, Active: s.focus == paneFiles}.Layout()
+```
+
 ### Controls
 
 Give controls IDs: clicks arrive as `MouseEvent`s targeting them, and keys

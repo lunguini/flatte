@@ -20,6 +20,8 @@ type metric[T unit] interface {
 	steps(n int) T // spacing steps (Pad, Gap)
 	// points is a Points size: exact in points, rounded up to cells.
 	points(n int, horizontal bool) T
+	// token is a SizeToken length.
+	token(t Token, horizontal bool) T
 	border() T // one border edge
 	padding(n Node) sidesOf[T]
 
@@ -52,6 +54,12 @@ type sized[T unit] struct {
 func toSized[T unit](m metric[T], s Size, horizontal bool) sized[T] {
 	if s.Kind == SizePoints {
 		return sized[T]{Kind: SizeFixed, Value: m.points(max(s.Value, 0), horizontal)}
+	}
+	if s.Kind == SizeToken {
+		if s.Value <= 0 || s.Value >= int(tokenEnd) {
+			return sized[T]{Kind: SizeAuto}
+		}
+		return sized[T]{Kind: SizeFixed, Value: m.token(Token(s.Value), horizontal)}
 	}
 	v := m.lines(s.Value)
 	if horizontal {
@@ -98,6 +106,12 @@ func (cells) points(n int, horizontal bool) int {
 		per = PointsPerColumn
 	}
 	return (n + per - 1) / per
+}
+func (c cells) token(t Token, horizontal bool) int {
+	if !horizontal {
+		return 1
+	}
+	return c.points(int(t.regularPoints()), true)
 }
 func (cells) border() int { return 1 }
 func (cells) padding(n Node) sidesOf[int] {

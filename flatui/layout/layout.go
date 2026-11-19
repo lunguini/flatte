@@ -111,7 +111,47 @@ const (
 	// cell of PointsPerColumn × PointsPerLine, rounding up. Otherwise it
 	// behaves like SizeFixed.
 	SizePoints
+
+	// SizeToken is a design-system length (Value is a Token): a GUI reads
+	// it in points from its Metrics.Sizes, so density restyles it; a
+	// terminal reads a height as one line and a width as the token's
+	// regular points in columns. Otherwise it behaves like SizeFixed.
+	SizeToken
 )
+
+// Token names a design-system length (theme.Sizes) for SizeToken.
+type Token int
+
+const (
+	TokenRow     Token = iota + 1 // list, tree and tab rows (24pt regular)
+	TokenControl                  // buttons, fields, segmented controls (28)
+	TokenBar                      // pane headers, tab strips, toolbars (36)
+	TokenHeader                   // the window header strip (44)
+	tokenEnd
+)
+
+// RowSize, ControlSize, BarSize and HeaderSize are the design system's
+// heights as Sizes (SizeToken).
+func RowSize() Size     { return Size{Kind: SizeToken, Value: int(TokenRow)} }
+func ControlSize() Size { return Size{Kind: SizeToken, Value: int(TokenControl)} }
+func BarSize() Size     { return Size{Kind: SizeToken, Value: int(TokenBar)} }
+func HeaderSize() Size  { return Size{Kind: SizeToken, Value: int(TokenHeader)} }
+
+// regularPoints is t's regular-density length, the fallback for a backend
+// without Sizes and a terminal's width reading.
+func (t Token) regularPoints() float64 {
+	switch t {
+	case TokenRow:
+		return 24
+	case TokenControl:
+		return 28
+	case TokenBar:
+		return 36
+	case TokenHeader:
+		return 44
+	}
+	return 0
+}
 
 // PointsPerColumn and PointsPerLine are the nominal terminal cell a
 // terminal reads Points sizes at: the 13pt macOS monospace cell, rounded.
@@ -154,6 +194,11 @@ func normalizeSize(s Size) Size {
 		return s
 	case SizeFixed, SizeContent, SizePoints:
 		s.Value = max(s.Value, 0)
+		return s
+	case SizeToken:
+		if s.Value <= 0 || s.Value >= int(tokenEnd) {
+			return Size{Kind: SizeAuto}
+		}
 		return s
 	case SizeGrow:
 		if s.Weight < 0 || math.IsNaN(s.Weight) || math.IsInf(s.Weight, 0) {

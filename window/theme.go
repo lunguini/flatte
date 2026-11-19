@@ -124,10 +124,10 @@ func (t Theme) typeScale() ds.TypeScale {
 	return t.design.Type
 }
 
-// spacing is the layout step (one Pad or Gap) and the default component
-// insets in points, from the design's space scale: step space-2, control
-// and item insets space-1 by space-2, panels space-3.
-func (t Theme) spacing() (step float64, in layout.Insets) {
+// spacing is the layout step (one Pad or Gap), the default component
+// insets and the token sizes in points, from the design's scales: step
+// space-2, control and item insets space-1 by space-2, panels space-3.
+func (t Theme) spacing() (step float64, in layout.Insets, sizes layout.Sizes) {
 	d := t.design
 	if d == nil {
 		d = &defaultDesign
@@ -137,7 +137,8 @@ func (t Theme) spacing() (step float64, in layout.Insets) {
 	if step <= 0 {
 		step = stepPoints
 	}
-	return step, layout.Insets{Vertical: sp[0], Horizontal: sp[1], Panel: sp[2]}
+	z := d.Size
+	return step, layout.Insets{Vertical: sp[0], Horizontal: sp[1], Panel: sp[2]}, layout.Sizes{Row: z.Row, Control: z.Control, Bar: z.Bar, Header: z.Header}
 }
 
 func rgb(r, g, b uint8) color.Color { return color.RGBA{r, g, b, 0xff} }

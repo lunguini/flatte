@@ -1,36 +1,36 @@
-                                                                                                                        
-  Flatte                 Colors                                                                                         
-                         Each palette on its own content surface. The ratio is each color's contrast with that          
-  DESIGN SYSTEM          surface; text roles need 4.5:1.                                                                
-  Colors                                                                                                                
-  Type                                                                                                                  
-  Space & shape           LIGHT                                           DARK                                          
-                                                                                                                        
-                               Canvas             #e9ecf0   1.2:1              Canvas             #121418   1.2:1       
-                               Chrome             #f4f5f7   1.1:1              Chrome             #1a1d22   1.1:1       
-                               Content            #ffffff   1.0:1              Content            #1f2228   1.0:1       
-                               Field              #ffffff   1.0:1              Field              #262a31   1.1:1       
-                               Raised             #ffffff   1.0:1              Raised             #2a2e36   1.2:1       
-                               Text               #1b1f26  16.5:1              Text               #e6e8ec  13.0:1       
-                               TextSecondary      #4f5765   7.3:1              TextSecondary      #a7adb7   7.1:1       
-                               TextMuted          #636a76   5.4:1              TextMuted          #8f96a1   5.3:1       
-                               Accent             #1f5fd1   5.8:1              Accent             #6ea2ff   6.3:1       
-                               Focus              #1f5fd1   5.8:1              Focus              #8bb5ff   7.7:1       
-                               SelectionActive    #d6e3fb   1.3:1              SelectionActive    #24406b   1.5:1       
-                               SelectionInactive  #e3e6eb   1.3:1              SelectionInactive  #2c3139   1.2:1       
-                               Divider            #dfe2e7   1.3:1              Divider            #2c3037   1.2:1       
-                               ControlBorder      #838a97   3.5:1              ControlBorder      #6b7380   3.3:1       
-                               Info               #1f5fd1   5.8:1              Info               #6ea2ff   6.3:1       
-                               Success            #17732f   5.9:1              Success            #4cc06a   6.9:1       
-                               Warning            #975e00   5.4:1              Warning            #e3a83b   7.5:1       
-                               Danger             #c4302b   5.5:1              Danger             #ff7b72   6.3:1       
-                               Diff.Add           #e3f5e6   1.1:1              Diff.Add           #1d3326   1.2:1       
-                               Diff.Del           #fde8e7   1.2:1              Diff.Del           #3a2326   1.1:1       
-                               Syntax.Keyword     #7c3aed   5.7:1              Syntax.Keyword     #c792ea   6.6:1       
-                               Syntax.String      #1f7a3d   5.4:1              Syntax.String      #98c379   7.9:1       
-                               Syntax.Func        #1f5fd1   5.8:1              Syntax.Func        #82aaff   6.9:1       
+ FLATTE design system       Compact  Regular  Comfortable    Square  Subtle  Round    Blue  Teal  Violet  Graphite      
+  ○  Colors                                                                                                             
+  i  Type                                                                                                               
+  •  Space & shape         Colors                                                                                       
+  ⚙  Components            Each palette on its own content surface. The ratio is each color's contrast with that        
+  •  App shell             surface; text roles need 4.5:1.                                                              
                                                                                                                         
                                                                                                                         
+                            LIGHT                                          DARK                                         
+                                                                                                                        
+                                 Canvas             #e9ecf0   1.2:1             Canvas             #121418   1.2:1      
+                                 Chrome             #f4f5f7   1.1:1             Chrome             #1a1d22   1.1:1      
+                                 Content            #ffffff   1.0:1             Content            #1f2228   1.0:1      
+                                 Field              #ffffff   1.0:1             Field              #262a31   1.1:1      
+                                 Raised             #ffffff   1.0:1             Raised             #2a2e36   1.2:1      
+                                 Text               #1b1f26  16.5:1             Text               #e6e8ec  13.0:1      
+                                 TextSecondary      #4f5765   7.3:1             TextSecondary      #a7adb7   7.1:1      
+                                 TextMuted          #636a76   5.4:1             TextMuted          #8f96a1   5.3:1      
+                                 Accent             #1f5fd1   5.8:1             Accent             #6ea2ff   6.3:1      
+                                 Focus              #1f5fd1   5.8:1             Focus              #8bb5ff   7.7:1      
+                                 SelectionActive    #d6e3fb   1.3:1             SelectionActive    #24406b   1.5:1      
+                                 SelectionInactive  #e3e6eb   1.3:1             SelectionInactive  #2c3139   1.2:1      
+                                 Divider            #dfe2e7   1.3:1             Divider            #2c3037   1.2:1      
+                                 ControlBorder      #838a97   3.5:1             ControlBorder      #6b7380   3.3:1      
+                                 Info               #1f5fd1   5.8:1             Info               #6ea2ff   6.3:1      
+                                 Success            #17732f   5.9:1             Success            #4cc06a   6.9:1      
+                                 Warning            #975e00   5.4:1             Warning            #e3a83b   7.5:1      
+                                 Danger             #c4302b   5.5:1             Danger             #ff7b72   6.3:1      
+                                 Diff.Add           #e3f5e6   1.1:1             Diff.Add           #1d3326   1.2:1      
+                                 Diff.Del           #fde8e7   1.2:1             Diff.Del           #3a2326   1.1:1      
+                                 Syntax.Keyword     #7c3aed   5.7:1             Syntax.Keyword     #c792ea   6.6:1      
+                                 Syntax.String      #1f7a3d   5.4:1             Syntax.String      #98c379   7.9:1      
+                                 Syntax.Func        #1f5fd1   5.8:1             Syntax.Func        #82aaff   6.9:1      
                                                                                                                         
                                                                                                                         
                                                                                                                         

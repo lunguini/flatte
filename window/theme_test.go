@@ -123,17 +123,23 @@ func contrast(a, b color.Color) float64 {
 // Density sets the layout step and default insets: regular is today's
 // 8pt step with 4×8 control insets and 12pt panels.
 func TestThemeSpacingFollowsDensity(t *testing.T) {
-	step, in := Dark().spacing()
+	step, in, sizes := Dark().spacing()
 	if step != 8 || in != (layout.Insets{Vertical: 4, Horizontal: 8, Panel: 12}) {
 		t.Fatalf("regular spacing %v %+v", step, in)
 	}
+	if sizes != (layout.Sizes{Row: 24, Control: 28, Bar: 36, Header: 44}) {
+		t.Fatalf("regular sizes %+v", sizes)
+	}
 	compact := ds.Default().With(ds.Seeds{Density: ds.Compact})
-	step, in = themeFor(nil, true, &compact).spacing()
+	step, in, sizes = themeFor(nil, true, &compact).spacing()
 	if step != compact.Space[1] || in != (layout.Insets{Vertical: compact.Space[0], Horizontal: compact.Space[1], Panel: compact.Space[2]}) || step >= 8 {
 		t.Fatalf("compact spacing %v %+v", step, in)
 	}
+	if sizes.Row != compact.Size.Row || sizes.Row >= 24 {
+		t.Fatalf("compact sizes %+v", sizes)
+	}
 	// A partial custom theme keeps the base's design spacing.
-	if step, _ := themeFor(&Theme{FontSize: 15}, true, &compact).spacing(); step != compact.Space[1] {
+	if step, _, _ := themeFor(&Theme{FontSize: 15}, true, &compact).spacing(); step != compact.Space[1] {
 		t.Fatalf("custom theme lost the design step: %v", step)
 	}
 }

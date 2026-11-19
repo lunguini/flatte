@@ -89,7 +89,7 @@ func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error
 		win = js.Global()
 	}
 	design := session.Theme(true)
-	th := themeFor(opts.Theme, browserDarkMode(win), design)
+	th := themeFor(opts.Theme, opts.dark(browserDarkMode(win)), design)
 	if err := loadCanvasFonts(doc, th, opts.Fonts); err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error
 		page.restore()
 		return errors.New("window: browser canvas 2D context is unavailable")
 	}
-	th = themeFor(opts.Theme, browserDarkMode(win), design)
+	th = themeFor(opts.Theme, opts.dark(browserDarkMode(win)), design)
 	page.design = design
 	page.ctx = ctx2d
 	painter := newCanvasPainter(ctx2d, th)
@@ -438,7 +438,7 @@ func (p *canvasPage) setSize(notify bool) {
 // and returns its metrics.
 func (p *canvasPage) restyle(design *ds.Theme) layout.Metrics {
 	p.design = design
-	th := themeFor(p.options.Theme, browserDarkMode(p.win), design)
+	th := themeFor(p.options.Theme, p.options.dark(browserDarkMode(p.win)), design)
 	p.painter.close()
 	p.painter = newCanvasPainter(p.ctx, th)
 	p.painter.invalidate = p.invalidate

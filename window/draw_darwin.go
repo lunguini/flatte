@@ -35,6 +35,7 @@ type theme struct {
 	// points (Theme.spacing).
 	step       float64
 	insets     layout.Insets
+	sizes      layout.Sizes
 	appearance flatte.Appearance
 	// ansi is the palette cell grids draw ANSI colors 0–15 in.
 	ansi [16]color.Color
@@ -62,7 +63,7 @@ func (th theme) fill(f layout.Fill) (rgba, bool) {
 
 func newTheme(t Theme) theme {
 	t = t.over(Dark())
-	step, insets := t.spacing()
+	step, insets, sizes := t.spacing()
 	return theme{
 		bg: rgbaOf(t.Background), surface: rgbaOf(t.Surface),
 		text: rgbaOf(t.Text), subtle: rgbaOf(t.Subtle), title: rgbaOf(t.Title),
@@ -72,7 +73,7 @@ func newTheme(t Theme) theme {
 		family: t.Font, mono: t.MonoFont,
 		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
 		controlHeight: t.ControlHeight,
-		step:          step, insets: insets,
+		step:          step, insets: insets, sizes: sizes,
 		appearance: t.appearance(),
 		ansi:       t.ANSI,
 		pal:        t.palette(), ts: t.typeScale(),
@@ -318,6 +319,7 @@ func (th theme) metrics() layout.Metrics {
 		Line:           th.font(fontKey{}).pitch(),
 		Step:           th.step,
 		Insets:         th.insets,
+		Sizes:          th.sizes,
 		Border:         borderBand,
 		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
 			f := th.styleFont(style)

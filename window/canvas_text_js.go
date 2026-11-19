@@ -119,9 +119,9 @@ func (t canvasTextLayout) metrics() layout.Metrics {
 	if line <= 0 {
 		line = t.theme.FontSize * 1.25
 	}
-	step, insets := t.theme.spacing()
+	step, insets, sizes := t.theme.spacing()
 	return layout.Metrics{
-		Column: column, Line: line, Step: step, Border: borderBand, Insets: insets,
+		Column: column, Line: line, Step: step, Border: borderBand, Insets: insets, Sizes: sizes,
 		DefaultPadding: true, ControlHeight: t.theme.ControlHeight,
 		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
 			font := t.font(style)
