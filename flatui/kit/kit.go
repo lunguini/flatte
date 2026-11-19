@@ -161,24 +161,29 @@ func iconColor(r ListRow) layout.TextColor {
 	return layout.ColorSecondary
 }
 
-// Tab is one tab of Tabs.
+// Tab is one tab of a Tabs strip. Close is its close action's ID (empty:
+// none); Modified shows a dot in the close action's place (an unsaved
+// file), still clickable by the same ID. Italic marks a preview tab.
 type Tab struct {
-	ID    string
-	Label string
-	Icon  layout.IconName
-	// Modified marks unsaved changes (a dot after the label).
+	ID       string
+	Label    string
+	Icon     layout.IconName
 	Modified bool
+	Italic   bool
+	Close    string
 }
 
 // Tabs is a tab strip at the bar height on the chrome surface: the active
 // tab sits on the content surface in strong text under an accent edge
-// (Box.Edge, in a window), the others in secondary
-// text. Each tab's node ID is Tab.ID; Trailing nodes (a new-tab button)
-// follow the tabs.
+// (Box.Edge, in a window), the others in secondary text. Each tab's node
+// ID is Tab.ID; Trailing nodes (a new-tab button, a breadcrumb) follow the
+// tabs directly. Fill shares the strip's width equally between the tabs (too many
+// to fit at their names' width): long names end in "…".
 type Tabs struct {
 	ID       string
 	Tabs     []Tab
 	Active   int
+	Fill     bool
 	Trailing []layout.Node
 }
 
@@ -192,23 +197,73 @@ func (t Tabs) Layout() layout.Node {
 			style = layout.TextStyle{Role: layout.TextStrong}
 			box.Fill, box.Edge = layout.FillContent, layout.SideTop
 		}
+		style.Italic = tab.Italic
 		parts := []layout.Node{}
 		if tab.Icon != layout.IconNone {
 			parts = append(parts, icon(tab.Icon, layout.ColorSecondary))
 		}
-		parts = append(parts, layout.Label{Text: tab.Label, Style: style, Truncate: true})
-		if tab.Modified {
-			parts = append(parts, layout.Label{Text: "●", Style: layout.TextStyle{Color: layout.ColorAccent}})
+		label := layout.Label{Text: tab.Label, Style: style, Truncate: true}
+		w := layout.Auto()
+		if t.Fill {
+			label.W, w = layout.Grow(1), layout.Grow(1)
+		}
+		parts = append(parts, label)
+		switch {
+		case tab.Modified:
+			parts = append(parts, Action{ID: tab.Close, Icon: layout.IconDot, Glyph: "●", Tooltip: "Unsaved — close"}.Layout())
+		case tab.Close != "":
+			parts = append(parts, Action{ID: tab.Close, Icon: layout.IconClose, Glyph: "✕", Tooltip: "Close"}.Layout())
+		}
+		pad := 1
+		if tab.Close != "" || tab.Modified {
+			pad = 0 // the action's own box is the right margin
 		}
 		kids = append(kids, layout.Row{
-			NodeBase: layout.NodeBase{ID: tab.ID, H: layout.Grow(1), Gap: 1, PadLeft: 1, PadRight: 1, Box: box},
+			NodeBase: layout.NodeBase{ID: tab.ID, W: w, H: layout.Grow(1), Gap: 1, PadLeft: 1, PadRight: pad, Box: box},
 			Align:    layout.AlignCenter, Children: parts,
 		})
 	}
-	kids = append(kids, &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
-	kids = append(kids, t.Trailing...)
+	for _, n := range t.Trailing { // centered on the strip's height, not stretched
+		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1), NoPadding: true}, Align: layout.AlignCenter, Children: []layout.Node{n}})
+	}
+	if !t.Fill {
+		kids = append(kids, &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
+	}
 	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: layout.Box{Fill: layout.FillChrome}}, Align: layout.AlignStretch, Children: kids}
 }
+
+// Action is a small icon button inside a row, a tab or a pane header — a
+// tab's close, a row's reveal: in a window a compact square with the hover
+// wash under its icon, in a terminal its glyph. Its node ID is ID.
+type Action struct {
+	ID      string
+	Icon    layout.IconName
+	Glyph   string // the terminal spelling ("" : the icon's glyph)
+	Tooltip string
+}
+
+func (a Action) Layout() layout.Node {
+	g := a.Glyph
+	if g == "" {
+		g = glyph(a.Icon)
+	}
+	return layout.Row{
+		NodeBase: layout.NodeBase{ID: a.ID, W: layout.Points(actionPoints), NoPadding: true, Tooltip: a.Tooltip, Box: layout.Box{Round: true, Interactive: a.ID != ""}},
+		Align:    layout.AlignCenter,
+		Children: []layout.Node{
+			&layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}},
+			layout.Icon{NodeBase: layout.NodeBase{W: layout.Points(actionIconPoints)}, Name: a.Icon, Text: g, Style: layout.TextStyle{Color: layout.ColorSecondary}},
+			&layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}},
+		},
+	}
+}
+
+// An Action's box and icon widths in a window (two cells each in a
+// terminal: the glyph and a space).
+const (
+	actionPoints     = 16
+	actionIconPoints = 10
+)
 
 // Segmented is a choice of a few options shown side by side, the chosen
 // one filled. Option i's node ID is ID + ":" + its index (OptionID).

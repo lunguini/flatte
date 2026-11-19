@@ -953,6 +953,7 @@ flatui/kit package kit
   const ToneSuccess Tone = 3
   const ToneWarning Tone = 4
   func OptionID(id string, i int) string
+  method Action.Layout() layout.Node
   method Badge.Layout() layout.Node
   method EmptyState.Layout() layout.Node
   method ListRow.Layout() layout.Node
@@ -962,6 +963,12 @@ flatui/kit package kit
   method Segmented.Layout() layout.Node
   method Setting.Layout() layout.Node
   method Tabs.Layout() layout.Node
+  type Action struct
+  field Action.ID string [order=0]
+  field Action.Icon layout.IconName [order=1]
+  field Action.Glyph string [order=2]
+  field Action.Tooltip string [order=3]
+  struct Action fields=4 comparable=true
   type Badge struct
   field Badge.Text string [order=0]
   field Badge.Tone Tone [order=1]
@@ -1018,13 +1025,16 @@ flatui/kit package kit
   field Tab.Label string [order=1]
   field Tab.Icon layout.IconName [order=2]
   field Tab.Modified bool [order=3]
-  struct Tab fields=4 comparable=true
+  field Tab.Italic bool [order=4]
+  field Tab.Close string [order=5]
+  struct Tab fields=6 comparable=true
   type Tabs struct
   field Tabs.ID string [order=0]
   field Tabs.Tabs []Tab [order=1]
   field Tabs.Active int [order=2]
-  field Tabs.Trailing []layout.Node [order=3]
-  struct Tabs fields=4 comparable=false
+  field Tabs.Fill bool [order=3]
+  field Tabs.Trailing []layout.Node [order=4]
+  struct Tabs fields=5 comparable=false
   type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2
