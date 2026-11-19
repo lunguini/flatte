@@ -143,7 +143,7 @@ func (t *Theme) Palette(dark bool) *Palette {
 	return &t.Light
 }
 
-// Default is Flatte's theme: neutral surfaces with a slight blue bias, a
+// Default is Flatte's theme: warm stone-grey surfaces, a vivid
 // blue accent, regular density and subtly rounded corners.
 func Default() Theme {
 	return Theme{
@@ -166,20 +166,20 @@ func Default() Theme {
 
 func light() Palette {
 	return Palette{
-		Canvas: Hex("#e9ecf0"), Chrome: Hex("#f4f5f7"), Content: Hex("#ffffff"), Field: Hex("#ffffff"), Raised: Hex("#ffffff"),
-		Text: Hex("#1b1f26"), TextSecondary: Hex("#4f5765"), TextMuted: Hex("#636a76"), TextDisabled: Hex("#a1a7b1"), OnAccent: Hex("#ffffff"),
+		Canvas: Hex("#ebe9e5"), Chrome: Hex("#f6f5f2"), Content: Hex("#fefdfb"), Field: Hex("#ffffff"), Raised: Hex("#ffffff"),
+		Text: Hex("#1f1d1a"), TextSecondary: Hex("#57534c"), TextMuted: Hex("#6b665e"), TextDisabled: Hex("#aaa49b"), OnAccent: Hex("#ffffff"),
 		Accent: Hex("#1f5fd1"), AccentHover: Hex("#1a52b5"), Focus: Hex("#1f5fd1"),
-		Hover: color.NRGBA{27, 31, 38, 13}, Pressed: color.NRGBA{27, 31, 38, 26},
-		SelectionActive: Hex("#d6e3fb"), SelectionInactive: Hex("#e3e6eb"), TextSelection: Hex("#b9d0f7"),
-		Match: Hex("#f8e39b"), CurrentLine: Hex("#f3f6fb"),
-		Divider: Hex("#dfe2e7"), ControlBorder: Hex("#838a97"),
+		Hover: color.NRGBA{40, 32, 24, 13}, Pressed: color.NRGBA{40, 32, 24, 26},
+		SelectionActive: Hex("#d6e3fb"), SelectionInactive: Hex("#e8e5df"), TextSelection: Hex("#b9d0f7"),
+		Match: Hex("#f8e39b"), CurrentLine: Hex("#f7f4ee"),
+		Divider: Hex("#e3dfd8"), ControlBorder: Hex("#8a8378"),
 		Info: Hex("#1f5fd1"), InfoTint: Hex("#e3ecfc"),
 		Success: Hex("#17732f"), SuccessTint: Hex("#dcf2e2"),
 		Warning: Hex("#975e00"), WarningTint: Hex("#fbeed3"),
 		Danger: Hex("#c4302b"), DangerTint: Hex("#fce4e2"),
-		Diff:   DiffColors{Add: Hex("#e3f5e6"), AddWord: Hex("#a9dfb3"), Del: Hex("#fde8e7"), DelWord: Hex("#f6b9b5"), Fold: Hex("#eef1f5"), Blank: Hex("#f5f6f8")},
-		Syntax: SyntaxColors{Keyword: Hex("#7c3aed"), String: Hex("#1f7a3d"), Comment: Hex("#646b77"), Number: Hex("#a35200"), Type: Hex("#0b6e99"), Func: Hex("#1f5fd1")},
-		Shadow: color.NRGBA{16, 24, 40, 41},
+		Diff:   DiffColors{Add: Hex("#e3f5e6"), AddWord: Hex("#a9dfb3"), Del: Hex("#fde8e7"), DelWord: Hex("#f6b9b5"), Fold: Hex("#f0ede7"), Blank: Hex("#f6f4f0")},
+		Syntax: SyntaxColors{Keyword: Hex("#7c3aed"), String: Hex("#1f7a3d"), Comment: Hex("#6b665e"), Number: Hex("#a35200"), Type: Hex("#0b6e99"), Func: Hex("#1f5fd1")},
+		Shadow: color.NRGBA{40, 28, 16, 41},
 		ANSI: [16]color.NRGBA{
 			Hex("#24292f"), Hex("#cf222e"), Hex("#116329"), Hex("#9a6700"), Hex("#0550ae"), Hex("#8250df"), Hex("#1b7c83"), Hex("#6e7781"),
 			Hex("#57606a"), Hex("#a40e26"), Hex("#1a7f37"), Hex("#7d4e00"), Hex("#0969da"), Hex("#a475f9"), Hex("#3192aa"), Hex("#8c959f"),
@@ -189,19 +189,19 @@ func light() Palette {
 
 func dark() Palette {
 	return Palette{
-		Canvas: Hex("#121418"), Chrome: Hex("#1a1d22"), Content: Hex("#1f2228"), Field: Hex("#262a31"), Raised: Hex("#2a2e36"),
-		Text: Hex("#e6e8ec"), TextSecondary: Hex("#a7adb7"), TextMuted: Hex("#8f96a1"), TextDisabled: Hex("#5d636d"), OnAccent: Hex("#0b1220"),
+		Canvas: Hex("#141311"), Chrome: Hex("#1c1b18"), Content: Hex("#21201d"), Field: Hex("#2a2825"), Raised: Hex("#2f2d29"),
+		Text: Hex("#ece9e3"), TextSecondary: Hex("#b1aba1"), TextMuted: Hex("#999288"), TextDisabled: Hex("#645f57"), OnAccent: Hex("#0b1220"),
 		Accent: Hex("#6ea2ff"), AccentHover: Hex("#8bb5ff"), Focus: Hex("#8bb5ff"),
-		Hover: color.NRGBA{255, 255, 255, 15}, Pressed: color.NRGBA{255, 255, 255, 26},
-		SelectionActive: Hex("#24406b"), SelectionInactive: Hex("#2c3139"), TextSelection: Hex("#2f5390"),
-		Match: Hex("#5a4812"), CurrentLine: Hex("#252a32"),
-		Divider: Hex("#2c3037"), ControlBorder: Hex("#6b7380"),
+		Hover: color.NRGBA{255, 246, 232, 15}, Pressed: color.NRGBA{255, 246, 232, 26},
+		SelectionActive: Hex("#24406b"), SelectionInactive: Hex("#34312c"), TextSelection: Hex("#2f5390"),
+		Match: Hex("#5a4812"), CurrentLine: Hex("#292723"),
+		Divider: Hex("#322f2a"), ControlBorder: Hex("#7a7469"),
 		Info: Hex("#6ea2ff"), InfoTint: Hex("#1c2b44"),
 		Success: Hex("#4cc06a"), SuccessTint: Hex("#17321f"),
 		Warning: Hex("#e3a83b"), WarningTint: Hex("#382b11"),
 		Danger: Hex("#ff7b72"), DangerTint: Hex("#3d1f1f"),
-		Diff:   DiffColors{Add: Hex("#1d3326"), AddWord: Hex("#2f6440"), Del: Hex("#3a2326"), DelWord: Hex("#6e2f37"), Fold: Hex("#262a31"), Blank: Hex("#1b1e23")},
-		Syntax: SyntaxColors{Keyword: Hex("#c792ea"), String: Hex("#98c379"), Comment: Hex("#8f96a1"), Number: Hex("#e5a66b"), Type: Hex("#6cc5d9"), Func: Hex("#82aaff")},
+		Diff:   DiffColors{Add: Hex("#1d3326"), AddWord: Hex("#2f6440"), Del: Hex("#3a2326"), DelWord: Hex("#6e2f37"), Fold: Hex("#2a2825"), Blank: Hex("#1d1c19")},
+		Syntax: SyntaxColors{Keyword: Hex("#c792ea"), String: Hex("#98c379"), Comment: Hex("#a09a90"), Number: Hex("#e5a66b"), Type: Hex("#6cc5d9"), Func: Hex("#82aaff")},
 		Shadow: color.NRGBA{0, 0, 0, 128},
 		ANSI: [16]color.NRGBA{
 			Hex("#545862"), Hex("#e06c75"), Hex("#98c379"), Hex("#e5c07b"), Hex("#61afef"), Hex("#c678dd"), Hex("#56b6c2"), Hex("#dcdfe4"),

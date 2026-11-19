@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,8 +73,9 @@ func TestThemedCellsPaintTheSurfaces(t *testing.T) {
 	d := flatest.StartWith(app(), flatest.Options{Width: 120, Height: 40, Theme: &th})
 	t.Cleanup(d.Close)
 	frame := d.Frame().Content
-	for name, rgb := range map[string]string{"chrome": "26;29;34", "content": "31;34;40", "selection": "36;64;107"} {
-		if !strings.Contains(frame, "48;2;"+rgb) {
+	sgr := func(c color.NRGBA) string { return fmt.Sprintf("48;2;%d;%d;%d", c.R, c.G, c.B) }
+	for name, c := range map[string]color.NRGBA{"chrome": th.Dark.Chrome, "content": th.Dark.Content, "selection": th.Dark.SelectionActive} {
+		if !strings.Contains(frame, sgr(c)) {
 			t.Errorf("no %s background in the themed frame", name)
 		}
 	}

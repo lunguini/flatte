@@ -16,9 +16,9 @@ func withCellTheme(t *testing.T, p *theme.Palette) {
 func TestThemedCellsResolveRoles(t *testing.T) {
 	d := theme.Default()
 	withCellTheme(t, &d.Dark)
-	// A caption: upper case, bold, in TextMuted (#8f96a1 = 143;150;161).
+	// A caption: upper case, bold, in TextMuted (#999288 = 153;146;136).
 	out := TextStyle{Role: TextCaption}.Render("files")
-	if !strings.Contains(out, "FILES") || !strings.Contains(out, "38;2;143;150;161") || !strings.Contains(out, "1") {
+	if !strings.Contains(out, "FILES") || !strings.Contains(out, "38;2;153;146;136") || !strings.Contains(out, "1") {
 		t.Fatalf("caption: %q", out)
 	}
 	// A color role wins over the text role's color; Fg wins over both.
@@ -27,7 +27,7 @@ func TestThemedCellsResolveRoles(t *testing.T) {
 	}
 	// A fill paints its background in cells.
 	content, _ := SolveAndCompose(Row{NodeBase: NodeBase{W: Fixed(4), H: Fixed(1), Box: Box{Fill: FillChrome}}, Children: []Node{Label{Text: "ab"}}}, 4, 1)
-	if !strings.Contains(content, "48;2;26;29;34") { // Chrome #1a1d22
+	if !strings.Contains(content, "48;2;28;27;24") { // Chrome #1c1b18
 		t.Fatalf("chrome fill: %q", content)
 	}
 	// A translucent fill composes over the content surface.
