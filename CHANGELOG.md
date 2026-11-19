@@ -4,6 +4,13 @@ Generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [release-please](https://github.com/googleapis/release-please); entries
 below the first release are automated.
 
+## [0.4.1](https://github.com/lunguini/flatte/compare/v0.4.0...v0.4.1) (2026-11-19)
+
+
+### Build System
+
+* **window:** require flatte v0.4.0 ([#39](https://github.com/lunguini/flatte/issues/39)) ([b0a4184](https://github.com/lunguini/flatte/commit/b0a41848dbe51f3364dc0db1f30052aa3069c531))
+
 ## [0.4.0](https://github.com/lunguini/flatte/compare/v0.3.0...v0.4.0) (2026-11-19)
 
 
