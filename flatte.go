@@ -409,6 +409,15 @@ func WithoutBracketedPaste() Option {
 // MouseModeNone remains compatible with WithInline; reporting modes do not.
 func WithMouse(mode MouseMode) Option { return optionFunc(func(c *runConfig) { c.mouse = mode }) }
 
+// MouseMode is the mouse reporting the app asked for with WithMouse. A
+// graphical host reports the pointer moving with no button held only under
+// MouseModeAllMotion, as a terminal does.
+func (s *Session) MouseMode() MouseMode { return s.mouse }
+
+// UseMouseMode sets the session's mouse reporting. Run sets it from
+// WithMouse; an offscreen host calls it before the first step.
+func (s *Session) UseMouseMode(m MouseMode) { s.mouse = m }
+
 // WithReportFocus enables focus reporting; terminal focus changes arrive
 // as FocusEvent. Some terminals and multiplexers need configuration to
 // report focus (tmux: focus-events).
