@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/theme"
 )
@@ -214,3 +216,50 @@ func TestTabsTrailingCentered(t *testing.T) {
 		t.Errorf("label centers %v, want one line", ys)
 	}
 }
+
+// A tree row's chevron sits inside the row's left padding, not on its edge,
+// and a leaf keeps the chevron's room so its icon lines up with a folder's.
+func TestTreeRowDisclosure(t *testing.T) {
+	col := layout.Col{Children: []layout.Node{
+		ListRow{ID: "dir", Icon: layout.IconFolder, Title: "cmd", Disclosure: DisclosureOpen}.Layout(),
+		ListRow{ID: "file", Icon: layout.IconFile, Title: "main.go", Disclosure: DisclosureLeaf, TitleColor: layout.ColorSecondary}.Layout(),
+	}}
+	s := layout.LayoutScene(col, 300, 100, points)
+	var icons []layout.IconOp
+	for _, op := range s.Ops {
+		if i, ok := op.(layout.IconOp); ok {
+			icons = append(icons, i)
+		}
+	}
+	// dir: chevron, folder; file: blank, file.
+	if len(icons) < 3 {
+		t.Fatalf("%d icons drawn", len(icons))
+	}
+	row := s.Rects["dir"]
+	if chev := icons[0]; chev.Name != layout.IconDisclosureOpen || chev.Rect.X < row.X+points.Step {
+		t.Errorf("chevron %+v at the row's edge (row x %v)", chev, row.X)
+	}
+	var folder, file layout.IconOp
+	for _, i := range icons {
+		switch i.Name {
+		case layout.IconFolder:
+			folder = i
+		case layout.IconFile:
+			file = i
+		}
+	}
+	if folder.Rect.X != file.Rect.X {
+		t.Errorf("leaf icon at %v, folder icon at %v", file.Rect.X, folder.Rect.X)
+	}
+	// Still clickable with a dimmed title.
+	if !(ListRow{TitleColor: layout.ColorDisabled}.Layout().(layout.Row).Box.Interactive) {
+		t.Error("a dimmed row stopped hovering")
+	}
+	// Terminal: "▾" one cell in, after the padding.
+	c := layout.Compose(col, 30, 2)
+	if !strings.HasPrefix(stripANSI(c.Frame), " ▾") {
+		t.Errorf("cells: %q", c.Frame)
+	}
+}
+
+func stripANSI(s string) string { return ansi.Strip(s) }

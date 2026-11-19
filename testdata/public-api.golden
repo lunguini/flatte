@@ -946,6 +946,10 @@ flatui package flatui
   var TabGlyphsPowerline TabGlyphs
   var TabGlyphsSafe TabGlyphs
 flatui/kit package kit
+  const DisclosureClosed Disclosure = 2
+  const DisclosureLeaf Disclosure = 1
+  const DisclosureNone Disclosure = 0
+  const DisclosureOpen Disclosure = 3
   const ToneAccent Tone = 1
   const ToneDanger Tone = 5
   const ToneInfo Tone = 2
@@ -973,6 +977,7 @@ flatui/kit package kit
   field Badge.Text string [order=0]
   field Badge.Tone Tone [order=1]
   struct Badge fields=2 comparable=true
+  type Disclosure int
   type EmptyState struct
   field EmptyState.ID string [order=0]
   field EmptyState.Icon layout.IconName [order=1]
@@ -990,7 +995,10 @@ flatui/kit package kit
   field ListRow.Active bool [order=6]
   field ListRow.Indent int [order=7]
   field ListRow.Disabled bool [order=8]
-  struct ListRow fields=9 comparable=false
+  field ListRow.Disclosure Disclosure [order=9]
+  field ListRow.TitleColor layout.TextColor [order=10]
+  field ListRow.Italic bool [order=11]
+  struct ListRow fields=12 comparable=false
   type PaneHeader struct
   field PaneHeader.ID string [order=0]
   field PaneHeader.Title string [order=1]

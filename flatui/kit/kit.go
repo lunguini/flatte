@@ -118,18 +118,48 @@ type ListRow struct {
 	Active   bool
 	Indent   int
 	Disabled bool
+	// Disclosure is a tree row's chevron, before the icon: DisclosureLeaf
+	// keeps the chevron's room empty so leaves line up with folders.
+	Disclosure Disclosure
+	// TitleColor colors the title (and dims the icon with it) while the row
+	// stays clickable: secondary files, disabled-grey ignored entries.
+	TitleColor layout.TextColor
+	// Italic sets the title in italics (a placeholder, a preview).
+	Italic bool
 }
+
+// Disclosure is a tree row's expand state (ListRow.Disclosure).
+type Disclosure int
+
+const (
+	// DisclosureNone is no chevron and no room for one (a flat list).
+	DisclosureNone Disclosure = iota
+	// DisclosureLeaf is the chevron's room, empty: a file among folders.
+	DisclosureLeaf
+	DisclosureClosed
+	DisclosureOpen
+)
 
 func (r ListRow) Layout() layout.Node {
 	kids := []layout.Node{}
-	color := layout.ColorDefault
+	color := r.TitleColor
 	if r.Disabled {
 		color = layout.ColorDisabled
+	}
+	if r.Disclosure != DisclosureNone {
+		name, g := layout.IconBlank, " "
+		switch r.Disclosure {
+		case DisclosureClosed:
+			name, g = layout.IconDisclosureClosed, "▸"
+		case DisclosureOpen:
+			name, g = layout.IconDisclosureOpen, "▾"
+		}
+		kids = append(kids, layout.Icon{NodeBase: layout.NodeBase{W: layout.Points(disclosurePoints)}, Name: name, Text: g, Style: layout.TextStyle{Color: iconColor(r)}})
 	}
 	if r.Icon != layout.IconNone {
 		kids = append(kids, icon(r.Icon, iconColor(r)))
 	}
-	title := layout.TextStyle{Color: color}
+	title := layout.TextStyle{Color: color, Italic: r.Italic}
 	if r.Selected && r.Active {
 		title.Role = layout.TextStrong
 	}
@@ -151,9 +181,13 @@ func (r ListRow) Layout() layout.Node {
 	}
 }
 
+// disclosurePoints is a chevron's width in a window (a cell in a terminal,
+// before the row's gap).
+const disclosurePoints = 8
+
 func iconColor(r ListRow) layout.TextColor {
 	switch {
-	case r.Disabled:
+	case r.Disabled || r.TitleColor == layout.ColorDisabled:
 		return layout.ColorDisabled
 	case r.Selected && r.Active:
 		return layout.ColorAccent
