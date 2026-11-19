@@ -100,6 +100,7 @@ flatte package flatte
   method *Scope.Ctx() context.Context
   method *Session.Cancel()
   method *Session.ContextMenu(target string)[]MenuItem
+  method *Session.MouseMode() MouseMode
   method *Session.PreciseScrolling() bool
   method *Session.QuitRequests() bool
   method *Session.State() HostState
@@ -108,6 +109,7 @@ flatte package flatte
   method *Session.ThemeVersion() uint64
   method *Session.Updates() <-chan struct{}
   method *Session.UseHostServices(services HostServices)
+  method *Session.UseMouseMode(m MouseMode)
   method *Session.UseTheme(t theme.Theme)
   method *Session.UsesNowPlaying() bool
   method *Session.WindowFrame(id string)(Frame, bool)
@@ -417,16 +419,17 @@ flatte package flatte
   field Session.<unexported> bool [order=23]
   field Session.<unexported> bool [order=24]
   field Session.<unexported> bool [order=25]
-  field Session.<unexported> bool [order=26]
+  field Session.<unexported> MouseMode [order=26]
   field Session.<unexported> bool [order=27]
-  field Session.<unexported> func(*NowPlaying) [order=28]
-  field Session.<unexported> *sessionCell [order=29]
-  field Session.<unexported> *theme.Theme [order=30]
+  field Session.<unexported> bool [order=28]
+  field Session.<unexported> func(*NowPlaying) [order=29]
+  field Session.<unexported> *sessionCell [order=30]
   field Session.<unexported> *theme.Theme [order=31]
   field Session.<unexported> *theme.Theme [order=32]
-  field Session.<unexported> uint64 [order=33]
-  field Session.<unexported> bool [order=34]
-  struct Session fields=35 comparable=false
+  field Session.<unexported> *theme.Theme [order=33]
+  field Session.<unexported> uint64 [order=34]
+  field Session.<unexported> bool [order=35]
+  struct Session fields=36 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string
