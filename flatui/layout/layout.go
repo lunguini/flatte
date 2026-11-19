@@ -333,8 +333,10 @@ const (
 // Fill is a background by theme role, for when Background is nil: a GUI
 // paints the current theme's color for the role and follows the system's
 // light/dark switch, so the app never picks a color that only reads on one
-// appearance. Background wins when both are set. Terminals ignore Fill:
-// their own background shows.
+// appearance. Background wins when both are set. A terminal paints Fill
+// in true color while the app has a theme (WithTheme or Frame.Theme),
+// translucent fills composed over Content; without one its own
+// background shows.
 type Box struct {
 	Border      BorderKind
 	BorderColor color.Color
