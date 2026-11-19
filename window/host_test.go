@@ -530,3 +530,28 @@ func TestHostPrecisePointer(t *testing.T) {
 		t.Fatalf("pointer %#v, want (2.5, 0.25) over cell (2, 0)", m)
 	}
 }
+
+// A window reports the pointer moving with no button held only to an app
+// that asked for MouseModeAllMotion, as a terminal does; the event names
+// the node under the pointer.
+func TestHostReportsPointerMotionWhenAsked(t *testing.T) {
+	s := &testState{root: listTree}
+	h, _ := newTestHost(t, s)
+	h.start(160, 160)
+	h.render()
+	r := h.scene.Rects["row1"]
+	n := len(s.events)
+	h.pointerMoved(30, r.Y+5, 0)
+	if len(s.events) != n {
+		t.Fatalf("motion delivered without MouseModeAllMotion: %+v", s.events[n:])
+	}
+	h.session.UseMouseMode(flatte.MouseModeAllMotion)
+	h.pointerMoved(30, r.Y+5, flatte.ModShift)
+	ev, ok := s.events[len(s.events)-1].(flatte.MouseEvent)
+	if !ok || ev.Action != flatte.MouseMotion || ev.Button != flatte.MouseNone || ev.Target != "row1" || ev.Mod != flatte.ModShift {
+		t.Fatalf("motion = %+v", s.events[len(s.events)-1])
+	}
+	if h.session.MouseMode() != flatte.MouseModeAllMotion {
+		t.Fatal("MouseMode not kept")
+	}
+}

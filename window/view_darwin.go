@@ -366,6 +366,7 @@ func viewMethods() []objc.MethodDef {
 				p := location(self, event)
 				shape, tip := st.ui.hover(p.X, p.Y)
 				st.showPointer(self, shape, tip)
+				st.ui.pointerMoved(p.X, p.Y, eventMods(event))
 			}
 		}},
 		{Cmd: sel("mouseExited:"), Fn: func(self objc.ID, _ objc.SEL, _ objc.ID) {

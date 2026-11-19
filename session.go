@@ -70,10 +70,12 @@ type Session struct {
 	quitRequests  bool
 	// preciseScrolling: see WithPreciseScrolling.
 	preciseScrolling bool
-	inline           bool
-	dirty            bool
-	publishMedia     func(*NowPlaying)
-	cell             *sessionCell
+	// mouse is the mouse reporting the app asked for (WithMouse).
+	mouse        MouseMode
+	inline       bool
+	dirty        bool
+	publishMedia func(*NowPlaying)
+	cell         *sessionCell
 	// theme is the app's design system (WithTheme, UseTheme); nil: the
 	// host's default.
 	theme        *theme.Theme
@@ -413,6 +415,7 @@ func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool
 	session := newSession(ctx, app)
 	session.quitRequests = config.config.quitRequests
 	session.preciseScrolling = config.config.preciseScrolling
+	session.mouse = config.config.mouse
 	session.theme = config.config.theme
 	session.runTerminal = func(runCtx context.Context, options ...Option) error {
 		runConfig := applyRunOptions(config.config, options...).config

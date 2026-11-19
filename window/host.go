@@ -154,6 +154,7 @@ type ui interface {
 	drop(x, y float64, paths []string, text string)
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
 	mouseClicks(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod, clicks int)
+	pointerMoved(x, y float64, mod flatte.Mod)
 	// hit is the ID of the node at (x, y) in a fresh scene ("": none).
 	hit(x, y float64) string
 	wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod)
@@ -992,6 +993,16 @@ func (s *surface) mouseClicks(x, y float64, button flatte.MouseButton, action fl
 		}
 	}
 	h.handle(ev)
+}
+
+// pointerMoved reports the pointer moving with no button held, as a
+// MouseMotion naming the node under it, to an app that asked for
+// MouseModeAllMotion (the host's own hover feedback draws either way).
+func (s *surface) pointerMoved(x, y float64, mod flatte.Mod) {
+	if s.h.session.MouseMode() != flatte.MouseModeAllMotion || s.drag != "" {
+		return
+	}
+	s.mouse(x, y, flatte.MouseNone, flatte.MouseMotion, mod)
 }
 
 func (s *surface) hit(x, y float64) string {
