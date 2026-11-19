@@ -2,8 +2,8 @@
   ○  Colors                                                                                                             
   i  Type                                                                                                               
   •  Space & shape         Components                                                                                   
-  ⚙  Components            flatui/kit: every piece below is built from the theme's roles and sizes — turn the dials     
-  •  App shell             above.                                                                                       
+  ⚙  Components            flatui/kit and the controls: built from the theme's roles, sizes and radii — turn the dials  
+  •  App shell             above; Tab moves focus.                                                                      
                                                                                                                         
                            PANE HEADER                                                                                  
                                                                                                                         
@@ -21,20 +21,20 @@
                             ▤  README.md                                                              cmd/flat-design   
                             selected, list not focused                                                                  
                                                                                                                         
-                           BUTTONS                                                                                      
+                           BUTTONS — PRIMARY, SECONDARY, QUIET, DANGER, ICON                                            
                                                                                                                         
-                           [ Commit ] [ Discard ]  Later  [search]                                                      
+                           [ Commit ] [ Discard ]  Later  [ Delete branch ] [search]                                    
                                                                                                                         
-                           BADGES                                                                                       
+                           [ Commit ] [ Discard ]  Later  disabled                                                      
                                                                                                                         
-                            idle   working   ready   needs you   failed   3                                             
+                           FIELDS                                                                                       
                                                                                                                         
-                           SETTINGS                                                                                     
+                           Go to file…                  read only                                                       
                                                                                                                         
-                            EDITOR                                                                                      
+                           CHECKBOXES, RADIOS, SWITCHES, SLIDER                                                         
                                                                                                                         
-                            Wrap lines                                                                           [ ●]   
-                            Soft-wrap lines longer than the pane.                                                       
+                           [x] Format on save  [ ] Trim whitespace  [x] Disabled                                        
                                                                                                                         
-                            Indent with                                                     Tabs  2 spaces  4 spaces    
+                           ( ) Light  ( ) Dark  (•) System                                                              
                                                                                                                         
+                           [ ●] Autosave  [○ ] Disabled                                                                 

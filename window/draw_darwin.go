@@ -43,6 +43,8 @@ type theme struct {
 	// roles resolve in (resolveStyle).
 	pal *ds.Palette
 	ts  ds.TypeScale
+	// lk is the control recipe: radii, washes, focus (Theme.look).
+	lk look
 }
 
 // fill is th's color for a Box.Fill role, and whether the role has one.
@@ -77,6 +79,7 @@ func newTheme(t Theme) theme {
 		appearance: t.appearance(),
 		ansi:       t.ANSI,
 		pal:        t.palette(), ts: t.typeScale(),
+		lk: t.look(),
 	}
 }
 
@@ -569,21 +572,22 @@ func (p *painter) backdrop(op layout.BoxOp, bd layout.Backdrop) {
 	p.image(layout.ImageOp{Rect: op.Rect, Clip: intersect(op.Rect, op.Clip), Source: src, Fit: layout.ImageCover})
 }
 
-// hoverFill draws a box's Hover fill at its node's hover level.
+// hoverFill draws a box's hover feedback at its node's hover and press
+// levels: its Hover color, or for an Interactive box the theme's hover
+// wash turning into the pressed wash.
 func (p *painter) hoverFill(op layout.BoxOp) {
 	if op.ID == "" || op.Box.Hover == nil && !op.Box.Interactive {
 		return
 	}
-	level := p.hovers[op.ID] + 0.5*p.presses[op.ID]
-	if level <= 0 {
+	hot, down := p.hovers[op.ID], p.presses[op.ID]
+	if hot <= 0 && down <= 0 {
 		return
 	}
-	c := p.th.text
-	c.A = 0.08
+	c := p.th.lk.wash(hot, down)
 	if op.Box.Hover != nil {
 		c = rgbaOf(op.Box.Hover)
+		c.A *= min(hot+0.5*down, 1.5)
 	}
-	c.A *= min(level, 1.5)
 	r := rectOf(op.Rect)
 	p.fill(c)
 	if op.Box.Round {
@@ -591,6 +595,15 @@ func (p *painter) hoverFill(op layout.BoxOp) {
 		return
 	}
 	p.cellFill(c, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H)
+}
+
+// edge draws a Box.Edge: a band of the accent, the focus stroke thick.
+func (p *painter) edge(op layout.BoxOp) {
+	r, ok := edgeRect(op.Rect, op.Box.Edge, p.th.lk.focusWidth)
+	if !ok {
+		return
+	}
+	p.clipped(op.Clip, func() { p.cellFill(p.th.lk.accent, r.X, r.Y, r.W, r.H) })
 }
 
 // box draws a Box. A border is a rounded stroke down the middle of its
@@ -603,6 +616,7 @@ func (p *painter) box(op layout.BoxOp) {
 		p.backdrop(op, *bd)
 	}
 	defer p.hoverFill(op)
+	defer p.edge(op)
 	if op.Box.Selected {
 		r := rectOf(op.Rect)
 		p.fill(p.th.selection)
@@ -861,18 +875,19 @@ func (p *painter) input(op layout.InputOp) {
 			if !op.Multiline {
 				field = controlBezel(outer)
 			}
-			rad := min(p.th.radiusOf(layout.BorderNormal), field.Size.Height/2)
-			p.fill(p.th.field)
+			lk := p.th.lk
+			rad := min(lk.radius, field.Size.Height/2)
+			p.fill(lk.field)
 			p.roundedPath(field, rad, func() { cgContextFillPath(p.ctx) })
-			outline := p.th.border
+			outline, width := lk.border, lk.control
 			if p.hovered == op.ID || p.hovered == clearHoverID(op.ID) {
 				outline = mix(outline, p.th.text, 0.22)
 			}
-			if op.Focused {
-				outline = p.th.caret
+			if op.Focused { // the outline turns focus at the focus width
+				outline, width = lk.focus, lk.focusWidth
 			}
 			p.stroke(outline)
-			cgContextSetLineWidth(p.ctx, strokeWidth)
+			cgContextSetLineWidth(p.ctx, width)
 			p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
 		})
 	}

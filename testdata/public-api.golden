@@ -1127,6 +1127,11 @@ flatui/layout package layout
   const ResizeColumns Resize = 1
   const ResizeNone Resize = 0
   const ResizeRows Resize = 2
+  const SideBottom Side = 2
+  const SideLeft Side = 3
+  const SideNone Side = 0
+  const SideRight Side = 4
+  const SideTop Side = 1
   const SizeAuto SizeKind = 0
   const SizeContent SizeKind = 3
   const SizeFixed SizeKind = 1
@@ -1304,7 +1309,8 @@ flatui/layout package layout
   field Box.InsetY float64 [order=10]
   field Box.Fill Fill [order=11]
   field Box.Resize Resize [order=12]
-  struct Box fields=13 comparable=true
+  field Box.Edge Side [order=13]
+  struct Box fields=14 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
@@ -1555,6 +1561,7 @@ flatui/layout package layout
   field ScrollBarOp.Show bool [order=4]
   field ScrollBarOp.Color color.Color [order=5]
   struct ScrollBarOp fields=6 comparable=true
+  type Side int
   type Size struct
   field Size.Kind SizeKind [order=0]
   field Size.Value int [order=1]

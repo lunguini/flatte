@@ -12,6 +12,7 @@ import (
 	"image/color"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -48,7 +49,16 @@ const (
 	idWrap     = "wrap"
 	idPopover  = "popover"
 	idOpen     = "open"
+	idMode     = "mode"
+	idQuery    = "query"
+	idFont     = "font"
+	idRadio    = "radio:"
+	idVolume   = "volume"
 )
+
+// controls are the focusable demo controls, in Tab order.
+var controls = []string{"primary", "secondary", "quiet", "danger", "icon", idQuery, "check:format", "check:trim",
+	idRadio + "0", idRadio + "1", idRadio + "2", "switch:autosave", idVolume, idChoice, idWrap, idFont}
 
 // accents are the showcase's accent seeds (all pass theme.Check).
 var accents = []struct {
@@ -66,21 +76,32 @@ var (
 	densities    = []theme.Density{theme.Compact, theme.Regular, theme.Comfortable}
 	shapeNames   = []string{"Square", "Subtle", "Round"}
 	shapes       = []theme.Roundness{theme.Square, theme.Subtle, theme.Round}
+	modeNames    = []string{"System", "Light", "Dark"}
 )
 
 // State is the page shown, the dials, and the component demos' state.
 type State struct {
 	page                   int
 	density, shape, accent int // indexes into densities, shapes, accents
+	mode                   int // 0 follows the system, 1 light, 2 dark
 	theme                  theme.Theme
 
 	row, tab, choice int
 	wrap, popover    bool
+
+	// focus is the focused demo control's ID ("": none); the rest is the
+	// Controls group's state.
+	focus        string
+	query        string
+	format, trim bool
+	radio        int
+	autosave     bool
+	volume       float64
 }
 
 // NewState opens on the colors in the default theme.
 func NewState() *State {
-	s := &State{density: 1, shape: 1, tab: 0, choice: 1, wrap: true}
+	s := &State{density: 1, shape: 1, tab: 0, choice: 1, wrap: true, format: true, radio: 2, autosave: true, volume: 0.6}
 	s.restyle()
 	return s
 }
@@ -94,6 +115,12 @@ func (s *State) restyle() {
 		seeds.Accent = &pair
 	}
 	s.theme = theme.Default().With(seeds)
+	switch s.mode { // one palette for both appearances pins the look
+	case 1:
+		s.theme.Dark = s.theme.Light
+	case 2:
+		s.theme.Light = s.theme.Dark
+	}
 }
 
 // Handle moves between pages (↑/↓, 1–5, a click), turns the dials (d, r,
@@ -101,6 +128,9 @@ func (s *State) restyle() {
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
 	case flatte.KeyEvent:
+		if controlKey(s, e) {
+			return
+		}
 		switch {
 		case e.Key == flatte.KeyUp:
 			s.page = (s.page + pageCount - 1) % pageCount
@@ -117,8 +147,11 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		case e.Key == flatte.KeyCharacter && e.Rune == 'a':
 			s.accent = (s.accent + 1) % len(accents)
 			s.restyle()
+		case e.Key == flatte.KeyCharacter && e.Rune == 'm':
+			s.mode = (s.mode + 1) % len(modeNames)
+			s.restyle()
 		case e.Key == flatte.KeyEscape:
-			s.popover = false
+			s.popover, s.focus = false, ""
 		case e.Key == flatte.KeyCharacter && e.Rune == 'q', e.Key == flatte.KeyCtrlC:
 			fx.Quit()
 		}
@@ -126,8 +159,62 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		if e.Action != flatte.MousePress || e.Button != flatte.MouseLeft {
 			return
 		}
+		if e.Target == idVolume {
+			s.volume = layout.Slider{}.ValueAt(e.X-e.TargetRect.X, e.TargetRect.W)
+		}
 		click(s, e.Target)
 	}
+}
+
+// controlKey moves focus through the demo controls (Tab, Shift-Tab), types
+// into the focused field, and works the focused control (Space, Enter,
+// ←/→); it reports whether it used the key.
+func controlKey(s *State, e flatte.KeyEvent) bool {
+	if e.Key == flatte.KeyTab {
+		i := slices.Index(controls, s.focus)
+		switch {
+		case e.Mod&flatte.ModShift != 0 && i <= 0:
+			i = len(controls) - 1
+		case e.Mod&flatte.ModShift != 0:
+			i--
+		default:
+			i = (i + 1) % len(controls)
+		}
+		s.focus = controls[i]
+		return true
+	}
+	if s.focus == "" {
+		return false
+	}
+	switch {
+	case s.focus == idQuery && e.Key == flatte.KeyCharacter && e.Mod&(flatte.ModCtrl|flatte.ModAlt) == 0:
+		s.query += string(e.Rune)
+	case s.focus == idQuery && e.Key == flatte.KeyBackspace:
+		if r := []rune(s.query); len(r) > 0 {
+			s.query = string(r[:len(r)-1])
+		}
+	case e.Key == flatte.KeyEnter, e.Key == flatte.KeyCharacter && e.Rune == ' ':
+		click(s, s.focus)
+	case e.Key == flatte.KeyLeft || e.Key == flatte.KeyRight:
+		step := 1
+		if e.Key == flatte.KeyLeft {
+			step = -1
+		}
+		switch {
+		case s.focus == idVolume:
+			s.volume = min(max(s.volume+0.05*float64(step), 0), 1)
+		case s.focus == idChoice:
+			s.choice = min(max(s.choice+step, 0), 2)
+		case strings.HasPrefix(s.focus, idRadio):
+			s.radio = min(max(s.radio+step, 0), 2)
+			s.focus = idRadio + strconv.Itoa(s.radio)
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+	return true
 }
 
 func click(s *State, target string) {
@@ -147,10 +234,14 @@ func click(s *State, target string) {
 	dial(idDensity, len(densities), &s.density)
 	dial(idShape, len(shapes), &s.shape)
 	dial(idAccent, len(accents), &s.accent)
+	dial(idMode, len(modeNames), &s.mode)
 	for i := range 3 {
 		if target == kit.OptionID(idChoice, i) {
-			s.choice = i
+			s.choice, s.focus = i, idChoice
 		}
+	}
+	if slices.Contains(controls, target) {
+		s.focus = target
 	}
 	switch {
 	case strings.HasPrefix(target, rowPrefix):
@@ -159,6 +250,14 @@ func click(s *State, target string) {
 		s.tab, _ = strconv.Atoi(target[len(tabPrefix):])
 	case target == idWrap:
 		s.wrap = !s.wrap
+	case target == "check:format":
+		s.format = !s.format
+	case target == "check:trim":
+		s.trim = !s.trim
+	case strings.HasPrefix(target, idRadio):
+		s.radio, _ = strconv.Atoi(target[len(idRadio):])
+	case target == "switch:autosave":
+		s.autosave = !s.autosave
 	case target == idOpen:
 		s.popover = !s.popover
 	}
@@ -241,6 +340,7 @@ func dials(s *State) layout.Node {
 			dial("Density", idDensity, densityNames, s.density),
 			dial("Shape", idShape, shapeNames, s.shape),
 			dial("Accent", idAccent, names, s.accent),
+			dial("Appearance", idMode, modeNames, s.mode),
 		},
 	}
 }
@@ -258,11 +358,51 @@ func componentsPage(s *State) layout.Node {
 	}
 	inactive := kit.ListRow{Title: "selected, list not focused", Selected: true}.Layout()
 	tabs := []kit.Tab{{ID: tabPrefix + "0", Label: "main.go"}, {ID: tabPrefix + "1", Label: "theme.go", Modified: true}, {ID: tabPrefix + "2", Label: "kit.go"}}
-	buttons := layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
-		layout.Button{NodeBase: layout.NodeBase{ID: "primary"}, Label: "Commit", Default: true},
-		layout.Button{NodeBase: layout.NodeBase{ID: "secondary"}, Label: "Discard"},
-		layout.Button{NodeBase: layout.NodeBase{ID: "quiet"}, Label: "Later", Plain: true},
-		layout.Button{NodeBase: layout.NodeBase{ID: "icon"}, Icon: layout.IconSearch, Label: "search"},
+	f := func(id string) bool { return s.focus == id }
+	button := func(id, label string, primary, quiet, disabled bool) layout.Node {
+		return layout.Button{NodeBase: layout.NodeBase{ID: id}, Label: label, Default: primary, Plain: quiet, Disabled: disabled, Focused: f(id)}
+	}
+	buttons := layout.Col{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+		layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+			button("primary", "Commit", true, false, false),
+			button("secondary", "Discard", false, false, false),
+			button("quiet", "Later", false, true, false),
+			layout.Button{NodeBase: layout.NodeBase{ID: "danger"}, Label: "Delete branch", Style: layout.TextStyle{Color: layout.ColorDanger}, Focused: f("danger")},
+			layout.Button{NodeBase: layout.NodeBase{ID: "icon", Tooltip: "Search"}, Icon: layout.IconSearch, Label: "search", Focused: f("icon")},
+		}},
+		layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+			button("", "Commit", true, false, true),
+			button("", "Discard", false, false, true),
+			button("", "Later", false, true, true),
+			layout.Label{Text: "disabled", Style: layout.TextStyle{Role: layout.TextMeta, Color: layout.ColorMuted}},
+		}},
+	}}
+	fields := layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+		layout.Input{NodeBase: layout.NodeBase{ID: idQuery, W: layout.Fixed(28)}, Value: s.query, Caret: len([]rune(s.query)), Placeholder: "Go to file…", Focused: f(idQuery)},
+		layout.Input{NodeBase: layout.NodeBase{W: layout.Fixed(16)}, Value: "read only"},
+	}}
+	toggle := func(id, label string, kind layout.ToggleKind, on, disabled bool) layout.Node {
+		return layout.Toggle{NodeBase: layout.NodeBase{ID: id}, Kind: kind, Label: label, Checked: on, Disabled: disabled, Focused: f(id)}
+	}
+	radios := make([]layout.Node, 3)
+	for i, name := range []string{"Light", "Dark", "System"} {
+		radios[i] = toggle(idRadio+strconv.Itoa(i), name, layout.ToggleRadio, s.radio == i, false)
+	}
+	toggles := layout.Col{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
+		layout.Row{NodeBase: layout.NodeBase{Gap: 2}, Children: []layout.Node{
+			toggle("check:format", "Format on save", layout.ToggleCheckbox, s.format, false),
+			toggle("check:trim", "Trim whitespace", layout.ToggleCheckbox, s.trim, false),
+			toggle("", "Disabled", layout.ToggleCheckbox, true, true),
+		}},
+		layout.Row{NodeBase: layout.NodeBase{Gap: 2}, Children: radios},
+		layout.Row{NodeBase: layout.NodeBase{Gap: 2}, Children: []layout.Node{
+			toggle("switch:autosave", "Autosave", layout.ToggleSwitch, s.autosave, false),
+			toggle("", "Disabled", layout.ToggleSwitch, false, true),
+		}},
+		layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Align: layout.AlignCenter, Children: []layout.Node{
+			layout.Label{Text: "Volume", Style: layout.TextStyle{Color: layout.ColorSecondary}},
+			layout.Slider{NodeBase: layout.NodeBase{ID: idVolume, W: layout.Fixed(24)}, Value: s.volume, Focused: f(idVolume)},
+		}},
 	}}
 	badges := layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
 		kit.Badge{Text: "idle"}.Layout(), kit.Badge{Text: "working", Tone: kit.ToneInfo}.Layout(),
@@ -270,9 +410,9 @@ func componentsPage(s *State) layout.Node {
 		kit.Badge{Text: "failed", Tone: kit.ToneDanger}.Layout(), kit.Badge{Text: "3", Tone: kit.ToneAccent}.Layout(),
 	}}
 	settings := kit.Section{Title: "Editor", Children: []layout.Node{
-		kit.Setting{ID: "set:wrap", Name: "Wrap lines", Description: "Soft-wrap lines longer than the pane.", Control: layout.Toggle{NodeBase: layout.NodeBase{ID: idWrap}, Kind: layout.ToggleSwitch, Checked: s.wrap}}.Layout(),
-		kit.Setting{ID: "set:tabs", Name: "Indent with", Control: kit.Segmented{ID: idChoice, Options: []string{"Tabs", "2 spaces", "4 spaces"}, Selected: s.choice}.Layout()}.Layout(),
-		kit.Setting{ID: "set:font", Name: "Font", Control: layout.Input{NodeBase: layout.NodeBase{ID: "font", W: layout.Fixed(20)}, Value: "Menlo"}}.Layout(),
+		kit.Setting{ID: "set:wrap", Name: "Wrap lines", Description: "Soft-wrap lines longer than the pane.", Control: layout.Toggle{NodeBase: layout.NodeBase{ID: idWrap}, Kind: layout.ToggleSwitch, Checked: s.wrap, Focused: f(idWrap)}}.Layout(),
+		kit.Setting{ID: "set:tabs", Name: "Indent with", Control: kit.Segmented{ID: idChoice, Options: []string{"Tabs", "2 spaces", "4 spaces"}, Selected: s.choice, Focused: f(idChoice)}.Layout()}.Layout(),
+		kit.Setting{ID: "set:font", Name: "Font", Control: layout.Input{NodeBase: layout.NodeBase{ID: idFont, W: layout.Fixed(20)}, Value: "Menlo", Focused: f(idFont)}}.Layout(),
 	}}
 	body := layout.Col{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
 		group("Pane header", kit.PaneHeader{Title: "Changes", Meta: "4 files", Actions: []layout.Node{
@@ -280,7 +420,9 @@ func componentsPage(s *State) layout.Node {
 		}}.Layout()),
 		group("Tabs", kit.Tabs{Tabs: tabs, Active: s.tab}.Layout()),
 		group("List rows", layout.Col{Children: append(rows, inactive)}),
-		group("Buttons", buttons),
+		group("Buttons — primary, secondary, quiet, danger, icon", buttons),
+		group("Fields", fields),
+		group("Checkboxes, radios, switches, slider", toggles),
 		group("Badges", badges),
 		group("Settings", settings.Layout()),
 		group("Popover", layout.Row{Children: []layout.Node{
@@ -300,7 +442,7 @@ func componentsPage(s *State) layout.Node {
 			kit.ListRow{Icon: layout.IconFile, Title: "kit.go", Meta: "flatui/kit"}.Layout(),
 		}}.Layout())
 	}
-	return page("Components", "flatui/kit: every piece below is built from the theme's roles and sizes — turn the dials above.",
+	return page("Components", "flatui/kit and the controls: built from the theme's roles, sizes and radii — turn the dials above; Tab moves focus.",
 		layout.Col{Children: kids})
 }
 

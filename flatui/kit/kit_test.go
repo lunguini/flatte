@@ -101,3 +101,22 @@ func TestTonesHaveTints(t *testing.T) {
 		}
 	}
 }
+
+// The active tab carries the accent edge on top; the others hover.
+func TestActiveTabEdge(t *testing.T) {
+	row := Tabs{Tabs: []Tab{{ID: "a", Label: "one"}, {ID: "b", Label: "two"}}, Active: 1}.Layout().(layout.Row)
+	a, b := row.Children[0].(layout.Row).Box, row.Children[1].(layout.Row).Box
+	if a.Edge != layout.SideNone || !a.Interactive {
+		t.Errorf("inactive tab %+v", a)
+	}
+	if b.Edge != layout.SideTop || b.Fill != layout.FillContent {
+		t.Errorf("active tab %+v", b)
+	}
+	s := layout.LayoutScene(row, 400, 40, points)
+	for _, op := range s.Ops {
+		if bo, ok := op.(layout.BoxOp); ok && bo.ID == "b" && bo.Box.Edge == layout.SideTop {
+			return
+		}
+	}
+	t.Error("the active tab's edge is not in the scene")
+}

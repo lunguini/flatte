@@ -171,7 +171,8 @@ type Tab struct {
 }
 
 // Tabs is a tab strip at the bar height on the chrome surface: the active
-// tab sits on the content surface in strong text, the others in secondary
+// tab sits on the content surface in strong text under an accent edge
+// (Box.Edge, in a window), the others in secondary
 // text. Each tab's node ID is Tab.ID; Trailing nodes (a new-tab button)
 // follow the tabs.
 type Tabs struct {
@@ -189,7 +190,7 @@ func (t Tabs) Layout() layout.Node {
 		box := layout.Box{Interactive: !active}
 		if active {
 			style = layout.TextStyle{Role: layout.TextStrong}
-			box.Fill = layout.FillContent
+			box.Fill, box.Edge = layout.FillContent, layout.SideTop
 		}
 		parts := []layout.Node{}
 		if tab.Icon != layout.IconNone {

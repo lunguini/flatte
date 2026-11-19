@@ -24,7 +24,6 @@ const (
 	canvasMeterThickness = 6.0
 	canvasThumbWidth     = 5.0
 	canvasThumbMin       = 16.0
-	canvasFocusRing      = 2.0
 )
 
 type canvasImage struct {
@@ -299,6 +298,9 @@ func (p *canvasPainter) box(op layout.BoxOp) {
 			p.textLine(op.Box.Title, style, x, in.Y-font.pitch/2, font)
 		}
 	}
+	if r, ok := edgeRect(op.Rect, op.Box.Edge, p.theme.look().focusWidth); ok {
+		p.fillRect(r, colorFromRGBA(p.theme.look().accent))
+	}
 	p.hoverFill(op)
 }
 
@@ -306,16 +308,16 @@ func (p *canvasPainter) hoverFill(op layout.BoxOp) {
 	if op.ID == "" || op.Box.Hover == nil && !op.Box.Interactive {
 		return
 	}
-	level := p.level(p.pres.hovers, op.ID, op.ID == p.pres.hovered, false) + 0.5*p.level(p.pres.presses, op.ID, op.ID == p.pres.pressed, false)
-	if level <= 0 {
+	hot := p.level(p.pres.hovers, op.ID, op.ID == p.pres.hovered, false)
+	down := p.level(p.pres.presses, op.ID, op.ID == p.pres.pressed, false)
+	if hot <= 0 && down <= 0 {
 		return
 	}
-	c := rgbaOf(p.theme.Text)
-	c.A = 0.08
+	c := p.theme.look().wash(hot, down)
 	if op.Box.Hover != nil {
 		c = rgbaOf(op.Box.Hover)
+		c.A *= min(hot+0.5*down, 1.5)
 	}
-	c.A *= min(level, 1.5)
 	p.fillRounded(op.Rect, canvasBoxFillRadius(op.Box, op.Rect, p.theme), colorFromRGBA(c))
 }
 
@@ -414,12 +416,14 @@ func (p *canvasPainter) input(op layout.InputOp) {
 		field = op.Rect
 	}
 	if !op.Bare {
-		p.fillRounded(field, min(canvasRadius(p.theme, layout.BorderNormal)+1, field.H/2), p.theme.Field)
-		border := p.theme.Border
+		lk := p.theme.look()
+		rad := min(lk.radius, field.H/2)
+		p.fillRounded(field, rad, colorFromRGBA(lk.field))
+		border, width := lk.border, lk.control
 		if op.Focused {
-			border = p.theme.Accent
+			border, width = lk.focus, lk.focusWidth
 		}
-		p.strokeRounded(field, min(canvasRadius(p.theme, layout.BorderNormal)+1, field.H/2), 1, border)
+		p.strokeRounded(field, rad, width, colorFromRGBA(border))
 	}
 	p.withClip(intersect(op.Rect, op.Clip), func() { p.inputText(op) })
 }
@@ -616,40 +620,44 @@ func (p *canvasPainter) dim(c rgba, disabled bool) rgba {
 
 func (p *canvasPainter) button(op layout.ControlOp, hot, down float64) {
 	r := op.Rect
+	lk := p.theme.look()
 	bez := layout.PointRect{X: r.X + 0.5, Y: r.Y + 1.5, W: max(r.W-1, 0), H: max(r.H-3, 0)}
-	radius := min(canvasRadius(p.theme, layout.BorderNormal)+1, bez.H/2)
+	radius := min(lk.radius, bez.H/2)
 	icon := op.Icon != layout.IconNone
 	if icon && math.Abs(r.W-r.H) < 1 {
 		bez = layout.PointRect{X: r.X + 1, Y: r.Y + 1, W: max(r.W-2, 0), H: max(r.H-2, 0)}
+		radius = min(lk.radius, bez.H/2)
 		if op.Default {
 			radius = bez.H / 2
 		}
 	}
-	fill := mix(rgbaOf(p.theme.Surface), rgbaOf(p.theme.Text), 0.08)
 	text := p.roleColor(op.Style)
 	if op.Default {
-		fill, text = rgbaOf(p.theme.Accent), rgba{1, 1, 1, 1}
+		fill := mix(lk.accent, lk.accentHot, hot)
+		text = lk.onAccent
 		if op.Style.Bg != nil {
-			fill = rgbaOf(op.Style.Bg)
+			fill = mix(rgbaOf(op.Style.Bg), rgba{1, 1, 1, 1}, 0.1*hot)
 		}
 		if op.Style.Fg != nil {
 			text = rgbaOf(op.Style.Fg)
+		}
+		p.fillRounded(bez, radius, colorFromRGBA(p.dim(lk.wash(down, down).over(fill), op.Disabled)))
+	} else {
+		if w := lk.wash(hot, down); w.A > 0 {
+			p.fillRounded(bez, radius, colorFromRGBA(w))
+		}
+		if !op.Plain {
+			p.strokeRounded(bez, radius, lk.control, colorFromRGBA(p.dim(lk.border, op.Disabled)))
 		}
 	}
 	if op.Plain && !op.Disabled && op.Style.Fg == nil {
 		text = mix(text, rgbaOf(p.theme.Title), hot)
 	}
-	if !op.Plain {
-		fill = p.dim(mix(mix(fill, rgba{1, 1, 1, 1}, 0.1*hot*(1-down)), rgbaOf(p.theme.Background), 0.25*down), op.Disabled)
-		p.fillRounded(bez, radius, colorFromRGBA(fill))
-		if !op.Default {
-			p.strokeRounded(bez, radius, strokeWidth, colorFromRGBA(p.dim(rgbaOf(p.theme.Border), op.Disabled)))
-		}
-	} else if hot > 0 || down > 0 {
-		lift := 0.1*hot + 0.06*down
-		c := mix(rgbaOf(p.theme.Background), rgbaOf(p.theme.Text), 0.16)
-		c.A *= min(lift/0.16, 1)
-		p.fillRounded(bez, radius, colorFromRGBA(c))
+	switch {
+	case op.Disabled && op.Default:
+		text = p.dim(text, true)
+	case op.Disabled:
+		text = lk.disabled
 	}
 	if icon {
 		size := min(r.W, r.H) * 0.5
@@ -659,7 +667,7 @@ func (p *canvasPainter) button(op layout.ControlOp, hot, down float64) {
 			shape, ok = iconShape(op.Icon, cx-size/2, cy-size/2, size, size, size)
 		}
 		if ok {
-			p.shape(shape, p.dim(text, op.Disabled))
+			p.shape(shape, text)
 		}
 	} else {
 		font := p.text.font(op.Style)
@@ -670,13 +678,21 @@ func (p *canvasPainter) button(op layout.ControlOp, hot, down float64) {
 		}
 		baseline := content.Y + (content.H-(font.ascent+font.descent))/2 + font.ascent
 		p.ctx.Set("font", font.css)
-		p.fill(colorFromRGBA(p.dim(text, op.Disabled)))
+		p.fill(colorFromRGBA(text))
 		p.ctx.Set("textAlign", "start")
 		p.ctx.Call("fillText", op.Label, content.X+(content.W-width)/2, baseline)
 	}
 	if op.Focused && !op.Disabled {
-		p.strokeRounded(bez, radius+2, canvasFocusRing, p.theme.Accent)
+		p.ring(bez, radius)
 	}
+}
+
+// ring strokes a focus ring around r: the theme's focus color and width,
+// a point clear of the control.
+func (p *canvasPainter) ring(r layout.PointRect, radius float64) {
+	lk := p.theme.look()
+	o := 1 + lk.focusWidth/2
+	p.strokeRounded(layout.PointRect{X: r.X - o, Y: r.Y - o, W: r.W + 2*o, H: r.H + 2*o}, radius+o, lk.focusWidth, colorFromRGBA(lk.focus))
 }
 
 func (p *canvasPainter) toggle(op layout.ControlOp, hot, down bool) {
@@ -684,43 +700,64 @@ func (p *canvasPainter) toggle(op layout.ControlOp, hot, down bool) {
 	if r == (layout.PointRect{}) {
 		r = op.Rect
 	}
+	lk := p.theme.look()
 	cols := 3.0
 	if op.Kind == layout.ControlSwitch {
 		cols = 4
 	}
 	areaW := cols * p.metrics.Column
 	cy := r.Y + r.H/2
+	wash := lk.wash(b2f(hot), b2f(down))
 	var ind layout.PointRect
+	var rad float64
+	box := func(fill rgba) {
+		p.fillRounded(ind, rad, colorFromRGBA(p.dim(wash.over(fill), op.Disabled)))
+		if !op.Checked {
+			border := lk.border
+			if hot {
+				border = mix(border, lk.accent, 0.6)
+			}
+			p.strokeRounded(layout.PointRect{X: ind.X + 0.5, Y: ind.Y + 0.5, W: ind.W - 1, H: ind.H - 1}, max(rad-0.5, 0), lk.control, colorFromRGBA(p.dim(border, op.Disabled)))
+		}
+	}
 	switch op.Kind {
 	case layout.ControlSwitch:
-		ind = layout.PointRect{X: r.X + (areaW-26)/2, Y: cy - 7.5, W: 26, H: 15}
-		track := p.theme.Track
+		const w, h = 28.0, 16.0
+		ind, rad = layout.PointRect{X: r.X + (areaW-w)/2, Y: cy - h/2, W: w, H: h}, h/2
+		track, thumb := lk.field, lk.knob
 		if op.Checked {
-			track = p.theme.Accent
+			track, thumb = lk.accent, lk.onAccent
 		}
-		p.fillRounded(ind, 7.5, colorFromRGBA(p.dim(p.shade(rgbaOf(track), hot, down), op.Disabled)))
-		kx := ind.X + 2
+		box(track)
+		knob := h - 6
+		kx := ind.X + 3
 		if op.Checked {
-			kx = ind.X + 26 - 2 - 11
+			kx = ind.X + w - 3 - knob
 		}
-		p.fillRounded(layout.PointRect{X: kx, Y: cy - 5.5, W: 11, H: 11}, 5.5, colorFromRGBA(p.dim(rgbaOf(color.White), op.Disabled)))
+		p.fillRounded(layout.PointRect{X: kx, Y: cy - knob/2, W: knob, H: knob}, knob/2, colorFromRGBA(p.dim(thumb, op.Disabled)))
 	case layout.ControlRadio:
-		ind = layout.PointRect{X: r.X + (areaW-14)/2, Y: cy - 7, W: 14, H: 14}
-		p.fillRounded(ind, 7, colorFromRGBA(p.dim(p.shade(rgbaOf(p.theme.Field), hot, down), op.Disabled)))
-		p.strokeRounded(ind, 7, 1, colorFromRGBA(p.dim(rgbaOf(p.theme.Border), op.Disabled)))
+		ind, rad = layout.PointRect{X: r.X + (areaW-14)/2, Y: cy - 7, W: 14, H: 14}, 7
+		fill := lk.field
 		if op.Checked {
-			p.fillRounded(layout.PointRect{X: ind.X + 4.5, Y: ind.Y + 4.5, W: 5, H: 5}, 2.5, colorFromRGBA(p.dim(rgbaOf(color.White), op.Disabled)))
+			fill = lk.accent
+		}
+		box(fill)
+		if op.Checked {
+			p.fillRounded(layout.PointRect{X: ind.X + 4.5, Y: ind.Y + 4.5, W: 5, H: 5}, 2.5, colorFromRGBA(p.dim(lk.onAccent, op.Disabled)))
 		}
 	default:
-		ind = layout.PointRect{X: r.X + (areaW-14)/2, Y: cy - 7, W: 14, H: 14}
-		p.fillRounded(ind, 3, colorFromRGBA(p.dim(p.shade(rgbaOf(p.theme.Field), hot, down), op.Disabled)))
-		p.strokeRounded(ind, 3, 1, colorFromRGBA(p.dim(rgbaOf(p.theme.Border), op.Disabled)))
+		ind, rad = layout.PointRect{X: r.X + (areaW-14)/2, Y: cy - 7, W: 14, H: 14}, lk.check
+		fill := lk.field
+		if op.Checked {
+			fill = lk.accent
+		}
+		box(fill)
 		if op.Checked {
 			p.ctx.Call("beginPath")
 			p.ctx.Call("moveTo", ind.X+3.5, ind.Y+7.2)
 			p.ctx.Call("lineTo", ind.X+6, ind.Y+9.8)
 			p.ctx.Call("lineTo", ind.X+10.5, ind.Y+4.3)
-			p.stroke(colorFromRGBA(p.dim(rgbaOf(color.White), op.Disabled)))
+			p.stroke(colorFromRGBA(p.dim(lk.onAccent, op.Disabled)))
 			p.ctx.Set("lineWidth", 1.8)
 			p.ctx.Call("stroke")
 		}
@@ -733,7 +770,7 @@ func (p *canvasPainter) toggle(op layout.ControlOp, hot, down bool) {
 		p.ctx.Call("fillText", op.Label, r.X+areaW, baseline)
 	}
 	if op.Focused && !op.Disabled {
-		p.strokeRounded(op.Rect, canvasRadius(p.theme, layout.BorderNormal), canvasFocusRing, p.theme.Accent)
+		p.ring(ind, rad)
 	}
 }
 
@@ -765,7 +802,7 @@ func (p *canvasPainter) slider(op layout.ControlOp, hot, down bool) {
 		p.strokeRounded(layout.PointRect{X: knobX - 7, Y: cy - 7, W: 14, H: 14}, 7, 1, p.theme.Accent)
 	}
 	if op.Focused && !op.Disabled {
-		p.strokeRounded(r, canvasRadius(p.theme, layout.BorderNormal), canvasFocusRing, p.theme.Accent)
+		p.ring(layout.PointRect{X: knobX - 7, Y: cy - 7, W: 14, H: 14}, 7)
 	}
 }
 

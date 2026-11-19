@@ -353,7 +353,24 @@ type Box struct {
 	// border): a window shows a resize pointer along its axis over it. It
 	// draws nothing; the app moves the border on MouseMotion.
 	Resize Resize
+	// Edge is a GUI's accent bar along one side of the box, the theme's
+	// focus stroke thick in its Accent: an active tab's top, a current
+	// row's marker. Terminals draw nothing for it; mark the node another
+	// way there (bold, a glyph).
+	Edge Side
 }
+
+// Side is one side of a box (Box.Edge).
+type Side int
+
+const (
+	// SideNone is no side.
+	SideNone Side = iota
+	SideTop
+	SideBottom
+	SideLeft
+	SideRight
+)
 
 // Resize is the axis a splitter box (Box.Resize) moves along.
 type Resize int

@@ -1125,6 +1125,13 @@ and labels are unchanged. A named box with `Box{Resize: layout.ResizeColumns}`
 (↔ or ↕); it draws nothing, and the app moves the border on `MouseMotion`. Menu surfaces opt out of extra panel padding; their border band supplies
 the outer gap while option content keeps its item insets.
 
+`Box.Edge` (`layout.SideTop`, `SideBottom`, `SideLeft`, `SideRight`) draws a
+band of the theme's accent along one side in a window — an active tab's
+top, a current row's marker. Terminals draw nothing for it, so mark the
+node another way there as well (bold, a glyph). In a window, buttons,
+fields and toggles follow the theme's control recipe: medium radius,
+hover and press washes, a focus ring in the Focus color.
+
 For single-line fields, apply pointer edits on the app loop:
 
 ```go

@@ -169,3 +169,77 @@ func pressAt(t *testing.T, d *flatest.Driver[State], id string, height int) {
 	}
 	d.Send(flatte.MouseEvent{X: r.X + r.W/2, Y: r.Y + r.H/2, Button: flatte.MouseLeft, Action: flatte.MousePress})
 }
+
+// The Controls group works from the keyboard: Tab walks the focus, typing
+// fills the focused field, Space and ←/→ work the focused control.
+func TestControlsFocusAndKeys(t *testing.T) {
+	th := theme.Default()
+	d := flatest.StartWith(app(), flatest.Options{Width: 120, Height: 120, Theme: &th})
+	t.Cleanup(d.Close)
+	key := func(k flatte.Key, r rune, mod flatte.Mod) { d.Send(flatte.KeyEvent{Key: k, Rune: r, Mod: mod}) }
+	key(flatte.KeyCharacter, '4', 0)
+	key(flatte.KeyTab, 0, 0)
+	if f := d.State().focus; f != "primary" {
+		t.Fatalf("first Tab focused %q", f)
+	}
+	key(flatte.KeyTab, 0, flatte.ModShift)
+	key(flatte.KeyTab, 0, flatte.ModShift)
+	if f := d.State().focus; f != controls[len(controls)-2] {
+		t.Fatalf("Shift-Tab wrapped to %q", f)
+	}
+	pressAt(t, d, idQuery, 120)
+	for _, r := range "dra" { // the dial keys type while the field has focus
+		key(flatte.KeyCharacter, r, 0)
+	}
+	key(flatte.KeyBackspace, 0, 0)
+	if s := d.State(); s.query != "dr" || s.density != 1 || s.focus != idQuery {
+		t.Fatalf("typing: query %q density %d focus %q", s.query, s.density, s.focus)
+	}
+	key(flatte.KeyTab, 0, 0) // → check:format
+	key(flatte.KeyCharacter, ' ', 0)
+	if d.State().format {
+		t.Error("Space did not clear the focused checkbox")
+	}
+	pressAt(t, d, idRadio+"0", 120)
+	key(flatte.KeyRight, 0, 0)
+	if s := d.State(); s.radio != 1 || s.focus != idRadio+"1" {
+		t.Errorf("→ on a radio: %d, focus %q", s.radio, s.focus)
+	}
+	pressAt(t, d, idVolume, 120)
+	v := d.State().volume
+	key(flatte.KeyLeft, 0, 0)
+	if got := d.State().volume; got >= v {
+		t.Errorf("← on the slider: %v from %v", got, v)
+	}
+	pressAt(t, d, "switch:autosave", 120)
+	if d.State().autosave {
+		t.Error("clicking the switch did not turn it off")
+	}
+	key(flatte.KeyEscape, 0, 0)
+	if f := d.State().focus; f != "" {
+		t.Errorf("Esc left focus on %q", f)
+	}
+	// Every focusable control is on the page and lays out.
+	r := layout.Compose(View(d.State(), flatte.RenderContext{Width: 120, Height: 120}).Root, 120, 120).Rects
+	for _, id := range controls {
+		if _, ok := r[id]; !ok {
+			t.Errorf("control %s not laid out", id)
+		}
+	}
+}
+
+// The Appearance dial pins light or dark: both palettes become one.
+func TestAppearanceDial(t *testing.T) {
+	s := NewState()
+	if s.theme.Dark == s.theme.Light {
+		t.Fatal("System should keep two palettes")
+	}
+	click(s, kit.OptionID(idMode, 1))
+	if s.theme.Dark != theme.Default().Light {
+		t.Error("Light did not pin the light palette")
+	}
+	click(s, kit.OptionID(idMode, 2))
+	if s.theme.Light != theme.Default().Dark {
+		t.Error("Dark did not pin the dark palette")
+	}
+}
