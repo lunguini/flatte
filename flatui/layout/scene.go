@@ -403,7 +403,7 @@ func (p pointMetric) padding(n Node) sidesOf[float64] {
 		if it, ok := n.(interface{ itemPadding() bool }); ok && it.itemPadding() {
 			return item
 		}
-		box := getBox(n)
+		box := nodeBox(n)
 		if box.Backdrop == nil && (box.hasBorder() || box.hasBackground()) {
 			return sidesOf[float64]{in.Panel, in.Panel, in.Panel, in.Panel}
 		}
@@ -714,7 +714,7 @@ func (p *scenePainter) chrome(n Node, r, clip rect[float64]) {
 		p.cells(r, clip, ch)
 		return
 	}
-	p.box(r, clip, getBox(n))
+	p.box(r, clip, nodeBox(n))
 }
 
 func (p *scenePainter) layer(r rect[float64]) {
