@@ -51,7 +51,7 @@ func TestUnthemedCellsKeepTheTerminalsColors(t *testing.T) {
 
 func TestFillColorCoversEveryRole(t *testing.T) {
 	d := theme.Default()
-	for f := FillSurface; f <= FillDiffBlank; f++ {
+	for f := FillSurface; f <= FillGlass; f++ {
 		if _, ok := FillColor(&d.Light, f); !ok {
 			t.Errorf("fill %d has no color", f)
 		}

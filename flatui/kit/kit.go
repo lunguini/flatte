@@ -222,7 +222,9 @@ type Tab struct {
 
 // Tabs is a tab strip at the bar height on the chrome surface: the active
 // tab sits on the content surface in strong text under an accent edge
-// (Box.Edge, in a window), the others in secondary text. Each tab's node
+// (Box.Edge, in a window), the others in secondary text. In a window the
+// strip and each tab round their top corners (Box.Flat), standing on the
+// panel below. Each tab's node
 // ID is Tab.ID; Trailing nodes (a new-tab button, a breadcrumb) follow the
 // tabs directly. Fill shares the strip's width equally between the tabs (too many
 // to fit at their names' width): long names end in "…".
@@ -239,7 +241,7 @@ func (t Tabs) Layout() layout.Node {
 	for i, tab := range t.Tabs {
 		active := i == t.Active
 		style := layout.TextStyle{Color: layout.ColorSecondary}
-		box := layout.Box{Interactive: !active}
+		box := layout.Box{Interactive: !active, Round: true, Flat: layout.SideBottom}
 		if active {
 			style = layout.TextStyle{Role: layout.TextStrong}
 			box.Fill, box.Edge = layout.FillContent, layout.SideTop
@@ -276,7 +278,7 @@ func (t Tabs) Layout() layout.Node {
 	if !t.Fill {
 		kids = append(kids, &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
 	}
-	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: layout.Box{Fill: layout.FillChrome}}, Align: layout.AlignStretch, Children: kids}
+	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom}}, Align: layout.AlignStretch, Children: kids}
 }
 
 // Action is a small icon button inside a row, a tab or a pane header — a

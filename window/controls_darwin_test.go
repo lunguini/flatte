@@ -162,3 +162,35 @@ func TestBoxEdge(t *testing.T) {
 		t.Errorf("row left %v, want the accent", c)
 	}
 }
+
+// A Round box with a Flat side rounds only the other corners, and its Edge
+// stays inside the rounded shape.
+func TestFlatSideRoundsTheOtherCorners(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	m := metrics()
+	root := layout.Row{Children: []layout.Node{
+		layout.Col{NodeBase: layout.NodeBase{ID: "tab", W: layout.Points(60), H: layout.Points(30), Box: layout.Box{Fill: layout.FillAccent, Round: true, Flat: layout.SideBottom, Edge: layout.SideTop}}},
+	}}
+	scene := layout.LayoutScene(root, 100, 40, m)
+	img := renderImage(scene, darkTheme, m, 100, 40, 2, nil, presentation{})
+	at := func(x, y float64) color.Color { return img.At(int(x*2), int(y*2)) }
+	r := scene.Rects["tab"]
+	bg, accent := toColor(darkTheme.bg), toColor(darkTheme.lk.accent)
+	if c := at(r.X+0.5, r.Y+0.5); !near(c, bg, 8) {
+		t.Errorf("top-left corner %v, want rounded off (background)", c)
+	}
+	if c := at(r.X+r.W-0.5, r.Y+0.5); !near(c, bg, 8) {
+		t.Errorf("top-right corner %v, want rounded off", c)
+	}
+	if c := at(r.X+0.5, r.Y+r.H-0.5); !near(c, accent, 8) {
+		t.Errorf("bottom-left corner %v, want square (filled)", c)
+	}
+	if c := at(r.X+r.W-0.5, r.Y+r.H-0.5); !near(c, accent, 8) {
+		t.Errorf("bottom-right corner %v, want square", c)
+	}
+	if c := at(r.X+r.W/2, r.Y+r.H/2); !near(c, accent, 8) {
+		t.Errorf("middle %v", c)
+	}
+}

@@ -555,7 +555,9 @@ muted), `TextMeta` (paths, counts, a row's second line), `TextStrong` and
 role follow the same palette: `FillCanvas`, `FillChrome` (headers,
 sidebars), `FillContent` (where work is read), `FillRaised`, `FillAccent`,
 `FillSelection` / `FillSelectionInactive`, `FillPressed`, the status tints,
-`FillCurrentLine`, `FillMatch` and the diff fills.
+`FillCurrentLine`, `FillMatch` and the diff fills. `FillGlass` is the
+content surface at 80% (`GlassAlpha`), for controls on a translucent
+window's chrome (side bar buttons, a title bar field).
 
 ### Themes
 
@@ -1122,13 +1124,18 @@ pointing-hand cursor, respecting clipping and overlays. Explicit `Box.Hover`
 overrides the default; `color.Transparent` disables the fill. Plain panels
 and labels are unchanged. A named box with `Box{Resize: layout.ResizeColumns}`
 (or `ResizeRows`) is a splitter: a window shows a resize pointer over it
-(↔ or ↕); it draws nothing, and the app moves the border on `MouseMotion`. Menu surfaces opt out of extra panel padding; their border band supplies
+(↔ or ↕); it draws nothing, and the app moves the border on `MouseMotion`.
+A window grabs a splitter 3pt past each side of its box, so a 1pt hairline
+splitter needs no padding around it. Menu surfaces opt out of extra panel padding; their border band supplies
 the outer gap while option content keeps its item insets.
 
 `Box.Edge` (`layout.SideTop`, `SideBottom`, `SideLeft`, `SideRight`) draws a
 band of the theme's accent along one side in a window — an active tab's
 top, a current row's marker. Terminals draw nothing for it, so mark the
-node another way there as well (bold, a glyph). In a window, buttons,
+node another way there as well (bold, a glyph). `Box.Flat` squares the two
+corners along one side of a `Round` box (`Flat: layout.SideBottom` rounds
+only the top, for a tab or a tab bar standing on the panel below); its
+hover wash and `Edge` follow the shape. In a window, buttons,
 fields and toggles follow the theme's control recipe: medium radius,
 hover and press washes, a focus ring in the Focus color.
 

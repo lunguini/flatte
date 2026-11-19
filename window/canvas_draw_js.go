@@ -233,6 +233,9 @@ func canvasSelectionRadius(r layout.PointRect, th Theme) float64 {
 }
 
 func canvasBoxFillRadius(box layout.Box, r layout.PointRect, th Theme) float64 {
+	if box.Flat != layout.SideNone { // a tab: the control radius
+		return max(min(th.look().radius, r.W/2, r.H/2), 0)
+	}
 	if box.Backdrop != nil {
 		return canvasBoxRadius(r, true)
 	}
@@ -240,6 +243,22 @@ func canvasBoxFillRadius(box layout.Box, r layout.PointRect, th Theme) float64 {
 		return canvasSelectionRadius(r, th)
 	}
 	return canvasBoxRadius(r, false)
+}
+
+// fillBox fills a Round box's shape: rounded, with Box.Flat's side square.
+func (p *canvasPainter) fillBox(box layout.Box, r layout.PointRect, c color.Color) {
+	rad := canvasBoxFillRadius(box, r, p.theme)
+	ext, ok := flatExtend(r, box.Flat, rad)
+	if !ok {
+		p.fillRounded(r, rad, c)
+		return
+	}
+	p.ctx.Call("save")
+	p.ctx.Call("beginPath")
+	p.ctx.Call("rect", r.X, r.Y, r.W, r.H)
+	p.ctx.Call("clip")
+	p.fillRounded(ext, rad, c)
+	p.ctx.Call("restore")
 }
 
 func (p *canvasPainter) box(op layout.BoxOp) {
@@ -269,7 +288,7 @@ func (p *canvasPainter) box(op layout.BoxOp) {
 	if op.Box.Border == layout.BorderNone {
 		if hasBG {
 			if op.Box.Round {
-				p.fillRounded(op.Rect, canvasBoxFillRadius(op.Box, op.Rect, p.theme), bg)
+				p.fillBox(op.Box, op.Rect, bg)
 			} else {
 				p.fillRect(op.Rect, bg)
 			}
@@ -299,7 +318,17 @@ func (p *canvasPainter) box(op layout.BoxOp) {
 		}
 	}
 	if r, ok := edgeRect(op.Rect, op.Box.Edge, p.theme.look().focusWidth); ok {
-		p.fillRect(r, colorFromRGBA(p.theme.look().accent))
+		accent := colorFromRGBA(p.theme.look().accent)
+		if op.Box.Round { // inside the box's rounded corners
+			p.ctx.Call("save")
+			p.ctx.Call("beginPath")
+			p.ctx.Call("rect", r.X, r.Y, r.W, r.H)
+			p.ctx.Call("clip")
+			p.fillBox(op.Box, op.Rect, accent)
+			p.ctx.Call("restore")
+		} else {
+			p.fillRect(r, accent)
+		}
 	}
 	p.hoverFill(op)
 }
@@ -318,7 +347,7 @@ func (p *canvasPainter) hoverFill(op layout.BoxOp) {
 		c = rgbaOf(op.Box.Hover)
 		c.A *= min(hot+0.5*down, 1.5)
 	}
-	p.fillRounded(op.Rect, canvasBoxFillRadius(op.Box, op.Rect, p.theme), colorFromRGBA(c))
+	p.fillBox(op.Box, op.Rect, colorFromRGBA(c))
 }
 
 func (p *canvasPainter) level(values map[string]float64, id string, on, disabled bool) float64 {

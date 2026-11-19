@@ -114,6 +114,12 @@ func TestActiveTabEdge(t *testing.T) {
 	if b.Edge != layout.SideTop || b.Fill != layout.FillContent {
 		t.Errorf("active tab %+v", b)
 	}
+	// Tabs and the strip stand on the panel below: top corners round.
+	for _, box := range []layout.Box{a, b, row.Box} {
+		if !box.Round || box.Flat != layout.SideBottom {
+			t.Errorf("not rounded on top only: %+v", box)
+		}
+	}
 	s := layout.LayoutScene(row, 400, 40, points)
 	for _, op := range s.Ops {
 		if bo, ok := op.(layout.BoxOp); ok && bo.ID == "b" && bo.Box.Edge == layout.SideTop {

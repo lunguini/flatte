@@ -529,6 +529,20 @@ func (p *painter) roundedPath(r CGRect, rad float64, f func()) {
 	cgPathRelease(path)
 }
 
+// boxPath is roundedPath for a Round box: with Box.Flat, the corners along
+// that side stay square (the path runs past the side, clipped at it).
+func (p *painter) boxPath(box layout.Box, r CGRect, rad float64, f func()) {
+	ext, ok := flatExtend(layout.PointRect{X: r.Origin.X, Y: r.Origin.Y, W: r.Size.Width, H: r.Size.Height}, box.Flat, rad)
+	if !ok {
+		p.roundedPath(r, rad, f)
+		return
+	}
+	cgContextSaveGState(p.ctx)
+	cgContextClipToRect(p.ctx, r)
+	p.roundedPath(rectOf(ext), rad, f)
+	cgContextRestoreGState(p.ctx)
+}
+
 // boxRadius is the corner radius a Round box's fill takes: up to a pill's
 // for a plain box, but in proportion to its size for a picture (an Image,
 // or a box with a Backdrop) — a pill-like radius makes a small thumbnail
@@ -545,6 +559,9 @@ func selectionRadius(r CGRect, th theme) float64 {
 }
 
 func boxFillRadius(box layout.Box, r CGRect, th theme) float64 {
+	if box.Flat != layout.SideNone { // a tab: the control radius
+		return max(min(th.lk.radius, r.Size.Width/2, r.Size.Height/2), 0)
+	}
 	if box.Backdrop != nil {
 		return boxRadius(r, true)
 	}
@@ -591,7 +608,7 @@ func (p *painter) hoverFill(op layout.BoxOp) {
 	r := rectOf(op.Rect)
 	p.fill(c)
 	if op.Box.Round {
-		p.roundedPath(r, boxFillRadius(op.Box, r, p.th), func() { cgContextFillPath(p.ctx) })
+		p.boxPath(op.Box, r, boxFillRadius(op.Box, r, p.th), func() { cgContextFillPath(p.ctx) })
 		return
 	}
 	p.cellFill(c, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H)
@@ -603,7 +620,19 @@ func (p *painter) edge(op layout.BoxOp) {
 	if !ok {
 		return
 	}
-	p.clipped(op.Clip, func() { p.cellFill(p.th.lk.accent, r.X, r.Y, r.W, r.H) })
+	p.clipped(op.Clip, func() {
+		if op.Box.Round { // inside the box's rounded corners
+			b := rectOf(op.Rect)
+			rad := boxFillRadius(op.Box, b, p.th)
+			ext, flat := flatExtend(op.Rect, op.Box.Flat, rad)
+			if flat {
+				cgContextClipToRect(p.ctx, b)
+				b = rectOf(ext)
+			}
+			p.roundedPath(b, rad, func() { cgContextClip(p.ctx) })
+		}
+		p.cellFill(p.th.lk.accent, r.X, r.Y, r.W, r.H)
+	})
 }
 
 // box draws a Box. A border is a rounded stroke down the middle of its
@@ -635,7 +664,7 @@ func (p *painter) box(op layout.BoxOp) {
 		case hasBg && op.Box.Round:
 			r := rectOf(op.Rect)
 			p.fill(bg)
-			p.roundedPath(r, boxFillRadius(op.Box, r, p.th), func() { cgContextFillPath(p.ctx) })
+			p.boxPath(op.Box, r, boxFillRadius(op.Box, r, p.th), func() { cgContextFillPath(p.ctx) })
 		case hasBg:
 			// Snapped like cell fills: adjacent filled boxes meet on whole
 			// pixels, with no seam at fractional edges.

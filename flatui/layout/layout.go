@@ -362,6 +362,11 @@ type Box struct {
 	// row's marker. Terminals draw nothing for it; mark the node another
 	// way there (bold, a glyph).
 	Edge Side
+	// Flat squares the two corners along one side of a Round box in a
+	// GUI: SideBottom rounds only the top corners, for a tab or a tab bar
+	// standing on the panel below it. Its hover wash and Edge follow the
+	// same shape. Terminals draw every box square.
+	Flat Side
 }
 
 // Side is one side of a box (Box.Edge).

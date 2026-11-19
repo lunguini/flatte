@@ -36,3 +36,24 @@ func edgeRect(r layout.PointRect, side layout.Side, width float64) (layout.Point
 	}
 	return layout.PointRect{}, false
 }
+
+// flatExtend is r reaching rad past its side s, so a rounded rect drawn
+// over it and clipped to r has square corners along s (Box.Flat); false
+// for no side.
+func flatExtend(r layout.PointRect, s layout.Side, rad float64) (layout.PointRect, bool) {
+	switch s {
+	case layout.SideTop:
+		r.Y -= rad
+		r.H += rad
+	case layout.SideBottom:
+		r.H += rad
+	case layout.SideLeft:
+		r.X -= rad
+		r.W += rad
+	case layout.SideRight:
+		r.W += rad
+	default:
+		return r, false
+	}
+	return r, true
+}

@@ -28,6 +28,10 @@ type metric[T unit] interface {
 	// GUI strokes a border in the middle of its band; cells draw it at the
 	// edge (zero).
 	anchorPull() (x, y T)
+	// grip is how far a splitter's (Box.Resize) hit area reaches past each
+	// side of its box across its axis: a GUI's hairline splitter stays easy
+	// to grab; a cell is grabbable already (zero).
+	grip() T
 	padding(n Node) sidesOf[T]
 
 	add(a, b T) T
@@ -121,6 +125,7 @@ func (c cells) token(t Token, horizontal bool) int {
 func (cells) border() int { return 1 }
 
 func (cells) anchorPull() (x, y int) { return 0, 0 }
+func (cells) grip() int              { return 0 }
 func (cells) padding(n Node) sidesOf[int] {
 	p := getPadSides(n)
 	return sidesOf[int]{p.top, p.right, p.bottom, p.left}
@@ -629,6 +634,10 @@ type solver[T unit] struct {
 	first map[string]rect[T]
 	dups  []dupOf[T]
 	hits  []hitOf[T]
+	// grips are the widened hit areas of the current layer's splitters,
+	// appended to hits when the layer ends so they win over the panes
+	// beside them (and stay under any later overlay layer).
+	grips []hitOf[T]
 	// clip is the visible region: the frame, narrowed by each enclosing
 	// Scroll's window. Painting and hit areas are confined to it.
 	clip rect[T]
@@ -643,6 +652,7 @@ func solveTree[T unit](m metric[T], root Node, w, h T, p painter[T]) *solver[T] 
 	// as a frame-sized base node.
 	if !isOverlay(root) {
 		s.walk(root, frame)
+		s.flushGrips()
 	}
 	for _, o := range findOverlays(root) {
 		r := centeredOf(m, o, w, h)
@@ -660,8 +670,14 @@ func solveTree[T unit](m metric[T], root Node, w, h T, p painter[T]) *solver[T] 
 		// below its own nodes.
 		s.hits = append(s.hits, hitOf[T]{rect: r, area: intersectOf(m, r, s.clip)})
 		s.walk(o, r)
+		s.flushGrips()
 	}
 	return s
+}
+
+func (s *solver[T]) flushGrips() {
+	s.hits = append(s.hits, s.grips...)
+	s.grips = s.grips[:0]
 }
 
 // walk distributes rects top-down, records every ID'd node's rect and hit
@@ -677,6 +693,16 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 		}
 		s.rects[id] = r
 		s.hits = append(s.hits, hitOf[T]{id: id, rect: r, area: intersectOf(m, r, s.clip)})
+		if g := m.grip(); g > 0 {
+			switch getBox(n).Resize {
+			case ResizeColumns:
+				a := rect[T]{m.sub(r.X, g), r.Y, m.add(r.W, m.add(g, g)), r.H}
+				s.grips = append(s.grips, hitOf[T]{id: id, rect: r, area: intersectOf(m, a, s.clip)})
+			case ResizeRows:
+				a := rect[T]{r.X, m.sub(r.Y, g), r.W, m.add(r.H, m.add(g, g))}
+				s.grips = append(s.grips, hitOf[T]{id: id, rect: r, area: intersectOf(m, a, s.clip)})
+			}
+		}
 	}
 
 	if sc, ok := n.(scroller); ok {

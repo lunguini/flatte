@@ -361,6 +361,12 @@ func (p pointMetric) border() float64              { return p.Border }
 // border, in points.
 const anchorGap = 3.0
 
+// splitterGrip is how far past each side of a splitter's box a GUI's
+// pointer still grabs it, in points.
+const splitterGrip = 3.0
+
+func (p pointMetric) grip() float64 { return splitterGrip }
+
 func (p pointMetric) anchorPull() (x, y float64) {
 	return p.Border / 2, max(p.Border/2-anchorGap, 0)
 }

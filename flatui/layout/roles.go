@@ -61,7 +61,14 @@ const (
 	FillDiffDelWord
 	FillDiffFold
 	FillDiffBlank
+	// FillGlass is the content surface at GlassAlpha: a control that sits
+	// on a translucent window's chrome (a side bar's buttons, a title bar
+	// field) reads the same whatever shows through.
+	FillGlass
 )
+
+// GlassAlpha is FillGlass's opacity (80%).
+const GlassAlpha = 0xcc
 
 // FillColor is f's color in p; ok is false for FillNone and unknown fills.
 // FillSurface is Raised, FillField is Field, FillSeparator is Divider.
@@ -111,6 +118,10 @@ func FillColor(p *theme.Palette, f Fill) (c color.NRGBA, ok bool) {
 		return p.Diff.Fold, true
 	case FillDiffBlank:
 		return p.Diff.Blank, true
+	case FillGlass:
+		c := p.Content
+		c.A = uint8(uint16(c.A) * GlassAlpha / 0xff)
+		return c, true
 	}
 	return color.NRGBA{}, false
 }

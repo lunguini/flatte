@@ -1084,6 +1084,7 @@ flatui/layout package layout
   const FillDiffDelWord Fill = 21
   const FillDiffFold Fill = 22
   const FillField Fill = 2
+  const FillGlass Fill = 24
   const FillInfoTint Fill = 12
   const FillMatch Fill = 17
   const FillNone Fill = 0
@@ -1095,6 +1096,7 @@ flatui/layout package layout
   const FillSuccessTint Fill = 13
   const FillSurface Fill = 1
   const FillWarningTint Fill = 14
+  const GlassAlpha untyped int = 204
   const IconArrowDown IconName = 17
   const IconArrowLeft IconName = 18
   const IconArrowRight IconName = 19
@@ -1331,7 +1333,8 @@ flatui/layout package layout
   field Box.Fill Fill [order=11]
   field Box.Resize Resize [order=12]
   field Box.Edge Side [order=13]
-  struct Box fields=14 comparable=true
+  field Box.Flat Side [order=14]
+  struct Box fields=15 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
