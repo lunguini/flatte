@@ -38,15 +38,17 @@ func NewTree(nodes []TreeNode) Tree {
 }
 
 // SetHeight sets the number of visible rows, clamped to the supported widget
-// dimension range.
+// dimension range; a visible cursor stays visible.
 func (t *Tree) SetHeight(h int) {
+	shown := t.cursorShown()
 	t.height = clampWidgetDimension(h)
-	t.clamp()
+	t.clamp(shown)
 }
 
 // SetNodes replaces the tree data, preserving expansion for IDs that still
-// exist and still have children.
+// exist and still have children. A visible cursor stays visible.
 func (t *Tree) SetNodes(nodes []TreeNode) {
+	shown := t.cursorShown()
 	t.nodes = cloneTreeNodes(nodes)
 	expandable := map[string]bool{}
 	collectExpandable(expandable, t.nodes)
@@ -57,31 +59,78 @@ func (t *Tree) SetNodes(nodes []TreeNode) {
 		}
 	}
 	t.expanded = nextExpanded
-	t.clamp()
+	t.clamp(shown)
 }
 
-// Toggle expands or collapses the node with id. Unknown and leaf IDs are no-op.
+// Toggle expands or collapses the node with id. Unknown and leaf IDs are
+// no-op. A visible cursor stays visible.
 func (t *Tree) Toggle(id string) {
 	if !treeHasChildren(t.nodes, id) {
 		return
 	}
+	shown, selected := t.cursorShown(), t.CursorID()
 	t.ensureExpanded()
 	if t.expanded[id] {
 		delete(t.expanded, id)
 	} else {
 		t.expanded[id] = true
 	}
-	t.clamp()
+	// The cursor stays on its item as rows open or close above it; an item
+	// folded away leaves it on the folder.
+	rows := t.VisibleRows()
+	for i, r := range rows {
+		if r.ID == selected {
+			t.cursor = i
+			break
+		}
+		if r.ID == id && !t.expanded[id] && treeContains(t.nodes, id, selected) {
+			t.cursor = i
+			break
+		}
+	}
+	t.clamp(shown)
+}
+
+// treeContains reports whether the node with id has a descendant with
+// the ID want.
+func treeContains(nodes []TreeNode, id, want string) bool {
+	for _, n := range nodes {
+		if n.ID == id {
+			return treeHas(n.Children, want)
+		}
+		if treeContains(n.Children, id, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func treeHas(nodes []TreeNode, want string) bool {
+	for _, n := range nodes {
+		if n.ID == want || treeHas(n.Children, want) {
+			return true
+		}
+	}
+	return false
 }
 
 // MoveUp / MoveDown move the cursor by one visible row, keeping it visible.
-func (t *Tree) MoveUp()   { t.cursor--; t.clamp() }
-func (t *Tree) MoveDown() { t.cursor++; t.clamp() }
+func (t *Tree) MoveUp()   { t.cursor--; t.clamp(true) }
+func (t *Tree) MoveDown() { t.cursor++; t.clamp(true) }
 
-// SelectVisible moves the cursor to the visible row index i.
+// SelectVisible moves the cursor to the visible row index i, keeping it
+// visible.
 func (t *Tree) SelectVisible(i int) {
 	t.cursor = i
-	t.clamp()
+	t.clamp(true)
+}
+
+// Scroll moves the visible window by rows (negative: up), clamped, leaving
+// the cursor where it is — for a mouse wheel. The cursor's row may scroll
+// out of view; moving the cursor brings it back.
+func (t *Tree) Scroll(rows int) {
+	t.offset += rows
+	t.clamp(false)
 }
 
 // CursorID is the ID of the selected visible row, or "" when the tree is empty.
@@ -166,10 +215,18 @@ func (t Tree) appendVisibleRows(rows *[]TreeRow, nodes []TreeNode, depth int) {
 	}
 }
 
-func (t *Tree) clamp() {
+// cursorShown reports whether the cursor's row is in the window (always,
+// before a height is set).
+func (t Tree) cursorShown() bool {
+	return t.height <= 0 || t.cursor >= t.offset && t.cursor < t.offset+t.height
+}
+
+// clamp keeps the cursor and the window in range, and with reveal the
+// window on the cursor.
+func (t *Tree) clamp(reveal bool) {
 	rows := t.VisibleRows()
 	t.cursor = min(max(t.cursor, 0), max(len(rows)-1, 0))
-	if t.height > 0 {
+	if reveal && t.height > 0 {
 		if t.cursor < t.offset {
 			t.offset = t.cursor
 		} else if t.cursor >= t.offset+t.height {

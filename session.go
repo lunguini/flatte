@@ -3,9 +3,12 @@ package flatte
 import (
 	"context"
 	"maps"
+	"reflect"
 	"sync"
 
+	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/internal/sessionaccess"
+	"github.com/lunguini/flatte/theme"
 )
 
 // Host runs an App through a platform-specific driver selected by Run.
@@ -32,6 +35,7 @@ type HostServices struct {
 
 type sessionPolicy struct {
 	defaultQuit                    bool
+	quitRequests                   bool
 	inline                         bool
 	dialogResizeRoutesThroughMenus bool
 }
@@ -63,10 +67,90 @@ type Session struct {
 	runTerminal   func(context.Context, ...Option) error
 	cellSurface   bool
 	defaultQuit   bool
-	inline        bool
-	dirty         bool
-	publishMedia  func(*NowPlaying)
-	cell          *sessionCell
+	quitRequests  bool
+	// preciseScrolling: see WithPreciseScrolling.
+	preciseScrolling bool
+	inline           bool
+	dirty            bool
+	publishMedia     func(*NowPlaying)
+	cell             *sessionCell
+	// theme is the app's design system (WithTheme, UseTheme); nil: the
+	// host's default.
+	theme        *theme.Theme
+	defaultTheme *theme.Theme
+	// frameTheme is the last frame's Theme (a copy; nil: none), which wins
+	// over theme; themeVersion counts the changes of the theme in effect.
+	frameTheme   *theme.Theme
+	themeVersion uint64
+	cellThemed   bool // the session installed the cell palette (cell surfaces)
+}
+
+// UseTheme sets the design system the session's views see in
+// RenderContext and its host draws with. Run sets it from WithTheme; an
+// offscreen host (a snapshot) calls it before the first step.
+func (s *Session) UseTheme(t theme.Theme) { s.theme = &t }
+
+// ThemeVersion counts the changes of the theme in effect (Theme) since the
+// session started, as frames set Frame.Theme: a host compares it after a
+// view to restyle.
+func (s *Session) ThemeVersion() uint64 { return s.themeVersion }
+
+// adoptFrameTheme makes t, a frame's Theme, the theme in effect and
+// reports whether that changed it. A cell surface's palette follows.
+func (s *Session) adoptFrameTheme(t *theme.Theme) bool {
+	switch {
+	case t == nil && s.frameTheme == nil:
+		return false
+	case t == nil:
+		s.frameTheme = nil
+	case s.frameTheme != nil && reflect.DeepEqual(*t, *s.frameTheme):
+		return false
+	default:
+		c := *t
+		s.frameTheme = &c
+	}
+	s.themeVersion++
+	if s.cellSurface {
+		if cur := s.Theme(false); cur != nil {
+			layout.UseCellTheme(&cur.Dark)
+			s.cellThemed = true
+		} else if s.cellThemed {
+			layout.UseCellTheme(nil)
+		}
+	}
+	return true
+}
+
+// Theme is the design system the host draws with: the app's (WithTheme),
+// or, for a graphical host, theme.Default(); nil in a terminal without one.
+func (s *Session) Theme(graphical bool) *theme.Theme {
+	if s.frameTheme != nil {
+		return s.frameTheme
+	}
+	if s.theme != nil {
+		return s.theme
+	}
+	if !graphical {
+		return nil
+	}
+	if s.defaultTheme == nil {
+		d := theme.Default()
+		s.defaultTheme = &d
+	}
+	return s.defaultTheme
+}
+
+// themed fills ctx's Theme and Palette from the session's theme.
+func (s *Session) themed(ctx RenderContext) RenderContext {
+	t := s.Theme(ctx.Graphical)
+	if t == nil {
+		return ctx
+	}
+	if ctx.Appearance == AppearanceUnknown {
+		ctx.Appearance = AppearanceDark
+	}
+	ctx.Theme, ctx.Palette = t, t.Palette(ctx.Appearance == AppearanceDark)
+	return ctx
 }
 
 // NewSession wraps an app for an offscreen host. Run constructs sessions
@@ -95,6 +179,17 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 		s.mu.Unlock()
 	})
 	s.actionSink = func(enqueue func(action)) { fx.enqueue = enqueue }
+	// With App.Panic, app code runs under catch: a panic is reported to the
+	// hook on the loop, as an update of its own.
+	var catch *catcher
+	if app.Panic != nil {
+		catch = &catcher{}
+		catch.report = func(p Panic) {
+			s.enqueue(func() { guardPanicHook(p, func() { app.Panic(app.State, p, fx) }) })
+		}
+		fx.catch = catch
+		app = guardApp(app, catch)
+	}
 	fx.sendUpdate = func(sendCtx context.Context, update StateUpdate[S]) bool {
 		if sendCtx != nil {
 			select {
@@ -103,7 +198,7 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 			default:
 			}
 		}
-		s.enqueue(func() { ApplyUpdate(app.State, app.Tracer, update) })
+		s.enqueue(func() { catch.run("update "+update.Name(), func() { ApplyUpdate(app.State, app.Tracer, update) }) })
 		return true
 	}
 	s.start = func(size ResizeEvent) {
@@ -136,7 +231,14 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 		}
 	}
 	s.trace = func(ev Event) { app.Tracer.Event(ev) }
-	s.view = func(ctx RenderContext) Frame { return app.View(app.State, ctx) }
+	s.view = func(ctx RenderContext) Frame {
+		f := app.View(app.State, s.themed(ctx))
+		if s.adoptFrameTheme(f.Theme) {
+			// Once more, so the frame is viewed in the theme it chose.
+			f = app.View(app.State, s.themed(ctx))
+		}
+		return f
+	}
 	s.services = func(host HostServices) {
 		fx = withHostCapabilities(fx, host.Capabilities)
 		fx = withHostClipboard(fx, host.SetClipboard, host.ReadClipboard)
@@ -185,6 +287,8 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 	}
 	s.step = func(input StepInput) StepResult { return stepSession(s, app, s.cell, input) }
 	sessionaccess.Register(s, sessionaccess.Access{
+		SetQuitRequests:     func(on bool) { s.quitRequests = on },
+		SetPreciseScrolling: func(on bool) { s.preciseScrolling = on },
 		SetAsync: func(dispatch func(func()), clock sessionaccess.Clock) {
 			fx.dispatch, fx.clock = dispatch, clock
 		},
@@ -275,6 +379,7 @@ func (s *Session) UseHostServices(services HostServices) { s.services(services) 
 
 func (s *Session) useCellPolicy(policy sessionPolicy) {
 	s.defaultQuit = policy.defaultQuit
+	s.quitRequests = policy.quitRequests
 	s.inline = policy.inline
 	s.cell.dialogResizeRoutesThroughMenus = policy.dialogResizeRoutesThroughMenus
 }
@@ -306,6 +411,9 @@ func runWithHost[S any](ctx context.Context, app App[S], config RunConfig) (bool
 		return false, nil
 	}
 	session := newSession(ctx, app)
+	session.quitRequests = config.config.quitRequests
+	session.preciseScrolling = config.config.preciseScrolling
+	session.theme = config.config.theme
 	session.runTerminal = func(runCtx context.Context, options ...Option) error {
 		runConfig := applyRunOptions(config.config, options...).config
 		terminalApp := app

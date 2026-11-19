@@ -69,3 +69,40 @@ func TestInvalidPointControlMinimumDoesNotPoisonGeometry(t *testing.T) {
 		}
 	}
 }
+
+// A design system's density sets the default insets: controls, item rows
+// and decorated panels take Metrics.Insets; zero fields keep the built-in
+// 4×8 and 12pt.
+func TestPointDefaultInsetsFollowMetrics(t *testing.T) {
+	tree := func() Node {
+		return Col{Align: AlignStart, Children: []Node{
+			Button{NodeBase: NodeBase{ID: "button"}, Label: "OK"},
+			Row{NodeBase: NodeBase{ID: "item", ItemPadding: true}, Children: []Node{Label{NodeBase: NodeBase{ID: "itemText"}, Text: "a"}}},
+			Col{NodeBase: NodeBase{ID: "panel", Box: Box{Border: BorderRounded}}, Children: []Node{Label{NodeBase: NodeBase{ID: "panelText"}, Text: "b"}}},
+		}}
+	}
+	for _, tc := range []struct {
+		in         Insets
+		v, h, pane float64
+	}{
+		{Insets{}, 4, 8, 12},
+		{Insets{Vertical: 3, Horizontal: 6, Panel: 10}, 3, 6, 10},
+		{Insets{Horizontal: 10}, 4, 10, 12},
+	} {
+		m := testMetrics
+		m.DefaultPadding = true
+		m.Insets = tc.in
+		s := LayoutScene(tree(), 300, 400, m)
+		b, txt := s.Rects["item"], s.Rects["itemText"]
+		if txt.X-b.X != tc.h || txt.Y-b.Y != tc.v {
+			t.Errorf("%+v: item inset %v,%v, want %v,%v", tc.in, txt.X-b.X, txt.Y-b.Y, tc.h, tc.v)
+		}
+		p, pt := s.Rects["panel"], s.Rects["panelText"]
+		if pt.X-p.X != tc.pane+m.Border || pt.Y-p.Y != tc.pane+m.Border {
+			t.Errorf("%+v: panel inset %v,%v, want %v", tc.in, pt.X-p.X, pt.Y-p.Y, tc.pane)
+		}
+		if bw := s.Rects["button"].W - 2*tc.h; bw != 12 { // "OK" in testMetrics
+			t.Errorf("%+v: button width %v", tc.in, bw)
+		}
+	}
+}

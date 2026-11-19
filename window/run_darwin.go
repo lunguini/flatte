@@ -13,6 +13,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 	"github.com/lunguini/flatte/window/internal/appkit"
 )
 
@@ -36,6 +37,48 @@ const (
 	// NSWindowCollectionBehaviorFullScreenPrimary.
 	nsWindowCollectionBehaviorFullScreenPrimary = 1 << 7
 )
+
+// newEffect is the blur a translucent window's view draws over: what is
+// behind the window, always active. The caller releases it.
+func newEffect(width, height float64) objc.ID {
+	effect := alloc("NSVisualEffectView").Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
+	effect.Send(sel("setMaterial:"), int(nsMaterialUnderWindow))
+	effect.Send(sel("setBlendingMode:"), int(nsBlendBehindWindow))
+	effect.Send(sel("setState:"), int(nsEffectActive))
+	return effect
+}
+
+// putBehind makes effect the window's content, view drawn over it, and the
+// window see-through.
+func putBehind(win, view, effect objc.ID, dark bool) {
+	view.Send(sel("retain"))
+	view.Send(sel("removeFromSuperview"))
+	effect.Send(sel("setFrame:"), objc.Send[CGRect](win.Send(sel("contentView")), sel("frame")))
+	win.Send(sel("setContentView:"), effect)
+	view.Send(sel("setFrame:"), objc.Send[CGRect](effect, sel("bounds")))
+	view.Send(sel("setAutoresizingMask:"), uint(nsViewSizable))
+	effect.Send(sel("addSubview:"), view)
+	view.Send(sel("release"))
+	win.Send(sel("setOpaque:"), false)
+	win.Send(sel("setBackgroundColor:"), class("NSColor").Send(sel("clearColor")))
+	appearance := "NSAppearanceNameAqua"
+	if dark {
+		appearance = "NSAppearanceNameDarkAqua"
+	}
+	win.Send(sel("setAppearance:"), class("NSAppearance").Send(sel("appearanceNamed:"), nsString(appearance)))
+	win.Send(sel("makeFirstResponder:"), view)
+}
+
+// takeOut makes view the window's content again, opaque.
+func takeOut(win, view objc.ID) {
+	view.Send(sel("retain"))
+	view.Send(sel("removeFromSuperview"))
+	win.Send(sel("setContentView:"), view)
+	view.Send(sel("release"))
+	win.Send(sel("setOpaque:"), true)
+	win.Send(sel("setBackgroundColor:"), class("NSColor").Send(sel("windowBackgroundColor")))
+	win.Send(sel("makeFirstResponder:"), view)
+}
 
 // --- running functions on the main thread ---
 
@@ -128,25 +171,11 @@ func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, min
 		win.Send(sel("setTitlebarAppearsTransparent:"), true)
 		win.Send(sel("setTitleVisibility:"), int(nsWindowTitleHidden))
 	}
+	win.Send(sel("setContentView:"), view)
 	if ch.translucent {
-		// The view draws over a blur of what is behind the window.
-		effect := alloc("NSVisualEffectView").Send(sel("initWithFrame:"), cgRect(0, 0, width, height))
-		effect.Send(sel("setMaterial:"), int(nsMaterialUnderWindow))
-		effect.Send(sel("setBlendingMode:"), int(nsBlendBehindWindow))
-		effect.Send(sel("setState:"), int(nsEffectActive))
-		view.Send(sel("setAutoresizingMask:"), uint(nsViewSizable))
-		effect.Send(sel("addSubview:"), view)
-		win.Send(sel("setContentView:"), effect)
+		effect := newEffect(width, height)
+		putBehind(win, view, effect, ch.dark)
 		effect.Send(sel("release"))
-		win.Send(sel("setOpaque:"), false)
-		win.Send(sel("setBackgroundColor:"), class("NSColor").Send(sel("clearColor")))
-		appearance := "NSAppearanceNameAqua"
-		if ch.dark {
-			appearance = "NSAppearanceNameDarkAqua"
-		}
-		win.Send(sel("setAppearance:"), class("NSAppearance").Send(sel("appearanceNamed:"), nsString(appearance)))
-	} else {
-		win.Send(sel("setContentView:"), view)
 	}
 	win.Send(sel("setCollectionBehavior:"), uint(nsWindowCollectionBehaviorFullScreenPrimary))
 	win.Send(sel("setContentMinSize:"), CGSize{Width: float64(max(minCols, 20)) * m.Column, Height: float64(max(minLines, 4)) * m.Line})
@@ -161,9 +190,10 @@ func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, min
 // nativeWindows is the window's windowBackend: secondary windows, each with
 // its own view and state, sharing the main window's look.
 type nativeWindows struct {
-	cls      objc.Class
-	m        layout.Metrics
-	th       func() theme
+	cls objc.Class
+	// main is the main window's state, whose metrics, theme and design
+	// (restyled live) a new window takes.
+	main     func() *windowState
 	follow   bool
 	delegate objc.ID
 	// focused and closeRequested report window id becoming key and the
@@ -179,9 +209,9 @@ func (n nativeWindows) openWindow(w flatte.Window, s ui) func() {
 	if lines <= 0 {
 		lines = 20
 	}
-	win, view := makeWindow(n.cls, n.m, w.ID, max(cols, w.MinWidth), max(lines, w.MinHeight), w.MinWidth, w.MinHeight, w.Autosave, chrome{})
-	th := n.th()
-	st := &windowState{ui: s, m: n.m, th: th, follow: n.follow, dark: isDark(view), window: win, view: view, id: w.ID, title: w.ID}
+	main := n.main()
+	win, view := makeWindow(n.cls, main.m, w.ID, max(cols, w.MinWidth), max(lines, w.MinHeight), w.MinWidth, w.MinHeight, w.Autosave, chrome{})
+	st := &windowState{ui: s, m: main.m, th: main.th, follow: n.follow, dark: isDark(view), window: win, view: view, id: w.ID, title: w.ID, design: main.design}
 	id := w.ID
 	st.focused = func() { n.focused(id) }
 	st.closeRequested = func() { n.closeRequested(id) }
@@ -232,8 +262,9 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	}
 	// Dark and Light share their type, so following the system changes
 	// colors only, never the metrics.
-	dark := isDark(nsApp)
-	th := newTheme(themeFor(opts.Theme, dark))
+	dark := opts.dark(isDark(nsApp))
+	design := session.Theme(true)
+	th := newTheme(themeFor(opts.Theme, dark, design))
 	m := th.metrics()
 	title := opts.Title
 	if opts.Desktop != nil && opts.Desktop.Title != "" {
@@ -260,7 +291,10 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	}
 	h := newSessionHost(ctx, session, m, post, stop, func() { view.Send(sel("setNeedsDisplay:"), true) })
 	defer h.cancel()
-	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.Theme == nil, dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, hideTitle: opts.HideTitleBar}
+	st := &windowState{ui: h.surface, m: m, th: th, follow: opts.follows(), dark: dark, window: win, view: view, title: title, translucent: opts.Translucent, always: opts.Translucent, hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts), design: design}
+	if opts.Translucent {
+		st.effect = win.Send(sel("contentView")).Send(sel("retain"))
+	}
 	st.focused = func() { h.focused("") }
 	register(st)
 	defer func() {
@@ -297,7 +331,19 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 	h.active = opts.Desktop == nil // regular windows activate below
 	delegateActive = h.activated
 	defer func() { delegateActive = nil }()
-	h.windows = nativeWindows{cls: cls, m: m, th: func() theme { return st.th }, follow: opts.Theme == nil, delegate: delegate,
+	if session.QuitRequests() {
+		delegateQuit = h.quitRequested
+		defer func() { delegateQuit = nil }()
+	}
+	h.restyle = func(d *ds.Theme) layout.Metrics {
+		for _, o := range states {
+			o.design = d
+			o.th = newTheme(themeFor(opts.Theme, o.dark, d))
+			o.m = o.th.metrics()
+		}
+		return st.m
+	}
+	h.windows = nativeWindows{cls: cls, main: func() *windowState { return st }, follow: opts.follows(), delegate: delegate,
 		focused: h.focused, closeRequested: h.closeRequested}
 	barChosen = h.menuChosen
 	defer func() { barChosen = nil }()
@@ -311,6 +357,10 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 		h.desktop = desktop
 		h.menus = desktopMenus{nativeMenus: menus, desktop: desktop}
 		st.closeRequested = func() { h.closeRequested("") }
+	}
+	if desktop == nil && session.QuitRequests() {
+		// The main window's close button asks the app, like ⌘Q.
+		st.closeRequested = h.quitRequested
 	}
 
 	done := make(chan struct{})
@@ -358,6 +408,8 @@ var (
 	delegateClassErr  error
 	delegateStop      func()
 	delegateActive    func(bool)
+	// delegateQuit, when set, answers ⌘Q instead of stopping (WithQuitRequests).
+	delegateQuit func()
 )
 
 // newDelegate is the app and window delegate: quitting from the menu or
@@ -370,6 +422,10 @@ func newDelegate(stop func()) (objc.ID, error) {
 			[]*objc.Protocol{objc.GetProtocol("NSApplicationDelegate"), objc.GetProtocol("NSWindowDelegate")}, nil,
 			[]objc.MethodDef{
 				{Cmd: sel("applicationShouldTerminate:"), Fn: func(objc.ID, objc.SEL, objc.ID) uint {
+					if delegateQuit != nil {
+						delegateQuit()
+						return nsTerminateCancel
+					}
 					if delegateStop != nil {
 						delegateStop()
 					}
@@ -433,23 +489,37 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	if err := registerFonts(opts.Fonts); err != nil {
 		return nil, err
 	}
-	th := newTheme(themeFor(opts.Theme, true))
+	// The first frame only: async results are dropped, quitting is moot.
+	session := flatte.NewSession(context.Background(), app)
+	dark := opts.dark(true)
+	th := newTheme(themeFor(opts.Theme, dark, session.Theme(true)))
 	m := th.metrics()
 	cols, lines := opts.size()
 	width, height := float64(cols)*m.Column, float64(lines)*m.Line
-	// The first frame only: async results are dropped, quitting is moot.
-	session := flatte.NewSession(context.Background(), app)
 	h := newSessionHost(context.Background(), session, m, func(func()) {}, func() {}, func() {})
+	h.restyle = func(d *ds.Theme) layout.Metrics { // the frame's Theme
+		th = newTheme(themeFor(opts.Theme, dark, d))
+		m = th.metrics()
+		return m
+	}
 	defer h.cancel()
 	defer session.Cancel()
+	h.surface.setAppearance(th.appearance)
 	h.start(width, height)
 	scene := h.render()
-	return renderImage(scene, th, m, width, height, scale, h.frameCursor(), presentation{}), nil
+	img := renderScene(scene, th, m, width, height, scale, h.frameCursor(), presentation{}, opts.Translucent || h.surface.frameTranslucent())
+	return img, nil
 }
 
 // renderImage draws scene offscreen into an RGBA image of width×height
 // points at scale pixels per point, with pres drawn over it.
 func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation) *image.RGBA {
+	return renderScene(scene, th, m, width, height, scale, cursor, pres, false)
+}
+
+// renderScene is renderImage, translucent leaving the background
+// unpainted (transparent) as a translucent window does.
+func renderScene(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation, translucent bool) *image.RGBA {
 	pw, ph := int(math.Ceil(width*scale)), int(math.Ceil(height*scale))
 	cs := cgColorSpaceCreateDeviceRGB()
 	defer cgColorSpaceRelease(cs)
@@ -458,7 +528,7 @@ func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, 
 	// Top-left origin points, as in the flipped view.
 	cgContextTranslateCTM(ctx, 0, float64(ph))
 	cgContextScaleCTM(ctx, scale, -scale)
-	p := &painter{ctx: ctx, m: m, th: th, scale: scale, presentation: pres}
+	p := &painter{ctx: ctx, m: m, th: th, scale: scale, presentation: pres, translucent: translucent}
 	withPool(func() {
 		// Fill the whole bitmap, including the partial pixel the point size
 		// rounds up to.

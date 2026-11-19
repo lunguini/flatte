@@ -50,8 +50,8 @@ func TestSnapshotControls(t *testing.T) {
 	if c := at(on.X+8+(swW-switchW)/2+3, on.Y+on.H/2); !near(c, accent, 30) {
 		t.Errorf("switch on %v, want the accent track", c)
 	}
-	if c := at(off.X+8+(swW-switchW)/2+switchW-3, off.Y+off.H/2); !near(c, toColor(darkTheme.track), 30) {
-		t.Errorf("switch off %v, want the plain track", c)
+	if c := at(off.X+8+(swW-switchW)/2+switchW-4, off.Y+off.H/2); !near(c, toColor(darkTheme.lk.field), 12) {
+		t.Errorf("switch off %v, want the field track", c)
 	}
 	vol := s.Rects["vol"]
 	if c := at(vol.X+knobSize, vol.Y+vol.H/2); !near(c, accent, 30) {
@@ -96,10 +96,69 @@ func TestControlHoverAndPress(t *testing.T) {
 	if !(lum(hot) > lum(plain)) {
 		t.Errorf("hovered %v not lighter than plain %v", hot, plain)
 	}
-	if !(lum(down) < lum(plain)) {
-		t.Errorf("pressed %v not darker than plain %v", down, plain)
+	// Dark washes are white: the pressed wash is the stronger one.
+	if !(lum(down) > lum(hot)) {
+		t.Errorf("pressed %v not stronger than hovered %v", down, hot)
 	}
 	if other := fill("other", "other"); other != plain {
 		t.Errorf("another control's hover changed this one: %v", other)
+	}
+}
+
+// Controls draw the design recipe: a secondary button is outlined with no
+// fill, focus is a ring in the theme's focus color, a focused field's
+// outline turns the focus color.
+func TestControlRecipe(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	m := metrics()
+	root := layout.Col{NodeBase: layout.NodeBase{Pad: 1}, Children: []layout.Node{
+		layout.Row{Children: []layout.Node{layout.Button{NodeBase: layout.NodeBase{ID: "b"}, Label: "Button", Focused: true}, layout.NewSpacer()}},
+		layout.Row{Children: []layout.Node{layout.Input{NodeBase: layout.NodeBase{ID: "in", W: layout.Fixed(12)}, Value: "x", Focused: true}, layout.NewSpacer()}},
+	}}
+	scene := layout.LayoutScene(root, 30*m.Column, 6*m.Line, m)
+	img := renderImage(scene, darkTheme, m, 30*m.Column, 6*m.Line, 2, nil, presentation{})
+	at := func(x, y float64) color.Color { return img.At(int(x*2), int(y*2)) }
+	b, in := scene.Rects["b"], scene.Rects["in"]
+	if c := at(b.X+b.W/2, b.Y+b.H/2+5); !near(c, toColor(darkTheme.bg), 6) {
+		t.Errorf("secondary button inside %v, want no fill", c)
+	}
+	if c := at(b.X+b.W/2, b.Y+1.5); !near(c, toColor(darkTheme.lk.border), 30) {
+		t.Errorf("secondary button edge %v, want the control border", c)
+	}
+	focus := toColor(darkTheme.lk.focus)
+	if c := at(b.X+b.W/2, b.Y); !near(c, focus, 40) {
+		t.Errorf("button focus ring %v, want %v", c, focus)
+	}
+	if c := at(in.X+in.W/2, in.Y+1.5); !near(c, focus, 40) {
+		t.Errorf("focused field outline %v, want %v", c, focus)
+	}
+}
+
+// A Box.Edge is a band of the accent along its side, the focus stroke
+// thick.
+func TestBoxEdge(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	m := metrics()
+	root := layout.Row{Children: []layout.Node{
+		layout.Label{NodeBase: layout.NodeBase{ID: "tab", W: layout.Fixed(8), Box: layout.Box{Fill: layout.FillContent, Edge: layout.SideTop}}, Text: "tab"},
+		layout.Label{NodeBase: layout.NodeBase{ID: "row", W: layout.Fixed(8), Box: layout.Box{Edge: layout.SideLeft}}, Text: "row"},
+	}}
+	scene := layout.LayoutScene(root, 20*m.Column, 2*m.Line, m)
+	img := renderImage(scene, darkTheme, m, 20*m.Column, 2*m.Line, 2, nil, presentation{})
+	at := func(x, y float64) color.Color { return img.At(int(x*2), int(y*2)) }
+	tab, row := scene.Rects["tab"], scene.Rects["row"]
+	accent := toColor(darkTheme.lk.accent)
+	if c := at(tab.X+tab.W/2, tab.Y+0.5); !near(c, accent, 6) {
+		t.Errorf("tab top %v, want the accent", c)
+	}
+	if c := at(tab.X+tab.W/2, tab.Y+3); near(c, accent, 30) {
+		t.Errorf("edge thicker than the focus stroke: %v", c)
+	}
+	if c := at(row.X+0.5, row.Y+row.H/2); !near(c, accent, 6) {
+		t.Errorf("row left %v, want the accent", c)
 	}
 }

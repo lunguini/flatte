@@ -2,6 +2,7 @@ package window
 
 import (
 	"context"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -460,5 +461,72 @@ func TestHostNowPlayingSnapshotAndMediaCommandLifecycle(t *testing.T) {
 	b.drain(t, 1)
 	if len(s.events) != eventsBefore+1 {
 		t.Fatalf("queued command arrived after close: %#v", s.events[eventsBefore+1:])
+	}
+}
+
+// With WithPreciseScrolling a trackpad's deltas arrive as fractions of a
+// line, one event per frame; without it, as whole notches.
+func TestHostPreciseScrolling(t *testing.T) {
+	s := &testState{root: func(*testState) layout.Node {
+		return layout.Col{Children: []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "list"}, Text: "rows"}}}
+	}}
+	h, _ := newTestHost(t, s)
+	sessionaccess.SetPreciseScrolling(h.session, true)
+	h.start(160, 64)
+	h.render()
+	r := h.scene.Rects["list"]
+	line := cellMetrics.Line
+	var acc wheelAccumulator
+	n := len(s.events)
+	for range 3 { // a quarter line each, content moving toward the end
+		h.scrollPoints(r.X+1, r.Y+1, -line/4, &acc, 0)
+	}
+	h.render()
+	got := s.events[n:]
+	if len(got) != 1 {
+		t.Fatalf("events %#v, want one gathered event", got)
+	}
+	m := got[0].(flatte.MouseEvent)
+	if m.Button != flatte.MouseWheelDown || m.Target != "list" || math.Abs(m.Scroll-0.75) > 1e-9 || m.ScrollLines() != m.Scroll {
+		t.Fatalf("event %#v, want 0.75 lines down on list", m)
+	}
+	// Reversing direction delivers what came before first.
+	n = len(s.events)
+	h.scrollPoints(r.X+1, r.Y+1, -line/2, &acc, 0)
+	h.scrollPoints(r.X+1, r.Y+1, line, &acc, 0)
+	h.render()
+	got = s.events[n:]
+	if len(got) != 2 || got[0].(flatte.MouseEvent).Scroll != 0.5 || got[1].(flatte.MouseEvent).Scroll != -1 {
+		t.Fatalf("reversal events %#v", got)
+	}
+
+	sessionaccess.SetPreciseScrolling(h.session, false)
+	n = len(s.events)
+	for range 3 {
+		h.scrollPoints(r.X+1, r.Y+1, -line/2, &acc, 0)
+	}
+	h.render()
+	got = s.events[n:]
+	if len(got) != 1 || got[0].(flatte.MouseEvent).Scroll != 1 || got[0].(flatte.MouseEvent).Button != flatte.MouseWheelDown {
+		t.Fatalf("whole-notch events %#v, want one notch down", got)
+	}
+}
+
+// A window reports the pointer in fractional cells too, in the target's
+// frame like X and Y.
+func TestHostPrecisePointer(t *testing.T) {
+	s := &testState{root: func(*testState) layout.Node {
+		return layout.Col{Children: []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "top"}, Text: "x"}}}
+	}}
+	h, _ := newTestHost(t, s)
+	h.start(160, 64)
+	h.render()
+	n := len(s.events)
+	x, y := 2.5*cellMetrics.Column, 0.25*cellMetrics.Line
+	h.mouse(x, y, flatte.MouseLeft, flatte.MousePress, 0)
+	m := s.events[n].(flatte.MouseEvent)
+	px, py := m.Point()
+	if !m.HasPrecise || math.Abs(px-2.5) > 1e-9 || math.Abs(py-0.25) > 1e-9 || m.X != 2 || m.Y != 0 {
+		t.Fatalf("pointer %#v, want (2.5, 0.25) over cell (2, 0)", m)
 	}
 }

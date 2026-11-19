@@ -1,6 +1,7 @@
 package window
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // windowState is the Go side of one window. AppKit calls the view's methods
@@ -32,13 +34,22 @@ type windowState struct {
 	// hideTitle has the content under the title bar, its strip dragging the
 	// window where nothing is.
 	translucent, hideTitle bool
-	window                 objc.ID
-	title                  string
+	// design is the app's design system (flatte.WithTheme; nil: the
+	// default), followed across appearance switches.
+	design *ds.Theme
+	// always: Options.Translucent (frames cannot turn it off); effect is
+	// the blur view, once made.
+	always bool
+	effect objc.ID
+	titleH float64 // the strip's height in points, with hideTitle
+	window objc.ID
+	title  string
 	// marked is the input method's uncommitted text; caret is where the
 	// focused input's caret was last drawn, in view coordinates.
 	marked  string
 	caret   CGRect
 	caretOK bool
+	extra   []CGRect // further carets, last drawn (they blink with caret)
 	wheel   wheelAccumulator
 	// caretMoved is when the caret last moved; blink redraws at its next
 	// blink phase.
@@ -58,6 +69,10 @@ func (st *windowState) showPointer(view objc.ID, shape pointer, tooltip string) 
 		name = "pointingHandCursor"
 	case pointerText:
 		name = "IBeamCursor"
+	case pointerResizeColumns:
+		name = "resizeLeftRightCursor"
+	case pointerResizeRows:
+		name = "resizeUpDownCursor"
 	}
 	class("NSCursor").Send(sel(name)).Send(sel("set"))
 	if tooltip != st.tooltip {
@@ -132,6 +147,10 @@ func register(st *windowState) {
 func unregister(st *windowState) {
 	delete(states, st.view)
 	delete(byWindow, st.window)
+	if st.effect != 0 {
+		st.effect.Send(sel("release"))
+		st.effect = 0
+	}
 	if st.frame != nil {
 		st.frame.Stop()
 	}
@@ -144,6 +163,25 @@ func unregister(st *windowState) {
 func isDark(view objc.ID) bool {
 	name := plainString(view.Send(sel("effectiveAppearance")).Send(sel("name")))
 	return strings.Contains(name, "Dark")
+}
+
+// setTranslucent puts the window's view over the blur, or takes it out,
+// as the frames ask.
+func (st *windowState) setTranslucent(on bool) {
+	if on == st.translucent || states[st.view] != st {
+		return // done meanwhile, or the window closed
+	}
+	st.translucent = on
+	if on {
+		if st.effect == 0 {
+			b := objc.Send[CGRect](st.view, sel("bounds"))
+			st.effect = newEffect(b.Size.Width, b.Size.Height)
+		}
+		putBehind(st.window, st.view, st.effect, st.dark)
+	} else {
+		takeOut(st.window, st.view)
+	}
+	st.view.Send(sel("setNeedsDisplay:"), true)
 }
 
 func (st *windowState) setTitle(t string) {
@@ -192,7 +230,7 @@ func mouseHandler(button flatte.MouseButton, action flatte.MouseAction) func(obj
 			// Under a hidden title bar, a press on nothing in the strip is
 			// the title bar's: it drags the window, and a double click
 			// zooms it.
-			if st.hideTitle && button == flatte.MouseLeft && action == flatte.MousePress && p.Y < TitleBarHeight && st.ui.hit(p.X, p.Y) == "" {
+			if st.hideTitle && button == flatte.MouseLeft && action == flatte.MousePress && p.Y < st.titleH && st.ui.hit(p.X, p.Y) == "" {
 				if objc.Send[int](event, sel("clickCount")) == 2 {
 					st.window.Send(sel("performZoom:"), objc.ID(0))
 				} else {
@@ -259,11 +297,15 @@ func viewMethods() []objc.MethodDef {
 			}
 			if st.follow {
 				if dark := isDark(self); dark != st.dark {
-					st.dark, st.th = dark, newTheme(themeFor(nil, dark))
+					st.dark, st.th = dark, newTheme(themeFor(nil, dark, st.design))
 				}
+			}
+			if st.hideTitle {
+				placeTitleButtons(st.window, st.titleH)
 			}
 			b := objc.Send[CGRect](self, sel("bounds"))
 			st.ui.resize(b.Size.Width, b.Size.Height)
+			st.ui.setAppearance(st.th.appearance)
 			scene := st.ui.render()
 			ctx := uintptr(class("NSGraphicsContext").Send(sel("currentContext")).Send(sel("CGContext")))
 			scale := objc.Send[float64](st.window, sel("backingScaleFactor"))
@@ -280,9 +322,9 @@ func viewMethods() []objc.MethodDef {
 				p.clip = layout.PointRect{W: b.Size.Width, H: b.Size.Height}
 				p.caretAt(float64(c.X)*st.m.Column, float64(c.Y)*st.m.Line, st.m.Line, st.th.font(fontKey{mono: true}))
 			}
-			if p.caretOK {
+			if p.caretOK || len(p.extra) > 0 {
 				now := time.Now()
-				if !st.caretOK || p.caret != st.caret {
+				if !st.caretOK || p.caret != st.caret || !slices.Equal(p.extra, st.extra) {
 					st.caretMoved = now // a moved caret shows at once
 				}
 				if caretOn(now.Sub(st.caretMoved)) {
@@ -290,8 +332,11 @@ func viewMethods() []objc.MethodDef {
 				}
 				st.blinkIn(caretBlink - now.Sub(st.caretMoved)%caretBlink)
 			}
-			st.caret, st.caretOK = p.caret, p.caretOK
+			st.caret, st.caretOK, st.extra = p.caret, p.caretOK, p.extra
 			st.setTitle(st.ui.frameTitle())
+			if on := st.always || st.ui.frameTranslucent(); on != st.translucent {
+				post(func() { st.setTranslucent(on) }) // not while drawing
+			}
 		}},
 		{Cmd: sel("keyDown:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
 			st := stateOf(self)
@@ -345,15 +390,8 @@ func viewMethods() []objc.MethodDef {
 			if !objc.Send[bool](event, sel("hasPreciseScrollingDeltas")) {
 				dy *= st.m.Line // whole lines from a notched wheel
 			}
-			n := st.wheel.notches(dy, st.m.Line)
-			button := flatte.MouseWheelUp
-			if n < 0 {
-				button, n = flatte.MouseWheelDown, -n
-			}
-			if n > 0 {
-				p := location(self, event)
-				st.ui.wheel(p.X, p.Y, button, n, eventMods(event))
-			}
+			p := location(self, event)
+			st.ui.scrollPoints(p.X, p.Y, dy, &st.wheel, eventMods(event))
 		}},
 
 		// NSTextInputClient. The "document" is the composition alone:

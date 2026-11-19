@@ -61,7 +61,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 			session.cell.dialogs.show(d, done)
 		},
 	})
-	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, dialogResizeRoutesThroughMenus: true})
+	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, quitRequests: cfg.quitRequests, dialogResizeRoutesThroughMenus: true})
 	defer cancel()
 	defer host.close()
 	defer session.close()

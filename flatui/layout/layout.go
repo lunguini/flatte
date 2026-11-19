@@ -111,7 +111,47 @@ const (
 	// cell of PointsPerColumn × PointsPerLine, rounding up. Otherwise it
 	// behaves like SizeFixed.
 	SizePoints
+
+	// SizeToken is a design-system length (Value is a Token): a GUI reads
+	// it in points from its Metrics.Sizes, so density restyles it; a
+	// terminal reads a height as one line and a width as the token's
+	// regular points in columns. Otherwise it behaves like SizeFixed.
+	SizeToken
 )
+
+// Token names a design-system length (theme.Sizes) for SizeToken.
+type Token int
+
+const (
+	TokenRow     Token = iota + 1 // list, tree and tab rows (24pt regular)
+	TokenControl                  // buttons, fields, segmented controls (28)
+	TokenBar                      // pane headers, tab strips, toolbars (36)
+	TokenHeader                   // the window header strip (44)
+	tokenEnd
+)
+
+// RowSize, ControlSize, BarSize and HeaderSize are the design system's
+// heights as Sizes (SizeToken).
+func RowSize() Size     { return Size{Kind: SizeToken, Value: int(TokenRow)} }
+func ControlSize() Size { return Size{Kind: SizeToken, Value: int(TokenControl)} }
+func BarSize() Size     { return Size{Kind: SizeToken, Value: int(TokenBar)} }
+func HeaderSize() Size  { return Size{Kind: SizeToken, Value: int(TokenHeader)} }
+
+// regularPoints is t's regular-density length, the fallback for a backend
+// without Sizes and a terminal's width reading.
+func (t Token) regularPoints() float64 {
+	switch t {
+	case TokenRow:
+		return 24
+	case TokenControl:
+		return 28
+	case TokenBar:
+		return 36
+	case TokenHeader:
+		return 44
+	}
+	return 0
+}
 
 // PointsPerColumn and PointsPerLine are the nominal terminal cell a
 // terminal reads Points sizes at: the 13pt macOS monospace cell, rounded.
@@ -154,6 +194,11 @@ func normalizeSize(s Size) Size {
 		return s
 	case SizeFixed, SizeContent, SizePoints:
 		s.Value = max(s.Value, 0)
+		return s
+	case SizeToken:
+		if s.Value <= 0 || s.Value >= int(tokenEnd) {
+			return Size{Kind: SizeAuto}
+		}
 		return s
 	case SizeGrow:
 		if s.Weight < 0 || math.IsNaN(s.Weight) || math.IsInf(s.Weight, 0) {
@@ -231,7 +276,9 @@ type NodeBase struct {
 	// centered on the frame: just below it and left-aligned to it, above
 	// it when there is no room below, kept inside the frame — for a
 	// dropdown or a context menu. An anchor that is not laid out (or an
-	// empty one) centers the overlay as usual.
+	// empty one) centers the overlay as usual. In a GUI a bordered
+	// overlay's drawn border, not its band, lines up with the anchor's left
+	// edge a few points below it.
 	Anchor string
 
 	// NoPadding disables a GUI host's default component padding. Explicit
@@ -282,6 +329,14 @@ const (
 // bottom, in a GUI — a gap between the rows of a list without changing
 // their layout (clicks in the gap still reach the node); terminals ignore
 // it.
+//
+// Fill is a background by theme role, for when Background is nil: a GUI
+// paints the current theme's color for the role and follows the system's
+// light/dark switch, so the app never picks a color that only reads on one
+// appearance. Background wins when both are set. A terminal paints Fill
+// in true color while the app has a theme (WithTheme or Frame.Theme),
+// translucent fills composed over Content; without one its own
+// background shows.
 type Box struct {
 	Border      BorderKind
 	BorderColor color.Color
@@ -297,7 +352,58 @@ type Box struct {
 	Interactive bool
 	Backdrop    *Backdrop
 	InsetY      float64
+	Fill        Fill
+	// Resize marks a named box as a splitter the app drags (a pane
+	// border): a window shows a resize pointer along its axis over it. It
+	// draws nothing; the app moves the border on MouseMotion.
+	Resize Resize
+	// Edge is a GUI's accent bar along one side of the box, the theme's
+	// focus stroke thick in its Accent: an active tab's top, a current
+	// row's marker. Terminals draw nothing for it; mark the node another
+	// way there (bold, a glyph).
+	Edge Side
 }
+
+// Side is one side of a box (Box.Edge).
+type Side int
+
+const (
+	// SideNone is no side.
+	SideNone Side = iota
+	SideTop
+	SideBottom
+	SideLeft
+	SideRight
+)
+
+// Resize is the axis a splitter box (Box.Resize) moves along.
+type Resize int
+
+const (
+	// ResizeNone is not a splitter.
+	ResizeNone Resize = iota
+	// ResizeColumns is a vertical border dragged left and right.
+	ResizeColumns
+	// ResizeRows is a horizontal border dragged up and down.
+	ResizeRows
+)
+
+// Fill is a box background named by its role in the theme rather than by
+// color (see Box.Fill).
+type Fill int
+
+const (
+	// FillNone paints no role background.
+	FillNone Fill = iota
+	// FillSurface is a raised surface: panels and popovers (Theme.Surface).
+	FillSurface
+	// FillField is an inset content area: text fields, editors, lists
+	// (Theme.Field).
+	FillField
+	// FillSeparator is a divider line's color (Theme.Border): give the node
+	// a hairline size, such as Points(1).
+	FillSeparator
+)
 
 // Backdrop is a picture filling a box in a GUI: Source blurred by Blur
 // points and drawn at Opacity (0 means 1). Sharp (Blur 0), it is cropped to

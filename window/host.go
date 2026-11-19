@@ -12,6 +12,7 @@ import (
 
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // maxLayoutPasses bounds how many LayoutEvents one render delivers, as in
@@ -55,7 +56,12 @@ type host struct {
 	// main window).
 	windows windowBackend
 	open    map[string]*surface
-	focus   string
+	// restyle switches the backend to a design system a frame chose
+	// (Frame.Theme) and returns its metrics; nil: the backend keeps its
+	// style. themeVersion is the session's ThemeVersion it styled for.
+	restyle      func(*ds.Theme) layout.Metrics
+	themeVersion uint64
+	focus        string
 }
 
 // surface is one window's share of the host: its view's size, the scene
@@ -67,9 +73,12 @@ type surface struct {
 	id         string
 	invalidate func()
 
+	// appearance is the active theme's, passed to View.
+	appearance    flatte.Appearance
 	width, height float64 // view size in points
 	scene         layout.Scene
 	title         string
+	translucent   bool // the last frame's Translucent
 	// cursor is a string frame's Frame.Cursor, in cells; Root frames show the
 	// focused Input's caret instead.
 	cursor          *flatte.Cursor
@@ -148,8 +157,16 @@ type ui interface {
 	// hit is the ID of the node at (x, y) in a fresh scene ("": none).
 	hit(x, y float64) string
 	wheel(x, y float64, button flatte.MouseButton, notches int, mod flatte.Mod)
+	// scrollPoints is a scroll of delta points at (x, y), positive toward
+	// the start (a wheel turned up): fractional lines for an app run
+	// WithPreciseScrolling, else whole notches through acc.
+	scrollPoints(x, y, delta float64, acc *wheelAccumulator, mod flatte.Mod)
 	render() layout.Scene
+	// setAppearance is the active theme's, reported to View from the next
+	// render on.
+	setAppearance(flatte.Appearance)
 	frameTitle() string
+	frameTranslucent() bool
 	frameCursor() *flatte.Cursor
 }
 
@@ -198,9 +215,11 @@ func (s textSel) in(i int, op layout.TextOp) (int, int) {
 type pointer int
 
 const (
-	pointerArrow pointer = iota
-	pointerHand          // over a control
-	pointerText          // over a text field
+	pointerArrow         pointer = iota
+	pointerHand                  // over a control
+	pointerText                  // over a text field
+	pointerResizeColumns         // over a vertical splitter (Box.Resize)
+	pointerResizeRows            // over a horizontal splitter
 )
 
 // textLayout is where a backend puts carets in the text fields it draws.
@@ -566,6 +585,20 @@ func (s *surface) control(id string) (layout.ControlOp, bool) {
 	return layout.ControlOp{}, false
 }
 
+// resizeBox is the axis of the splitter named id (ResizeNone when id is no
+// splitter).
+func (s *surface) resizeBox(id string) layout.Resize {
+	if id == "" {
+		return layout.ResizeNone
+	}
+	for i := len(s.scene.Ops) - 1; i >= 0; i-- {
+		if box, ok := s.scene.Ops[i].(layout.BoxOp); ok && box.ID == id {
+			return box.Box.Resize
+		}
+	}
+	return layout.ResizeNone
+}
+
 // interactiveBox reports a named custom item that requests native hover.
 func (s *surface) interactiveBox(id string) bool {
 	if id == "" {
@@ -598,10 +631,17 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 		}
 	}
 	if !inputHovered {
-		if _, ok := s.control(id); ok || s.interactiveBox(id) {
-			shape = pointerHand
-		} else {
-			id = ""
+		switch r := s.resizeBox(id); {
+		case r == layout.ResizeColumns:
+			shape, id = pointerResizeColumns, ""
+		case r == layout.ResizeRows:
+			shape, id = pointerResizeRows, ""
+		default:
+			if _, ok := s.control(id); ok || s.interactiveBox(id) {
+				shape = pointerHand
+			} else {
+				id = ""
+			}
 		}
 	}
 	if shape == pointerArrow {
@@ -970,6 +1010,35 @@ func (s *surface) wheel(x, y float64, button flatte.MouseButton, notches int, mo
 	if notches <= 0 {
 		return
 	}
+	s.gatherWheel(x, y, button, mod, false).n += notches
+}
+
+func (s *surface) scrollPoints(x, y, delta float64, acc *wheelAccumulator, mod flatte.Mod) {
+	line := s.h.metrics.Line
+	if line <= 0 || math.IsNaN(delta) || math.IsInf(delta, 0) || delta == 0 {
+		return
+	}
+	if s.h.session.PreciseScrolling() {
+		lines := -delta / line
+		button := flatte.MouseWheelDown
+		if lines < 0 {
+			button = flatte.MouseWheelUp
+		}
+		s.gatherWheel(x, y, button, mod, true).lines += lines
+		return
+	}
+	n := acc.notches(delta, line)
+	button := flatte.MouseWheelUp
+	if n < 0 {
+		button, n = flatte.MouseWheelDown, -n
+	}
+	s.wheel(x, y, button, n, mod)
+}
+
+// gatherWheel is the scrolling pending for the next frame, for an event at
+// (x, y) of button: what was gathered for another button, target or kind
+// is delivered first.
+func (s *surface) gatherWheel(x, y float64, button flatte.MouseButton, mod flatte.Mod, precise bool) *pendingWheel {
 	var scene layout.Scene
 	if s.scroll != nil {
 		scene = s.scene // targets do not move under a gathered scroll
@@ -982,15 +1051,15 @@ func (s *surface) wheel(x, y float64, button flatte.MouseButton, notches int, mo
 	if op, ok := s.input(id); ok && s.h.text != nil {
 		ev.Caret, ev.HasCaret = s.h.text.caretAt(op, x, y), true
 	}
-	if p := s.scroll; p != nil && (p.ev.Button != ev.Button || p.ev.Mod != ev.Mod || p.ev.Target != ev.Target) {
+	if p := s.scroll; p != nil && (p.ev.Button != ev.Button || p.ev.Mod != ev.Mod || p.ev.Target != ev.Target || p.precise != precise) {
 		s.flushWheel()
 	}
 	if s.scroll == nil {
-		s.scroll = &pendingWheel{}
+		s.scroll = &pendingWheel{precise: precise}
 	}
 	s.scroll.ev = ev
-	s.scroll.n += notches
 	s.invalidate()
+	return s.scroll
 }
 
 // pendingWheel is the scrolling gathered for the next frame: n turns of
@@ -998,6 +1067,9 @@ func (s *surface) wheel(x, y float64, button flatte.MouseButton, notches int, mo
 type pendingWheel struct {
 	ev flatte.MouseEvent
 	n  int
+	// precise: lines of fractional scrolling, delivered as one event.
+	precise bool
+	lines   float64
 }
 
 // flushWheel delivers the gathered scrolling: one event per turn, as a
@@ -1009,9 +1081,18 @@ func (s *surface) flushWheel() {
 	}
 	s.scroll = nil
 	h := s.h
-	events := make([]flatte.Event, p.n)
-	for i := range events {
-		events[i] = p.ev
+	var events []flatte.Event
+	if p.precise {
+		ev := p.ev
+		ev.Scroll = p.lines
+		events = []flatte.Event{ev}
+	} else {
+		ev := p.ev
+		ev.Scroll = ev.ScrollLines() // ±1, the notch
+		events = make([]flatte.Event, p.n)
+		for i := range events {
+			events[i] = ev
+		}
 	}
 	step := h.session.Step(flatte.StepInput{Events: events})
 	h.after(step)
@@ -1024,12 +1105,46 @@ func (s *surface) flushWheel() {
 func (s *surface) pointerAt(x, y float64, id string, r layout.PointRect) flatte.MouseEvent {
 	h := s.h
 	ev := flatte.MouseEvent{X: h.cols(x), Y: h.lines(y), Window: s.id}
+	col, line := h.metrics.Column, h.metrics.Line
+	if col > 0 && line > 0 {
+		ev.PreciseX, ev.PreciseY, ev.HasPrecise = x/col, y/line, true
+	}
 	if id != "" {
 		ev.Target, ev.TargetRect = id, r.Cells(h.metrics)
 		ev.X = ev.TargetRect.X + h.cols(x-r.X)
 		ev.Y = ev.TargetRect.Y + h.lines(y-r.Y)
+		if ev.HasPrecise {
+			// In the target's cells, as X and Y are.
+			ev.PreciseX = float64(ev.TargetRect.X) + (x-r.X)/col
+			ev.PreciseY = float64(ev.TargetRect.Y) + (y-r.Y)/line
+		}
 	}
 	return ev
+}
+
+// followTheme restyles the backend when the theme in effect changed (a
+// frame set Frame.Theme). New cell sizes reach the app as a ResizeEvent
+// after this render, as a window resize would.
+func (h *host) followTheme() {
+	v := h.session.ThemeVersion()
+	if v == h.themeVersion {
+		return
+	}
+	h.themeVersion = v
+	if h.restyle == nil {
+		return
+	}
+	old := h.metrics
+	h.metrics = h.restyle(h.session.Theme(true))
+	if old.Column == h.metrics.Column && old.Line == h.metrics.Line {
+		return
+	}
+	h.post(func() {
+		for _, s := range append([]*surface{h.surface}, slices.Collect(maps.Values(h.open))...) {
+			s.width = -1 // the next resize delivers the new cell size
+			s.invalidate()
+		}
+	})
 }
 
 // render produces the scene to draw, settling layout first: while the
@@ -1040,7 +1155,9 @@ func (s *surface) render() layout.Scene {
 	s.flushWheel()
 	for pass := 0; ; pass++ {
 		frame := s.view()
+		h.followTheme()
 		s.title = frame.Title
+		s.translucent = frame.Translucent
 		s.cursor = nil
 		root := frame.Root
 		if root == nil {
@@ -1083,7 +1200,7 @@ func (s *surface) render() layout.Scene {
 func (s *surface) view() flatte.Frame {
 	return s.h.session.Step(flatte.StepInput{FrameDue: true, RenderContext: flatte.RenderContext{
 		Width: s.h.cols(s.width), Height: s.h.lines(s.height), ColorProfile: colorprofile.TrueColor,
-		Window: s.id, Graphical: true, Capabilities: s.h.state.Capabilities,
+		Window: s.id, Graphical: true, Capabilities: s.h.state.Capabilities, Appearance: s.appearance,
 	}}).Frame
 }
 
@@ -1104,7 +1221,23 @@ func (w *wheelAccumulator) notches(delta, line float64) int {
 }
 
 // frameTitle is the last rendered frame's title.
+func (s *surface) setAppearance(a flatte.Appearance) { s.appearance = a }
+
 func (s *surface) frameTitle() string { return s.title }
+
+// frameTranslucent reports the last frame's Translucent.
+func (s *surface) frameTranslucent() bool { return s.translucent }
 
 // frameCursor is the last rendered string frame's cursor, in cells.
 func (s *surface) frameCursor() *flatte.Cursor { return s.cursor }
+
+// quitRequested is the user asking to quit (⌘Q, the main window's close
+// button): the app answers it when it opted in with WithQuitRequests (and
+// quits with Effects.Quit, or keeps running); otherwise the host stops.
+func (h *host) quitRequested() {
+	if !h.session.QuitRequests() {
+		h.stop()
+		return
+	}
+	h.handle(flatte.QuitRequest{})
+}

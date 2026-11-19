@@ -1,4 +1,7 @@
 flatte package flatte
+  const AppearanceDark Appearance = 2
+  const AppearanceLight Appearance = 1
+  const AppearanceUnknown Appearance = 0
   const CursorShapeBar CursorShape = 3
   const CursorShapeBlock CursorShape = 1
   const CursorShapeDefault CursorShape = 0
@@ -85,7 +88,10 @@ flatte package flatte
   func WithInput(in io.Reader) Option
   func WithMouse(mode MouseMode) Option
   func WithOutput(out io.Writer) Option
+  func WithPreciseScrolling() Option
+  func WithQuitRequests() Option
   func WithReportFocus() Option
+  func WithTheme(t theme.Theme) Option
   func WithoutBracketedPaste() Option
   func WithoutDefaultQuit() Option
   method *RunConfig.UseFallbackHost(host Host)
@@ -94,12 +100,18 @@ flatte package flatte
   method *Scope.Ctx() context.Context
   method *Session.Cancel()
   method *Session.ContextMenu(target string)[]MenuItem
+  method *Session.PreciseScrolling() bool
+  method *Session.QuitRequests() bool
   method *Session.State() HostState
   method *Session.Step(input StepInput) StepResult
+  method *Session.Theme(graphical bool) *theme.Theme
+  method *Session.ThemeVersion() uint64
   method *Session.Updates() <-chan struct{}
   method *Session.UseHostServices(services HostServices)
+  method *Session.UseTheme(t theme.Theme)
   method *Session.UsesNowPlaying() bool
   method *Session.WindowFrame(id string)(Frame, bool)
+  method Appearance.Dark() bool
   method Effects[S].Capabilities() Capabilities
   method Effects[S].Ctx() context.Context
   method Effects[S].Desktop(command DesktopCommand)
@@ -112,8 +124,12 @@ flatte package flatte
   method Effects[S].SetClipboard(text string)
   method Effects[S].Suspend()
   method Mod.Contains(mods Mod) bool
+  method MouseEvent.Point()(x float64, y float64)
+  method MouseEvent.ScrollLines() float64
   method NoopTracer.Event(Event)
   method NoopTracer.Update(string)
+  method Panic.Error() string
+  method Panic.Where() string
   method UpdateTracer.Event(Event)
   method UpdateTracer.Update(name string)
   type AlertDialog struct
@@ -132,7 +148,9 @@ flatte package flatte
   field App.ContextMenu func(s*S, target string)[]MenuItem [order=7]
   field App.Windows func(*S)[]Window [order=8]
   field App.NowPlaying func(*S) *NowPlaying [order=9]
-  struct App fields=10 comparable=false
+  field App.Panic func(*S, Panic, Effects[S]) [order=10]
+  struct App fields=11 comparable=false
+  type Appearance int
   type Capabilities struct
   field Capabilities.Exec bool [order=0]
   field Capabilities.Suspend bool [order=1]
@@ -210,7 +228,8 @@ flatte package flatte
   field Effects.<unexported> func(Notification) [order=11]
   field Effects.<unexported> func(DesktopCommand) [order=12]
   field Effects.<unexported> Capabilities [order=13]
-  struct Effects fields=14 comparable=false
+  field Effects.<unexported> *catcher [order=14]
+  struct Effects fields=15 comparable=false
   type Event interface
   interface Event method isEvent()
   type FileSelection struct
@@ -226,8 +245,10 @@ flatte package flatte
   field Frame.CursorStyle *CursorStyle [order=2]
   field Frame.Title string [order=3]
   field Frame.CellImages bool [order=4]
-  field Frame.Root layout.Node [order=5]
-  struct Frame fields=6 comparable=true
+  field Frame.Translucent bool [order=5]
+  field Frame.Theme *theme.Theme [order=6]
+  field Frame.Root layout.Node [order=7]
+  struct Frame fields=8 comparable=true
   type Host interface
   interface Host method Run(context.Context, *Session) error
   type HostServices struct
@@ -296,7 +317,11 @@ flatte package flatte
   field MouseEvent.Clicks int [order=9]
   field MouseEvent.Clear bool [order=10]
   field MouseEvent.Window string [order=11]
-  struct MouseEvent fields=12 comparable=true
+  field MouseEvent.Scroll float64 [order=12]
+  field MouseEvent.PreciseX float64 [order=13]
+  field MouseEvent.PreciseY float64 [order=14]
+  field MouseEvent.HasPrecise bool [order=15]
+  struct MouseEvent fields=16 comparable=true
   type MouseMode int
   type NoopTracer struct
   struct NoopTracer fields=0 comparable=true
@@ -323,9 +348,16 @@ flatte package flatte
   struct OpenDialog fields=5 comparable=false
   type Option interface
   interface Option method ConfigureRun(*RunConfig)
+  type Panic struct
+  field Panic.In string [order=0]
+  field Panic.Value any [order=1]
+  field Panic.Stack []byte [order=2]
+  struct Panic fields=3 comparable=false
   type PasteEvent struct
   field PasteEvent.Text string [order=0]
   struct PasteEvent fields=1 comparable=true
+  type QuitRequest struct
+  struct QuitRequest fields=0 comparable=true
   type RenderContext struct
   field RenderContext.Width int [order=0]
   field RenderContext.Height int [order=1]
@@ -333,7 +365,10 @@ flatte package flatte
   field RenderContext.Window string [order=3]
   field RenderContext.Graphical bool [order=4]
   field RenderContext.Capabilities Capabilities [order=5]
-  struct RenderContext fields=6 comparable=true
+  field RenderContext.Appearance Appearance [order=6]
+  field RenderContext.Theme *theme.Theme [order=7]
+  field RenderContext.Palette *theme.Palette [order=8]
+  struct RenderContext fields=9 comparable=true
   type ResizeEvent struct
   field ResizeEvent.Width int [order=0]
   field ResizeEvent.Height int [order=1]
@@ -382,9 +417,16 @@ flatte package flatte
   field Session.<unexported> bool [order=23]
   field Session.<unexported> bool [order=24]
   field Session.<unexported> bool [order=25]
-  field Session.<unexported> func(*NowPlaying) [order=26]
-  field Session.<unexported> *sessionCell [order=27]
-  struct Session fields=28 comparable=false
+  field Session.<unexported> bool [order=26]
+  field Session.<unexported> bool [order=27]
+  field Session.<unexported> func(*NowPlaying) [order=28]
+  field Session.<unexported> *sessionCell [order=29]
+  field Session.<unexported> *theme.Theme [order=30]
+  field Session.<unexported> *theme.Theme [order=31]
+  field Session.<unexported> *theme.Theme [order=32]
+  field Session.<unexported> uint64 [order=33]
+  field Session.<unexported> bool [order=34]
+  struct Session fields=35 comparable=false
   type StateUpdate[S any] interface
   interface StateUpdate method Apply(*S)
   interface StateUpdate method Name() string
@@ -467,13 +509,15 @@ flatest package flatest
   field Driver.<unexported> func() [order=9]
   field Driver.<unexported> []pendingDialog [order=10]
   field Driver.<unexported> []flatte.Notification [order=11]
-  struct Driver fields=12 comparable=false
+  field Driver.<unexported> bool [order=12]
+  struct Driver fields=13 comparable=false
   type Options struct
   field Options.Width int [order=0]
   field Options.Height int [order=1]
   field Options.Graphical bool [order=2]
   field Options.Capabilities flatte.Capabilities [order=3]
-  struct Options fields=4 comparable=true
+  field Options.Theme *theme.Theme [order=4]
+  struct Options fields=5 comparable=true
   type Recorder struct
   field Recorder.Steps []Step [order=0]
   struct Recorder fields=1 comparable=false
@@ -616,6 +660,7 @@ flatui package flatui
   method *Timer.Tick(delta time.Duration)
   method *Tree.MoveDown()
   method *Tree.MoveUp()
+  method *Tree.Scroll(rows int)
   method *Tree.SelectVisible(i int)
   method *Tree.SetHeight(h int)
   method *Tree.SetNodes(nodes[]TreeNode)
@@ -900,6 +945,108 @@ flatui package flatui
   var SpinnerLine []string
   var TabGlyphsPowerline TabGlyphs
   var TabGlyphsSafe TabGlyphs
+flatui/kit package kit
+  const DisclosureClosed Disclosure = 2
+  const DisclosureLeaf Disclosure = 1
+  const DisclosureNone Disclosure = 0
+  const DisclosureOpen Disclosure = 3
+  const ToneAccent Tone = 1
+  const ToneDanger Tone = 5
+  const ToneInfo Tone = 2
+  const ToneNeutral Tone = 0
+  const ToneSuccess Tone = 3
+  const ToneWarning Tone = 4
+  func OptionID(id string, i int) string
+  method Action.Layout() layout.Node
+  method Badge.Layout() layout.Node
+  method EmptyState.Layout() layout.Node
+  method ListRow.Layout() layout.Node
+  method PaneHeader.Layout() layout.Node
+  method Popover.Layout() layout.Node
+  method Section.Layout() layout.Node
+  method Segmented.Layout() layout.Node
+  method Setting.Layout() layout.Node
+  method Tabs.Layout() layout.Node
+  type Action struct
+  field Action.ID string [order=0]
+  field Action.Icon layout.IconName [order=1]
+  field Action.Glyph string [order=2]
+  field Action.Tooltip string [order=3]
+  struct Action fields=4 comparable=true
+  type Badge struct
+  field Badge.Text string [order=0]
+  field Badge.Tone Tone [order=1]
+  struct Badge fields=2 comparable=true
+  type Disclosure int
+  type EmptyState struct
+  field EmptyState.ID string [order=0]
+  field EmptyState.Icon layout.IconName [order=1]
+  field EmptyState.Title string [order=2]
+  field EmptyState.Hint string [order=3]
+  field EmptyState.Actions []layout.Node [order=4]
+  field EmptyState.Inline bool [order=5]
+  struct EmptyState fields=6 comparable=false
+  type ListRow struct
+  field ListRow.ID string [order=0]
+  field ListRow.Icon layout.IconName [order=1]
+  field ListRow.Title string [order=2]
+  field ListRow.Meta string [order=3]
+  field ListRow.Trailing []layout.Node [order=4]
+  field ListRow.Selected bool [order=5]
+  field ListRow.Active bool [order=6]
+  field ListRow.Indent int [order=7]
+  field ListRow.Disabled bool [order=8]
+  field ListRow.Disclosure Disclosure [order=9]
+  field ListRow.TitleColor layout.TextColor [order=10]
+  field ListRow.Italic bool [order=11]
+  struct ListRow fields=12 comparable=false
+  type PaneHeader struct
+  field PaneHeader.ID string [order=0]
+  field PaneHeader.Title string [order=1]
+  field PaneHeader.Meta string [order=2]
+  field PaneHeader.Actions []layout.Node [order=3]
+  field PaneHeader.Active bool [order=4]
+  field PaneHeader.Body layout.Node [order=5]
+  struct PaneHeader fields=6 comparable=false
+  type Popover struct
+  field Popover.ID string [order=0]
+  field Popover.Anchor string [order=1]
+  field Popover.Width layout.Size [order=2]
+  field Popover.Children []layout.Node [order=3]
+  struct Popover fields=4 comparable=false
+  type Section struct
+  field Section.ID string [order=0]
+  field Section.Title string [order=1]
+  field Section.Children []layout.Node [order=2]
+  struct Section fields=3 comparable=false
+  type Segmented struct
+  field Segmented.ID string [order=0]
+  field Segmented.Options []string [order=1]
+  field Segmented.Selected int [order=2]
+  field Segmented.Focused bool [order=3]
+  struct Segmented fields=4 comparable=false
+  type Setting struct
+  field Setting.ID string [order=0]
+  field Setting.Name string [order=1]
+  field Setting.Description string [order=2]
+  field Setting.Control layout.Node [order=3]
+  struct Setting fields=4 comparable=true
+  type Tab struct
+  field Tab.ID string [order=0]
+  field Tab.Label string [order=1]
+  field Tab.Icon layout.IconName [order=2]
+  field Tab.Modified bool [order=3]
+  field Tab.Italic bool [order=4]
+  field Tab.Close string [order=5]
+  struct Tab fields=6 comparable=true
+  type Tabs struct
+  field Tabs.ID string [order=0]
+  field Tabs.Tabs []Tab [order=1]
+  field Tabs.Active int [order=2]
+  field Tabs.Fill bool [order=3]
+  field Tabs.Trailing []layout.Node [order=4]
+  struct Tabs fields=5 comparable=false
+  type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2
   const AlignEnd Align = 3
@@ -908,11 +1055,46 @@ flatui/layout package layout
   const BorderNone BorderKind = 0
   const BorderNormal BorderKind = 2
   const BorderRounded BorderKind = 1
+  const ColorAccent TextColor = 5
+  const ColorDanger TextColor = 10
+  const ColorDefault TextColor = 0
+  const ColorDisabled TextColor = 4
+  const ColorInfo TextColor = 7
+  const ColorMuted TextColor = 3
+  const ColorOnAccent TextColor = 6
+  const ColorPrimary TextColor = 1
+  const ColorSecondary TextColor = 2
+  const ColorSuccess TextColor = 8
+  const ColorWarning TextColor = 9
   const ControlButton ControlKind = 0
   const ControlCheckbox ControlKind = 1
   const ControlRadio ControlKind = 3
   const ControlSlider ControlKind = 4
   const ControlSwitch ControlKind = 2
+  const FillAccent Fill = 8
+  const FillCanvas Fill = 4
+  const FillChrome Fill = 5
+  const FillContent Fill = 6
+  const FillCurrentLine Fill = 16
+  const FillDangerTint Fill = 15
+  const FillDiffAdd Fill = 18
+  const FillDiffAddWord Fill = 19
+  const FillDiffBlank Fill = 23
+  const FillDiffDel Fill = 20
+  const FillDiffDelWord Fill = 21
+  const FillDiffFold Fill = 22
+  const FillField Fill = 2
+  const FillInfoTint Fill = 12
+  const FillMatch Fill = 17
+  const FillNone Fill = 0
+  const FillPressed Fill = 11
+  const FillRaised Fill = 7
+  const FillSelection Fill = 9
+  const FillSelectionInactive Fill = 10
+  const FillSeparator Fill = 3
+  const FillSuccessTint Fill = 13
+  const FillSurface Fill = 1
+  const FillWarningTint Fill = 14
   const IconArrowDown IconName = 17
   const IconArrowLeft IconName = 18
   const IconArrowRight IconName = 19
@@ -943,6 +1125,7 @@ flatui/layout package layout
   const IconMinus IconName = 10
   const IconNext IconName = 29
   const IconNone IconName = 0
+  const IconPanelBottom IconName = 41
   const IconPause IconName = 27
   const IconPlay IconName = 26
   const IconPlus IconName = 9
@@ -951,40 +1134,68 @@ flatui/layout package layout
   const IconRepeatOne IconName = 39
   const IconSearch IconName = 11
   const IconShuffle IconName = 30
+  const IconSidebarLeft IconName = 42
+  const IconSidebarRight IconName = 43
+  const IconSparkle IconName = 44
   const IconSpeaker IconName = 32
+  const IconTerminal IconName = 40
   const IconWarning IconName = 14
   const ImageContain ImageFit = 0
   const ImageCover ImageFit = 1
   const ImageStretch ImageFit = 2
   const PointsPerColumn untyped int = 8
   const PointsPerLine untyped int = 16
+  const ResizeColumns Resize = 1
+  const ResizeNone Resize = 0
+  const ResizeRows Resize = 2
+  const SideBottom Side = 2
+  const SideLeft Side = 3
+  const SideNone Side = 0
+  const SideRight Side = 4
+  const SideTop Side = 1
   const SizeAuto SizeKind = 0
   const SizeContent SizeKind = 3
   const SizeFixed SizeKind = 1
   const SizeGrow SizeKind = 2
   const SizePoints SizeKind = 4
+  const SizeToken SizeKind = 5
   const TextBody TextRole = 0
+  const TextCaption TextRole = 3
+  const TextMeta TextRole = 4
+  const TextPageTitle TextRole = 6
+  const TextStrong TextRole = 5
   const TextSubtle TextRole = 2
   const TextTitle TextRole = 1
   const ToggleCheckbox ToggleKind = 0
   const ToggleRadio ToggleKind = 2
   const ToggleSwitch ToggleKind = 1
+  const TokenBar Token = 3
+  const TokenControl Token = 2
+  const TokenHeader Token = 4
+  const TokenRow Token = 1
   func Auto() Size
+  func BarSize() Size
   func ClampScroll(offset int, viewport int, content int) int
   func Compose(root Node, width int, height int) Composition
   func ComposeWithColorProfile(root Node, width int, height int, profile colorprofile.Profile) Composition
+  func ControlSize() Size
+  func FillColor(p*theme.Palette, f Fill)(c color.NRGBA, ok bool)
   func Fixed(n int) Size
   func Grow(w float64) Size
+  func HeaderSize() Size
   func LayoutScene(root Node, width float64, height float64, m Metrics) Scene
   func NewSpacer() *Spacer
   func Overlay(base string, layer string) string
   func OverlayAt(base string, layer string, x int, y int) string
   func OverlayOrigin(base string, layer string)(x int, y int)
   func Points(n int) Size
+  func RowSize() Size
   func Solve(root Node, width int, height int) map[string] Rect
   func SolveAndCompose(root Node, width int, height int)(string, map[string] Rect)
   func SolveAndComposeWithDiagnostics(root Node, width int, height int)(string, map[string] Rect, []DuplicateIDDiagnostic)
   func SolveWithDiagnostics(root Node, width int, height int)(map[string] Rect, []DuplicateIDDiagnostic)
+  func TextColorOf(p*theme.Palette, s TextStyle) color.Color
+  func UseCellTheme(p*theme.Palette)
   method *Spacer.Render(r Rect) string
   method *Spacer.WithBackground(c color.Color) *Spacer
   method Button.Render(r Rect) string
@@ -1117,7 +1328,10 @@ flatui/layout package layout
   field Box.Interactive bool [order=8]
   field Box.Backdrop *Backdrop [order=9]
   field Box.InsetY float64 [order=10]
-  struct Box fields=11 comparable=true
+  field Box.Fill Fill [order=11]
+  field Box.Resize Resize [order=12]
+  field Box.Edge Side [order=13]
+  struct Box fields=14 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]
@@ -1134,13 +1348,22 @@ flatui/layout package layout
   field Button.Icon IconName [order=6]
   field Button.Plain bool [order=7]
   struct Button fields=8 comparable=false
+  type Caret struct
+  field Caret.X int [order=0]
+  field Caret.Y int [order=1]
+  struct Caret fields=2 comparable=true
+  type CaretOp struct
+  field CaretOp.Cell PointRect [order=0]
+  field CaretOp.Clip PointRect [order=1]
+  struct CaretOp fields=2 comparable=true
   type CellsOp struct
   field CellsOp.Rect PointRect [order=0]
   field CellsOp.Clip PointRect [order=1]
   field CellsOp.Cols int [order=2]
   field CellsOp.Lines int [order=3]
   field CellsOp.Content string [order=4]
-  struct CellsOp fields=5 comparable=true
+  field CellsOp.Caret *Caret [order=5]
+  struct CellsOp fields=6 comparable=true
   type Col struct
   field Col.NodeBase NodeBase [order=0]
   field Col.Children []Node [order=1]
@@ -1178,6 +1401,7 @@ flatui/layout package layout
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
   field DuplicateIDDiagnostic.Duplicate Rect [order=2]
   struct DuplicateIDDiagnostic fields=3 comparable=true
+  type Fill int
   type Icon struct
   field Icon.NodeBase NodeBase [order=0]
   field Icon.Name IconName [order=1]
@@ -1243,6 +1467,11 @@ flatui/layout package layout
   field InputOp.Clearable bool [order=14]
   field InputOp.Field PointRect [order=15]
   struct InputOp fields=16 comparable=true
+  type Insets struct
+  field Insets.Vertical float64 [order=0]
+  field Insets.Horizontal float64 [order=1]
+  field Insets.Panel float64 [order=2]
+  struct Insets fields=3 comparable=true
   type Label struct
   field Label.NodeBase NodeBase [order=0]
   field Label.Text string [order=1]
@@ -1278,7 +1507,9 @@ flatui/layout package layout
   field Metrics.MeasureRuns func(runs[]Run, maxWidth float64)(w float64, h float64) [order=5]
   field Metrics.DefaultPadding bool [order=6]
   field Metrics.ControlHeight float64 [order=7]
-  struct Metrics fields=8 comparable=false
+  field Metrics.Insets Insets [order=8]
+  field Metrics.Sizes Sizes [order=9]
+  struct Metrics fields=10 comparable=false
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)
@@ -1315,6 +1546,7 @@ flatui/layout package layout
   field Rect.W int [order=2]
   field Rect.H int [order=3]
   struct Rect fields=4 comparable=true
+  type Resize int
   type Row struct
   field Row.NodeBase NodeBase [order=0]
   field Row.Children []Node [order=1]
@@ -1350,12 +1582,19 @@ flatui/layout package layout
   field ScrollBarOp.Show bool [order=4]
   field ScrollBarOp.Color color.Color [order=5]
   struct ScrollBarOp fields=6 comparable=true
+  type Side int
   type Size struct
   field Size.Kind SizeKind [order=0]
   field Size.Value int [order=1]
   field Size.Weight float64 [order=2]
   struct Size fields=3 comparable=true
   type SizeKind int
+  type Sizes struct
+  field Sizes.Row float64 [order=0]
+  field Sizes.Control float64 [order=1]
+  field Sizes.Bar float64 [order=2]
+  field Sizes.Header float64 [order=3]
+  struct Sizes fields=4 comparable=true
   type Slider struct
   field Slider.NodeBase NodeBase [order=0]
   field Slider.Value float64 [order=1]
@@ -1375,7 +1614,11 @@ flatui/layout package layout
   type Text struct
   field Text.NodeBase NodeBase [order=0]
   field Text.String string [order=1]
-  struct Text fields=2 comparable=false
+  field Text.Caret *Caret [order=2]
+  field Text.Carets []Caret [order=3]
+  field Text.OffsetY float64 [order=4]
+  struct Text fields=5 comparable=false
+  type TextColor int
   type TextOp struct
   field TextOp.Rect PointRect [order=0]
   field TextOp.Clip PointRect [order=1]
@@ -1391,15 +1634,16 @@ flatui/layout package layout
   type TextRole int
   type TextStyle struct
   field TextStyle.Role TextRole [order=0]
-  field TextStyle.Fg color.Color [order=1]
-  field TextStyle.Bg color.Color [order=2]
-  field TextStyle.Size float64 [order=3]
-  field TextStyle.Leading float64 [order=4]
-  field TextStyle.Bold bool [order=5]
-  field TextStyle.Italic bool [order=6]
-  field TextStyle.Underline bool [order=7]
-  field TextStyle.Strikethrough bool [order=8]
-  struct TextStyle fields=9 comparable=true
+  field TextStyle.Color TextColor [order=1]
+  field TextStyle.Fg color.Color [order=2]
+  field TextStyle.Bg color.Color [order=3]
+  field TextStyle.Size float64 [order=4]
+  field TextStyle.Leading float64 [order=5]
+  field TextStyle.Bold bool [order=6]
+  field TextStyle.Italic bool [order=7]
+  field TextStyle.Underline bool [order=8]
+  field TextStyle.Strikethrough bool [order=9]
+  struct TextStyle fields=10 comparable=true
   type Toggle struct
   field Toggle.NodeBase NodeBase [order=0]
   field Toggle.Kind ToggleKind [order=1]
@@ -1410,3 +1654,133 @@ flatui/layout package layout
   field Toggle.Focused bool [order=6]
   struct Toggle fields=7 comparable=false
   type ToggleKind int
+  type Token int
+theme package theme
+  const Comfortable Density = 2
+  const Compact Density = 1
+  const Regular Density = 0
+  const Round Roundness = 2
+  const Square Roundness = 1
+  const Subtle Roundness = 0
+  func Contrast(fg color.NRGBA, bg color.NRGBA) float64
+  func Default() Theme
+  func Hex(s string) color.NRGBA
+  func Mix(a color.NRGBA, b color.NRGBA, t float64) color.NRGBA
+  func Over(c color.NRGBA, bg color.NRGBA) color.NRGBA
+  method *Theme.Palette(dark bool) *Palette
+  method Problem.String() string
+  method Theme.Check()[]Problem
+  method Theme.With(s Seeds) Theme
+  type Density int
+  type DiffColors struct
+  field DiffColors.Add color.NRGBA [order=0]
+  field DiffColors.AddWord color.NRGBA [order=1]
+  field DiffColors.Del color.NRGBA [order=2]
+  field DiffColors.DelWord color.NRGBA [order=3]
+  field DiffColors.Fold color.NRGBA [order=4]
+  field DiffColors.Blank color.NRGBA [order=5]
+  struct DiffColors fields=6 comparable=true
+  type Pair struct
+  field Pair.Light color.NRGBA [order=0]
+  field Pair.Dark color.NRGBA [order=1]
+  struct Pair fields=2 comparable=true
+  type Palette struct
+  field Palette.Canvas color.NRGBA [order=0]
+  field Palette.Chrome color.NRGBA [order=1]
+  field Palette.Content color.NRGBA [order=2]
+  field Palette.Field color.NRGBA [order=3]
+  field Palette.Raised color.NRGBA [order=4]
+  field Palette.Text color.NRGBA [order=5]
+  field Palette.TextSecondary color.NRGBA [order=6]
+  field Palette.TextMuted color.NRGBA [order=7]
+  field Palette.TextDisabled color.NRGBA [order=8]
+  field Palette.OnAccent color.NRGBA [order=9]
+  field Palette.Accent color.NRGBA [order=10]
+  field Palette.AccentHover color.NRGBA [order=11]
+  field Palette.Focus color.NRGBA [order=12]
+  field Palette.Hover color.NRGBA [order=13]
+  field Palette.Pressed color.NRGBA [order=14]
+  field Palette.SelectionActive color.NRGBA [order=15]
+  field Palette.SelectionInactive color.NRGBA [order=16]
+  field Palette.TextSelection color.NRGBA [order=17]
+  field Palette.Match color.NRGBA [order=18]
+  field Palette.CurrentLine color.NRGBA [order=19]
+  field Palette.Divider color.NRGBA [order=20]
+  field Palette.ControlBorder color.NRGBA [order=21]
+  field Palette.Info color.NRGBA [order=22]
+  field Palette.InfoTint color.NRGBA [order=23]
+  field Palette.Success color.NRGBA [order=24]
+  field Palette.SuccessTint color.NRGBA [order=25]
+  field Palette.Warning color.NRGBA [order=26]
+  field Palette.WarningTint color.NRGBA [order=27]
+  field Palette.Danger color.NRGBA [order=28]
+  field Palette.DangerTint color.NRGBA [order=29]
+  field Palette.Diff DiffColors [order=30]
+  field Palette.Syntax SyntaxColors [order=31]
+  field Palette.Shadow color.NRGBA [order=32]
+  field Palette.ANSI [16] color.NRGBA [order=33]
+  struct Palette fields=34 comparable=true
+  type Problem struct
+  field Problem.Appearance string [order=0]
+  field Problem.Fg string [order=1]
+  field Problem.Bg string [order=2]
+  field Problem.Ratio float64 [order=3]
+  field Problem.Need float64 [order=4]
+  struct Problem fields=5 comparable=true
+  type Radii struct
+  field Radii.Sm float64 [order=0]
+  field Radii.Md float64 [order=1]
+  field Radii.Lg float64 [order=2]
+  struct Radii fields=3 comparable=true
+  type Roundness int
+  type Seeds struct
+  field Seeds.Accent *Pair [order=0]
+  field Seeds.Density Density [order=1]
+  field Seeds.Roundness Roundness [order=2]
+  struct Seeds fields=3 comparable=true
+  type Sizes struct
+  field Sizes.Row float64 [order=0]
+  field Sizes.Control float64 [order=1]
+  field Sizes.Bar float64 [order=2]
+  field Sizes.Header float64 [order=3]
+  field Sizes.Icon float64 [order=4]
+  field Sizes.Popover float64 [order=5]
+  struct Sizes fields=6 comparable=true
+  type Strokes struct
+  field Strokes.Divider float64 [order=0]
+  field Strokes.Control float64 [order=1]
+  field Strokes.Focus float64 [order=2]
+  struct Strokes fields=3 comparable=true
+  type SyntaxColors struct
+  field SyntaxColors.Keyword color.NRGBA [order=0]
+  field SyntaxColors.String color.NRGBA [order=1]
+  field SyntaxColors.Comment color.NRGBA [order=2]
+  field SyntaxColors.Number color.NRGBA [order=3]
+  field SyntaxColors.Type color.NRGBA [order=4]
+  field SyntaxColors.Func color.NRGBA [order=5]
+  struct SyntaxColors fields=6 comparable=true
+  type TextSpec struct
+  field TextSpec.Size float64 [order=0]
+  field TextSpec.Line float64 [order=1]
+  field TextSpec.Weight int [order=2]
+  field TextSpec.Tracking float64 [order=3]
+  struct TextSpec fields=4 comparable=true
+  type Theme struct
+  field Theme.Light Palette [order=0]
+  field Theme.Dark Palette [order=1]
+  field Theme.Type TypeScale [order=2]
+  field Theme.Space [6] float64 [order=3]
+  field Theme.Size Sizes [order=4]
+  field Theme.Radius Radii [order=5]
+  field Theme.Stroke Strokes [order=6]
+  field Theme.Font string [order=7]
+  field Theme.MonoFont string [order=8]
+  struct Theme fields=9 comparable=true
+  type TypeScale struct
+  field TypeScale.PageTitle TextSpec [order=0]
+  field TypeScale.Title TextSpec [order=1]
+  field TypeScale.Body TextSpec [order=2]
+  field TypeScale.Meta TextSpec [order=3]
+  field TypeScale.Caption TextSpec [order=4]
+  field TypeScale.Code TextSpec [order=5]
+  struct TypeScale fields=6 comparable=true

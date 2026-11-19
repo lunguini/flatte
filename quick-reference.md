@@ -62,7 +62,13 @@ grid. On other native platforms the option installs no host and `Run` uses the
 terminal. `window.Supported()` is true on macOS and js/wasm. `Theme` and `Fonts`
 apply to both GUI hosts. On a page, `Title` is the fallback document title;
 desktop/window-frame options such as `Desktop`, `Width`, `Height`, `MinWidth`,
-`MinHeight`, `Autosave`, `HideTitleBar`, and `Translucent` are ignored. A sample
+`MinHeight`, `Autosave`, `HideTitleBar`, `TitleBarHeight`, and `Translucent` are ignored. A
+macOS window with `HideTitleBar` and a taller app-drawn strip sets
+`TitleBarHeight` to its height in points: the whole strip drags the window and
+the window buttons sit in its middle. `Translucent` shows what is behind a
+macOS window, blurred, wherever the frame draws no background; a frame's
+`Frame.Translucent` does the same frame by frame, so an app can switch it live
+(either turns it on; terminals and pages ignore the frame field). A sample
 can append `window.Options` when its GUI mode is selected and still call
 `flatte.Run` once:
 
@@ -244,6 +250,11 @@ TinyGo builds use the matching TinyGo runtime loader.
 report the same host support, so an app can hide actions the host lacks;
 `Graphical` means point-based GUI rendering. Unsupported effects still
 answer: `Exec` folds `ErrUnsupported`, dialogs fold `ErrNoDialogs`.
+`RenderContext.Appearance` (`AppearanceLight`, `AppearanceDark`, or
+`AppearanceUnknown` in terminals) is the window's active theme, by its
+background's luminance; the window calls `View` again when the system switches.
+Use it only for colors no text or fill role covers (a syntax palette, say), and
+`Appearance.Dark()` to treat unknown as dark.
 `flatest.StartWith` lets tests set width, height, Graphical, and capabilities,
 while `Driver.Resize(w, h)` updates both Handle and View. Use `flatest` for
 event and state behavior; native point metrics remain covered by
@@ -261,6 +272,8 @@ Use these names for every app:
 | Input handling | `Handle(s *State, ev flatte.Event, fx flatte.Effects[State])` |
 | Rendering | `View(s *State, ctx flatte.RenderContext) flatte.Frame` |
 | Quit | `fx.Quit()` |
+| Smooth scrolling in a window | `flatte.WithPreciseScrolling()`: a trackpad's wheel events carry fractional lines in `MouseEvent.Scroll` (one gathered event per frame); read `m.ScrollLines()` (±1 per notch elsewhere) and `m.Point()` (fractional cells when `HasPrecise`), and draw the part-way line with `layout.Text.OffsetY` |
+| Ask before quitting (unsaved work) | `flatte.WithQuitRequests()`: ⌘Q, the main window's close button, and the default Ctrl+C arrive as `flatte.QuitRequest`; call `fx.Quit()` when ready, or keep running |
 | Window size | handle `flatte.ResizeEvent` |
 | Keyboard | type switch to `flatte.KeyEvent` |
 | Mouse | `flatte.WithMouse(...)` plus `flatte.MouseEvent` |
@@ -275,6 +288,22 @@ applications that report persistence failures should capture them in `OnExit`
 and print them after `Run` returns. A context cancellation is not returned as
 `context.Canceled`, is not an update-drain barrier, and `OnExit` observes only
 the updates the loop applied before selecting cancellation.
+
+`App.Panic` (opt-in) keeps a panic in app code from ending the process: Init,
+Handle, View, Menus, ContextMenu, Windows, NowPlaying, an update as it applies,
+and the off-loop work of `Go`/`Latest`/`Stream` and their Scope forms are run
+under `recover`, and the hook runs on the loop with a `flatte.Panic` (`In` names
+what was running, `Value`, `Stack`; `Where()` is the first stack frame in the
+app's own code). The app goes on from its state as the panic left it; a View
+that panics shows its last frame and reports once until it draws again; work
+that panics folds nothing. Without the hook, panics end the process as before.
+
+```go
+app.Panic = func(s *State, p flatte.Panic, fx flatte.Effects[State]) {
+	log.Printf("%v\n%s", p, p.Stack)
+	s.notice = "Something went wrong (" + p.Where() + ")"
+}
+```
 
 Input limitations are explicit: F1–F12 key presses are supported, but key
 release events and terminal capability/keyboard-enhancement reports are not
@@ -367,7 +396,7 @@ shared geometry and add their own fields.
 | `Tooltip` | `string` | Help text a window shows while the pointer rests on the node (the innermost one with a tooltip); the terminal ignores it. |
 | `ID` | `string` | Record this node's solved rect under `ID` for hit-testing. |
 | `Chrome` | `func(Rect) string` | Custom container decoration (styled border, background, title) painted under the children in place of the default `Pad`/`Box` fill; layout inset still comes from `Pad` and the border. Terminal-only: prefer `Box` when it can say what you need. |
-| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`, `Round`, `Title`, `TitleStyle`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). `Round` asks a window to round a background's corners (a pill when one line tall); the terminal draws it square. `Title` labels a border: the terminal writes ` Title ` in `TitleStyle` into the top rule, a window sets it in the stroke. |
+| `Box` | `Box` | Semantic decoration: `Border` (`BorderNone`, `BorderRounded`, `BorderNormal`), `BorderColor`, `Background`, `Selected`, `Round`, `Title`, `TitleStyle`. A border adds one inset cell per side; `Box.Border` wins over `Bordered`. `Background` is behind the content: leaf cells without their own background keep it. `Selected` makes a window highlight the node; the terminal adds nothing (the app's markers show selection). `Round` asks a window to round a background's corners (a pill when one line tall); the terminal draws it square. `Title` labels a border: the terminal writes ` Title ` in `TitleStyle` into the top rule, a window sets it in the stroke. `Fill` (`FillSurface`, `FillField`, `FillSeparator`) is a background by theme role when `Background` is nil: a window paints the current theme's color and follows the light/dark switch; terminals ignore it. Give a `FillSeparator` node a hairline size such as `Points(1)`. |
 
 The native window supplies default inner spacing: 8pt horizontally and
 4pt vertically for buttons, toggles and non-bare inputs; 12pt on every
@@ -411,7 +440,7 @@ whole viewport.
 | `layout.Row{Children: ...}` | Distribute children horizontally (main axis = width). |
 | `layout.Col{Children: ...}` | Distribute children vertically (main axis = height). |
 | `layout.Label{Text: ..., Style: ...}` | Leaf of plain text with a semantic `TextStyle` (role + overrides); auto-sizes to it. Prefer it to `Text` for app text. `Wrap: true` wraps it by words at its width (cells in the terminal, the font in a window): it fills an Auto width, and its Auto height is the wrapped line count at the width it gets. `Runs: []layout.Run{{Text, Style}, ...}` makes it rich text (replacing `Text`; a run with a zero `Style` takes the Label's), wrapping across runs. `Selectable: true` lets a window user drag-select it and copy with ⌘C — the window draws the selection; the app still gets the clicks. `HoverFg: color` opt-in tints the entire named label, including runs, toward that color while hovered in a window; nil preserves run colors and the terminal ignores it. |
-| `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`; `IconBlank` draws nothing — terminal-only decoration) in the same columns. Larger symbols — `IconCheck`, `IconClose`, `IconPlus`, `IconMinus`, `IconSearch`, `IconGear`, `IconInfo`, `IconWarning`, `IconError`, `IconArrowUp`/`Down`/`Left`/`Right`, `IconEllipsis`, `IconFolder`, `IconFile` — are 0.7 of a line, centered: give them two columns (`"✓ "`). `IconChevronLeft`/`Up`/`Down` match `IconChevronRight`. Media and app shapes: `IconPlay`, `IconPause`, `IconPrevious`, `IconNext`, `IconShuffle`, `IconRepeat`, `IconRepeatOne`, `IconSpeaker`, `IconHome`, `IconHeart`/`IconHeartOutline`, `IconClock`, `IconEqualizer`, `IconLibrary`. Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
+| `layout.Icon{Name: ..., Text: ..., Style: ...}` | A small symbol: the terminal shows `Text` in `Style`; a window draws the named shape (`IconChevronRight`, `IconDisclosureClosed`/`Open`, `IconDot`, `IconCircle`; `IconBlank` draws nothing — terminal-only decoration) in the same columns. Larger symbols — `IconCheck`, `IconClose`, `IconPlus`, `IconMinus`, `IconSearch`, `IconGear`, `IconInfo`, `IconWarning`, `IconError`, `IconArrowUp`/`Down`/`Left`/`Right`, `IconEllipsis`, `IconFolder`, `IconFile` — are 0.7 of a line, centered: give them two columns (`"✓ "`). `IconChevronLeft`/`Up`/`Down` match `IconChevronRight`. Media and app shapes: `IconPlay`, `IconPause`, `IconPrevious`, `IconNext`, `IconShuffle`, `IconRepeat`, `IconRepeatOne`, `IconSpeaker`, `IconHome`, `IconHeart`/`IconHeartOutline`, `IconClock`, `IconEqualizer`, `IconLibrary`. IDE shapes for pane toggles: `IconTerminal` (a prompt), `IconPanelBottom`, `IconSidebarLeft`, `IconSidebarRight`; `IconSparkle` (✦, an assistant or agent). Names are shapes; the app decides what they mean. `IconNone` draws `Text` everywhere. |
 | `layout.Image{Source: img, Text: ..., Fit: ...}` | A window draws `Source` (`ImageContain`, `ImageCover`, `ImageStretch`), one pixel to a point on Auto axes. Terminals always compose the half-block cell fallback (two vertical pixels per cell); `Run` overlays a real PNG image in kitty, Ghostty, WezTerm, and Warp when their environment identifies the Kitty graphics protocol and the full content box is visible. The terminal renderer assumes 8×16 pixels per cell when scaling PNGs. Set `FLATTE_IMAGES=cells` to keep only cell output; images are also disabled inside tmux and `screen`. `ASCII`/`NoTTY`, a missing source, or a box narrower than two cells shows `Text`, subtle and wrapped — use it as the description. Auto sizing stays based on `Text`; size art explicitly with terminal cells or `Points` for a window. Fully transparent pixels leave the cell half unpainted. Keep images in state: a window reads `Source` once, so give a new image to change it. |
 | `layout.Button{Label: ..., Default: ..., Disabled: ..., Focused: ...}` | A push button: `[ Label ]` in the terminal (bold when `Default`, label reversed when `Focused`, subtle when `Disabled`), a native bezel in a window (the accent when `Default`). |
 | `layout.Toggle{Kind: ..., Label: ..., Checked: ...}` | A checkbox (`[x]`), switch (`[ ●]`/`[○ ]`), or radio button (`(•)`), with its label; native indicators in a window. One-of-many for radios is the app's. |
@@ -419,7 +448,7 @@ whole viewport.
 | `layout.Meter{Value: ..., Fill: ..., Track: ...}` | A horizontal gauge filled to `Value` (0..1): `█`/`░` cells in the terminal, a native bar in a window; fills the width on Auto, one line tall. |
 | `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. `Multiline: true` makes it a text area (usually from `Textarea.Layout`): `Wrap` soft-wraps, `SelStart`/`SelEnd` select bytes (shown in `SelectionStyle`, reverse video when zero), `OffsetX`/`OffsetY` are the widget's scroll, and its Auto height grows. |
 | `layout.ScrollBar{Offset: ..., Visible: ..., Total: ..., Color: ...}` | Where a scrolled window is: `█` thumb on `░` track in the terminal (blank when everything fits), a thin native thumb in a window. One column wide, fills the height. |
-| `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. |
+| `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. `Caret: &layout.Caret{X, Y}` puts a text caret at a content cell (code editors, terminal emulators): a blinking bar in a window, the hardware cursor in a terminal; the last visible caret in paint order wins. `Carets: []layout.Caret{...}` adds further carets for multi-cursor editing: a window draws each as the same blinking bar (`layout.CaretOp` in the scene); a terminal has one cursor and ignores them, so style those cells yourself. `OffsetY` (0–1) draws the text that fraction of a line higher in a window, clipped, with one more line of `String` showing below: smooth scrolling (terminals ignore it). |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
 | `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY`. See [Scrolling](#scrolling). |
 
@@ -518,6 +547,80 @@ role. `Size` sets the font size in points in a window (0: the role's size;
 lines grow to fit it); terminals ignore it. `TextStyle.Render(s)` is the terminal look, and `flatui.Title` /
 `flatui.Subtle` are those roles for string frames, so both paths match.
 
+The design-system roles add `TextCaption` (small, semibold, upper case,
+muted), `TextMeta` (paths, counts, a row's second line), `TextStrong` and
+`TextPageTitle`, and `TextStyle.Color` names a color by role
+(`ColorSecondary`, `ColorMuted`, `ColorAccent`, `ColorOnAccent`,
+`ColorSuccess`, `ColorWarning`, `ColorDanger`, `ColorInfo`, …). Box fills by
+role follow the same palette: `FillCanvas`, `FillChrome` (headers,
+sidebars), `FillContent` (where work is read), `FillRaised`, `FillAccent`,
+`FillSelection` / `FillSelectionInactive`, `FillPressed`, the status tints,
+`FillCurrentLine`, `FillMatch` and the diff fills.
+
+### Themes
+
+`theme.Default()` is Flatte's design system as data: a light and a dark
+`theme.Palette` (surfaces, text levels, accent, focus, selection, status,
+diff, syntax and ANSI colors) and the shared scales — `Type`, `Space`
+(4…32pt), `Size` (row 24, control 28, bar 36, header 44), `Radius`,
+`Stroke`. Seeds change the identity in one step and keep every pair
+readable:
+
+```go
+teal := theme.Pair{Light: theme.Hex("#0e7468"), Dark: theme.Hex("#4fd1c0")}
+t := theme.Default().With(theme.Seeds{Accent: &teal, Density: theme.Compact, Roundness: theme.Square})
+if problems := t.Check(); len(problems) > 0 { /* a pair below 4.5:1 (3:1 for outlines and focus) */ }
+flatte.Run(ctx, app, flatte.WithTheme(t))
+```
+
+A native window and the browser canvas draw the roles in the theme
+(`theme.Default()` without `WithTheme`), following the system's light or
+dark appearance; a terminal draws its cells in true color from the dark
+palette only with `WithTheme` (without it, cells keep the terminal's own
+colors). `RenderContext.Theme` and `RenderContext.Palette` carry the theme
+to View for colors no role covers (a syntax or diff palette).
+`flatest.Options.Theme` gives a test driver the same theme.
+
+Density sets the spacing in a window: one `Pad` or `Gap` step is
+`Space[1]` (8pt regular, 6 compact, 10 comfortable), controls and
+`ItemPadding` rows are inset by `Space[0]`×`Space[1]`, and decorated panels
+by `Space[2]` (`layout.Metrics.Insets` for other point backends). Terminal
+padding stays in cells.
+
+To restyle live (a settings dial), keep the theme in state and return it
+from View: `Frame.Theme` overrides `WithTheme` from that frame on — every
+host restyles (palette, fonts, spacing) and the frame that sets it is
+already viewed in it; `nil` goes back to the app's theme.
+
+```go
+return flatte.Frame{Root: root, Theme: &s.theme} // s.theme = theme.Default().With(s.seeds)
+```
+
+Lengths that should follow density are tokens: `layout.RowSize()`,
+`ControlSize()`, `BarSize()` and `HeaderSize()` read the theme's sizes in
+points in a window (`layout.Metrics.Sizes`) and one line in a terminal.
+`window.Options.Appearance` fixes light or dark instead of following the
+system (Snapshot draws dark by default) while keeping the design's colors.
+
+### Components (`flatui/kit`)
+
+Design-system pieces as plain structs whose `Layout()` builds the tree
+from roles and tokens only, so the theme restyles them: `PaneHeader`
+(caption title, meta, trailing actions on the chrome bar), `Tabs` (active
+tab on the content surface; tab node IDs are `Tab.ID`), `ListRow` (icon,
+title, meta, trailing nodes; `Selected` + `Active` is the strong
+selection, `Selected` alone the quiet one; `Indent` for trees), `Segmented`
+(option IDs from `kit.OptionID(id, i)`), `Badge` with a `Tone`, `Section`,
+`Setting` (name, description, control), `EmptyState` and `Popover`.
+Stateless: selection and values are app state, clicks are MouseEvents on
+the IDs. Buttons stay `layout.Button` (`Default` primary, plain secondary,
+`Plain` quiet).
+
+```go
+kit.ListRow{ID: "file:3", Icon: layout.IconFile, Title: name, Meta: dir,
+	Selected: i == s.cursor, Active: s.focus == paneFiles}.Layout()
+```
+
 ### Controls
 
 Give controls IDs: clicks arrive as `MouseEvent`s targeting them, and keys
@@ -587,7 +690,7 @@ frame tree instead of being rendered and positioned by hand:
 | `flatui.TabBar` | A `Row` of tabs, each a `Row` of blank-in-a-window cap `Icon`s around a filled, padded `Label` on a `Round` box (the same cells in the terminal; spaced pills in a window), or one bordered `Text`; tags rects when `WithID` is set. |
 | `flatui.List` | `ScrollTo(offset)` scrolls the window, keeping the cursor in it (for a scroll bar); `Scroll(rows)` moves the window alone, leaving the selection (for a wheel; the next move brings it back). `Rows(id, row)`: the visible rows as nodes — each wrapped in a `Row` with ID `id:index` (click `Target`) and `Box.Selected` on the selected one; the returned Col is the app's: give it an ID and `H: layout.Grow(1)` to size the list from its solved height. `Layout()`: a `Text` leaf of the visible rows via `RenderRow`. |
 | `flatui.Table` | `HeaderLayout(style)` and `Cells(cells, style)`: Rows of column-width Labels one column apart (they line up in a window too); `Rows(id, row)`: body rows like `List.Rows`. |
-| `flatui.Tree` | `Rows(id, row)`: the visible rows like `List.Rows`, each ID'd `id:<node ID>` (stable as the tree expands). |
+| `flatui.Tree` | `Rows(id, row)`: the visible rows like `List.Rows`, each ID'd `id:<node ID>` (stable as the tree expands). `Scroll(rows)` moves the window for a wheel and leaves the cursor (moves reveal it again); folding keeps the cursor on its item. |
 | `flatui.Viewport` | A `layout.Scroll` over its lines at the current offset, as tall as the visible slice: a `Label` when plain (for `SetWrappedContent`, a wrapping `Label` of the raw text, so a window wraps it in its font), a `Text` when styled. Wrapped content breaks at words. Call `Adopt(rects, id)` with each `LayoutEvent` (id: the node holding `Layout()`) instead of `SetSize`: it sizes the viewport from that node and scrolls over the lines the host laid the text out in, so a window's scroll range, `AtBottom`, and `ScrollPercent` are its own; a viewport sent to the bottom stays there. |
 | `flatui.Progress` | A `layout.Meter` of the bar's width and the percent label: the same text in the terminal, a native bar in a window. |
 | `flatui.TextField` | `Edit(key) bool` applies one-line typing, Home/End, Cmd+Left/Right, Alt/Ctrl word arrows, Shift selection, Cmd+A, Ctrl+A/E/U/K/W, and modified Backspace/Delete; it leaves Enter, Escape, Tab, vertical movement, and clipboard shortcuts to the app. Use `InsertText` for paste. `Layout(id, focused)` shows the value and caret. |
@@ -869,8 +972,11 @@ draw the ops of `layout.LayoutScene`.
 `Options.Theme` sets the look: colors for what the app leaves uncolored
 (`Background`, `Surface`, `Text`, `Subtle`, `Title`, `Border`, `Field`,
 `Accent` for focus, carets, and meters, `Selection`, `Track`), `Font` and
-`MonoFont` families, `FontSize`, `TitleSize`, `LineSpacing`, and `Radius`
-(negative: square corners). Start from `window.Dark()` or `window.Light()`
+`MonoFont` families, `FontSize`, `TitleSize`, `LineSpacing`, `Radius`
+(negative: square corners), and `ANSI`, the 16-color palette cell grids draw
+ANSI colors 0–15 in, as a terminal profile does (`Dark` and `Light` carry
+palettes tuned to read on their fields; colors 16–255 and true colors draw as
+given). Start from `window.Dark()` or `window.Light()`
 and change fields; zero fields keep the base's value. Nil follows the
 system's light/dark appearance live; `Snapshot` draws `Dark` when nil.
 `Options.Fonts` are registered before the first frame (CoreText on macOS,
@@ -1014,8 +1120,17 @@ interactive GUI rows by default. Named boxes can opt in with
 `Box{Interactive: true}`. The host supplies a theme-aware hover fill and
 pointing-hand cursor, respecting clipping and overlays. Explicit `Box.Hover`
 overrides the default; `color.Transparent` disables the fill. Plain panels
-and labels are unchanged. Menu surfaces opt out of extra panel padding; their border band supplies
+and labels are unchanged. A named box with `Box{Resize: layout.ResizeColumns}`
+(or `ResizeRows`) is a splitter: a window shows a resize pointer over it
+(↔ or ↕); it draws nothing, and the app moves the border on `MouseMotion`. Menu surfaces opt out of extra panel padding; their border band supplies
 the outer gap while option content keeps its item insets.
+
+`Box.Edge` (`layout.SideTop`, `SideBottom`, `SideLeft`, `SideRight`) draws a
+band of the theme's accent along one side in a window — an active tab's
+top, a current row's marker. Terminals draw nothing for it, so mark the
+node another way there as well (bold, a glyph). In a window, buttons,
+fields and toggles follow the theme's control recipe: medium radius,
+hover and press washes, a focus ring in the Focus color.
 
 For single-line fields, apply pointer edits on the app loop:
 

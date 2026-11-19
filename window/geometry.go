@@ -20,3 +20,19 @@ func intersect(a, b layout.PointRect) layout.PointRect {
 }
 
 func runeStart(s string, i int) bool { return i == len(s) || s[i]&0xC0 != 0x80 }
+
+// edgeRect is the band of r a Box.Edge on side covers, width thick.
+func edgeRect(r layout.PointRect, side layout.Side, width float64) (layout.PointRect, bool) {
+	width = min(width, r.W, r.H)
+	switch side {
+	case layout.SideTop:
+		return layout.PointRect{X: r.X, Y: r.Y, W: r.W, H: width}, true
+	case layout.SideBottom:
+		return layout.PointRect{X: r.X, Y: r.Y + r.H - width, W: r.W, H: width}, true
+	case layout.SideLeft:
+		return layout.PointRect{X: r.X, Y: r.Y, W: width, H: r.H}, true
+	case layout.SideRight:
+		return layout.PointRect{X: r.X + r.W - width, Y: r.Y, W: width, H: r.H}, true
+	}
+	return layout.PointRect{}, false
+}

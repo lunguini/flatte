@@ -15,6 +15,8 @@ import (
 	"unicode/utf16"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // Options selects the canvas host in a browser page.
@@ -45,6 +47,7 @@ type canvasPage struct {
 	host                                *host
 	painter                             *canvasPainter
 	options                             Options
+	design                              *ds.Theme
 	listeners                           []canvasListener
 	observer                            js.Value
 	observerFn                          js.Func
@@ -85,7 +88,8 @@ func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error
 	if win.IsUndefined() || win.IsNull() {
 		win = js.Global()
 	}
-	th := themeFor(opts.Theme, browserDarkMode(win))
+	design := session.Theme(true)
+	th := themeFor(opts.Theme, opts.dark(browserDarkMode(win)), design)
 	if err := loadCanvasFonts(doc, th, opts.Fonts); err != nil {
 		return err
 	}
@@ -135,7 +139,8 @@ func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error
 		page.restore()
 		return errors.New("window: browser canvas 2D context is unavailable")
 	}
-	th = themeFor(opts.Theme, browserDarkMode(win))
+	th = themeFor(opts.Theme, opts.dark(browserDarkMode(win)), design)
+	page.design = design
 	page.ctx = ctx2d
 	painter := newCanvasPainter(ctx2d, th)
 	page.painter = painter
@@ -172,6 +177,7 @@ func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error
 	h.notes = canvasNotifier{win: win}
 	h.dialogs = canvasDialogs{win: win}
 	page.host = h
+	h.restyle = page.restyle
 	h.surface.clock = time.Now
 	page.bind()
 	page.observeSize()
@@ -267,16 +273,8 @@ func (p *canvasPage) bind() {
 		case 2:
 			delta *= p.height()
 		}
-		n := p.wheel.notches(-delta, p.host.metrics.Line)
-		if n == 0 {
-			return
-		}
-		button := flatte.MouseWheelUp
-		if n < 0 {
-			button, n = flatte.MouseWheelDown, -n
-		}
 		x, y := p.point(ev)
-		p.host.surface.wheel(x, y, button, n, canvasModifiers(ev))
+		p.host.surface.scrollPoints(x, y, -delta, &p.wheel, canvasModifiers(ev))
 	})
 	p.listen(p.canvas, "dragover", func(ev js.Value) { ev.Call("preventDefault") })
 	p.listen(p.canvas, "drop", func(ev js.Value) {
@@ -436,17 +434,23 @@ func (p *canvasPage) setSize(notify bool) {
 	p.invalidate()
 }
 
+// restyle draws in design from now on (the system's appearance applied)
+// and returns its metrics.
+func (p *canvasPage) restyle(design *ds.Theme) layout.Metrics {
+	p.design = design
+	th := themeFor(p.options.Theme, p.options.dark(browserDarkMode(p.win)), design)
+	p.painter.close()
+	p.painter = newCanvasPainter(p.ctx, th)
+	p.painter.invalidate = p.invalidate
+	p.host.text = canvasTextLayout{ctx: p.ctx, theme: th}
+	return p.painter.metrics
+}
+
 func (p *canvasPage) refreshTheme() {
 	if p.closed {
 		return
 	}
-	th := themeFor(p.options.Theme, browserDarkMode(p.win))
-	ctx := p.ctx
-	p.painter.close()
-	p.painter = newCanvasPainter(ctx, th)
-	p.painter.invalidate = p.invalidate
-	p.host.metrics = p.painter.metrics
-	p.host.text = canvasTextLayout{ctx: ctx, theme: th}
+	p.host.metrics = p.restyle(p.design)
 	p.host.surface.delivered = nil
 	p.host.surface.deliveredPoints = nil
 	p.host.handle(flatte.ResizeEvent{Width: p.host.cols(p.width()), Height: p.host.lines(p.height())})
@@ -484,6 +488,7 @@ func (p *canvasPage) draw() {
 	if p.closed || p.host == nil {
 		return
 	}
+	p.host.surface.setAppearance(p.painter.theme.appearance())
 	scene := p.host.surface.render()
 	p.painter.marked = p.marked
 	p.painter.caretOn = p.caretOn
@@ -615,6 +620,10 @@ func canvasCursor(p pointer) string {
 		return "pointer"
 	case pointerText:
 		return "text"
+	case pointerResizeColumns:
+		return "col-resize"
+	case pointerResizeRows:
+		return "row-resize"
 	default:
 		return "default"
 	}

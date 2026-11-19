@@ -14,7 +14,7 @@ func Go[S, T any](fx Effects[S], name string, work func(context.Context) (T, err
 	if !fx.hasUpdateTransport() {
 		return
 	}
-	fx.spawn(func() {
+	fx.spawn(name, func() {
 		ctx := fx.Ctx()
 		value, err := work(ctx)
 		if ctx.Err() != nil {
@@ -156,7 +156,7 @@ func Stream[S, T any](fx Effects[S], name string, source func(context.Context, f
 		return
 	}
 	ctx := fx.context()
-	fx.spawn(func() {
+	fx.spawn(name, func() {
 		source(ctx, func(value T) {
 			update := Named(name, func(s *S) { fold(s, value) })
 			fx.Send(update)
@@ -180,7 +180,7 @@ func Latest[S, T any](fx Effects[S], name string, work func(context.Context) (T,
 		return
 	}
 	ctx, entry := fx.latest.replace(name, fx.context())
-	fx.spawn(func() {
+	fx.spawn(name, func() {
 		value, err := work(ctx)
 		if ctx.Err() != nil {
 			// Superseded, Cancelled, or parent shutdown. release is

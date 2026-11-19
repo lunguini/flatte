@@ -15,6 +15,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/lunguini/flatte/flatui/layout"
+	"github.com/lunguini/flatte/theme"
 	"golang.org/x/term"
 )
 
@@ -49,6 +50,17 @@ type App[S any] struct {
 	// for it. A native host publishes it to the system media controls; nil
 	// opts out. The callback is read on the app's state loop after changes.
 	NowPlaying func(*S) *NowPlaying
+	// Panic, when set, catches a panic in the app's code instead of
+	// letting it end the process: in Init, Handle, View, Menus, ContextMenu,
+	// Windows, NowPlaying, a fold or other update as it applies, and the
+	// off-loop work of Go, Latest, Stream and their Scope forms. Panic then
+	// runs on the loop with what happened (show it, log it), and the app
+	// goes on from its state as the panic left it. A View that panics
+	// shows the last frame it drew (reported once until View draws
+	// again); work that panics folds nothing. A panic in Panic itself is
+	// printed to stderr and dropped. Nil: panics end the process, as
+	// before.
+	Panic func(*S, Panic, Effects[S])
 }
 
 // action is a one-shot terminal capability request, queued by Effects
@@ -91,6 +103,8 @@ type Effects[S any] struct {
 	desktop func(DesktopCommand)
 	// caps is what the host supports.
 	caps Capabilities
+	// catch recovers panics in off-loop work for App.Panic (nil: none).
+	catch *catcher
 }
 
 // Capabilities reports what the current host supports; the zero value on
@@ -160,7 +174,11 @@ func withHostClipboard[S any](fx Effects[S], set func(text string), read func())
 
 // spawn runs f on a goroutine by default, or through the injected dispatch
 // (tests defer it to a controlled queue).
-func (fx Effects[S]) spawn(f func()) {
+func (fx Effects[S]) spawn(in string, f func()) {
+	if fx.catch != nil {
+		g := f
+		f = func() { fx.catch.run("work "+in, g) }
+	}
 	if fx.dispatch != nil {
 		fx.dispatch(f)
 		return
@@ -330,16 +348,29 @@ const (
 )
 
 type runConfig struct {
-	mediaCommands  <-chan MediaEvent
-	publishMedia   func(*NowPlaying)
-	input          io.Reader
-	output         io.Writer
-	defaultQuit    bool
-	bracketedPaste bool
-	mouse          MouseMode
-	reportFocus    bool
-	inline         bool
-	suspendProcess func() // test seam; defaults to the platform suspend
+	mediaCommands <-chan MediaEvent
+	publishMedia  func(*NowPlaying)
+	input         io.Reader
+	output        io.Writer
+	defaultQuit   bool
+	quitRequests  bool
+	// preciseScrolling: see WithPreciseScrolling.
+	preciseScrolling bool
+	bracketedPaste   bool
+	mouse            MouseMode
+	reportFocus      bool
+	inline           bool
+	suspendProcess   func() // test seam; defaults to the platform suspend
+	theme            *theme.Theme
+}
+
+// WithTheme gives the app a design system: a native window draws layout's
+// roles in it (following the system's light or dark appearance), a
+// terminal draws its cells in true color from its dark palette, and
+// RenderContext carries it to View. Without it, a window uses
+// theme.Default() and a terminal its own colors.
+func WithTheme(t theme.Theme) Option {
+	return optionFunc(func(c *runConfig) { c.theme = &t })
 }
 
 // withSuspendProcess overrides the process-suspension call. Test seam:
@@ -568,6 +599,15 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	session := newSession(runCtx, app)
+	if cfg.theme != nil {
+		session.UseTheme(*cfg.theme)
+		layout.UseCellTheme(&session.theme.Dark)
+	}
+	defer func() {
+		if cfg.theme != nil || session.cellThemed { // a frame's Theme installs one too
+			layout.UseCellTheme(nil)
+		}
+	}()
 	session.setActionSink(func(a action) { pending = append(pending, a) })
 	session.cell.dialogs.home, _ = os.UserHomeDir()
 	session.UseHostServices(HostServices{
@@ -576,7 +616,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 		CellSurface:  true,
 		PublishMedia: cfg.publishMedia,
 	})
-	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, inline: cfg.inline})
+	session.useCellPolicy(sessionPolicy{defaultQuit: cfg.defaultQuit, quitRequests: cfg.quitRequests, inline: cfg.inline})
 
 	// The input pipeline is restartable: suspend and exec stop it before
 	// handing the terminal away (the subprocess must own stdin) and start

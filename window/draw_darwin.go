@@ -12,7 +12,9 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/ebitengine/purego/objc"
 
+	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 // theme is a Theme in drawing terms. Roles and Boxes map onto it; explicit
@@ -29,10 +31,41 @@ type theme struct {
 	family, mono                     string
 	body, titleSize, spacing, radius float64
 	controlHeight                    float64
+	// step is one Pad or Gap and insets the default component insets, in
+	// points (Theme.spacing).
+	step       float64
+	insets     layout.Insets
+	sizes      layout.Sizes
+	appearance flatte.Appearance
+	// ansi is the palette cell grids draw ANSI colors 0–15 in.
+	ansi [16]color.Color
+	// pal and ts are the design palette and type scale layout's newer
+	// roles resolve in (resolveStyle).
+	pal *ds.Palette
+	ts  ds.TypeScale
+	// lk is the control recipe: radii, washes, focus (Theme.look).
+	lk look
+}
+
+// fill is th's color for a Box.Fill role, and whether the role has one.
+func (th theme) fill(f layout.Fill) (rgba, bool) {
+	switch f {
+	case layout.FillSurface:
+		return th.surface, true
+	case layout.FillField:
+		return th.field, true
+	case layout.FillSeparator:
+		return rgbaOf(th.pal.Divider), true
+	}
+	if c, ok := layout.FillColor(th.pal, f); ok {
+		return rgbaOf(c), true
+	}
+	return rgba{}, false
 }
 
 func newTheme(t Theme) theme {
 	t = t.over(Dark())
+	step, insets, sizes := t.spacing()
 	return theme{
 		bg: rgbaOf(t.Background), surface: rgbaOf(t.Surface),
 		text: rgbaOf(t.Text), subtle: rgbaOf(t.Subtle), title: rgbaOf(t.Title),
@@ -42,6 +75,11 @@ func newTheme(t Theme) theme {
 		family: t.Font, mono: t.MonoFont,
 		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
 		controlHeight: t.ControlHeight,
+		step:          step, insets: insets, sizes: sizes,
+		appearance: t.appearance(),
+		ansi:       t.ANSI,
+		pal:        t.palette(), ts: t.typeScale(),
+		lk: t.look(),
 	}
 }
 
@@ -227,6 +265,7 @@ func (th theme) font(k fontKey) font {
 }
 
 func (th theme) styleFont(s layout.TextStyle) font {
+	s = resolveStyle(s, th.pal, th.ts)
 	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic, size: s.Size, leading: s.Leading})
 }
 
@@ -281,7 +320,9 @@ func (th theme) metrics() layout.Metrics {
 		ControlHeight:  th.controlHeight,
 		Column:         zero.width,
 		Line:           th.font(fontKey{}).pitch(),
-		Step:           stepPoints,
+		Step:           th.step,
+		Insets:         th.insets,
+		Sizes:          th.sizes,
 		Border:         borderBand,
 		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
 			f := th.styleFont(style)
@@ -390,6 +431,10 @@ type painter struct {
 	caret     CGRect
 	caretOK   bool
 	caretClip layout.PointRect
+	// extra are further carets (layout.CaretOp) and extraClip their clips;
+	// they blink with the caret.
+	extra     []CGRect
+	extraClip []layout.PointRect
 	// clip is the clip of the op being drawn.
 	clip layout.PointRect
 	// presentation is what the host draws itself: hovered and pressed
@@ -469,6 +514,10 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.scrollBar(op) })
 		case layout.CellsOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.cells(op) })
+		case layout.CaretOp:
+			f := p.th.font(fontKey{mono: true})
+			p.extra = append(p.extra, cgRect(op.Cell.X, op.Cell.Y+(op.Cell.H-f.lineHeight())/2, 1.5, f.lineHeight()))
+			p.extraClip = append(p.extraClip, op.Clip)
 		}
 	}
 }
@@ -523,21 +572,22 @@ func (p *painter) backdrop(op layout.BoxOp, bd layout.Backdrop) {
 	p.image(layout.ImageOp{Rect: op.Rect, Clip: intersect(op.Rect, op.Clip), Source: src, Fit: layout.ImageCover})
 }
 
-// hoverFill draws a box's Hover fill at its node's hover level.
+// hoverFill draws a box's hover feedback at its node's hover and press
+// levels: its Hover color, or for an Interactive box the theme's hover
+// wash turning into the pressed wash.
 func (p *painter) hoverFill(op layout.BoxOp) {
 	if op.ID == "" || op.Box.Hover == nil && !op.Box.Interactive {
 		return
 	}
-	level := p.hovers[op.ID] + 0.5*p.presses[op.ID]
-	if level <= 0 {
+	hot, down := p.hovers[op.ID], p.presses[op.ID]
+	if hot <= 0 && down <= 0 {
 		return
 	}
-	c := p.th.text
-	c.A = 0.08
+	c := p.th.lk.wash(hot, down)
 	if op.Box.Hover != nil {
 		c = rgbaOf(op.Box.Hover)
+		c.A *= min(hot+0.5*down, 1.5)
 	}
-	c.A *= min(level, 1.5)
 	r := rectOf(op.Rect)
 	p.fill(c)
 	if op.Box.Round {
@@ -545,6 +595,15 @@ func (p *painter) hoverFill(op layout.BoxOp) {
 		return
 	}
 	p.cellFill(c, op.Rect.X, op.Rect.Y, op.Rect.W, op.Rect.H)
+}
+
+// edge draws a Box.Edge: a band of the accent, the focus stroke thick.
+func (p *painter) edge(op layout.BoxOp) {
+	r, ok := edgeRect(op.Rect, op.Box.Edge, p.th.lk.focusWidth)
+	if !ok {
+		return
+	}
+	p.clipped(op.Clip, func() { p.cellFill(p.th.lk.accent, r.X, r.Y, r.W, r.H) })
 }
 
 // box draws a Box. A border is a rounded stroke down the middle of its
@@ -557,6 +616,7 @@ func (p *painter) box(op layout.BoxOp) {
 		p.backdrop(op, *bd)
 	}
 	defer p.hoverFill(op)
+	defer p.edge(op)
 	if op.Box.Selected {
 		r := rectOf(op.Rect)
 		p.fill(p.th.selection)
@@ -565,6 +625,8 @@ func (p *painter) box(op layout.BoxOp) {
 	bg, hasBg := rgba{}, false
 	if op.Box.Background != nil && op.Box.Background != color.Transparent {
 		bg, hasBg = rgbaOf(op.Box.Background), true
+	} else if c, ok := p.th.fill(op.Box.Fill); ok {
+		bg, hasBg = c, true
 	} else if raised {
 		bg, hasBg = p.th.surface, true
 	}
@@ -646,6 +708,7 @@ func strokeRect(r layout.PointRect, band float64) CGRect {
 }
 
 func (p *painter) roleColor(s layout.TextStyle) rgba {
+	s = resolveStyle(s, p.th.pal, p.th.ts)
 	return roleRGBA(s, p.th.text, p.th.subtle, p.th.title)
 }
 
@@ -812,18 +875,19 @@ func (p *painter) input(op layout.InputOp) {
 			if !op.Multiline {
 				field = controlBezel(outer)
 			}
-			rad := min(p.th.radiusOf(layout.BorderNormal), field.Size.Height/2)
-			p.fill(p.th.field)
+			lk := p.th.lk
+			rad := min(lk.radius, field.Size.Height/2)
+			p.fill(lk.field)
 			p.roundedPath(field, rad, func() { cgContextFillPath(p.ctx) })
-			outline := p.th.border
+			outline, width := lk.border, lk.control
 			if p.hovered == op.ID || p.hovered == clearHoverID(op.ID) {
 				outline = mix(outline, p.th.text, 0.22)
 			}
-			if op.Focused {
-				outline = p.th.caret
+			if op.Focused { // the outline turns focus at the focus width
+				outline, width = lk.focus, lk.focusWidth
 			}
 			p.stroke(outline)
-			cgContextSetLineWidth(p.ctx, strokeWidth)
+			cgContextSetLineWidth(p.ctx, width)
 			p.roundedPath(field, rad, func() { cgContextStrokePath(p.ctx) })
 		})
 	}
@@ -1038,19 +1102,25 @@ func (p *painter) caretAt(x, y, h float64, f font) {
 // paintCaret draws the caret placed while drawing, clipped to its field. It
 // is separate so a window can blink it.
 func (p *painter) paintCaret() {
-	if !p.caretOK {
-		return
+	if p.caretOK {
+		p.clipped(p.caretClip, func() {
+			p.fill(p.th.caret)
+			cgContextFillRect(p.ctx, p.caret)
+		})
 	}
-	p.clipped(p.caretClip, func() {
-		p.fill(p.th.caret)
-		cgContextFillRect(p.ctx, p.caret)
-	})
+	for i, r := range p.extra {
+		p.clipped(p.extraClip[i], func() {
+			p.fill(p.th.caret)
+			cgContextFillRect(p.ctx, r)
+		})
+	}
 }
 
 // cells draws terminal content as a monospace grid: runs of same-styled
 // cells as one shaped line each, wide cells on their own so the grid stays
 // aligned whatever the font's advance for them.
 func (p *painter) cells(op layout.CellsOp) {
+	defer p.cellsCaret(op)
 	buf := uv.NewScreenBuffer(op.Cols, op.Lines)
 	uv.NewStyledString(op.Content).Draw(buf, buf.Bounds())
 	for y := range op.Lines {
@@ -1104,10 +1174,10 @@ func cellText(c *uv.Cell) string {
 func (p *painter) cellColors(st uv.Style) (fg, bg rgba, hasBg bool) {
 	fg = p.th.text
 	if st.Fg != nil {
-		fg = rgbaOf(st.Fg)
+		fg = rgbaOf(ansiColor(&p.th.ansi, st.Fg))
 	}
 	if st.Bg != nil {
-		bg, hasBg = rgbaOf(st.Bg), true
+		bg, hasBg = rgbaOf(ansiColor(&p.th.ansi, st.Bg)), true
 	}
 	if st.Attrs&uv.AttrReverse != 0 {
 		if !hasBg {
@@ -1291,4 +1361,16 @@ func (p *painter) shape(g cellShape, fg rgba) {
 			cgContextSetLineJoin(p.ctx, cgLineJoinMiter)
 		}
 	}
+}
+
+// cellsCaret places a cell grid's text caret (CellsOp.Caret) as the
+// window's caret: a bar at the cell's left edge, as tall as the grid's
+// font, clipped to the grid and blinking like an Input's.
+func (p *painter) cellsCaret(op layout.CellsOp) {
+	c := op.Caret
+	if c == nil || c.X < 0 || c.Y < 0 || c.X >= op.Cols || c.Y >= op.Lines {
+		return
+	}
+	p.clip = intersect(op.Rect, op.Clip)
+	p.caretAt(op.Rect.X+float64(c.X)*p.m.Column, op.Rect.Y+float64(c.Y)*p.m.Line, p.m.Line, p.th.font(fontKey{mono: true}))
 }

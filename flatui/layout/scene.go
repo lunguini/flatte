@@ -31,6 +31,53 @@ type Metrics struct {
 	// non-Bare single-line inputs, in points. Zero or negative means no
 	// minimum; explicit H values, Bare inputs and text areas are unchanged.
 	ControlHeight float64
+	// Insets are the component insets DefaultPadding gives, in points
+	// (a zero field: 4pt vertical and 8pt horizontal for controls and
+	// item rows, 12pt for decorated panels).
+	Insets Insets
+	// Sizes are the design system's lengths SizeToken reads, in points (a
+	// zero field: its regular size — row 24, control 28, bar 36, header 44).
+	Sizes Sizes
+}
+
+// Sizes are a points backend's design-system lengths (theme.Sizes).
+type Sizes struct{ Row, Control, Bar, Header float64 }
+
+func (s Sizes) of(t Token) float64 {
+	v := 0.0
+	switch t {
+	case TokenRow:
+		v = s.Row
+	case TokenControl:
+		v = s.Control
+	case TokenBar:
+		v = s.Bar
+	case TokenHeader:
+		v = s.Header
+	}
+	if v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+		return t.regularPoints()
+	}
+	return v
+}
+
+// Insets are a points backend's default component insets: Vertical and
+// Horizontal for controls, inputs and ItemPadding rows, Panel on every
+// side of a decorated Row or Col. A design system's density sets them.
+type Insets struct{ Vertical, Horizontal, Panel float64 }
+
+// orDefault is i with its zero fields at the built-in insets.
+func (i Insets) orDefault() Insets {
+	if i.Vertical <= 0 {
+		i.Vertical = 4
+	}
+	if i.Horizontal <= 0 {
+		i.Horizontal = 8
+	}
+	if i.Panel <= 0 {
+		i.Panel = 12
+	}
+	return i
 }
 
 // PointRect is a rect in points.
@@ -185,6 +232,9 @@ type CellsOp struct {
 	Rect, Clip  PointRect
 	Cols, Lines int
 	Content     string
+	// Caret is a text caret's cell in the grid (a Text's Caret, padding
+	// included); nil for none.
+	Caret *Caret
 }
 
 // ImageOp draws an Image's Source in Rect (its content box) as Fit says.
@@ -200,6 +250,13 @@ type ImageOp struct {
 // page outside rounded corners; undecorated overlays clear their rectangle.
 // Input/tooltip barriers are independent of this painting behavior.
 type LayerOp struct{ Rect PointRect }
+
+// CaretOp is a further caret of a Text (Text.Carets): a GUI draws its
+// blinking caret bar at Cell's left edge, clipped to Clip, alongside the
+// primary caret.
+type CaretOp struct{ Cell, Clip PointRect }
+
+func (CaretOp) isOp() {}
 
 func (BoxOp) isOp()       {}
 func (TextOp) isOp()      {}
@@ -299,11 +356,20 @@ func (p pointMetric) lines(n int) float64          { return float64(n) * p.Line 
 func (p pointMetric) steps(n int) float64          { return float64(n) * p.Step }
 func (p pointMetric) points(n int, _ bool) float64 { return float64(n) }
 func (p pointMetric) border() float64              { return p.Border }
-func (pointMetric) add(a, b float64) float64       { return a + b }
-func (pointMetric) sub(a, b float64) float64       { return a - b }
-func (pointMetric) times(a float64, k int) float64 { return a * float64(k) }
-func (pointMetric) half(a float64) float64         { return a / 2 }
-func (pointMetric) one() float64                   { return 0 }
+
+// anchorGap is the space between an anchor and a bordered overlay's drawn
+// border, in points.
+const anchorGap = 3.0
+
+func (p pointMetric) anchorPull() (x, y float64) {
+	return p.Border / 2, max(p.Border/2-anchorGap, 0)
+}
+func (p pointMetric) token(t Token, _ bool) float64 { return p.Sizes.of(t) }
+func (pointMetric) add(a, b float64) float64        { return a + b }
+func (pointMetric) sub(a, b float64) float64        { return a - b }
+func (pointMetric) times(a float64, k int) float64  { return a * float64(k) }
+func (pointMetric) half(a float64) float64          { return a / 2 }
+func (pointMetric) one() float64                    { return 0 }
 func (pointMetric) spread(rem float64, n int) (float64, int) {
 	return rem / float64(n), 0
 }
@@ -324,20 +390,22 @@ func (p pointMetric) padding(n Node) sidesOf[float64] {
 	if np, ok := n.(interface{ noPadding() bool }); ok && np.noPadding() {
 		return s
 	}
+	in := p.Insets.orDefault()
+	item := sidesOf[float64]{in.Vertical, in.Horizontal, in.Vertical, in.Horizontal}
 	switch l := n.(type) {
 	case Button, Toggle:
-		return sidesOf[float64]{4, 8, 4, 8}
+		return item
 	case Input:
 		if !l.Bare {
-			return sidesOf[float64]{4, 8, 4, 8}
+			return item
 		}
 	case Row, Col, *Row, *Col:
-		if item, ok := n.(interface{ itemPadding() bool }); ok && item.itemPadding() {
-			return sidesOf[float64]{4, 8, 4, 8}
+		if it, ok := n.(interface{ itemPadding() bool }); ok && it.itemPadding() {
+			return item
 		}
 		box := getBox(n)
 		if box.Backdrop == nil && (box.hasBorder() || box.hasBackground()) {
-			return sidesOf[float64]{12, 12, 12, 12}
+			return sidesOf[float64]{in.Panel, in.Panel, in.Panel, in.Panel}
 		}
 	}
 	return s
@@ -425,7 +493,7 @@ func (p pointMetric) leaf(n Node, width float64) (w, h sized[float64]) {
 		return p.content(l.NodeBase, tw, th)
 	case Icon:
 		// Columns, not the GUI font: an icon lines up with the terminal.
-		cw, ch := measureString(l.Style.Render(l.Text))
+		cw, ch := measureString(l.Style.Render(cased(l.Text, l.Style)))
 		return p.content(l.NodeBase, p.cols(cw), p.lines(ch))
 	case Meter:
 		w, h = p.content(l.NodeBase, 0, p.Line)
@@ -470,7 +538,7 @@ func (p pointMetric) content(nb NodeBase, w, h float64) (sw, sh sized[float64]) 
 // label measures a Label's text (see text).
 func (p pointMetric) label(l Label, maxWidth float64) (float64, float64) {
 	if len(l.Runs) == 0 {
-		return p.text(l.Text, l.Style, maxWidth)
+		return p.text(cased(l.Text, l.Style), l.Style, maxWidth)
 	}
 	if p.MeasureRuns != nil {
 		return p.MeasureRuns(l.runs(), maxWidth)
@@ -527,7 +595,7 @@ func (p *scenePainter) box(r, clip rect[float64], b Box) {
 		in = min(in, r.H/2)
 		r.Y, r.H = r.Y+in, r.H-2*in
 	}
-	if b.hasBorder() || b.hasBackground() || b.Selected || b.Hover != nil || b.Interactive || b.Backdrop != nil {
+	if b.hasBorder() || b.hasBackground() || b.Fill != FillNone || b.Selected || b.Hover != nil || b.Interactive || b.Backdrop != nil || b.Resize != ResizeNone || b.Edge != SideNone {
 		p.ops = append(p.ops, BoxOp{Rect: PointRect(r), Clip: PointRect(clip), Box: b, ID: p.id})
 	}
 }
@@ -570,7 +638,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		control(ControlOp{ID: l.ID, Kind: ControlSlider, Value: l.value(), Fill: l.Fill, Disabled: l.Disabled, Focused: l.Focused}, l.box())
 	case Label:
 		p.box(r, clip, l.box())
-		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: l.Text, Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap, ID: l.ID, HoverFg: l.HoverFg}
+		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: cased(l.Text, l.Style), Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap, ID: l.ID, HoverFg: l.HoverFg}
 		if len(l.Runs) > 0 {
 			op.Text, op.Runs = l.plain(), l.runs()
 		}
@@ -610,7 +678,29 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		}
 		p.box(r, clip, Box{Background: bg})
 	default:
+		before := len(p.ops)
+		if t, ok := n.(Text); ok && t.shift() > 0 {
+			// A fraction of a line higher, with a line more below, clipped
+			// to the node.
+			clip = intersectOf[float64](p.m, r, clip)
+			r.Y -= t.shift() * p.m.Line
+			r.H += p.m.Line
+		}
 		p.cells(r, clip, n.Render)
+		if t, ok := n.(Text); ok && (t.Caret != nil || len(t.Carets) > 0) && len(p.ops) > before {
+			op := p.ops[len(p.ops)-1].(CellsOp)
+			grid := Rect{W: op.Cols, H: op.Lines}
+			if x, y, ok := t.caret(grid); ok {
+				op.Caret = &Caret{X: x, Y: y}
+			}
+			p.ops[len(p.ops)-1] = op
+			for _, c := range t.Carets {
+				if x, y, ok := t.place(c, grid); ok {
+					cell := PointRect{X: op.Rect.X + float64(x)*p.m.Column, Y: op.Rect.Y + float64(y)*p.m.Line, W: p.m.Column, H: p.m.Line}
+					p.ops = append(p.ops, CaretOp{Cell: cell, Clip: PointRect(intersectOf[float64](p.m, r, clip))})
+				}
+			}
+		}
 	}
 }
 

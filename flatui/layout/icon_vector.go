@@ -212,6 +212,29 @@ func buildIconGeometry(name IconName) (iconGeometry, bool) {
 			line(at(-0.32, -0.45), at(0.1, -0.45), at(0.32, -0.23), at(0.32, 0.45), at(-0.32, 0.45), at(-0.32, -0.45)),
 			line(at(0.1, -0.45), at(0.1, -0.23), at(0.32, -0.23)),
 		}}, true
+	case IconTerminal:
+		return iconGeometry{strokes: []iconStroke{
+			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
+			line(at(-0.28, -0.14), at(-0.1, 0.02), at(-0.28, 0.18)),
+			line(at(0.0, 0.18), at(0.26, 0.18)),
+		}}, true
+	case IconPanelBottom:
+		return iconGeometry{strokes: []iconStroke{
+			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
+			line(at(-0.45, 0.1), at(0.45, 0.1)),
+		}}, true
+	case IconSidebarLeft:
+		return iconGeometry{strokes: []iconStroke{
+			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
+			line(at(-0.14, -0.36), at(-0.14, 0.36)),
+		}}, true
+	case IconSidebarRight:
+		return iconGeometry{strokes: []iconStroke{
+			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
+			line(at(0.14, -0.36), at(0.14, 0.36)),
+		}}, true
+	case IconSparkle:
+		return iconGeometry{strokes: []iconStroke{line(at(0, -0.45), at(0.1, -0.1), at(0.45, 0), at(0.1, 0.1), at(0, 0.45), at(-0.1, 0.1), at(-0.45, 0), at(-0.1, -0.1), at(0, -0.45))}}, true
 	}
 	return iconGeometry{}, false
 }

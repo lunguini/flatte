@@ -140,3 +140,20 @@ func TestSceneWrapsInPoints(t *testing.T) {
 		}
 	}
 }
+
+// A wrapping Label inside a centered Row's child gets the lines it wraps
+// to at that child's width, not one line (its height without a width).
+func TestWrapInsideAlignedRowChild(t *testing.T) {
+	row := Row{NodeBase: NodeBase{ID: "row", Gap: 2}, Align: AlignCenter, Children: []Node{
+		Col{NodeBase: NodeBase{ID: "text", W: Grow(1)}, Children: []Node{
+			Label{NodeBase: NodeBase{ID: "name"}, Text: "Translucent sidebars"},
+			Label{NodeBase: NodeBase{ID: "desc"}, Text: "The files and agents panes and the header show what is behind the window, blurred.", Wrap: true},
+		}},
+		Label{NodeBase: NodeBase{ID: "ctl"}, Text: "[○ ]"},
+	}}
+	c := Compose(Col{Children: []Node{row, NewSpacer()}}, 30, 20)
+	r, text, desc := c.Rects["row"], c.Rects["text"], c.Rects["desc"]
+	if desc.H < 3 || text.H != r.H || text.Y != r.Y {
+		t.Errorf("row %+v text %+v desc %+v: the description should wrap over the row's full height", r, text, desc)
+	}
+}

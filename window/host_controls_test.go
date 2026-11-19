@@ -161,3 +161,37 @@ func TestInteractiveItemHoverRespectsScrollAndOverlay(t *testing.T) {
 		t.Fatal("item behind overlay gained hover")
 	}
 }
+
+// A box marked Resize is a splitter: the pointer over it is a resize arrow
+// along its axis, and it is not a control (no hover fill).
+func TestHostResizeBoxShowsAResizePointer(t *testing.T) {
+	state := &testState{root: func(*testState) layout.Node {
+		return layout.Row{Children: []layout.Node{
+			layout.Col{NodeBase: layout.NodeBase{ID: "left", W: layout.Grow(1)}, Children: []layout.Node{layout.Label{Text: "a"}}},
+			layout.Col{NodeBase: layout.NodeBase{ID: "split", W: layout.Points(6), Box: layout.Box{Resize: layout.ResizeColumns}}},
+			layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Children: []layout.Node{
+				layout.Col{NodeBase: layout.NodeBase{ID: "top", H: layout.Grow(1)}},
+				layout.Col{NodeBase: layout.NodeBase{ID: "hsplit", H: layout.Points(6), Box: layout.Box{Resize: layout.ResizeRows}}},
+				layout.Col{NodeBase: layout.NodeBase{H: layout.Grow(1)}},
+			}},
+		}}
+	}}
+	host, _ := newTestHost(t, state)
+	host.start(200, 100)
+	host.render()
+	r := host.scene.Rects["split"]
+	if shape, _ := host.hover(r.X+r.W/2, r.Y+r.H/2); shape != pointerResizeColumns {
+		t.Fatalf("over a column splitter: shape %v", shape)
+	}
+	r = host.scene.Rects["hsplit"]
+	if shape, _ := host.hover(r.X+r.W/2, r.Y+r.H/2); shape != pointerResizeRows {
+		t.Fatalf("over a row splitter: shape %v", shape)
+	}
+	if host.pres.hovered != "" {
+		t.Fatalf("a splitter took hover presentation: %q", host.pres.hovered)
+	}
+	r = host.scene.Rects["left"]
+	if shape, _ := host.hover(r.X+r.W/2, r.Y+r.H/2); shape == pointerResizeColumns || shape == pointerResizeRows {
+		t.Fatal("resize pointer outside the splitter")
+	}
+}

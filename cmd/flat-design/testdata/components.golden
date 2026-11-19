@@ -1,0 +1,40 @@
+ FLATTE design system       Compact  Regular  Comfortable    Square  Subtle  Round    Blue  Teal  Violet  Graphite      
+  ○  Colors                                                                                                             
+  i  Type                                                                                                               
+  •  Space & shape         Components                                                                                   
+  ⚙  Components            flatui/kit and the controls: built from the theme's roles, sizes and radii — turn the dials  
+  •  App shell             above; Tab moves focus.                                                                      
+                                                                                                                        
+                           PANE HEADER                                                                                  
+                                                                                                                        
+                            CHANGES 4 files                                                                        ↻    
+                                                                                                                        
+                           TABS                                                                                         
+                                                                                                                        
+                            main.go  theme.go ●  kit.go                                                                 
+                                                                                                                        
+                           LIST ROWS                                                                                    
+                                                                                                                        
+                            ▤  main.go                                                                cmd/flat-design   
+                            ▤  theme.go                                                           cmd/flat-design  M    
+                            ▤  kit.go                                                                 cmd/flat-design   
+                            ▤  README.md                                                              cmd/flat-design   
+                            selected, list not focused                                                                  
+                                                                                                                        
+                           BUTTONS — PRIMARY, SECONDARY, QUIET, DANGER, ICON                                            
+                                                                                                                        
+                           [ Commit ] [ Discard ]  Later  [ Delete branch ] [search]                                    
+                                                                                                                        
+                           [ Commit ] [ Discard ]  Later  disabled                                                      
+                                                                                                                        
+                           FIELDS                                                                                       
+                                                                                                                        
+                           Go to file…                  read only                                                       
+                                                                                                                        
+                           CHECKBOXES, RADIOS, SWITCHES, SLIDER                                                         
+                                                                                                                        
+                           [x] Format on save  [ ] Trim whitespace  [x] Disabled                                        
+                                                                                                                        
+                           ( ) Light  ( ) Dark  (•) System                                                              
+                                                                                                                        
+                           [ ●] Autosave  [○ ] Disabled                                                                 

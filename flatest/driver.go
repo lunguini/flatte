@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/lunguini/flatte"
+	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/internal/sessionaccess"
+	"github.com/lunguini/flatte/theme"
 )
 
 // Driver runs a flatte.App synchronously for tests. App-triggered async
@@ -32,6 +34,7 @@ type Driver[S any] struct {
 	dialogs []pendingDialog
 	// notifications are the ones the app posted, oldest first.
 	notifications []flatte.Notification
+	themedCells   bool // Close removes the cell theme it installed
 }
 
 // Start builds a Driver, runs Init, delivers the initial ResizeEvent, and
@@ -45,6 +48,11 @@ type Options struct {
 	Width, Height int
 	Graphical     bool
 	Capabilities  flatte.Capabilities
+	// Theme is the app's design system, as flatte.WithTheme sets it (nil:
+	// none; a Graphical driver then reports theme.Default()). A terminal
+	// driver composes its cells in the theme's dark palette, as a terminal
+	// run does, until Close.
+	Theme *theme.Theme
 }
 
 // StartWith builds a Driver with an explicit size and host render context.
@@ -64,6 +72,13 @@ func StartWith[S any](app flatte.App[S], opts Options) *Driver[S] {
 		clock:     newFakeClock(),
 	}
 	d.session = flatte.NewSession(context.Background(), app)
+	if opts.Theme != nil {
+		d.session.UseTheme(*opts.Theme)
+		if !opts.Graphical {
+			layout.UseCellTheme(&d.session.Theme(false).Dark)
+			d.themedCells = true
+		}
+	}
 	access, ok := sessionaccess.For(d.session)
 	if !ok {
 		panic("flatest: session access was not registered")
@@ -137,6 +152,7 @@ func (d *Driver[S]) applyUpdates() {
 // body so Latest's apply-time guard sees a superseded ctx and drops the
 // stale result.
 func (d *Driver[S]) Settle() flatte.Frame {
+	d.applyUpdates() // updates queued outside an event (a panic report from View)
 	for len(d.pending) > 0 {
 		batch := d.pending
 		d.pending = nil
@@ -145,6 +161,7 @@ func (d *Driver[S]) Settle() flatte.Frame {
 			d.applyUpdates()
 		}
 	}
+	d.applyUpdates() // what applying queued (a panic report from a fold)
 	return d.render()
 }
 
@@ -225,6 +242,10 @@ func (d *Driver[S]) Quit() bool { return d.quit }
 // Close calls the app's OnExit hook, mirroring what Run does on loop exit.
 // Call it at the end of a test to verify state-save callbacks.
 func (d *Driver[S]) Close() {
+	if d.themedCells || (!d.graphical && d.session.ThemeVersion() > 0) {
+		layout.UseCellTheme(nil)
+		d.themedCells = false
+	}
 	if d.close != nil {
 		d.close()
 		d.close = nil

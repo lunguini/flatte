@@ -25,6 +25,7 @@ type canvasFont struct {
 
 func (t canvasTextLayout) font(style layout.TextStyle) canvasFont {
 	th := t.theme
+	style = resolveStyle(style, th.palette(), th.typeScale())
 	size := th.FontSize
 	family := th.Font
 	if style.Role == layout.TextTitle {
@@ -118,8 +119,9 @@ func (t canvasTextLayout) metrics() layout.Metrics {
 	if line <= 0 {
 		line = t.theme.FontSize * 1.25
 	}
+	step, insets, sizes := t.theme.spacing()
 	return layout.Metrics{
-		Column: column, Line: line, Step: stepPoints, Border: borderBand,
+		Column: column, Line: line, Step: step, Border: borderBand, Insets: insets, Sizes: sizes,
 		DefaultPadding: true, ControlHeight: t.theme.ControlHeight,
 		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
 			font := t.font(style)
