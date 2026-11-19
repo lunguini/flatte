@@ -4,6 +4,43 @@ Generated from [Conventional Commits](https://www.conventionalcommits.org/)
 by [release-please](https://github.com/googleapis/release-please); entries
 below the first release are automated.
 
+## [0.4.0](https://github.com/lunguini/flatte/compare/v0.3.0...v0.4.0) (2026-11-19)
+
+
+### Features
+
+* App.Panic catches panics in app code instead of crashing ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **flatui:** Tree.Scroll leaves the cursor; folding keeps it on its item ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **kit:** Action, closable tabs, and centered tab-strip trailing nodes ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **kit:** design-system components, size tokens, live dials in flat-design ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **kit:** tree rows: disclosure chevrons, title color, italics ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** add a text caret to cell-grid Text ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** add terminal, panel and sidebar icons ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** add theme fill roles for box backgrounds ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** draw extra text carets for multi-cursor editing ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** IconSparkle ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** mark splitter boxes for a resize pointer ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* let apps answer quit requests ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* report light or dark appearance to View ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* smooth scrolling with fractional wheel events and text offsets ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **theme:** density spacing in windows and live themes via Frame.Theme ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **theme:** design system tokens, roles in every renderer, flat-design ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **theme:** warm stone-grey neutrals in the default palettes ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **window:** controls on the design recipe, Box.Edge, flat-design controls ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **window:** draw ANSI colors through a theme palette ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **window:** Frame.Translucent switches the window blur live ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **window:** TitleBarHeight for taller hidden title bars ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+
+
+### Bug Fixes
+
+* **flatui:** drop a collapsed selection on edit ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **kit:** center segmented option labels in the control height ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** bordered anchored overlays hug their anchor in a GUI ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** color roles draw in an unthemed terminal ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **layout:** wrapped text inside aligned row children; kit headers and inline empty states ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+* **window:** draw invalid UTF-8 as U+FFFD instead of crashing ([df7c31c](https://github.com/lunguini/flatte/commit/df7c31c3b0f979f8c8197e02a92750b5a4db6f04))
+
 ## [0.3.0](https://github.com/lunguini/flatte/compare/v0.2.0...v0.3.0) (2026-11-14)
 
 
