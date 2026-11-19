@@ -232,7 +232,13 @@ func (s Segmented) Layout() layout.Node {
 			box.Selected = s.Focused
 			style = layout.TextStyle{Role: layout.TextStrong}
 		}
-		kids[i] = layout.Label{NodeBase: layout.NodeBase{ID: OptionID(s.ID, i), PadLeft: 1, PadRight: 1, Box: box}, Text: o, Style: style}
+		// The option fills the track's height and centers its label in it
+		// (a Label draws its text at the top of its rect).
+		kids[i] = layout.Row{
+			NodeBase: layout.NodeBase{ID: OptionID(s.ID, i), PadLeft: 1, PadRight: 1, NoPadding: true, Box: box},
+			Align:    layout.AlignCenter,
+			Children: []layout.Node{layout.Label{Text: o, Style: style}},
+		}
 	}
 	return layout.Row{
 		NodeBase: layout.NodeBase{ID: s.ID, H: layout.ControlSize(), NoPadding: true, Box: layout.Box{Fill: layout.FillPressed, Round: true}},

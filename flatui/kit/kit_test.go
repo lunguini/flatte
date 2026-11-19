@@ -120,3 +120,26 @@ func TestActiveTabEdge(t *testing.T) {
 	}
 	t.Error("the active tab's edge is not in the scene")
 }
+
+// A segmented option's label sits in the middle of the control's height,
+// not at its top.
+func TestSegmentedLabelsCentered(t *testing.T) {
+	s := layout.LayoutScene(Segmented{ID: "seg", Options: []string{"Off", "On"}}.Layout(), 300, 100, points)
+	track := s.Rects["seg"]
+	found := 0
+	for _, op := range s.Ops {
+		if text, ok := op.(layout.TextOp); ok {
+			found++
+			if text.Rect.H >= track.H {
+				t.Errorf("%q stretched to the control height %v: its text draws at the top", text.Text, text.Rect.H)
+			}
+			top, bottom := text.Rect.Y-track.Y, track.Y+track.H-(text.Rect.Y+text.Rect.H)
+			if d := top - bottom; d < -1 || d > 1 {
+				t.Errorf("%q: %v above, %v below", text.Text, top, bottom)
+			}
+		}
+	}
+	if found != 2 {
+		t.Fatalf("%d labels drawn", found)
+	}
+}
