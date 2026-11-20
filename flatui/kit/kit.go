@@ -95,7 +95,7 @@ func (h PaneHeader) Layout() layout.Node {
 	}
 	kids = append(kids, h.Actions...)
 	return layout.Row{
-		NodeBase: layout.NodeBase{ID: h.ID, H: layout.BarSize(), Gap: 1, PadLeft: 1, PadRight: 1, Box: layout.Box{Fill: layout.FillChrome}},
+		NodeBase: layout.NodeBase{ID: h.ID, H: layout.BarSize(), Gap: 1, PadLeft: 1, PadRight: 1, Box: layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom}},
 		Align:    layout.AlignCenter, Children: kids,
 	}
 }

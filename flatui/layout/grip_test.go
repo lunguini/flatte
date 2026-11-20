@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image/color"
 	"testing"
 
 	"github.com/lunguini/flatte/theme"
@@ -51,14 +52,13 @@ func TestCellSplitterHasNoGrip(t *testing.T) {
 	}
 }
 
-func TestGlassIsTranslucentContent(t *testing.T) {
+// Glass is white in both appearances: mostly opaque on light, a faint
+// wash on dark (the dark content surface at 80% read as black).
+func TestGlassIsWhite(t *testing.T) {
 	d := theme.Default()
-	for _, p := range []*theme.Palette{&d.Light, &d.Dark} {
-		c, ok := FillColor(p, FillGlass)
-		want := p.Content
-		want.A = GlassAlpha
-		if !ok || c != want {
-			t.Errorf("glass %v, want %v", c, want)
+	for p, a := range map[*theme.Palette]uint8{&d.Light: GlassLight, &d.Dark: GlassDark} {
+		if c, ok := FillColor(p, FillGlass); !ok || c != (color.NRGBA{0xff, 0xff, 0xff, a}) {
+			t.Errorf("glass %v, want white at %#x", c, a)
 		}
 	}
 }

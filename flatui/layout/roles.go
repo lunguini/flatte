@@ -61,14 +61,18 @@ const (
 	FillDiffDelWord
 	FillDiffFold
 	FillDiffBlank
-	// FillGlass is the content surface at GlassAlpha: a control that sits
-	// on a translucent window's chrome (a side bar's buttons, a title bar
-	// field) reads the same whatever shows through.
+	// FillGlass is white glass for a control that sits on a translucent
+	// window's chrome (a side bar's buttons, a title bar field), so it
+	// reads the same whatever shows through: white at GlassLight on a
+	// light palette, a faint white wash at GlassDark on a dark one.
 	FillGlass
 )
 
-// GlassAlpha is FillGlass's opacity (80%).
-const GlassAlpha = 0xcc
+// FillGlass's white opacities: 80% on a light palette, 14% on a dark one.
+const (
+	GlassLight = 0xcc
+	GlassDark  = 0x24
+)
 
 // FillColor is f's color in p; ok is false for FillNone and unknown fills.
 // FillSurface is Raised, FillField is Field, FillSeparator is Divider.
@@ -119,9 +123,11 @@ func FillColor(p *theme.Palette, f Fill) (c color.NRGBA, ok bool) {
 	case FillDiffBlank:
 		return p.Diff.Blank, true
 	case FillGlass:
-		c := p.Content
-		c.A = uint8(uint16(c.A) * GlassAlpha / 0xff)
-		return c, true
+		// Dark when white text reads better on Content than black.
+		if theme.Contrast(color.NRGBA{0xff, 0xff, 0xff, 0xff}, p.Content) > theme.Contrast(color.NRGBA{0, 0, 0, 0xff}, p.Content) {
+			return color.NRGBA{0xff, 0xff, 0xff, GlassDark}, true
+		}
+		return color.NRGBA{0xff, 0xff, 0xff, GlassLight}, true
 	}
 	return color.NRGBA{}, false
 }

@@ -314,3 +314,11 @@ func TestDimmedRowSelected(t *testing.T) {
 		}
 	}
 }
+
+// A pane header stands on its pane like a tab bar: top corners round.
+func TestPaneHeaderRoundsItsTop(t *testing.T) {
+	b := PaneHeader{Title: "Files"}.Layout().(layout.Row).Box
+	if !b.Round || b.Flat != layout.SideBottom || b.Fill != layout.FillChrome {
+		t.Fatalf("pane header box %+v", b)
+	}
+}
