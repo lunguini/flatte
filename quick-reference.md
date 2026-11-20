@@ -557,7 +557,7 @@ sidebars), `FillContent` (where work is read), `FillRaised`, `FillAccent`,
 `FillSelection` / `FillSelectionInactive`, `FillPressed`, the status tints,
 `FillCurrentLine`, `FillMatch` and the diff fills. `FillGlass` is white
 glass for controls on a translucent window's chrome (side bar buttons, a
-title bar field): 80% white on a light palette (`GlassLight`), a 14% white
+title bar field): 80% white on a light palette (`GlassLight`), an 8% white
 wash on a dark one (`GlassDark`).
 
 ### Themes

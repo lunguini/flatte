@@ -68,10 +68,10 @@ const (
 	FillGlass
 )
 
-// FillGlass's white opacities: 80% on a light palette, 14% on a dark one.
+// FillGlass's white opacities: 80% on a light palette, 8% on a dark one.
 const (
 	GlassLight = 0xcc
-	GlassDark  = 0x24
+	GlassDark  = 0x14
 )
 
 // FillColor is f's color in p; ok is false for FillNone and unknown fills.
