@@ -62,3 +62,21 @@ func TestGlassIsWhite(t *testing.T) {
 		}
 	}
 }
+
+// A draggable bar with controls in it (a terminal header) keeps its
+// controls clickable: the grip reaches only past the bar's edges.
+func TestGripLeavesChildrenOnTop(t *testing.T) {
+	bar := Row{NodeBase: NodeBase{ID: "bar", W: Grow(1), H: Points(24), Box: Box{Resize: ResizeRows}}, Children: []Node{
+		Col{NodeBase: NodeBase{ID: "btn", W: Points(20), H: Points(24), Box: Box{Interactive: true}}},
+	}}
+	col := Col{Children: []Node{Col{NodeBase: NodeBase{ID: "top", W: Grow(1), H: Points(40)}}, bar, Col{NodeBase: NodeBase{ID: "body", W: Grow(1), H: Grow(1)}}}}
+	s := LayoutScene(col, 100, 100, Metrics{})
+	for _, tc := range []struct {
+		x, y float64
+		want string
+	}{{10, 52, "btn"}, {10, 41, "btn"}, {50, 52, "bar"}, {10, 38, "bar"}, {10, 66, "bar"}, {10, 70, "body"}} {
+		if id, _ := s.HitTest(tc.x, tc.y); id != tc.want {
+			t.Errorf("(%v,%v): %q, want %q", tc.x, tc.y, id, tc.want)
+		}
+	}
+}

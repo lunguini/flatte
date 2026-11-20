@@ -694,13 +694,20 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 		s.rects[id] = r
 		s.hits = append(s.hits, hitOf[T]{id: id, rect: r, area: intersectOf(m, r, s.clip)})
 		if g := m.grip(); g > 0 {
+			// Only the strips past the box's edges: inside it, the box's own
+			// hit (under its children) keeps a draggable bar's controls
+			// clickable.
+			var strips [2]rect[T]
 			switch getBox(n).Resize {
 			case ResizeColumns:
-				a := rect[T]{m.sub(r.X, g), r.Y, m.add(r.W, m.add(g, g)), r.H}
-				s.grips = append(s.grips, hitOf[T]{id: id, rect: r, area: intersectOf(m, a, s.clip)})
+				strips = [2]rect[T]{{m.sub(r.X, g), r.Y, g, r.H}, {m.add(r.X, r.W), r.Y, g, r.H}}
 			case ResizeRows:
-				a := rect[T]{r.X, m.sub(r.Y, g), r.W, m.add(r.H, m.add(g, g))}
-				s.grips = append(s.grips, hitOf[T]{id: id, rect: r, area: intersectOf(m, a, s.clip)})
+				strips = [2]rect[T]{{r.X, m.sub(r.Y, g), r.W, g}, {r.X, m.add(r.Y, r.H), r.W, g}}
+			}
+			if getBox(n).Resize != ResizeNone {
+				for _, a := range strips {
+					s.grips = append(s.grips, hitOf[T]{id: id, rect: r, area: intersectOf(m, a, s.clip)})
+				}
 			}
 		}
 	}
