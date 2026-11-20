@@ -388,6 +388,10 @@ func (pointMetric) share(total, ratio float64) float64 {
 
 // padding resolves a host's default component insets in points.
 func (p pointMetric) padding(n Node) sidesOf[float64] {
+	if pp, ok := n.(interface{ panePadding() bool }); ok && pp.panePadding() {
+		st := p.steps(1)
+		return sidesOf[float64]{st, st, st, st}
+	}
 	pad := getPadSides(n)
 	s := sidesOf[float64]{p.steps(pad.top), p.steps(pad.right), p.steps(pad.bottom), p.steps(pad.left)}
 	if !p.DefaultPadding || pad.any() {

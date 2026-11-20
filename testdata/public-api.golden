@@ -1535,7 +1535,8 @@ flatui/layout package layout
   field NodeBase.Anchor string [order=14]
   field NodeBase.NoPadding bool [order=15]
   field NodeBase.ItemPadding bool [order=16]
-  struct NodeBase fields=17 comparable=false
+  field NodeBase.PanePadding bool [order=17]
+  struct NodeBase fields=18 comparable=false
   type Op interface
   interface Op method isOp()
   type PointRect struct

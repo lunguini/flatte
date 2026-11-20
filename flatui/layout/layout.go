@@ -289,10 +289,22 @@ type NodeBase struct {
 	// horizontal, 4pt vertical) when default padding is enabled. Explicit
 	// Pad fields or NoPadding override it. Terminal geometry is unchanged.
 	ItemPadding bool
+
+	// PanePadding is a pane body's inset (a file tree, a list under a
+	// PaneHeader): one layout step on every side in a GUI, so the first
+	// row's selection sits as far from the header as from the sides; one
+	// column left and right in a terminal, which cannot spare the rows.
+	// Explicit Pad fields override it.
+	PanePadding bool
 }
 
 func (n NodeBase) noPadding() bool   { return n.NoPadding }
 func (n NodeBase) itemPadding() bool { return n.ItemPadding }
+
+// panePadding reports a PanePadding the Pad fields do not override.
+func (n NodeBase) panePadding() bool {
+	return n.PanePadding && n.Pad == 0 && n.PadTop == 0 && n.PadRight == 0 && n.PadBottom == 0 && n.PadLeft == 0
+}
 
 func (n NodeBase) tooltip() string { return n.Tooltip }
 
@@ -466,6 +478,9 @@ func (s sides) clampTo(width, height int) sides {
 // padSides is the node's padding per side: symmetric Pad plus the per-side
 // extras (border excluded).
 func (n NodeBase) padSides() sides {
+	if n.panePadding() {
+		return sides{right: 1, left: 1}
+	}
 	pad := max(n.Pad, 0)
 	return sides{
 		top:    satAdd(pad, nonNegative(n.PadTop)),
