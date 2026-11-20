@@ -57,12 +57,12 @@ type windowState struct {
 	blink      *time.Timer
 	// frame redraws the next frame of a fade or an animated icon.
 	frame *time.Timer
-	// tooltip is the view's tooltip now.
-	tooltip string
 }
 
-// showPointer sets the pointer shape and the view's tooltip.
-func (st *windowState) showPointer(view objc.ID, shape pointer, tooltip string) {
+// showPointer sets the pointer shape. Tooltips are drawn by the view
+// (withTip): AppKit's view tooltip shows only on entering the view, and
+// the whole frame is one view.
+func (st *windowState) showPointer(shape pointer) {
 	name := "arrowCursor"
 	switch shape {
 	case pointerHand:
@@ -75,14 +75,6 @@ func (st *windowState) showPointer(view objc.ID, shape pointer, tooltip string) 
 		name = "resizeUpDownCursor"
 	}
 	class("NSCursor").Send(sel(name)).Send(sel("set"))
-	if tooltip != st.tooltip {
-		st.tooltip = tooltip
-		var tip objc.ID
-		if tooltip != "" {
-			tip = nsString(tooltip)
-		}
-		view.Send(sel("setToolTip:"), tip)
-	}
 }
 
 // caretBlink is a caret blink phase, as macOS fields blink.
@@ -311,12 +303,14 @@ func viewMethods() []objc.MethodDef {
 			scale := objc.Send[float64](st.window, sel("backingScaleFactor"))
 			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale, translucent: st.translucent}
 			p.presentation = st.ui.presentation()
-			p.draw(scene, b.Size.Width, b.Size.Height)
+			p.draw(st.ui.withTip(scene, p.presentation), b.Size.Width, b.Size.Height)
 			switch {
 			case p.moving:
 				st.frameIn(fadeFrame)
 			case p.animated:
 				st.frameIn(animateFrame)
+			case p.tipWait > 0:
+				st.frameIn(p.tipWait) // a resting pointer's tooltip is due
 			}
 			if c := st.ui.frameCursor(); c != nil {
 				p.clip = layout.PointRect{W: b.Size.Width, H: b.Size.Height}
@@ -364,14 +358,14 @@ func viewMethods() []objc.MethodDef {
 		{Cmd: sel("mouseMoved:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
 			if st := stateOf(self); st != nil {
 				p := location(self, event)
-				shape, tip := st.ui.hover(p.X, p.Y)
-				st.showPointer(self, shape, tip)
+				shape, _ := st.ui.hover(p.X, p.Y)
+				st.showPointer(shape)
 			}
 		}},
 		{Cmd: sel("mouseExited:"), Fn: func(self objc.ID, _ objc.SEL, _ objc.ID) {
 			if st := stateOf(self); st != nil {
-				shape, tip := st.ui.hover(-1, -1)
-				st.showPointer(self, shape, tip)
+				shape, _ := st.ui.hover(-1, -1)
+				st.showPointer(shape)
 			}
 		}},
 		{Cmd: sel("mouseDown:"), Fn: mouseHandler(flatte.MouseLeft, flatte.MousePress)},

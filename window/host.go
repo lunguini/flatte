@@ -111,6 +111,8 @@ type surface struct {
 	hovers, presses *fader
 	clock           func() time.Time
 	selecting       bool
+	// tip is the tooltip under the pointer and since when it rests there.
+	tip tipState
 }
 
 // desktopBackend performs native background-utility operations.
@@ -151,6 +153,8 @@ type ui interface {
 	paste()
 	hover(x, y float64) (pointer, string)
 	presentation() presentation
+	// withTip is a scene with the presentation's tooltip drawn over it.
+	withTip(layout.Scene, presentation) layout.Scene
 	drop(x, y float64, paths []string, text string)
 	mouse(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod)
 	mouseClicks(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod, clicks int)
@@ -190,6 +194,12 @@ type presentation struct {
 	hovers, presses map[string]float64
 	moving          bool
 	now             time.Time
+	// tip is the tooltip to draw at (tipX, tipY), the pointer; tipWait,
+	// when positive, is how long until a resting pointer's tooltip shows
+	// (the view draws again then).
+	tip        string
+	tipX, tipY float64
+	tipWait    time.Duration
 }
 
 // textSel is the bytes from..to (either order) selected in the text of the
@@ -651,6 +661,10 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 	}
 	changed := id != s.pres.hovered
 	s.pres.hovered = id
+	if tooltip != s.tip.text {
+		changed = changed || s.tip.shown(s.now())
+		s.tip = tipState{text: tooltip, x: x, y: y, since: s.now()}
+	}
 	if over := s.idsAt(x, y); !maps.Equal(over, s.over) {
 		s.over, changed = over, true
 		s.faders()
@@ -775,6 +789,13 @@ func (s *surface) presentation() presentation {
 	p.hovers, p.moving = s.hovers.levels(p.now)
 	p.presses, moved = s.presses.levels(p.now)
 	p.moving = p.moving || moved
+	if t := s.tip; t.text != "" && !t.off {
+		if wait := tipDelay - p.now.Sub(t.since); wait > 0 {
+			p.tipWait = wait
+		} else {
+			p.tip, p.tipX, p.tipY = t.text, t.x, t.y
+		}
+	}
 	return p
 }
 
@@ -937,6 +958,13 @@ func (s *surface) mouseClicks(x, y float64, button flatte.MouseButton, action fl
 	}
 	ev := s.pointerAt(x, y, id, r)
 	ev.Button, ev.Action, ev.Mod, ev.Clicks = button, action, mod, max(clicks, 1)
+	if action == flatte.MousePress && s.tip.text != "" && !s.tip.off {
+		// A press hides the tooltip until the pointer moves to another.
+		if s.tip.shown(s.now()) {
+			s.invalidate()
+		}
+		s.tip.off = true
+	}
 	// A right press (or a Control-click, as on macOS) with a context menu
 	// shows it instead of being delivered; the choice arrives as a
 	// MenuEvent.

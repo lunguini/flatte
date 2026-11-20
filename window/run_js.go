@@ -64,12 +64,14 @@ type canvasPage struct {
 	blinkID                             js.Value
 	blinkFn                             js.Func
 	blinkPending                        bool
-	wheel                               wheelAccumulator
-	originalTitle                       string
-	title                               string
-	style                               js.Value
-	styles                              map[string]string
-	stop                                func()
+	// tipPending is a redraw scheduled for a resting pointer's tooltip.
+	tipPending    bool
+	wheel         wheelAccumulator
+	originalTitle string
+	title         string
+	style         js.Value
+	styles        map[string]string
+	stop          func()
 }
 
 func runCanvas(ctx context.Context, session *flatte.Session, opts Options) error {
@@ -255,13 +257,11 @@ func (p *canvasPage) bind() {
 			button = flatte.MouseNone
 		}
 		p.host.surface.mouse(x, y, button, flatte.MouseMotion, canvasModifiers(ev))
-		pointer, tip := p.host.surface.hover(x, y)
+		pointer, _ := p.host.surface.hover(x, y)
 		p.canvas.Get("style").Set("cursor", canvasCursor(pointer))
-		p.canvas.Set("title", tip)
 	})
 	p.listen(p.canvas, "pointerleave", func(ev js.Value) {
 		p.canvas.Get("style").Set("cursor", "default")
-		p.canvas.Set("title", "")
 		p.host.surface.hover(-1, -1)
 	})
 	p.listen(p.canvas, "wheel", func(ev js.Value) {
@@ -492,7 +492,15 @@ func (p *canvasPage) draw() {
 	scene := p.host.surface.render()
 	p.painter.marked = p.marked
 	p.painter.caretOn = p.caretOn
-	p.painter.draw(scene, p.width(), p.height(), p.host.surface.presentation())
+	pres := p.host.surface.presentation()
+	p.painter.draw(p.host.surface.withTip(scene, pres), p.width(), p.height(), pres)
+	if pres.tipWait > 0 && !p.tipPending {
+		// A resting pointer's tooltip is due: draw again then.
+		p.tipPending = true
+		var fn js.Func
+		fn = js.FuncOf(func(js.Value, []js.Value) any { fn.Release(); p.tipPending = false; p.invalidate(); return nil })
+		p.win.Call("setTimeout", fn, pres.tipWait.Milliseconds()+1)
+	}
 	if cursor := p.host.surface.frameCursor(); cursor != nil {
 		p.painter.drawCursor(*cursor)
 	}
