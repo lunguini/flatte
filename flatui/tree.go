@@ -1,6 +1,7 @@
 package flatui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/lunguini/flatte/flatui/layout"
@@ -183,6 +184,55 @@ func (t Tree) Rows(id string, row func(row TreeRow, selected bool) layout.Node) 
 		})
 	}
 	return col
+}
+
+// Pinned is the folders to keep at the top of the window (sticky folders):
+// the ancestors, outermost first, of the rows at the top of the window
+// whose own rows have scrolled above it. An app draws them over the
+// window's first len(Pinned()) rows, which they hide. One row of the window
+// is always left to the tree's own rows; none before a height is set.
+func (t Tree) Pinned() []TreeRow {
+	rows := t.VisibleRows()
+	if t.height <= 0 || len(rows) == 0 {
+		return nil
+	}
+	off := min(max(t.offset, 0), max(len(rows)-t.height, 0))
+	most := min(t.height-1, len(rows)-off-1)
+	// above is the ancestors of the row n below the window's top that are
+	// above that row's slot, outermost first.
+	above := func(n int) []TreeRow {
+		i := off + n
+		var out []TreeRow
+		for depth, j := rows[i].Depth, i-1; depth > 0 && j >= 0; j-- {
+			if rows[j].Depth == depth-1 {
+				out = append(out, rows[j])
+				depth--
+			}
+		}
+		slices.Reverse(out)
+		return out
+	}
+	n := min(len(above(0)), most)
+	if n == 0 {
+		return nil
+	}
+	// Grow while the row below the pins has more folders above it, then
+	// give way to a folder's end: the pins are the outermost n of the
+	// folders of the row they sit on.
+	for n < most {
+		if f := len(above(n)); f > n {
+			n = min(f, most)
+			continue
+		}
+		break
+	}
+	for n > 0 && len(above(n)) < n {
+		n--
+	}
+	if n == 0 {
+		return nil
+	}
+	return above(n)[:n]
 }
 
 // window returns the visible rows and the cursor's index among them (-1

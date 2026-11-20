@@ -748,6 +748,7 @@ flatui package flatui
   method Timer.Remaining() time.Duration
   method Tree.CursorID() string
   method Tree.Offset() int
+  method Tree.Pinned()[]TreeRow
   method Tree.Rows(id string, row func(row TreeRow, selected bool) layout.Node) layout.Col
   method Tree.View(render func(row TreeRow, selected bool) string) string
   method Tree.VisibleRows()[]TreeRow
