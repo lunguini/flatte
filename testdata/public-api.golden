@@ -664,6 +664,7 @@ flatui package flatui
   method *Tree.SelectVisible(i int)
   method *Tree.SetHeight(h int)
   method *Tree.SetNodes(nodes[]TreeNode)
+  method *Tree.SetSticky(on bool)
   method *Tree.Toggle(id string)
   method *Viewport.Adopt(rects map[string] layout.Rect, id string)
   method *Viewport.GotoBottom()
@@ -910,7 +911,8 @@ flatui package flatui
   field Tree.<unexported> int [order=2]
   field Tree.<unexported> int [order=3]
   field Tree.<unexported> int [order=4]
-  struct Tree fields=5 comparable=false
+  field Tree.<unexported> bool [order=5]
+  struct Tree fields=6 comparable=false
   type TreeNode struct
   field TreeNode.ID string [order=0]
   field TreeNode.Label string [order=1]

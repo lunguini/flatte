@@ -28,6 +28,7 @@ func TestTreePinnedAncestors(t *testing.T) {
 	})
 	tr.Toggle("a")
 	tr.Toggle("a/b")
+	tr.SetSticky(true)
 	// rows: a, a/b, 1, 2, 3, 4, a/c, d, e, f
 	tr.SetHeight(4)
 	for _, tc := range []struct {
@@ -57,5 +58,56 @@ func TestTreePinnedAncestors(t *testing.T) {
 	tr.SetHeight(0)
 	if got := pinnedIDs(tr); got != nil {
 		t.Errorf("no height: %q", got)
+	}
+}
+
+// Revealing the cursor keeps it below the pinned folders: moving up into
+// rows the pins cover scrolls the window up instead.
+func TestTreeRevealKeepsTheCursorBelowThePins(t *testing.T) {
+	tr := NewTree([]TreeNode{
+		{ID: "a", Label: "a", Children: []TreeNode{
+			{ID: "a/1", Label: "1"}, {ID: "a/2", Label: "2"}, {ID: "a/3", Label: "3"}, {ID: "a/4", Label: "4"}, {ID: "a/5", Label: "5"},
+		}},
+	})
+	tr.Toggle("a")
+	tr.SetSticky(true)
+	tr.SetHeight(3)
+	for range 4 {
+		tr.MoveDown()
+	}
+	// cursor a/4 (row 4), window 2..4, pinned [a] over a/2.
+	if tr.CursorID() != "a/4" || !slices.Equal(pinnedIDs(tr), []string{"a"}) {
+		t.Fatalf("cursor %q offset %d pinned %q", tr.CursorID(), tr.Offset(), pinnedIDs(tr))
+	}
+	tr.MoveUp()
+	tr.MoveUp() // a/2: under the pin at offset 2
+	if p := len(tr.Pinned()); rowIndex(tr, tr.CursorID()) < tr.Offset()+p {
+		t.Errorf("cursor %q at row %d hidden under %d pins (offset %d)", tr.CursorID(), rowIndex(tr, tr.CursorID()), p, tr.Offset())
+	}
+	tr.SelectVisible(0) // the folder itself
+	if tr.Offset() != 0 {
+		t.Errorf("selecting the folder: offset %d, want 0", tr.Offset())
+	}
+}
+
+func rowIndex(t Tree, id string) int {
+	for i, r := range t.VisibleRows() {
+		if r.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// Without SetSticky nothing is pinned and reveal is unchanged.
+func TestTreeNotStickyByDefault(t *testing.T) {
+	tr := NewTree([]TreeNode{{ID: "a", Label: "a", Children: []TreeNode{{ID: "a/1", Label: "1"}, {ID: "a/2", Label: "2"}, {ID: "a/3", Label: "3"}}}})
+	tr.Toggle("a")
+	tr.SetHeight(2)
+	tr.MoveDown()
+	tr.MoveDown()
+	tr.MoveUp()
+	if tr.Pinned() != nil || tr.Offset() != 1 {
+		t.Errorf("pinned %v offset %d, want none and 1", tr.Pinned(), tr.Offset())
 	}
 }

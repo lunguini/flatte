@@ -31,6 +31,14 @@ type Tree struct {
 	cursor   int
 	offset   int
 	height   int
+	sticky   bool
+}
+
+// SetSticky turns sticky folders on: Pinned reports them, and revealing the
+// cursor keeps it below them. Off (the default), Pinned is empty.
+func (t *Tree) SetSticky(on bool) {
+	t.sticky = on
+	t.clamp(t.cursorShown())
 }
 
 // NewTree returns a tree with the given nodes.
@@ -186,14 +194,15 @@ func (t Tree) Rows(id string, row func(row TreeRow, selected bool) layout.Node) 
 	return col
 }
 
-// Pinned is the folders to keep at the top of the window (sticky folders):
+// Pinned is the folders to keep at the top of the window (sticky folders,
+// after SetSticky(true)):
 // the ancestors, outermost first, of the rows at the top of the window
 // whose own rows have scrolled above it. An app draws them over the
 // window's first len(Pinned()) rows, which they hide. One row of the window
 // is always left to the tree's own rows; none before a height is set.
 func (t Tree) Pinned() []TreeRow {
 	rows := t.VisibleRows()
-	if t.height <= 0 || len(rows) == 0 {
+	if !t.sticky || t.height <= 0 || len(rows) == 0 {
 		return nil
 	}
 	off := min(max(t.offset, 0), max(len(rows)-t.height, 0))
@@ -284,6 +293,10 @@ func (t *Tree) clamp(reveal bool) {
 		}
 	}
 	t.offset = min(max(t.offset, 0), max(len(rows)-t.height, 0))
+	// A revealed cursor stays out from under the pinned folders.
+	for reveal && t.offset > 0 && t.cursor < t.offset+len(t.Pinned()) {
+		t.offset--
+	}
 }
 
 func (t *Tree) ensureExpanded() {
