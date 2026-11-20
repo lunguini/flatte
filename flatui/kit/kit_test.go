@@ -322,3 +322,12 @@ func TestPaneHeaderRoundsItsTop(t *testing.T) {
 		t.Fatalf("pane header box %+v", b)
 	}
 }
+
+// An inline empty state sits in a pane body, which owns the inset
+// (layout.NodeBase.PanePadding): it adds none of its own.
+func TestInlineEmptyStateLeavesTheInsetToItsPane(t *testing.T) {
+	col := EmptyState{Title: "Nothing", Hint: "Here", Inline: true}.Layout().(layout.Col)
+	if nb := col.NodeBase; nb.Pad != 0 || nb.PadTop != 0 || nb.PadLeft != 0 || nb.PadRight != 0 || nb.PadBottom != 0 {
+		t.Errorf("inline empty state pads itself: %+v", nb)
+	}
+}

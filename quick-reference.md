@@ -616,6 +616,8 @@ title, meta, trailing nodes; `Selected` + `Active` is the strong
 selection, `Selected` alone the quiet one; `Indent` for trees), `Segmented`
 (option IDs from `kit.OptionID(id, i)`), `Badge` with a `Tone`, `Section`,
 `Setting` (name, description, control), `EmptyState` and `Popover`.
+A pane is a `PaneHeader` over a body Col with `PanePadding: true`; rows
+and an `Inline` empty state inside it add no inset of their own.
 Stateless: selection and values are app state, clicks are MouseEvents on
 the IDs. Buttons stay `layout.Button` (`Default` primary, plain secondary,
 `Plain` quiet).
