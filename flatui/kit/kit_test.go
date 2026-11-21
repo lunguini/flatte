@@ -331,3 +331,26 @@ func TestInlineEmptyStateLeavesTheInsetToItsPane(t *testing.T) {
 		t.Errorf("inline empty state pads itself: %+v", nb)
 	}
 }
+
+// An unfocused strip marks its active tab with a neutral edge, so the
+// focused pane's tab is the only accented one.
+func TestUnfocusedTabsMarkTheActiveTabQuietly(t *testing.T) {
+	edge := func(tabs Tabs) layout.Box {
+		row := tabs.Layout().(layout.Row)
+		for _, k := range row.Children {
+			if r, ok := k.(layout.Row); ok && r.ID == "t0" {
+				return r.Box
+			}
+		}
+		t.Fatalf("no tab t0 in %+v", row)
+		return layout.Box{}
+	}
+	tabs := Tabs{ID: "tabs", Active: 0, Tabs: []Tab{{ID: "t0", Label: "a"}, {ID: "t1", Label: "b"}}}
+	if b := edge(tabs); b.Edge != layout.SideTop || b.EdgeFill != layout.FillNone {
+		t.Errorf("focused: edge %v fill %v, want the accent", b.Edge, b.EdgeFill)
+	}
+	tabs.Unfocused = true
+	if b := edge(tabs); b.Edge != layout.SideTop || b.EdgeFill != layout.FillBorder {
+		t.Errorf("unfocused: edge %v fill %v, want FillBorder", b.Edge, b.EdgeFill)
+	}
+}

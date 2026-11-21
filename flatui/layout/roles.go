@@ -66,6 +66,9 @@ const (
 	// reads the same whatever shows through: white at GlassLight on a
 	// light palette, a faint white wash at GlassDark on a dark one.
 	FillGlass
+	// FillBorder is a control's border color: a neutral mark that does not
+	// read as focus (an unfocused pane's active tab edge).
+	FillBorder
 )
 
 // FillGlass's white opacities: 80% on a light palette, 8% on a dark one.
@@ -122,6 +125,8 @@ func FillColor(p *theme.Palette, f Fill) (c color.NRGBA, ok bool) {
 		return p.Diff.Fold, true
 	case FillDiffBlank:
 		return p.Diff.Blank, true
+	case FillBorder:
+		return p.ControlBorder, true
 	case FillGlass:
 		// Dark when white text reads better on Content than black.
 		if theme.Contrast(color.NRGBA{0xff, 0xff, 0xff, 0xff}, p.Content) > theme.Contrast(color.NRGBA{0, 0, 0, 0xff}, p.Content) {

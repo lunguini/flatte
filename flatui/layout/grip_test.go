@@ -80,3 +80,14 @@ func TestGripLeavesChildrenOnTop(t *testing.T) {
 		}
 	}
 }
+
+// FillBorder is the palette's control border: a neutral line, for marks
+// that must not read as focus.
+func TestFillBorderIsTheControlBorder(t *testing.T) {
+	d := theme.Default()
+	for _, p := range []*theme.Palette{&d.Light, &d.Dark} {
+		if c, ok := FillColor(p, FillBorder); !ok || c != p.ControlBorder {
+			t.Errorf("FillBorder %v, want %v", c, p.ControlBorder)
+		}
+	}
+}

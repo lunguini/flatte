@@ -194,3 +194,25 @@ func TestFlatSideRoundsTheOtherCorners(t *testing.T) {
 		t.Errorf("middle %v", c)
 	}
 }
+
+// An Edge with EdgeFill draws in that role, not the accent: an unfocused
+// pane's active tab.
+func TestEdgeFillIsNotTheAccent(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	m := metrics()
+	root := layout.Row{Children: []layout.Node{
+		layout.Col{NodeBase: layout.NodeBase{ID: "quiet", W: layout.Points(60), H: layout.Points(30), Box: layout.Box{Fill: layout.FillContent, Edge: layout.SideTop, EdgeFill: layout.FillBorder}}},
+	}}
+	scene := layout.LayoutScene(root, 100, 40, m)
+	img := renderImage(scene, darkTheme, m, 100, 40, 2, nil, presentation{})
+	r := scene.Rects["quiet"]
+	c := img.At(int((r.X+r.W/2)*2), int((r.Y+0.5)*2))
+	if want := toColor(rgbaOf(darkTheme.pal.ControlBorder)); !near(c, want, 8) {
+		t.Errorf("quiet edge %v, want the control border %v", c, want)
+	}
+	if near(c, toColor(darkTheme.lk.accent), 30) {
+		t.Errorf("quiet edge %v is the accent", c)
+	}
+}

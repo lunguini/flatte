@@ -559,7 +559,8 @@ sidebars), `FillContent` (where work is read), `FillRaised`, `FillAccent`,
 `FillCurrentLine`, `FillMatch` and the diff fills. `FillGlass` is white
 glass for controls on a translucent window's chrome (side bar buttons, a
 title bar field): 80% white on a light palette (`GlassLight`), an 8% white
-wash on a dark one (`GlassDark`).
+wash on a dark one (`GlassDark`). `FillBorder` is the control border, a
+neutral mark that does not read as focus.
 
 ### Themes
 
@@ -1138,7 +1139,9 @@ the outer gap while option content keeps its item insets.
 
 `Box.Edge` (`layout.SideTop`, `SideBottom`, `SideLeft`, `SideRight`) draws a
 band of the theme's accent along one side in a window — an active tab's
-top, a current row's marker. Terminals draw nothing for it, so mark the
+top, a current row's marker; `Box.EdgeFill` draws it in another role
+instead (`FillBorder` for the active tab of a pane without focus;
+`kit.Tabs.Unfocused` does this). Terminals draw nothing for it, so mark the
 node another way there as well (bold, a glyph). `Box.Flat` squares the two
 corners along one side of a `Round` box (`Flat: layout.SideBottom` rounds
 only the top, for a tab or a tab bar standing on the panel below); its

@@ -634,8 +634,18 @@ func (p *painter) edge(op layout.BoxOp) {
 			}
 			p.roundedPath(b, rad, func() { cgContextClip(p.ctx) })
 		}
-		p.cellFill(p.th.lk.accent, r.X, r.Y, r.W, r.H)
+		p.cellFill(p.th.edgeColor(op.Box), r.X, r.Y, r.W, r.H)
 	})
+}
+
+// edgeColor is a Box.Edge's color: its EdgeFill role, else the accent.
+func (th theme) edgeColor(b layout.Box) rgba {
+	if b.EdgeFill != layout.FillNone {
+		if c, ok := th.fill(b.EdgeFill); ok {
+			return c
+		}
+	}
+	return th.lk.accent
 }
 
 // box draws a Box. A border is a rounded stroke down the middle of its

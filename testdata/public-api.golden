@@ -1048,7 +1048,8 @@ flatui/kit package kit
   field Tabs.Active int [order=2]
   field Tabs.Fill bool [order=3]
   field Tabs.Trailing []layout.Node [order=4]
-  struct Tabs fields=5 comparable=false
+  field Tabs.Unfocused bool [order=5]
+  struct Tabs fields=6 comparable=false
   type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2
@@ -1075,6 +1076,7 @@ flatui/layout package layout
   const ControlSlider ControlKind = 4
   const ControlSwitch ControlKind = 2
   const FillAccent Fill = 8
+  const FillBorder Fill = 25
   const FillCanvas Fill = 4
   const FillChrome Fill = 5
   const FillContent Fill = 6
@@ -1337,8 +1339,9 @@ flatui/layout package layout
   field Box.Fill Fill [order=11]
   field Box.Resize Resize [order=12]
   field Box.Edge Side [order=13]
-  field Box.Flat Side [order=14]
-  struct Box fields=15 comparable=true
+  field Box.EdgeFill Fill [order=14]
+  field Box.Flat Side [order=15]
+  struct Box fields=16 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]

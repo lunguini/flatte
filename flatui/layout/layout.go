@@ -374,6 +374,10 @@ type Box struct {
 	// row's marker. Terminals draw nothing for it; mark the node another
 	// way there (bold, a glyph).
 	Edge Side
+	// EdgeFill is the Edge band's color role (FillNone: the Accent), for a
+	// mark that must not read as focus: FillBorder for the active tab of a
+	// pane without focus.
+	EdgeFill Fill
 	// Flat squares the two corners along one side of a Round box in a
 	// GUI: SideBottom rounds only the top corners, for a tab or a tab bar
 	// standing on the panel below it. Its hover wash and Edge follow the

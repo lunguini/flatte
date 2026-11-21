@@ -319,6 +319,11 @@ func (p *canvasPainter) box(op layout.BoxOp) {
 	}
 	if r, ok := edgeRect(op.Rect, op.Box.Edge, p.theme.look().focusWidth); ok {
 		accent := colorFromRGBA(p.theme.look().accent)
+		if op.Box.EdgeFill != layout.FillNone { // a role instead of the accent
+			if c := p.theme.fillColor(op.Box.EdgeFill); c != nil {
+				accent = c
+			}
+		}
 		if op.Box.Round { // inside the box's rounded corners
 			p.ctx.Call("save")
 			p.ctx.Call("beginPath")

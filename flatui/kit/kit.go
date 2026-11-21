@@ -234,6 +234,10 @@ type Tabs struct {
 	Active   int
 	Fill     bool
 	Trailing []layout.Node
+	// Unfocused marks the active tab's edge in the neutral FillBorder
+	// instead of the accent: the strip's pane does not have focus, so
+	// another pane's tab is the accented one.
+	Unfocused bool
 }
 
 func (t Tabs) Layout() layout.Node {
@@ -245,6 +249,9 @@ func (t Tabs) Layout() layout.Node {
 		if active {
 			style = layout.TextStyle{Role: layout.TextStrong}
 			box.Fill, box.Edge = layout.FillContent, layout.SideTop
+			if t.Unfocused {
+				box.EdgeFill = layout.FillBorder
+			}
 		}
 		style.Italic = tab.Italic
 		parts := []layout.Node{}
