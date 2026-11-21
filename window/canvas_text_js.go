@@ -95,7 +95,7 @@ func (t canvasTextLayout) monoFont() canvasFont {
 	if family == "" {
 		family = "ui-monospace, SFMono-Regular, Menlo, monospace"
 	}
-	return t.fontFamily(layout.TextStyle{Role: layout.TextBody}, t.theme.FontSize, family)
+	return t.fontFamily(layout.TextStyle{Role: layout.TextBody}, t.theme.monoSize(), family)
 }
 
 func (t canvasTextLayout) width(font canvasFont, text string) float64 {
@@ -109,15 +109,17 @@ func (t canvasTextLayout) measure(style layout.TextStyle, text string) (float64,
 }
 
 func (t canvasTextLayout) metrics() layout.Metrics {
-	body := t.font(layout.TextStyle{Role: layout.TextBody})
+	// The grid is set in the code size: columns its fixed-pitch advance,
+	// lines the body font's pitch at that size.
+	body := t.font(layout.TextStyle{Role: layout.TextBody, Size: t.theme.monoSize()})
 	mono := t.monoFont()
 	column := t.width(mono, "0")
 	if column <= 0 {
-		column = t.theme.FontSize * 0.6
+		column = t.theme.monoSize() * 0.6
 	}
 	line := body.pitch
 	if line <= 0 {
-		line = t.theme.FontSize * 1.25
+		line = t.theme.monoSize() * 1.25
 	}
 	step, insets, sizes := t.theme.spacing()
 	return layout.Metrics{

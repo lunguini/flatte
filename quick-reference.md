@@ -978,7 +978,10 @@ draw the ops of `layout.LayoutScene`.
 `Options.Theme` sets the look: colors for what the app leaves uncolored
 (`Background`, `Surface`, `Text`, `Subtle`, `Title`, `Border`, `Field`,
 `Accent` for focus, carets, and meters, `Selection`, `Track`), `Font` and
-`MonoFont` families, `FontSize`, `TitleSize`, `LineSpacing`, `Radius`
+`MonoFont` families, `FontSize`, `TitleSize`, `MonoSize` (the cell grids'
+code size, apart from the interface text: columns and lines are measured in
+it; zero follows `FontSize`, and a design's `Type.Code.Size` sets it),
+`LineSpacing`, `Radius`
 (negative: square corners), and `ANSI`, the 16-color palette cell grids draw
 ANSI colors 0–15 in, as a terminal profile does (`Dark` and `Light` carry
 palettes tuned to read on their fields; colors 16–255 and true colors draw as

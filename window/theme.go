@@ -35,6 +35,10 @@ type Theme struct {
 	// lines are measured in this type, so a larger size makes a larger
 	// window for the same Options.Width and Height.
 	FontSize, TitleSize, LineSpacing float64
+	// MonoSize is the cell grids' (code's) size in points, apart from the
+	// interface text: columns are its fixed-pitch advance and lines its
+	// pitch. Zero follows FontSize.
+	MonoSize float64
 	// ControlHeight is the minimum Auto height of regular controls in points.
 	// Zero inherits the base theme (32pt); negative disables the minimum.
 	// Explicit node heights and Bare/multiline fields are unaffected.
@@ -102,7 +106,8 @@ func fromDesign(design *ds.Theme, dark bool) Theme {
 		Accent: p.Accent, Selection: p.SelectionActive, Track: p.SelectionInactive,
 		Font: design.Font, MonoFont: design.MonoFont,
 		FontSize: design.Type.Body.Size, TitleSize: design.Type.Title.Size, LineSpacing: 1.25,
-		Radius: radius, ControlHeight: design.Size.Control,
+		MonoSize: design.Type.Code.Size,
+		Radius:   radius, ControlHeight: design.Size.Control,
 		ANSI:   pal,
 		design: design, dark: dark,
 	}
@@ -183,7 +188,29 @@ func (t Theme) over(base Theme) Theme {
 		FontSize: num(t.FontSize, base.FontSize), TitleSize: num(t.TitleSize, base.TitleSize),
 		LineSpacing: num(t.LineSpacing, base.LineSpacing), Radius: num(t.Radius, base.Radius),
 		ControlHeight: num(t.ControlHeight, base.ControlHeight),
+		MonoSize:      t.monoOver(base),
 	}
+}
+
+// monoOver is t's MonoSize over base: its own, else — when t sets
+// FontSize, which sized the grid before MonoSize — FontSize's (0), else
+// base's.
+func (t Theme) monoOver(base Theme) float64 {
+	switch {
+	case t.MonoSize > 0:
+		return t.MonoSize
+	case t.FontSize > 0:
+		return 0
+	}
+	return base.MonoSize
+}
+
+// monoSize is the grid's size: MonoSize, else FontSize.
+func (t Theme) monoSize() float64 {
+	if t.MonoSize > 0 {
+		return t.MonoSize
+	}
+	return t.FontSize
 }
 
 // themeFor is the theme a window draws with: opts' theme over Dark, or —

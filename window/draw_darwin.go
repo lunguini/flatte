@@ -30,7 +30,9 @@ type theme struct {
 	// border's corner radius (negative: square).
 	family, mono                     string
 	body, titleSize, spacing, radius float64
-	controlHeight                    float64
+	// monoSize is the cell grid's (code's) size.
+	monoSize      float64
+	controlHeight float64
 	// step is one Pad or Gap and insets the default component insets, in
 	// points (Theme.spacing).
 	step       float64
@@ -74,6 +76,7 @@ func newTheme(t Theme) theme {
 		track:  rgbaOf(t.Track),
 		family: t.Font, mono: t.MonoFont,
 		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
+		monoSize:      t.monoSize(),
 		controlHeight: t.ControlHeight,
 		step:          step, insets: insets, sizes: sizes,
 		appearance: t.appearance(),
@@ -203,7 +206,7 @@ func fontFor(k fontKey) font { return darkTheme.font(k) }
 func (th theme) font(k fontKey) font {
 	id := fontID{fontKey: k, family: th.family, size: th.body, spacing: th.spacing}
 	if k.mono {
-		id.family = th.mono
+		id.family, id.size = th.mono, th.monoSize
 	} else if k.role == layout.TextTitle {
 		id.size = th.titleSize
 	}
@@ -310,8 +313,8 @@ func utf16Len(s string) int {
 func metrics() layout.Metrics { return darkTheme.metrics() }
 
 // metrics is the layout metric for th's fonts on this machine: columns are
-// the fixed-pitch advance, lines the body font's pitch, a step 8pt, a border
-// a band of borderBand.
+// the fixed-pitch advance and lines the body font's pitch, both at the
+// code size; a step 8pt, a border a band of borderBand.
 func (th theme) metrics() layout.Metrics {
 	zero := shape("0", th.font(fontKey{mono: true}))
 	defer zero.release()
@@ -319,7 +322,7 @@ func (th theme) metrics() layout.Metrics {
 		DefaultPadding: true,
 		ControlHeight:  th.controlHeight,
 		Column:         zero.width,
-		Line:           th.font(fontKey{}).pitch(),
+		Line:           th.font(fontKey{size: th.monoSize}).pitch(),
 		Step:           th.step,
 		Insets:         th.insets,
 		Sizes:          th.sizes,

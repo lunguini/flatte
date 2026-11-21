@@ -43,6 +43,7 @@ func TestThemeFor(t *testing.T) {
 	got := themeFor(&Theme{Accent: red, FontSize: 16, Radius: -1}, false, nil)
 	want := Dark()
 	want.Accent, want.FontSize, want.Radius = red, 16, -1
+	want.MonoSize = 0 // FontSize alone sizes the grid too, as before MonoSize
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("partial theme = %+v, want Dark with the overrides", got)
 	}

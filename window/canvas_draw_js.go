@@ -938,7 +938,7 @@ func (p *canvasPainter) cellRun(text string, style uv.Style, x, y, w float64) {
 		family = "ui-monospace, SFMono-Regular, Menlo, monospace"
 	}
 	fontStyle := layout.TextStyle{Role: layout.TextBody, Bold: style.Attrs&uv.AttrBold != 0, Italic: style.Attrs&uv.AttrItalic != 0}
-	f := p.text.fontFamily(fontStyle, p.theme.FontSize, family)
+	f := p.text.fontFamily(fontStyle, p.theme.monoSize(), family)
 	base := y + (p.metrics.Line-(f.ascent+f.descent))/2 + f.ascent
 	p.ctx.Set("font", f.css)
 	p.fill(colorFromRGBA(fg))
