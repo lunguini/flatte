@@ -111,3 +111,33 @@ func TestTreeNotStickyByDefault(t *testing.T) {
 		t.Errorf("pinned %v offset %d, want none and 1", tr.Pinned(), tr.Offset())
 	}
 }
+
+// The wheel scrolls past the cursor even when it reaches the pins: a
+// height set every frame (as a window lays out) must not pull the window
+// back to keep the cursor below them.
+func TestTreeScrollsPastTheCursorUnderThePins(t *testing.T) {
+	var kids []TreeNode
+	for i := range 40 {
+		kids = append(kids, TreeNode{ID: "a/" + string(rune('A'+i)), Label: "x"})
+	}
+	tr := NewTree([]TreeNode{{ID: "a", Label: "a", Children: kids}})
+	tr.Toggle("a")
+	tr.SetSticky(true)
+	tr.SetHeight(10)
+	for range 5 {
+		tr.MoveDown() // cursor on a/E, row 5
+	}
+	for step := range 12 {
+		before := tr.Offset()
+		tr.Scroll(1)
+		tr.SetHeight(10) // the next frame's layout
+		if tr.Offset() != before+1 {
+			t.Fatalf("scroll %d: offset %d, want %d (cursor %q)", step, tr.Offset(), before+1, tr.CursorID())
+		}
+	}
+	// Moving the cursor still brings it out from under the pins.
+	tr.MoveUp()
+	if p := len(tr.Pinned()); rowIndex(tr, tr.CursorID()) < tr.Offset()+p {
+		t.Errorf("after a move the cursor is under the pins: row %d offset %d pins %d", rowIndex(tr, tr.CursorID()), tr.Offset(), p)
+	}
+}

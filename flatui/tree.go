@@ -34,8 +34,8 @@ type Tree struct {
 	sticky   bool
 }
 
-// SetSticky turns sticky folders on: Pinned reports them, and revealing the
-// cursor keeps it below them. Off (the default), Pinned is empty.
+// SetSticky turns sticky folders on: Pinned reports them, and moving the
+// cursor keeps it below them (the wheel still scrolls past it). Off (the default), Pinned is empty.
 func (t *Tree) SetSticky(on bool) {
 	t.sticky = on
 	t.clamp(t.cursorShown())
@@ -124,14 +124,14 @@ func treeHas(nodes []TreeNode, want string) bool {
 }
 
 // MoveUp / MoveDown move the cursor by one visible row, keeping it visible.
-func (t *Tree) MoveUp()   { t.cursor--; t.clamp(true) }
-func (t *Tree) MoveDown() { t.cursor++; t.clamp(true) }
+func (t *Tree) MoveUp()   { t.cursor--; t.moved() }
+func (t *Tree) MoveDown() { t.cursor++; t.moved() }
 
 // SelectVisible moves the cursor to the visible row index i, keeping it
 // visible.
 func (t *Tree) SelectVisible(i int) {
 	t.cursor = i
-	t.clamp(true)
+	t.moved()
 }
 
 // Scroll moves the visible window by rows (negative: up), clamped, leaving
@@ -293,8 +293,15 @@ func (t *Tree) clamp(reveal bool) {
 		}
 	}
 	t.offset = min(max(t.offset, 0), max(len(rows)-t.height, 0))
-	// A revealed cursor stays out from under the pinned folders.
-	for reveal && t.offset > 0 && t.cursor < t.offset+len(t.Pinned()) {
+}
+
+// moved keeps the cursor in view after the cursor moved, out from under
+// the pinned folders too. Only cursor moves do this: a wheel may scroll the
+// cursor's row under the pins and past it, and keeping a visible cursor
+// visible (a new height every frame) must not pull the window back.
+func (t *Tree) moved() {
+	t.clamp(true)
+	for t.offset > 0 && t.cursor < t.offset+len(t.Pinned()) {
 		t.offset--
 	}
 }
