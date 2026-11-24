@@ -38,10 +38,12 @@ type MenuItem struct {
 
 // MenuEvent reports a chosen menu item: from the menu bar, a shortcut, or a
 // context menu. Target is the ID of the node whose context menu it came
-// from ("" otherwise).
+// from ("" otherwise), and Press is the press that opened it (zero
+// otherwise): where in Target the menu was asked for.
 type MenuEvent struct {
 	ID     string
 	Target string
+	Press  MouseEvent
 }
 
 func (MenuEvent) isEvent() {}
@@ -86,9 +88,11 @@ func sameKey(a, b KeyEvent) bool {
 // menuHost is the menu presentation used by the cell drivers.
 type menuHost struct {
 	// levels are the open context menu and its open submenus, outermost
-	// first; target is the node it was opened on.
+	// first; target is the node it was opened on, press the press that
+	// opened it, as the app sees it (local to its window).
 	levels []menuLevel
 	target string
+	press  MouseEvent
 }
 
 type menuLevel struct {
@@ -114,7 +118,7 @@ func routeMenus[S any](m *menuHost, app App[S], ev Event, width, height int) (Ev
 func (m *menuHost) isOpen() bool { return len(m.levels) > 0 }
 
 // close closes any open context menu.
-func (m *menuHost) close() { m.levels, m.target = nil, "" }
+func (m *menuHost) close() { m.levels, m.target, m.press = nil, "", MouseEvent{} }
 
 // route takes an event before the app does, for a frame of width×height
 // cells (mouse events already hit-tested), with the app's menu bar and
@@ -143,7 +147,7 @@ func (m *menuHost) route(ev Event, menus []Menu, contextMenu func(target string)
 	case MouseEvent:
 		if e.Button == MouseRight && e.Action == MousePress && contextMenu != nil {
 			if items := contextMenu(e.Target); len(items) > 0 {
-				m.target = e.Target
+				m.target, m.press = e.Target, e
 				m.open(items, e.X, e.Y, width, height, nil)
 				return nil, false
 			}
@@ -218,9 +222,9 @@ func (m *menuHost) choose(li, row int, onlyOpen bool, width, height int) (Event,
 	if onlyOpen {
 		return nil, false
 	}
-	target := m.target
+	ev := MenuEvent{ID: it.ID, Target: m.target, Press: m.press}
 	m.close()
-	return MenuEvent{ID: it.ID, Target: target}, true
+	return ev, true
 }
 
 // open shows items with its top-left at (x, y), kept inside width×height:

@@ -289,7 +289,11 @@ func routeInput[S any](menus *menuHost, windows *windowHost, app App[S], ev Even
 		ox, oy := windows.origin(m.Window)
 		screen := m
 		screen.X, screen.Y = m.X+ox, m.Y+oy
+		wasOpen := menus.isOpen()
 		routed, ok := routeMenus(menus, app, screen, width, height)
+		if !wasOpen && menus.isOpen() {
+			menus.press = m
+		}
 		switch {
 		case !ok:
 		case routed == Event(screen):

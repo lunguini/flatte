@@ -100,8 +100,11 @@ func TestHostContextMenu(t *testing.T) {
 	if len(m.popups) != 1 || m.at != [2]float64{doc.X + 2, doc.Y + 1} {
 		t.Fatalf("popups %+v at %v", m.popups, m.at)
 	}
-	if len(s.events) != 1 || s.events[0] != (flatte.MenuEvent{ID: "cut", Target: "doc"}) {
+	if len(s.events) != 1 {
 		t.Fatalf("delivered %#v", s.events)
+	}
+	if e, _ := s.events[0].(flatte.MenuEvent); e.ID != "cut" || e.Target != "doc" || e.Press.Target != "doc" || e.Press.Button != flatte.MouseRight || !e.Press.HasPrecise {
+		t.Fatalf("delivered %#v", s.events[0])
 	}
 	// Dismissed: nothing is delivered, not even the click.
 	s.events, m.choose = nil, ""

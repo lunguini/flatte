@@ -802,7 +802,8 @@ then `At(x, y)`). `ZoneScanner` remains as deprecated compatibility API.
 ## Menus
 
 Declare menus beside `View`, derived from state; choices arrive as
-`MenuEvent{ID, Target}`:
+`MenuEvent{ID, Target, Press}` (`Press`: the press that opened a context
+menu, so a choice can act where it was asked for):
 
 ```go
 app := flatte.App[State]{State: s, Handle: Handle, View: View, Menus: Menus, ContextMenu: ContextMenu}

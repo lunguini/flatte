@@ -291,7 +291,8 @@ flatte package flatte
   type MenuEvent struct
   field MenuEvent.ID string [order=0]
   field MenuEvent.Target string [order=1]
-  struct MenuEvent fields=2 comparable=true
+  field MenuEvent.Press MouseEvent [order=2]
+  struct MenuEvent fields=3 comparable=true
   type MenuItem struct
   field MenuItem.ID string [order=0]
   field MenuItem.Label string [order=1]

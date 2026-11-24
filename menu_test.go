@@ -111,7 +111,7 @@ func TestMenuHostContextMenuKeys(t *testing.T) {
 	route(KeyEvent{Key: KeyEnter}) // reopens
 	route(KeyEvent{Key: KeyDown})
 	ev, ok := route(KeyEvent{Key: KeyEnter})
-	if !ok || ev != (MenuEvent{ID: "b", Target: "doc"}) || m.isOpen() {
+	if !ok || ev != (MenuEvent{ID: "b", Target: "doc", Press: rightClick(3, 2, "doc")}) || m.isOpen() {
 		t.Fatalf("choose: %#v %v open %v", ev, ok, m.isOpen())
 	}
 	// Escape closes one level at a time.
@@ -155,7 +155,7 @@ func TestMenuHostContextMenuMouse(t *testing.T) {
 		t.Fatal("disabled click")
 	}
 	ev, ok := route(MouseEvent{X: l.x + 2, Y: l.y + 1, Button: MouseLeft, Action: MousePress})
-	if !ok || ev != (MenuEvent{ID: "cut", Target: "doc"}) || m.isOpen() {
+	if e, _ := ev.(MenuEvent); !ok || e.ID != "cut" || e.Target != "doc" || e.Press.Button != MouseRight || m.isOpen() {
 		t.Fatalf("click: %#v %v", ev, ok)
 	}
 	// A click outside closes it without reaching the app.

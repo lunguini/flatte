@@ -973,7 +973,7 @@ func (s *surface) mouseClicks(x, y float64, button flatte.MouseButton, action fl
 		items := h.session.ContextMenu(id)
 		if len(items) > 0 {
 			if chosen := h.menus.popUp(s.id, items, x, y); chosen != "" {
-				h.handle(flatte.MenuEvent{ID: chosen, Target: id})
+				h.handle(flatte.MenuEvent{ID: chosen, Target: id, Press: ev})
 			}
 			return
 		}

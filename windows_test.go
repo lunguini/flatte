@@ -150,8 +150,12 @@ func TestRouteInputContextMenuInAWindow(t *testing.T) {
 		t.Fatalf("menu %+v target %q", mh.levels, mh.target)
 	}
 	evs := routeInput(&mh, &wh, app, KeyEvent{Key: KeyEnter}, 40, 16)
-	if len(evs) != 1 || evs[0] != (MenuEvent{ID: "on:stats:words", Target: "stats:words"}) {
+	if len(evs) != 1 {
 		t.Fatalf("choice: %v", evs)
+	}
+	// With the press that opened it, window-local like any other.
+	if e, _ := evs[0].(MenuEvent); e.ID != "on:stats:words" || e.Target != "stats:words" || e.Press.X != 1 || e.Press.Window != "stats" || e.Press.Target != e.Target {
+		t.Fatalf("choice: %+v", evs[0])
 	}
 	// A plain click in the window reaches the app window-local.
 	evs = routeInput(&mh, &wh, app, MouseEvent{X: w.x + 2, Y: w.y + 1, Button: MouseLeft, Action: MousePress}, 40, 16)

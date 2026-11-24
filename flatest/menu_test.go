@@ -56,7 +56,10 @@ func TestDriverRoutesMenus(t *testing.T) {
 	}
 	d.Send(flatte.KeyEvent{Key: flatte.KeyDown})
 	d.Send(flatte.KeyEvent{Key: flatte.KeyEnter})
-	if len(s.events) != 1 || s.events[0] != (flatte.MenuEvent{ID: "paste", Target: "doc"}) {
+	if len(s.events) != 1 {
+		t.Fatalf("choice delivered %#v", s.events)
+	}
+	if e, _ := s.events[0].(flatte.MenuEvent); e.ID != "paste" || e.Target != "doc" || e.Press.X != 4 || e.Press.Y != 2 {
 		t.Fatalf("choice delivered %#v", s.events)
 	}
 	if strings.Contains(CleanFrame(d.Frame().Content), "Paste") {
