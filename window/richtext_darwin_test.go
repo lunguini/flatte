@@ -157,6 +157,15 @@ func TestTruncatedFitsWithItsEllipsis(t *testing.T) {
 			t.Errorf("width %v: cut at %q, but the next rune fits", width, rt.text[:end])
 		}
 	}
+	for _, width := range []float64{whole * 0.4, whole * 0.9} {
+		end, run, tail := rt.truncatedKeeping(sp, width, len("Hotel)"))
+		if rt.text[tail:] != "Hotel)" || end <= 0 || rt.width(0, end)+rt.fonts[run].width("…")+rt.width(tail, len(rt.text)) > width {
+			t.Errorf("width %v: kept %q and %q", width, rt.text[:end], rt.text[tail:])
+		}
+	}
+	if _, _, tail := rt.truncatedKeeping(sp, 20, len("Hotel)")); tail != len(rt.text) {
+		t.Error("an end kept without room for it")
+	}
 	if end, _ := rt.truncated(sp, 1); end != 0 {
 		t.Fatalf("a 1pt box keeps %q", rt.text[:end])
 	}

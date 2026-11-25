@@ -134,6 +134,7 @@ type TextOp struct {
 	Runs       []Run
 	Selectable bool
 	Truncate   bool // a line too long for Rect ends in "…" (not with Wrap)
+	KeepEnd    int  // but keeps this many bytes at its end after it (TruncatedTail)
 	ID         string
 	HoverFg    color.Color
 }
@@ -648,7 +649,7 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		control(ControlOp{ID: l.ID, Kind: ControlSlider, Value: l.value(), Fill: l.Fill, Disabled: l.Disabled, Focused: l.Focused}, l.box())
 	case Label:
 		p.box(r, clip, l.box())
-		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: cased(l.Text, l.Style), Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap, ID: l.ID, HoverFg: l.HoverFg}
+		op := TextOp{Rect: p.content(n, r), Clip: PointRect(clip), Text: cased(l.Text, l.Style), Style: l.Style, Wrap: l.Wrap, Selectable: l.Selectable, Truncate: l.Truncate && !l.Wrap, KeepEnd: l.KeepEnd, ID: l.ID, HoverFg: l.HoverFg}
 		if len(l.Runs) > 0 {
 			op.Text, op.Runs = l.plain(), l.runs()
 		}

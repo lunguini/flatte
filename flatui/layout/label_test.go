@@ -25,3 +25,32 @@ func TestLabelTruncate(t *testing.T) {
 		t.Fatalf("clipped label has an ellipsis: %q", got)
 	}
 }
+
+// KeepEnd keeps the end of a cut-off line.
+func TestLabelKeepsItsEnd(t *testing.T) {
+	for _, tc := range []struct {
+		text string
+		keep int
+		w    int
+		want string
+	}{
+		{"agentlist_test.go", 3, 10, "agentl….go"},
+		{"agentlist_test.go", 3, 17, "agentlist_test.go"},
+		{"agentlist_test.go", 0, 10, "agentlist…"},
+		{"agentlist_test.go", 3, 4, "age…"}, // no room for it
+		{"ünïcödé.txt", 4, 8, "ünï….txt"},
+		{"abc", 9, 2, "a…"},
+	} {
+		c := Compose(Label{Text: tc.text, Truncate: true, KeepEnd: tc.keep}, tc.w, 1)
+		if got := plainLines(c.Frame)[0]; got != tc.want {
+			t.Errorf("%q in %d: %q, want %q", tc.text, tc.w, got, tc.want)
+		}
+	}
+	rich := Label{Runs: []Run{{Text: "long", Style: TextStyle{Bold: true}}, {Text: "name.go"}}, Truncate: true, KeepEnd: 3}
+	if got := plainLines(Compose(rich, 8, 1).Frame)[0]; got != "long….go" {
+		t.Errorf("runs: %q", got)
+	}
+	if TruncatedTail("é", 1) != "" {
+		t.Error("half a rune kept")
+	}
+}

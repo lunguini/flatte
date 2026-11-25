@@ -967,6 +967,7 @@ flatui/kit package kit
   const ToneSuccess Tone = 3
   const ToneWarning Tone = 4
   func HoldTabs(widths[]float64, i int, gap float64, limit float64, fill bool)[]float64
+  func NameEnd(name string) int
   func OptionID(id string, i int) string
   method Action.Layout() layout.Node
   method Badge.Layout() layout.Node
@@ -1019,7 +1020,8 @@ flatui/kit package kit
   field ListRow.Disclosure Disclosure [order=9]
   field ListRow.TitleColor layout.TextColor [order=10]
   field ListRow.Italic bool [order=11]
-  struct ListRow fields=12 comparable=false
+  field ListRow.KeepEnd int [order=12]
+  struct ListRow fields=13 comparable=false
   type PaneHeader struct
   field PaneHeader.ID string [order=0]
   field PaneHeader.Title string [order=1]
@@ -1060,7 +1062,8 @@ flatui/kit package kit
   field Tab.Italic bool [order=5]
   field Tab.Close string [order=6]
   field Tab.W layout.Size [order=7]
-  struct Tab fields=8 comparable=false
+  field Tab.KeepEnd int [order=8]
+  struct Tab fields=9 comparable=false
   type Tabs struct
   field Tabs.ID string [order=0]
   field Tabs.Tabs []Tab [order=1]
@@ -1229,6 +1232,7 @@ flatui/layout package layout
   func SolveAndComposeWithDiagnostics(root Node, width int, height int)(string, map[string] Rect, []DuplicateIDDiagnostic)
   func SolveWithDiagnostics(root Node, width int, height int)(map[string] Rect, []DuplicateIDDiagnostic)
   func TextColorOf(p*theme.Palette, s TextStyle) color.Color
+  func TruncatedTail(text string, keep int) string
   func UseCellTheme(p*theme.Palette)
   method *Spacer.Render(r Rect) string
   method *Spacer.WithBackground(c color.Color) *Spacer
@@ -1523,8 +1527,9 @@ flatui/layout package layout
   field Label.Runs []Run [order=4]
   field Label.Selectable bool [order=5]
   field Label.Truncate bool [order=6]
-  field Label.HoverFg color.Color [order=7]
-  struct Label fields=8 comparable=false
+  field Label.KeepEnd int [order=7]
+  field Label.HoverFg color.Color [order=8]
+  struct Label fields=9 comparable=false
   type LayerOp struct
   field LayerOp.Rect PointRect [order=0]
   struct LayerOp fields=1 comparable=true
@@ -1677,9 +1682,10 @@ flatui/layout package layout
   field TextOp.Runs []Run [order=5]
   field TextOp.Selectable bool [order=6]
   field TextOp.Truncate bool [order=7]
-  field TextOp.ID string [order=8]
-  field TextOp.HoverFg color.Color [order=9]
-  struct TextOp fields=10 comparable=false
+  field TextOp.KeepEnd int [order=8]
+  field TextOp.ID string [order=9]
+  field TextOp.HoverFg color.Color [order=10]
+  struct TextOp fields=11 comparable=false
   type TextRole int
   type TextStyle struct
   field TextStyle.Role TextRole [order=0]

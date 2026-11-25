@@ -126,6 +126,10 @@ type Label struct {
 	// window, text cut off scrolls while the pointer rests on it, and its
 	// tooltip has it whole.
 	Truncate bool
+	// KeepEnd is how many bytes at the end of the text a cut-off line keeps,
+	// after the "…" (a file's extension: "agentli….go"); in a box too narrow
+	// for that the text is cut at its end as usual. One line only.
+	KeepEnd int
 	// HoverFg is the native foreground color while the pointer rests over
 	// this named label. It colors the whole label, including Runs; nil keeps
 	// the label's normal and per-run colors. Terminals ignore it.
@@ -254,13 +258,28 @@ func (l Label) Render(r Rect) string {
 	if w := r.insetBy(l.insetSides()).W; l.Truncate && !l.Wrap && w > 0 {
 		lines := strings.Split(out, "\n")
 		for i, ln := range lines {
-			if ansi.StringWidth(ln) > w {
-				lines[i] = ansi.Truncate(ln, w, "…")
+			if ansi.StringWidth(ln) <= w {
+				continue
 			}
+			if tail := TruncatedTail(l.plain(), l.KeepEnd); tail != "" && len(lines) == 1 && ansi.StringWidth(tail)+2 <= w {
+				n := ansi.StringWidth(ln)
+				lines[i] = ansi.Truncate(ln, w-ansi.StringWidth(tail), "…") + ansi.Cut(ln, n-ansi.StringWidth(tail), n)
+				continue
+			}
+			lines[i] = ansi.Truncate(ln, w, "…")
 		}
 		out = strings.Join(lines, "\n")
 	}
 	return fillBox(out, r, l.padSides(), l.box())
+}
+
+// TruncatedTail is the end of text a cut-off line keeps: its last keep
+// bytes, "" when they are no part of it (or all).
+func TruncatedTail(text string, keep int) string {
+	if keep <= 0 || keep >= len(text) || !utf8.RuneStart(text[len(text)-keep]) || strings.Contains(text, "\n") {
+		return ""
+	}
+	return text[len(text)-keep:]
 }
 
 // wrapHeight is a wrapping Label's Auto height in cells at a rect width

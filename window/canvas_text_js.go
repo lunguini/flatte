@@ -255,6 +255,20 @@ func (rt canvasRichText) nearest(line span, x float64) int {
 	return line.end
 }
 
+// truncatedKeeping is truncated, keeping the last keep bytes of the line
+// after the ellipsis where there is room for them: they begin at tail.
+func (rt canvasRichText) truncatedKeeping(line span, width float64, keep int) (end, run, tail int) {
+	if t := layout.TruncatedTail(rt.text[line.start:line.end], keep); t != "" {
+		at := line.end - len(t)
+		if w := rt.width(at, line.end); w+rt.textLayout.width(rt.fonts[len(rt.fonts)-1], "…")*2 <= width {
+			end, run = rt.truncated(span{start: line.start, end: at}, width-w)
+			return end, run, at
+		}
+	}
+	end, run = rt.truncated(line, width)
+	return end, run, line.end
+}
+
 func (rt canvasRichText) truncated(line span, width float64) (int, int) {
 	cuts := []int{line.start}
 	for i := line.start; i < line.end; {

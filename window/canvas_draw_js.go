@@ -388,17 +388,17 @@ func (p *canvasPainter) textOp(op layout.TextOp, from, to int) {
 		}
 		base := line.y + (line.pitch-line.height)/2 + line.ascent
 		end := line.end
-		ellipsis, ellipsisRun := false, 0
+		ellipsis, ellipsisRun, tail := false, 0, line.end
 		x := op.Rect.X
 		if w := rt.width(line.start, line.end); op.Truncate && w > op.Rect.W {
 			off, more := p.pres.scroll.offset(op, w-op.Rect.W, p.pres.now)
 			p.scrolling = p.scrolling || more
 			if x -= off; off == 0 {
-				end, ellipsisRun = rt.truncated(line.span, op.Rect.W)
+				end, ellipsisRun, tail = rt.truncatedKeeping(line.span, op.Rect.W, op.KeepEnd)
 				ellipsis = true
 			}
 		}
-		rt.pieces(line.start, end, func(i, a, b int) {
+		piece := func(i, a, b int) {
 			style := rt.runs[i].Style
 			if zeroCanvasStyle(style) {
 				style = op.Style
@@ -410,13 +410,15 @@ func (p *canvasPainter) textOp(op layout.TextOp, from, to int) {
 				}
 			}
 			x += p.textRun(rt.text[a:b], style, rt.fonts[i], x, base, line.y, line.pitch, fg)
-		})
+		}
+		rt.pieces(line.start, end, piece)
 		if ellipsis {
 			style := rt.runs[ellipsisRun].Style
 			if zeroCanvasStyle(style) {
 				style = op.Style
 			}
-			p.textRun("…", style, rt.fonts[ellipsisRun], x, base, line.y, line.pitch, p.roleColor(style))
+			x += p.textRun("…", style, rt.fonts[ellipsisRun], x, base, line.y, line.pitch, p.roleColor(style))
+			rt.pieces(tail, line.end, piece)
 		}
 	}
 }

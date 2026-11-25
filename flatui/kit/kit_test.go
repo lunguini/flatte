@@ -359,6 +359,14 @@ func TestDivider(t *testing.T) {
 	}
 }
 
+func TestNameEnd(t *testing.T) {
+	for name, want := range map[string]int{"a.go": 3, ".gitignore": 0, "README": 0, "x.": 0, "a.tar.gz": 3, "v1.2 notes here": 0, "a.verylongextension": 0} {
+		if got := NameEnd(name); got != want {
+			t.Errorf("%s: %d, want %d", name, got, want)
+		}
+	}
+}
+
 // End nodes sit at the strip's far end.
 func TestTabsEnd(t *testing.T) {
 	end := []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "where"}, Text: "internal"}}

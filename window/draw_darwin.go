@@ -804,12 +804,12 @@ func (p *painter) text(op layout.TextOp, from, to int) {
 		}
 		base := ln.y + (ln.pitch-ln.height)/2 + ln.ascent
 		x := op.Rect.X
-		end, ellipsis := ln.end, -1
+		end, ellipsis, tail := ln.end, -1, ln.end
 		if w := rt.width(ln.start, ln.end); op.Truncate && w > op.Rect.W {
 			off, more := p.scroll.offset(op, w-op.Rect.W, p.now)
 			p.animated = p.animated || more
 			if x -= off; off == 0 {
-				end, ellipsis = rt.truncated(ln.span, op.Rect.W)
+				end, ellipsis, tail = rt.truncatedKeeping(ln.span, op.Rect.W, op.KeepEnd)
 			}
 		}
 		rt.pieces(ln.start, end, func(i, a, b int) {
@@ -826,9 +826,31 @@ func (p *painter) text(op layout.TextOp, from, to int) {
 			if op.HoverFg != nil && hover > 0 {
 				fg = mix(fg, hoverFg, hover)
 			}
-			p.lineOn("…", rt.fonts[ellipsis], x, base, ln.y, ln.pitch, fg, st.Bg, false, false)
+			x += p.lineOn("…", rt.fonts[ellipsis], x, base, ln.y, ln.pitch, fg, st.Bg, false, false)
+			rt.pieces(tail, ln.end, func(i, a, b int) {
+				st := rt.runs[i].Style
+				fg := p.roleColor(st)
+				if op.HoverFg != nil && hover > 0 {
+					fg = mix(fg, hoverFg, hover)
+				}
+				x += p.lineOn(rt.text[a:b], rt.fonts[i], x, base, ln.y, ln.pitch, fg, st.Bg, st.Underline, st.Strikethrough)
+			})
 		}
 	}
+}
+
+// truncatedKeeping is truncated, keeping the last keep bytes of the line
+// after the ellipsis where there is room for them: they begin at tail.
+func (rt richText) truncatedKeeping(sp span, width float64, keep int) (end, run, tail int) {
+	if t := layout.TruncatedTail(rt.text[sp.start:sp.end], keep); t != "" {
+		at := sp.end - len(t)
+		if w := rt.width(at, sp.end); w+rt.fonts[len(rt.fonts)-1].width("…")*2 <= width {
+			end, run = rt.truncated(span{start: sp.start, end: at}, width-w)
+			return end, run, at
+		}
+	}
+	end, run = rt.truncated(sp, width)
+	return end, run, sp.end
 }
 
 // truncated is where sp is cut to fit width with an ellipsis after it, and
