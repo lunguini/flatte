@@ -43,6 +43,7 @@ type canvasPainter struct {
 	scale      float64
 	now        time.Time
 	animated   bool
+	scrolling  bool // cut-off text under the pointer is on the move
 	layer      layout.PointRect
 	inLayer    bool
 	gen        uint64
@@ -58,7 +59,7 @@ func newCanvasPainter(ctx js.Value, th Theme) *canvasPainter {
 }
 
 func (p *canvasPainter) draw(scene layout.Scene, width, height float64, pres presentation) {
-	p.pres, p.now, p.animated = pres, time.Now(), false
+	p.pres, p.now, p.animated, p.scrolling = pres, time.Now(), false, false
 	p.gen++
 	p.ctx.Set("globalAlpha", 1)
 	p.ctx.Set("filter", "none")
@@ -388,11 +389,15 @@ func (p *canvasPainter) textOp(op layout.TextOp, from, to int) {
 		base := line.y + (line.pitch-line.height)/2 + line.ascent
 		end := line.end
 		ellipsis, ellipsisRun := false, 0
-		if op.Truncate && rt.width(line.start, line.end) > op.Rect.W {
-			end, ellipsisRun = rt.truncated(line.span, op.Rect.W)
-			ellipsis = true
-		}
 		x := op.Rect.X
+		if w := rt.width(line.start, line.end); op.Truncate && w > op.Rect.W {
+			off, more := p.pres.scroll.offset(op, w-op.Rect.W, p.pres.now)
+			p.scrolling = p.scrolling || more
+			if x -= off; off == 0 {
+				end, ellipsisRun = rt.truncated(line.span, op.Rect.W)
+				ellipsis = true
+			}
+		}
 		rt.pieces(line.start, end, func(i, a, b int) {
 			style := rt.runs[i].Style
 			if zeroCanvasStyle(style) {

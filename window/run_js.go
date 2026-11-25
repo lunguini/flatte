@@ -512,11 +512,15 @@ func (p *canvasPage) draw() {
 		title = p.originalTitle
 	}
 	p.doc.Set("title", title)
-	if p.painter.animated {
-		p.painter.animated = false
+	if p.painter.animated || p.painter.scrolling {
+		every := 80
+		if p.painter.scrolling {
+			every = 16
+		}
+		p.painter.animated, p.painter.scrolling = false, false
 		var fn js.Func
 		fn = js.FuncOf(func(js.Value, []js.Value) any { fn.Release(); p.invalidate(); return nil })
-		p.win.Call("setTimeout", fn, 80)
+		p.win.Call("setTimeout", fn, every)
 	}
 }
 

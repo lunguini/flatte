@@ -122,8 +122,9 @@ type Label struct {
 	Runs       []Run
 	Selectable bool
 	// Truncate ends a line too long for the label's box in "…", in the
-	// terminal and a GUI (instead of clipping it); not with Wrap. A Tooltip
-	// can show the whole text.
+	// terminal and a GUI (instead of clipping it); not with Wrap. In a
+	// window, text cut off scrolls while the pointer rests on it, and its
+	// tooltip has it whole.
 	Truncate bool
 	// HoverFg is the native foreground color while the pointer rests over
 	// this named label. It colors the whole label, including Runs; nil keeps

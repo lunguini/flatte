@@ -805,8 +805,12 @@ func (p *painter) text(op layout.TextOp, from, to int) {
 		base := ln.y + (ln.pitch-ln.height)/2 + ln.ascent
 		x := op.Rect.X
 		end, ellipsis := ln.end, -1
-		if op.Truncate && rt.width(ln.start, ln.end) > op.Rect.W {
-			end, ellipsis = rt.truncated(ln.span, op.Rect.W)
+		if w := rt.width(ln.start, ln.end); op.Truncate && w > op.Rect.W {
+			off, more := p.scroll.offset(op, w-op.Rect.W, p.now)
+			p.animated = p.animated || more
+			if x -= off; off == 0 {
+				end, ellipsis = rt.truncated(ln.span, op.Rect.W)
+			}
 		}
 		rt.pieces(ln.start, end, func(i, a, b int) {
 			st := rt.runs[i].Style

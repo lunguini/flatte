@@ -187,6 +187,7 @@ type windowBackend interface {
 type presentation struct {
 	hovered, pressed string
 	sel              textSel
+	scroll           textScroll
 	// hovers and presses are the nodes under the pointer and under a
 	// pressed left button, by ID, as levels fading in and out (0..1);
 	// moving reports a fade still under way (the view draws again soon).
@@ -659,7 +660,8 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 			shape = pointerText
 		}
 	}
-	changed := id != s.pres.hovered
+	tooltip, changed := s.scrollAt(x, y, tooltip)
+	changed = changed || id != s.pres.hovered
 	s.pres.hovered = id
 	if tooltip != s.tip.text {
 		changed = changed || s.tip.shown(s.now())
