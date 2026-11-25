@@ -579,3 +579,20 @@ func TestBareHeaderHasNoFill(t *testing.T) {
 		t.Errorf("fill %v", f)
 	}
 }
+
+func TestListRowWeights(t *testing.T) {
+	for _, c := range []struct {
+		row  ListRow
+		bold bool
+	}{
+		{ListRow{Title: "a"}, false},
+		{ListRow{Title: "a", Selected: true, Active: true}, true},
+		{ListRow{Title: "a", Selected: true, Active: true, Plain: true}, false},
+		{ListRow{Title: "a", Plain: true, Strong: true}, true},
+	} {
+		style := c.row.Layout().(layout.Row).Children[0].(layout.Label).Style
+		if bold := style.Role == layout.TextStrong; bold != c.bold {
+			t.Errorf("%+v: %+v", c.row, style)
+		}
+	}
+}

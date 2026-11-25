@@ -182,6 +182,9 @@ type ListRow struct {
 	// TitleColor colors the title (and dims the icon with it) while the row
 	// stays clickable: secondary files, disabled-grey ignored entries.
 	TitleColor layout.TextColor
+	// Plain keeps a selected row's title at the weight of the others' (its
+	// background marks it); Strong makes a row's title bold, selected or not.
+	Plain, Strong bool
 	// Italic sets the title in italics (a placeholder, a preview).
 	Italic bool
 	// KeepEnd keeps that many bytes at the end of a cut-off title (a file's
@@ -222,7 +225,13 @@ func (r ListRow) Layout() layout.Node {
 	}
 	title := layout.TextStyle{Color: color, Italic: r.Italic}
 	if r.Selected && r.Active { // readable on the strong selection, dimmed or not
-		title.Role, title.Color = layout.TextStrong, layout.ColorDefault
+		title.Color = layout.ColorDefault
+		if !r.Plain {
+			title.Role = layout.TextStrong
+		}
+	}
+	if r.Strong {
+		title.Role = layout.TextStrong
 	}
 	kids = append(kids, layout.Label{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Text: r.Title, Style: title, Truncate: true, KeepEnd: r.KeepEnd})
 	if r.Meta != "" {

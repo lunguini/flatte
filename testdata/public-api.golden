@@ -1047,9 +1047,11 @@ flatui/kit package kit
   field ListRow.Disabled bool [order=8]
   field ListRow.Disclosure Disclosure [order=9]
   field ListRow.TitleColor layout.TextColor [order=10]
-  field ListRow.Italic bool [order=11]
-  field ListRow.KeepEnd int [order=12]
-  struct ListRow fields=13 comparable=false
+  field ListRow.Plain bool [order=11]
+  field ListRow.Strong bool [order=12]
+  field ListRow.Italic bool [order=13]
+  field ListRow.KeepEnd int [order=14]
+  struct ListRow fields=15 comparable=false
   type PaneHeader struct
   field PaneHeader.ID string [order=0]
   field PaneHeader.Title string [order=1]
