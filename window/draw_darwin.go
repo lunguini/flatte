@@ -562,7 +562,7 @@ func selectionRadius(r CGRect, th theme) float64 {
 }
 
 func boxFillRadius(box layout.Box, r CGRect, th theme) float64 {
-	if box.Flat != layout.SideNone { // a tab: the control radius
+	if box.Flat != layout.SideNone || box.Tight { // a tab or pane: the control radius
 		return max(min(th.lk.radius, r.Size.Width/2, r.Size.Height/2), 0)
 	}
 	if box.Backdrop != nil {

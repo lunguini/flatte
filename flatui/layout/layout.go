@@ -386,6 +386,10 @@ type Box struct {
 	// standing on the panel below it. Its hover wash and Edge follow the
 	// same shape. Terminals draw every box square.
 	Flat Side
+	// Tight gives a Round box the theme's control radius in a GUI, as a
+	// Flat one has, instead of the larger a plain box takes: a pane among
+	// tabs. Terminals draw every box square.
+	Tight bool
 }
 
 // Side is one side of a box (Box.Edge).

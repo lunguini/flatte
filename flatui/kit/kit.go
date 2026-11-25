@@ -79,6 +79,8 @@ type PaneHeader struct {
 	// Body follows the title and takes the room before the actions: a
 	// panel's tab strip (kit.Tabs), a filter field.
 	Body layout.Node
+	// Bare leaves the header unfilled, on the pane's own surface.
+	Bare bool
 }
 
 func (h PaneHeader) Layout() layout.Node {
@@ -96,8 +98,12 @@ func (h PaneHeader) Layout() layout.Node {
 		kids = append(kids, &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
 	}
 	kids = append(kids, h.Actions...)
+	box := layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom}
+	if h.Bare {
+		box.Fill = layout.FillNone
+	}
 	return layout.Row{
-		NodeBase: layout.NodeBase{ID: h.ID, H: layout.BarSize(), Gap: 1, PadLeft: 1, PadRight: 1, Box: layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom}},
+		NodeBase: layout.NodeBase{ID: h.ID, H: layout.BarSize(), Gap: 1, PadLeft: 1, PadRight: 1, Box: box},
 		Align:    layout.AlignCenter, Children: kids,
 	}
 }
@@ -250,7 +256,7 @@ func iconColor(r ListRow) layout.TextColor {
 	return layout.ColorSecondary
 }
 
-// Tab is one tab of a Tabs strip. Modified shows the unsaved dot; Italic
+// Tab is one tab of a Tabs strip. Modified shows the unsaved dot and the icon in the warning color; Italic
 // marks a preview tab; Close, when set, is the ID of a close action shown
 // after the label (in place of the dot's when Modified: the dot then closes
 // too). Leading nodes (a number, a badge) come before the icon.
@@ -447,7 +453,11 @@ func (t Tabs) tab(tab Tab, active bool) layout.Node {
 	style.Italic = tab.Italic
 	parts := append([]layout.Node{}, tab.Leading...)
 	if tab.Icon != layout.IconNone {
-		parts = append(parts, icon(tab.Icon, layout.ColorSecondary))
+		c := layout.ColorSecondary
+		if tab.Modified {
+			c = layout.ColorWarning
+		}
+		parts = append(parts, icon(tab.Icon, c))
 	}
 	label := layout.Label{Text: tab.Label, Style: style, Truncate: true, KeepEnd: tab.KeepEnd}
 	w := layout.Auto()
@@ -460,7 +470,7 @@ func (t Tabs) tab(tab Tab, active bool) layout.Node {
 	parts = append(parts, label)
 	switch {
 	case tab.Modified:
-		parts = append(parts, Action{ID: tab.Close, Icon: layout.IconDot, Glyph: "●", Tooltip: "Unsaved — close"}.Layout())
+		parts = append(parts, Action{ID: tab.Close, Icon: layout.IconDot, Glyph: "●", Tooltip: "Unsaved — close", Color: layout.ColorWarning}.Layout())
 	case tab.Close != "":
 		parts = append(parts, Action{ID: tab.Close, Icon: layout.IconClose, Glyph: "✕", Tooltip: "Close"}.Layout())
 	}
@@ -482,9 +492,14 @@ type Action struct {
 	Icon    layout.IconName
 	Glyph   string // the terminal spelling ("" : the icon's glyph)
 	Tooltip string
+	Color   layout.TextColor // of the icon (the default: secondary)
 }
 
 func (a Action) Layout() layout.Node {
+	c := a.Color
+	if c == layout.ColorDefault {
+		c = layout.ColorSecondary
+	}
 	g := a.Glyph
 	if g == "" {
 		g = glyph(a.Icon)
@@ -494,7 +509,7 @@ func (a Action) Layout() layout.Node {
 		Align:    layout.AlignCenter,
 		Children: []layout.Node{
 			&layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}},
-			layout.Icon{NodeBase: layout.NodeBase{W: layout.Points(actionIconPoints)}, Name: a.Icon, Text: g, Style: layout.TextStyle{Color: layout.ColorSecondary}},
+			layout.Icon{NodeBase: layout.NodeBase{W: layout.Points(actionIconPoints)}, Name: a.Icon, Text: g, Style: layout.TextStyle{Color: c}},
 			&layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}},
 		},
 	}

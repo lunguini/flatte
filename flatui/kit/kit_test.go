@@ -563,3 +563,19 @@ func TestPlainTabsAreNotBold(t *testing.T) {
 		}
 	}
 }
+
+// An unsaved tab's icon and dot are in the warning color.
+func TestModifiedTabIsMarked(t *testing.T) {
+	row := Tabs{ID: "s", Active: -1, Tabs: []Tab{{ID: "a", Label: "a", Icon: layout.IconFile, Close: "x", Modified: true}}}.Layout().(layout.Row)
+	parts := row.Children[0].(layout.Row).Children
+	dot := parts[len(parts)-1].(layout.Row).Children[1].(layout.Icon)
+	if c := parts[0].(layout.Icon).Style.Color; c != layout.ColorWarning || dot.Style.Color != layout.ColorWarning {
+		t.Errorf("icon %v dot %v", c, dot.Style.Color)
+	}
+}
+
+func TestBareHeaderHasNoFill(t *testing.T) {
+	if f := (PaneHeader{Title: "a", Bare: true}).Layout().(layout.Row).Box.Fill; f != layout.FillNone {
+		t.Errorf("fill %v", f)
+	}
+}

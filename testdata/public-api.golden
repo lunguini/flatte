@@ -1014,7 +1014,8 @@ flatui/kit package kit
   field Action.Icon layout.IconName [order=1]
   field Action.Glyph string [order=2]
   field Action.Tooltip string [order=3]
-  struct Action fields=4 comparable=true
+  field Action.Color layout.TextColor [order=4]
+  struct Action fields=5 comparable=true
   type Badge struct
   field Badge.Text string [order=0]
   field Badge.Tone Tone [order=1]
@@ -1056,7 +1057,8 @@ flatui/kit package kit
   field PaneHeader.Actions []layout.Node [order=3]
   field PaneHeader.Active bool [order=4]
   field PaneHeader.Body layout.Node [order=5]
-  struct PaneHeader fields=6 comparable=false
+  field PaneHeader.Bare bool [order=6]
+  struct PaneHeader fields=7 comparable=false
   type Popover struct
   field Popover.ID string [order=0]
   field Popover.Anchor string [order=1]
@@ -1410,7 +1412,8 @@ flatui/layout package layout
   field Box.Edge Side [order=14]
   field Box.EdgeFill Fill [order=15]
   field Box.Flat Side [order=16]
-  struct Box fields=17 comparable=true
+  field Box.Tight bool [order=17]
+  struct Box fields=18 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]

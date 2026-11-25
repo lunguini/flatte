@@ -234,7 +234,7 @@ func canvasSelectionRadius(r layout.PointRect, th Theme) float64 {
 }
 
 func canvasBoxFillRadius(box layout.Box, r layout.PointRect, th Theme) float64 {
-	if box.Flat != layout.SideNone { // a tab: the control radius
+	if box.Flat != layout.SideNone || box.Tight { // a tab or pane: the control radius
 		return max(min(th.look().radius, r.W/2, r.H/2), 0)
 	}
 	if box.Backdrop != nil {
