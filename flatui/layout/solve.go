@@ -769,7 +769,8 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 	}
 }
 
-// walkScroll lays a Scroll's child out at its natural height behind the
+// walkScroll lays a Scroll's child out at its natural height (and, with
+// ScrollX, width) behind the
 // Scroll's inner box and walks it with the clip narrowed to that box.
 func (s *solver[T]) walkScroll(n Node, sc scroller, r rect[T]) {
 	m := s.m
@@ -782,10 +783,15 @@ func (s *solver[T]) walkScroll(n Node, sc scroller, r rect[T]) {
 	}
 	inner := insetOf(m, r, insetsOf[T](m, n))
 	cw, _ := intrinsic(m, child)
-	_, ch := measure(m, child, crossOf(cw, inner.W))
+	contentW, left := crossOf(cw, inner.W), T(0)
+	if offX, ok := sc.across(); ok {
+		contentW = scrollContentOf(cw, inner.W)
+		left = clampScrollOf(m, m.cols(offX), inner.W, contentW)
+	}
+	_, ch := measure(m, child, contentW)
 	contentH := scrollContentOf(ch, inner.H)
 	off := clampScrollOf(m, m.lines(offset), inner.H, contentH)
-	cr := rect[T]{inner.X, m.sub(inner.Y, off), crossOf(cw, inner.W), contentH}
+	cr := rect[T]{m.sub(inner.X, left), m.sub(inner.Y, off), contentW, contentH}
 
 	saved := s.clip
 	s.clip = intersectOf(m, saved, inner)

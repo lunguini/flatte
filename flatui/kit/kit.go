@@ -208,84 +208,143 @@ func iconColor(r ListRow) layout.TextColor {
 	return layout.ColorSecondary
 }
 
-// Tab is one tab of a Tabs strip. Close is its close action's ID (empty:
-// none); Modified shows a dot in the close action's place (an unsaved
-// file), still clickable by the same ID. Italic marks a preview tab.
+// Tab is one tab of a Tabs strip. Modified shows the unsaved dot; Italic
+// marks a preview tab; Close, when set, is the ID of a close action shown
+// after the label (in place of the dot's when Modified: the dot then closes
+// too). Leading nodes (a number, a badge) come before the icon.
 type Tab struct {
 	ID       string
 	Label    string
 	Icon     layout.IconName
+	Leading  []layout.Node
 	Modified bool
 	Italic   bool
 	Close    string
 }
 
 // Tabs is a tab strip at the bar height on the chrome surface: the active
-// tab sits on the content surface in strong text under an accent edge
-// (Box.Edge, in a window), the others in secondary text. In a window the
-// strip and each tab round their top corners (Box.Flat), standing on the
-// panel below. Each tab's node
-// ID is Tab.ID; Trailing nodes (a new-tab button, a breadcrumb) follow the
-// tabs directly. Fill shares the strip's width equally between the tabs (too many
-// to fit at their names' width): long names end in "…".
+// tab sits on the content surface (or Surface, the panel's below) in strong text under an accent edge
+// (Box.Edge, in a window), the others in secondary text, with a hairline
+// between tabs (TabGap) so each reads as its own.
+// In a window the strip and each tab round their top corners (Box.Flat),
+// standing on the panel below. Each tab's node ID is Tab.ID.
+//
+// Trailing nodes (a new-tab button) follow the tabs; End nodes (where the
+// shown file is) sit at the strip's far end, so they never look like one
+// more tab. Fill shares the strip's width equally between the tabs (too
+// many to fit at their names' width): long names end in "…".
+//
+// Scroll keeps tabs readable however many there are: a strip wider than its
+// room scrolls sideways instead of squeezing its tabs, and Fill never makes
+// one narrower than MinTabCols. Offset is app state, in columns: clamp it
+// with layout.ClampScroll over the rects of ViewID and ContentID, and bring
+// a tab into view with layout.ScrollToShow. It needs an ID.
 type Tabs struct {
 	ID       string
 	Tabs     []Tab
 	Active   int
 	Fill     bool
 	Trailing []layout.Node
+	End      []layout.Node
+	Scroll   bool
+	Offset   int
+	// Surface is the active tab's fill when the panel the strip stands on
+	// is not the content surface.
+	Surface layout.Fill
 	// Unfocused marks the active tab's edge in the neutral FillBorder
 	// instead of the accent: the strip's pane does not have focus, so
 	// another pane's tab is the accented one.
 	Unfocused bool
 }
 
+// Tab geometry: the hairline between tabs in points (one column in a terminal),
+// and the narrowest tab of a scrolling Fill strip, in columns.
+const (
+	TabGap     = 1
+	MinTabCols = 18
+)
+
+// ViewID is the ID of a scrolling strip's window, ContentID of everything
+// in it.
+func (t Tabs) ViewID() string    { return t.ID + ".view" }
+func (t Tabs) ContentID() string { return t.ID + ".content" }
+
 func (t Tabs) Layout() layout.Node {
-	kids := make([]layout.Node, 0, len(t.Tabs)+len(t.Trailing)+1)
+	tabs := make([]layout.Node, 0, 2*len(t.Tabs))
 	for i, tab := range t.Tabs {
-		active := i == t.Active
-		style := layout.TextStyle{Color: layout.ColorSecondary}
-		box := layout.Box{Interactive: !active, Round: true, Flat: layout.SideBottom}
-		if active {
-			style = layout.TextStyle{Role: layout.TextStrong}
-			box.Fill, box.Edge = layout.FillContent, layout.SideTop
-			if t.Unfocused {
-				box.EdgeFill = layout.FillBorder
-			}
+		if i > 0 {
+			tabs = append(tabs, layout.Col{NodeBase: layout.NodeBase{W: layout.Points(TabGap), H: layout.Grow(1), NoPadding: true, Box: layout.Box{Fill: layout.FillSeparator}}})
 		}
-		style.Italic = tab.Italic
-		parts := []layout.Node{}
-		if tab.Icon != layout.IconNone {
-			parts = append(parts, icon(tab.Icon, layout.ColorSecondary))
-		}
-		label := layout.Label{Text: tab.Label, Style: style, Truncate: true}
-		w := layout.Auto()
-		if t.Fill {
-			label.W, w = layout.Grow(1), layout.Grow(1)
-		}
-		parts = append(parts, label)
-		switch {
-		case tab.Modified:
-			parts = append(parts, Action{ID: tab.Close, Icon: layout.IconDot, Glyph: "●", Tooltip: "Unsaved — close"}.Layout())
-		case tab.Close != "":
-			parts = append(parts, Action{ID: tab.Close, Icon: layout.IconClose, Glyph: "✕", Tooltip: "Close"}.Layout())
-		}
-		pad := 1
-		if tab.Close != "" || tab.Modified {
-			pad = 0 // the action's own box is the right margin
-		}
-		kids = append(kids, layout.Row{
-			NodeBase: layout.NodeBase{ID: tab.ID, W: w, H: layout.Grow(1), Gap: 1, PadLeft: 1, PadRight: pad, Box: box},
-			Align:    layout.AlignCenter, Children: parts,
-		})
+		tabs = append(tabs, t.tab(tab, i == t.Active))
 	}
-	for _, n := range t.Trailing { // centered on the strip's height, not stretched
-		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1), NoPadding: true}, Align: layout.AlignCenter, Children: []layout.Node{n}})
+	trailing := make([]layout.Node, 0, len(t.Trailing))
+	center := func(n layout.Node) layout.Node { // on the strip's height, not stretched
+		return layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1), NoPadding: true}, Align: layout.AlignCenter, Children: []layout.Node{n}}
 	}
-	if !t.Fill {
+	for _, n := range t.Trailing {
+		trailing = append(trailing, center(n))
+	}
+	var kids []layout.Node
+	if t.Scroll {
+		content := layout.Row{NodeBase: layout.NodeBase{ID: t.ContentID(), H: layout.Grow(1)}, Align: layout.AlignStretch, Children: tabs}
+		if t.Fill { // equal shares, at least MinTabCols each
+			content.W = layout.Size{Kind: layout.SizeContent, Value: len(t.Tabs) * MinTabCols}
+		} else { // the trailing nodes scroll along, right after the tabs
+			content.Children = append(append(content.Children, trailing...), &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
+			trailing = nil
+		}
+		kids = []layout.Node{layout.Scroll{NodeBase: layout.NodeBase{ID: t.ViewID(), W: layout.Grow(1), H: layout.Grow(1)}, ScrollX: true, OffsetX: t.Offset, Child: content}}
+	} else {
+		kids = tabs
+	}
+	kids = append(kids, trailing...)
+	if !t.Fill && !t.Scroll {
 		kids = append(kids, &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
 	}
+	if len(t.End) > 0 {
+		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1), PadLeft: 1, PadRight: 1, Gap: 1}, Align: layout.AlignCenter, Children: t.End})
+	}
 	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom}}, Align: layout.AlignStretch, Children: kids}
+}
+
+func (t Tabs) tab(tab Tab, active bool) layout.Node {
+	style := layout.TextStyle{Color: layout.ColorSecondary}
+	box := layout.Box{Interactive: !active, Round: true, Flat: layout.SideBottom}
+	if active {
+		style = layout.TextStyle{Role: layout.TextStrong}
+		box.Fill, box.Edge = layout.FillContent, layout.SideTop
+		if t.Surface != layout.FillNone {
+			box.Fill = t.Surface
+		}
+		if t.Unfocused {
+			box.EdgeFill = layout.FillBorder
+		}
+	}
+	style.Italic = tab.Italic
+	parts := append([]layout.Node{}, tab.Leading...)
+	if tab.Icon != layout.IconNone {
+		parts = append(parts, icon(tab.Icon, layout.ColorSecondary))
+	}
+	label := layout.Label{Text: tab.Label, Style: style, Truncate: true}
+	w := layout.Auto()
+	if t.Fill {
+		label.W, w = layout.Grow(1), layout.Grow(1)
+	}
+	parts = append(parts, label)
+	switch {
+	case tab.Modified:
+		parts = append(parts, Action{ID: tab.Close, Icon: layout.IconDot, Glyph: "●", Tooltip: "Unsaved — close"}.Layout())
+	case tab.Close != "":
+		parts = append(parts, Action{ID: tab.Close, Icon: layout.IconClose, Glyph: "✕", Tooltip: "Close"}.Layout())
+	}
+	pad := 1
+	if tab.Close != "" || tab.Modified {
+		pad = 0 // the action's own box is the right margin
+	}
+	return layout.Row{
+		NodeBase: layout.NodeBase{ID: tab.ID, W: w, H: layout.Grow(1), Gap: 1, PadLeft: 1, PadRight: pad, Box: box},
+		Align:    layout.AlignCenter, Children: parts,
+	}
 }
 
 // Action is a small icon button inside a row, a tab or a pane header — a

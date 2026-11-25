@@ -451,7 +451,7 @@ whole viewport.
 | `layout.ScrollBar{Offset: ..., Visible: ..., Total: ..., Color: ...}` | Where a scrolled window is: `█` thumb on `░` track in the terminal (blank when everything fits), a thin native thumb in a window. One column wide, fills the height. |
 | `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. `Caret: &layout.Caret{X, Y}` puts a text caret at a content cell (code editors, terminal emulators): a blinking bar in a window, the hardware cursor in a terminal; the last visible caret in paint order wins. `Carets: []layout.Caret{...}` adds further carets for multi-cursor editing: a window draws each as the same blinking bar (`layout.CaretOp` in the scene); a terminal has one cursor and ignores them, so style those cells yourself. `OffsetY` (0–1) draws the text that fraction of a line higher in a window, clipped, with one more line of `String` showing below: smooth scrolling (terminals ignore it). |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
-| `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY`. See [Scrolling](#scrolling). |
+| `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY` (with `ScrollX: true`, its natural width too, from column `OffsetX`). See [Scrolling](#scrolling). |
 
 ### Solving a frame
 
@@ -537,7 +537,10 @@ appear stuck. Put chrome (borders, padding) on a wrapping container so the
 Scroll's rect is exactly its window. To keep a row visible, compare its
 content-relative position (`row.Y - content.Y`, the same at every offset) with
 the offset and window height. A whole page scrolls the same way, with a Scroll
-as the root. `cmd/flat-scroll` shows panes; `cmd/flat-landing` shows a page.
+as the root. `layout.ScrollToShow(offset, viewport, start, end)` is the nearest
+offset that shows a range. `ScrollX: true` scrolls sideways as well: the child
+keeps its natural width and `OffsetX` is in columns; sideways swipes arrive as
+`MouseWheelLeft`/`MouseWheelRight`. `cmd/flat-scroll` shows panes; `cmd/flat-landing` shows a page.
 
 ### Text roles
 
@@ -612,7 +615,10 @@ system (Snapshot draws dark by default) while keeping the design's colors.
 Design-system pieces as plain structs whose `Layout()` builds the tree
 from roles and tokens only, so the theme restyles them: `PaneHeader`
 (caption title, meta, trailing actions on the chrome bar), `Tabs` (active
-tab on the content surface; tab node IDs are `Tab.ID`), `ListRow` (icon,
+tab on the content surface or `Surface`, a hairline between tabs; tab node
+IDs are `Tab.ID`; `Scroll` with an `Offset` you keep scrolls a strip that does
+not fit instead of squeezing it, `MinTabCols` the narrowest `Fill` tab; `End`
+nodes sit at the far end), `ListRow` (icon,
 title, meta, trailing nodes; `Selected` + `Active` is the strong
 selection, `Selected` alone the quiet one; `Indent` for trees), `Segmented`
 (option IDs from `kit.OptionID(id, i)`), `Badge` with a `Tone`, `Section`,

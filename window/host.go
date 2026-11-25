@@ -165,6 +165,9 @@ type ui interface {
 	// the start (a wheel turned up): fractional lines for an app run
 	// WithPreciseScrolling, else whole notches through acc.
 	scrollPoints(x, y, delta float64, acc *wheelAccumulator, mod flatte.Mod)
+	// scrollAcross is the same sideways, in columns: positive toward the
+	// start of the lines.
+	scrollAcross(x, y, delta float64, acc *wheelAccumulator, mod flatte.Mod)
 	render() layout.Scene
 	// setAppearance is the active theme's, reported to View from the next
 	// render on.
@@ -1048,19 +1051,33 @@ func (s *surface) scrollPoints(x, y, delta float64, acc *wheelAccumulator, mod f
 	if line <= 0 || math.IsNaN(delta) || math.IsInf(delta, 0) || delta == 0 {
 		return
 	}
+	s.scrollUnits(x, y, delta, line, flatte.MouseWheelUp, flatte.MouseWheelDown, acc, mod)
+}
+
+// scrollAcross is scrollPoints sideways: delta is positive toward the start
+// of the lines, and a column is the unit.
+func (s *surface) scrollAcross(x, y, delta float64, acc *wheelAccumulator, mod flatte.Mod) {
+	col := s.h.metrics.Column
+	if col <= 0 || math.IsNaN(delta) || math.IsInf(delta, 0) || delta == 0 {
+		return
+	}
+	s.scrollUnits(x, y, delta, col, flatte.MouseWheelLeft, flatte.MouseWheelRight, acc, mod)
+}
+
+func (s *surface) scrollUnits(x, y, delta, line float64, less, more flatte.MouseButton, acc *wheelAccumulator, mod flatte.Mod) {
 	if s.h.session.PreciseScrolling() {
 		lines := -delta / line
-		button := flatte.MouseWheelDown
+		button := more
 		if lines < 0 {
-			button = flatte.MouseWheelUp
+			button = less
 		}
 		s.gatherWheel(x, y, button, mod, true).lines += lines
 		return
 	}
 	n := acc.notches(delta, line)
-	button := flatte.MouseWheelUp
+	button := less
 	if n < 0 {
-		button, n = flatte.MouseWheelDown, -n
+		button, n = more, -n
 	}
 	s.wheel(x, y, button, n, mod)
 }

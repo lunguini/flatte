@@ -512,6 +512,39 @@ func TestHostPreciseScrolling(t *testing.T) {
 	}
 }
 
+// A sideways swipe arrives as wheel-left and wheel-right, in columns.
+func TestScrollAcross(t *testing.T) {
+	s := &testState{root: func(*testState) layout.Node {
+		return layout.Col{Children: []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "list"}, Text: "rows"}}}
+	}}
+	h, _ := newTestHost(t, s)
+	sessionaccess.SetPreciseScrolling(h.session, true)
+	h.start(160, 64)
+	h.render()
+	var acc wheelAccumulator
+	n := len(s.events)
+	h.scrollAcross(1, 1, -cellMetrics.Column/2, &acc, 0)
+	h.scrollAcross(1, 1, -cellMetrics.Column, &acc, 0)
+	h.scrollAcross(1, 1, cellMetrics.Column*2, &acc, 0)
+	h.scrollAcross(1, 1, math.NaN(), &acc, 0)
+	h.render()
+	got := s.events[n:]
+	if len(got) != 2 {
+		t.Fatalf("events %#v", got)
+	}
+	r, l := got[0].(flatte.MouseEvent), got[1].(flatte.MouseEvent)
+	if r.Button != flatte.MouseWheelRight || r.Scroll != 1.5 || l.Button != flatte.MouseWheelLeft || l.Scroll != -2 {
+		t.Fatalf("%#v %#v", r, l)
+	}
+	sessionaccess.SetPreciseScrolling(h.session, false)
+	n = len(s.events)
+	h.scrollAcross(1, 1, -cellMetrics.Column*2, &acc, 0)
+	h.render()
+	if got = s.events[n:]; len(got) != 2 || got[0].(flatte.MouseEvent).Button != flatte.MouseWheelRight {
+		t.Fatalf("notches %#v", got)
+	}
+}
+
 // A window reports the pointer in fractional cells too, in the target's
 // frame like X and Y.
 func TestHostPrecisePointer(t *testing.T) {

@@ -25,6 +25,12 @@ package layout
 type Scroll struct {
 	NodeBase
 	OffsetY int
+	// ScrollX also lets the child be wider than the window, laid out at its
+	// natural width (Fixed exactly, Content at least the window, Grow/Auto
+	// the window, as for its height) and shown from column OffsetX. Without
+	// it the child gets the window's width and OffsetX is ignored.
+	ScrollX bool
+	OffsetX int
 	Child   Node
 }
 
@@ -61,6 +67,8 @@ func (s Scroll) IsHorizontal() bool { return false }
 
 func (s Scroll) scroll() (Node, int) { return s.Child, s.OffsetY }
 
+func (s Scroll) across() (int, bool) { return s.OffsetX, s.ScrollX }
+
 // ClampScroll clamps a scroll offset to [0, content-viewport]: the offset a
 // Scroll whose window is viewport rows tall shows for content rows of child.
 // The walk uses it, so an app clamping its own OffsetY with it agrees with
@@ -69,4 +77,17 @@ func ClampScroll(offset, viewport, content int) int {
 	return clampScrollOf[int](cells{}, offset, viewport, content)
 }
 
-type scroller interface{ scroll() (Node, int) }
+// ScrollToShow is the offset, as near to offset as possible, whose window of
+// viewport shows the content from start to end (its start when it is larger
+// than the window). Either axis; the caller still clamps (ClampScroll).
+func ScrollToShow(offset, viewport, start, end int) int {
+	if end > offset+viewport {
+		offset = end - viewport
+	}
+	return min(offset, start)
+}
+
+type scroller interface {
+	scroll() (Node, int)
+	across() (offset int, ok bool)
+}

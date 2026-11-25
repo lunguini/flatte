@@ -107,7 +107,7 @@ func TestTonesHaveTints(t *testing.T) {
 // The active tab carries the accent edge on top; the others hover.
 func TestActiveTabEdge(t *testing.T) {
 	row := Tabs{Tabs: []Tab{{ID: "a", Label: "one"}, {ID: "b", Label: "two"}}, Active: 1}.Layout().(layout.Row)
-	a, b := row.Children[0].(layout.Row).Box, row.Children[1].(layout.Row).Box
+	a, b := row.Children[0].(layout.Row).Box, row.Children[2].(layout.Row).Box // the gap between
 	if a.Edge != layout.SideNone || !a.Interactive {
 		t.Errorf("inactive tab %+v", a)
 	}
@@ -183,7 +183,7 @@ func TestTabCloseAction(t *testing.T) {
 	if got := icons(row.Children[0]); len(got) != 1 || got[0] != layout.IconClose {
 		t.Errorf("closable tab icons %v", got)
 	}
-	if got := icons(row.Children[1]); len(got) != 1 || got[0] != layout.IconDot {
+	if got := icons(row.Children[2]); len(got) != 1 || got[0] != layout.IconDot {
 		t.Errorf("modified tab icons %v", got)
 	}
 }
@@ -191,8 +191,86 @@ func TestTabCloseAction(t *testing.T) {
 // Fill shares the strip: equal tab widths, no spacer.
 func TestTabsFill(t *testing.T) {
 	s := layout.LayoutScene(Tabs{Fill: true, Tabs: []Tab{{ID: "a", Label: "a"}, {ID: "b", Label: "a much longer name"}}}.Layout(), 400, 36, points)
-	if a, b := s.Rects["a"], s.Rects["b"]; a.W != b.W || a.W+b.W < 399 {
+	if a, b := s.Rects["a"], s.Rects["b"]; a.W != b.W || a.W+b.W != 400-TabGap {
 		t.Errorf("filled tabs %v and %v", a.W, b.W)
+	}
+}
+
+// A hairline stands between tabs, seen on the strip.
+func TestTabsStandApart(t *testing.T) {
+	strip := Tabs{Tabs: []Tab{{ID: "a", Label: "a.go"}, {ID: "b", Label: "b.go"}, {ID: "c", Label: "c.go"}}, Active: 0}
+	s := layout.LayoutScene(strip.Layout(), 600, 36, points).Rects
+	if d := s["b"].X - s["a"].X - s["a"].W; d != TabGap {
+		t.Errorf("%v points between tabs", d)
+	}
+	c := layout.Compose(strip.Layout(), 60, 1).Rects
+	if d := c["c"].X - c["b"].X - c["b"].W; d != 1 {
+		t.Errorf("%v columns between tabs", d)
+	}
+	if b := strip.Layout().(layout.Row).Children[1].(layout.Col).Box; b.Fill != layout.FillSeparator {
+		t.Errorf("between tabs: %+v", b)
+	}
+	strip.Surface = layout.FillField
+	if b := strip.Layout().(layout.Row).Children[0].(layout.Row).Box; b.Fill != layout.FillField {
+		t.Errorf("the active tab on a field: %+v", b)
+	}
+}
+
+// A scrolling strip never squeezes its tabs: they keep their names' width
+// (or, sharing the room, MinTabCols) and the rest is scrolled to.
+func TestTabsScroll(t *testing.T) {
+	var tabs []Tab
+	for i := range 10 {
+		tabs = append(tabs, Tab{ID: string(rune('a' + i)), Label: "some_file_name.go", Close: string(rune('a'+i)) + "x"})
+	}
+	plus := Action{ID: "new", Icon: layout.IconPlus}.Layout()
+	one := layout.LayoutScene(Tabs{ID: "s", Scroll: true, Tabs: tabs[:1], Trailing: []layout.Node{plus}}.Layout(), 400, 36, points).Rects
+	if n, a := one["new"], one["a"]; n.W == 0 || n.X != a.X+a.W {
+		t.Errorf("+ at %v, the tab at %v: want it right after", n, a)
+	}
+	for _, fill := range []bool{false, true} {
+		strip := Tabs{ID: "s", Scroll: true, Fill: fill, Tabs: tabs, Trailing: []layout.Node{plus}}
+		r := layout.LayoutScene(strip.Layout(), 400, 36, points).Rects
+		view, content := r[strip.ViewID()], r[strip.ContentID()]
+		if view.W > 400 || content.W <= view.W {
+			t.Fatalf("fill %v: view %v content %v", fill, view, content)
+		}
+		want := float64(MinTabCols) * points.Column
+		if !fill {
+			want = one["a"].W
+		}
+		if d := r["j"].W - want; !fill && d != 0 || d < -TabGap || d > 0 {
+			t.Errorf("fill %v: the last tab is %v wide, want %v", fill, r["j"].W, want)
+		}
+		if fill && (r["new"].X+r["new"].W > 400 || r["new"].W == 0) {
+			t.Errorf("crowded, + is out of sight: %v", r["new"])
+		}
+		strip.Offset = 1000
+		r = layout.LayoutScene(strip.Layout(), 400, 36, points).Rects
+		if j := r["j"]; j.X+j.W > view.X+view.W+.01 {
+			t.Errorf("fill %v: scrolled to the end, the last tab ends at %v of %v", fill, j.X+j.W, view.X+view.W)
+		}
+		scene := layout.LayoutScene(strip.Layout(), 400, 36, points)
+		if id, _ := scene.HitTest(view.X+1, 10); id == "a" || id == "" {
+			t.Errorf("fill %v: the first point hits %q", fill, id)
+		}
+	}
+	// In a terminal the window clips whole cells.
+	strip := Tabs{ID: "s", Scroll: true, Tabs: tabs, Offset: 3}
+	c := layout.Compose(strip.Layout(), 40, 1)
+	if r := c.Rects["a"]; r.X != -3 {
+		t.Errorf("scrolled by 3: the first tab at %d", r.X)
+	}
+}
+
+// End nodes sit at the strip's far end.
+func TestTabsEnd(t *testing.T) {
+	end := []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "where"}, Text: "internal"}}
+	for _, scroll := range []bool{false, true} {
+		r := layout.LayoutScene(Tabs{ID: "s", Scroll: scroll, Tabs: []Tab{{ID: "a", Label: "a"}}, End: end}.Layout(), 400, 36, points).Rects["where"]
+		if r.X+r.W != 400-points.Step {
+			t.Errorf("scroll %v: ends at %v", scroll, r.X+r.W)
+		}
 	}
 }
 

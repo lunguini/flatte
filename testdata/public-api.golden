@@ -954,6 +954,8 @@ flatui/kit package kit
   const DisclosureLeaf Disclosure = 1
   const DisclosureNone Disclosure = 0
   const DisclosureOpen Disclosure = 3
+  const MinTabCols untyped int = 18
+  const TabGap untyped int = 1
   const ToneAccent Tone = 1
   const ToneDanger Tone = 5
   const ToneInfo Tone = 2
@@ -970,7 +972,9 @@ flatui/kit package kit
   method Section.Layout() layout.Node
   method Segmented.Layout() layout.Node
   method Setting.Layout() layout.Node
+  method Tabs.ContentID() string
   method Tabs.Layout() layout.Node
+  method Tabs.ViewID() string
   type Action struct
   field Action.ID string [order=0]
   field Action.Icon layout.IconName [order=1]
@@ -1039,18 +1043,23 @@ flatui/kit package kit
   field Tab.ID string [order=0]
   field Tab.Label string [order=1]
   field Tab.Icon layout.IconName [order=2]
-  field Tab.Modified bool [order=3]
-  field Tab.Italic bool [order=4]
-  field Tab.Close string [order=5]
-  struct Tab fields=6 comparable=true
+  field Tab.Leading []layout.Node [order=3]
+  field Tab.Modified bool [order=4]
+  field Tab.Italic bool [order=5]
+  field Tab.Close string [order=6]
+  struct Tab fields=7 comparable=false
   type Tabs struct
   field Tabs.ID string [order=0]
   field Tabs.Tabs []Tab [order=1]
   field Tabs.Active int [order=2]
   field Tabs.Fill bool [order=3]
   field Tabs.Trailing []layout.Node [order=4]
-  field Tabs.Unfocused bool [order=5]
-  struct Tabs fields=6 comparable=false
+  field Tabs.End []layout.Node [order=5]
+  field Tabs.Scroll bool [order=6]
+  field Tabs.Offset int [order=7]
+  field Tabs.Surface layout.Fill [order=8]
+  field Tabs.Unfocused bool [order=9]
+  struct Tabs fields=10 comparable=false
   type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2
@@ -1199,6 +1208,7 @@ flatui/layout package layout
   func OverlayOrigin(base string, layer string)(x int, y int)
   func Points(n int) Size
   func RowSize() Size
+  func ScrollToShow(offset int, viewport int, start int, end int) int
   func Solve(root Node, width int, height int) map[string] Rect
   func SolveAndCompose(root Node, width int, height int)(string, map[string] Rect)
   func SolveAndComposeWithDiagnostics(root Node, width int, height int)(string, map[string] Rect, []DuplicateIDDiagnostic)
@@ -1577,8 +1587,10 @@ flatui/layout package layout
   type Scroll struct
   field Scroll.NodeBase NodeBase [order=0]
   field Scroll.OffsetY int [order=1]
-  field Scroll.Child Node [order=2]
-  struct Scroll fields=3 comparable=false
+  field Scroll.ScrollX bool [order=2]
+  field Scroll.OffsetX int [order=3]
+  field Scroll.Child Node [order=4]
+  struct Scroll fields=5 comparable=false
   type ScrollBar struct
   field ScrollBar.NodeBase NodeBase [order=0]
   field ScrollBar.Offset int [order=1]

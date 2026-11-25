@@ -1,6 +1,7 @@
 package window
 
 import (
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -51,6 +52,7 @@ type windowState struct {
 	caretOK bool
 	extra   []CGRect // further carets, last drawn (they blink with caret)
 	wheel   wheelAccumulator
+	across  wheelAccumulator // sideways
 	// caretMoved is when the caret last moved; blink redraws at its next
 	// blink phase.
 	caretMoved time.Time
@@ -381,10 +383,16 @@ func viewMethods() []objc.MethodDef {
 				return
 			}
 			dy := objc.Send[float64](event, sel("scrollingDeltaY"))
+			dx := objc.Send[float64](event, sel("scrollingDeltaX"))
 			if !objc.Send[bool](event, sel("hasPreciseScrollingDeltas")) {
 				dy *= st.m.Line // whole lines from a notched wheel
+				dx *= st.m.Column
 			}
 			p := location(self, event)
+			if math.Abs(dx) > math.Abs(dy) { // one way at a time: a swipe is never quite straight
+				st.ui.scrollAcross(p.X, p.Y, dx, &st.across, eventMods(event))
+				return
+			}
 			st.ui.scrollPoints(p.X, p.Y, dy, &st.wheel, eventMods(event))
 		}},
 

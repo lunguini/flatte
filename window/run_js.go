@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math"
 	"strconv"
 	"strings"
 	"syscall/js"
@@ -67,6 +68,7 @@ type canvasPage struct {
 	// tipPending is a redraw scheduled for a resting pointer's tooltip.
 	tipPending    bool
 	wheel         wheelAccumulator
+	across        wheelAccumulator // sideways
 	originalTitle string
 	title         string
 	style         js.Value
@@ -266,14 +268,20 @@ func (p *canvasPage) bind() {
 	})
 	p.listen(p.canvas, "wheel", func(ev js.Value) {
 		ev.Call("preventDefault")
-		delta := ev.Get("deltaY").Float()
+		delta, across := ev.Get("deltaY").Float(), ev.Get("deltaX").Float()
 		switch ev.Get("deltaMode").Int() {
 		case 1:
 			delta *= p.host.metrics.Line
+			across *= p.host.metrics.Column
 		case 2:
 			delta *= p.height()
+			across *= p.width()
 		}
 		x, y := p.point(ev)
+		if math.Abs(across) > math.Abs(delta) { // one way at a time: a swipe is never quite straight
+			p.host.surface.scrollAcross(x, y, -across, &p.across, canvasModifiers(ev))
+			return
+		}
 		p.host.surface.scrollPoints(x, y, -delta, &p.wheel, canvasModifiers(ev))
 	})
 	p.listen(p.canvas, "dragover", func(ev js.Value) { ev.Call("preventDefault") })

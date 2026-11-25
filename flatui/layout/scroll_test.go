@@ -359,3 +359,47 @@ func TestScrollHugeOffsetAndContent(t *testing.T) {
 		t.Fatalf("first line = %q", got)
 	}
 }
+
+// ScrollX lays the child out at its natural width behind the window.
+func TestScrollX(t *testing.T) {
+	row := func(w Size) Row {
+		return Row{NodeBase: NodeBase{ID: "content", W: w}, Children: []Node{
+			Text{NodeBase: NodeBase{ID: "a", W: Fixed(6)}, String: "aaaaaa"}, Text{NodeBase: NodeBase{ID: "b", W: Fixed(6)}, String: "bbbbbb"},
+		}}
+	}
+	for _, tc := range []struct {
+		w       Size
+		offset  int
+		want    string
+		x, wide int
+	}{
+		{Auto(), 0, "aaaaaabb", 0, 12},
+		{Auto(), 3, "aaabbbbb", -3, 12},
+		{Auto(), 99, "aabbbbbb", -4, 12}, // clamped
+		{Auto(), -5, "aaaaaabb", 0, 12},
+		{Fixed(5), 2, "aaaaa", 0, 5},
+		{Grow(1), 2, "aaaaaabb", 0, 8},
+	} {
+		c := Compose(Scroll{ScrollX: true, OffsetX: tc.offset, Child: row(tc.w)}, 8, 1)
+		if got := plainLines(c.Frame)[0]; got != tc.want {
+			t.Errorf("%+v: frame %q", tc, got)
+		}
+		if r := c.Rects["content"]; r.X != tc.x || r.W != tc.wide {
+			t.Errorf("%+v: content %+v", tc, r)
+		}
+	}
+	// Without it the offset means nothing.
+	if c := Compose(Scroll{OffsetX: 3, Child: row(Auto())}, 8, 1); c.Rects["content"].X != 0 || c.Rects["content"].W != 8 {
+		t.Errorf("not ScrollX: %+v", c.Rects["content"])
+	}
+}
+
+func TestScrollToShow(t *testing.T) {
+	for _, tc := range []struct{ offset, start, end, want int }{
+		{0, 2, 8, 0}, {0, 8, 14, 4}, {9, 3, 6, 3}, {5, 4, 40, 4}, {3, 3, 13, 3},
+	} {
+		if got := ScrollToShow(tc.offset, 10, tc.start, tc.end); got != tc.want {
+			t.Errorf("%+v: %d", tc, got)
+		}
+	}
+}
