@@ -1,13 +1,21 @@
 package window
 
-import (
-	"math"
+import "github.com/ebitengine/purego/objc"
 
-	"github.com/ebitengine/purego/objc"
+const (
+	nsWindowToolbarStyleUnified        = 3 // 52 points
+	nsWindowToolbarStyleUnifiedCompact = 4 // 40 points, 38 before macOS 26
+	nsTitlebarSeparatorStyleNone       = 1
+
+	// unifiedStrip is the strip height from which the unified toolbar's
+	// bar is the nearer one.
+	unifiedStrip = 46
+
+	nsPresentationAutoHideMenuBar = 1 << 2
+	nsPresentationHideMenuBar     = 1 << 3
+	nsPresentationFullScreen      = 1 << 10
+	nsPresentationAutoHideToolbar = 1 << 11
 )
-
-// nsWindowStyleMaskFullScreen is NSWindowStyleMaskFullScreen.
-const nsWindowStyleMaskFullScreen = 1 << 14
 
 // titleBarPoints is the height of a HideTitleBar window's strip: the
 // app's, or the system's when the app names none.
@@ -18,46 +26,32 @@ func titleBarPoints(o Options) float64 {
 	return TitleBarHeight
 }
 
-// placeTitleButtons centers the window buttons vertically in a strip h
-// points tall (taller than the system's title bar), as a browser's are in
-// its tab strip: the buttons' container grows to h and each button sits in
-// its middle. AppKit lays the title bar out again on resize and on leaving
-// full screen, so this runs before every draw and moves only what moved;
-// in full screen the system's own title bar is left alone.
-func placeTitleButtons(win objc.ID, h float64) {
-	if h <= TitleBarHeight || objc.Send[uint](win, sel("styleMask"))&nsWindowStyleMaskFullScreen != 0 {
+// tallTitleBar gives a HideTitleBar window whose strip is h points tall the
+// system's title bar nearest that height, by an empty toolbar: AppKit then
+// lays the window buttons out in the middle of it itself, always. (Moving
+// the buttons instead would have them jump: AppKit puts them back on every
+// layout of the title bar, until the next move.)
+func tallTitleBar(win objc.ID, h float64) {
+	if h <= TitleBarHeight {
 		return
 	}
-	closeButton := win.Send(sel("standardWindowButton:"), 0)
-	if closeButton == 0 {
-		return
+	bar := alloc("NSToolbar").Send(sel("initWithIdentifier:"), nsString("flatte.titlebar"))
+	style := nsWindowToolbarStyleUnifiedCompact
+	if h >= unifiedStrip {
+		style = nsWindowToolbarStyleUnified
 	}
-	bar := closeButton.Send(sel("superview"))
-	container := bar.Send(sel("superview"))
-	if bar == 0 || container == 0 {
-		return
-	}
-	wf := objc.Send[CGRect](win, sel("frame"))
-	cf := objc.Send[CGRect](container, sel("frame"))
-	if want := cgRect(cf.Origin.X, wf.Size.Height-h, cf.Size.Width, h); !sameRect(cf, want) {
-		container.Send(sel("setFrame:"), want)
-	}
-	if bf := objc.Send[CGRect](bar, sel("frame")); !sameRect(bf, cgRect(0, 0, cf.Size.Width, h)) {
-		bar.Send(sel("setFrame:"), cgRect(0, 0, cf.Size.Width, h))
-	}
-	for i := range 3 { // close, minimize, zoom
-		b := win.Send(sel("standardWindowButton:"), i)
-		if b == 0 {
-			continue
-		}
-		f := objc.Send[CGRect](b, sel("frame"))
-		y := math.Round((h - f.Size.Height) / 2)
-		if f.Origin.Y != y {
-			b.Send(sel("setFrameOrigin:"), CGPoint{X: f.Origin.X, Y: y})
-		}
-	}
+	win.Send(sel("setToolbarStyle:"), style)
+	win.Send(sel("setToolbar:"), bar)
+	win.Send(sel("setTitlebarSeparatorStyle:"), nsTitlebarSeparatorStyleNone)
+	bar.Send(sel("release"))
 }
 
-func sameRect(a, b CGRect) bool {
-	return a.Origin == b.Origin && a.Size == b.Size
+// fullScreenPresentation is the full-screen presentation for what AppKit
+// proposes: a toolbar (tallTitleBar's, empty) shows with the menu bar only,
+// not over the app's own strip.
+func fullScreenPresentation(proposed uint) uint {
+	if proposed&nsPresentationFullScreen == 0 || proposed&(nsPresentationAutoHideMenuBar|nsPresentationHideMenuBar) == 0 {
+		return proposed // AppKit refuses a hiding toolbar without these
+	}
+	return proposed | nsPresentationAutoHideToolbar
 }

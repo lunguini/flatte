@@ -140,9 +140,12 @@ func run(ctx context.Context, session *flatte.Session, opts Options) error {
 	return err
 }
 
-// chrome is how a window's frame looks: Options.HideTitleBar and
-// Translucent, and dark for the blur's appearance.
-type chrome struct{ hideTitle, translucent, dark bool }
+// chrome is how a window's frame looks: Options.HideTitleBar (with a strip
+// titleH points tall) and Translucent, and dark for the blur's appearance.
+type chrome struct {
+	hideTitle, translucent, dark bool
+	titleH                       float64
+}
 
 // makeWindow creates a titled, resizable window of cols×lines cells of m,
 // with no smaller than minCols×minLines (at least 20×4), and its view of
@@ -170,6 +173,7 @@ func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, min
 	if ch.hideTitle {
 		win.Send(sel("setTitlebarAppearsTransparent:"), true)
 		win.Send(sel("setTitleVisibility:"), int(nsWindowTitleHidden))
+		tallTitleBar(win, ch.titleH)
 	}
 	win.Send(sel("setContentView:"), view)
 	if ch.translucent {
@@ -274,7 +278,7 @@ func runWindow(ctx context.Context, session *flatte.Session, opts Options) error
 		title = "Flatte"
 	}
 	win, view := makeWindow(cls, m, title, max(cols, opts.MinWidth), max(lines, opts.MinHeight), opts.MinWidth, opts.MinHeight, opts.Autosave,
-		chrome{hideTitle: opts.HideTitleBar, translucent: opts.Translucent, dark: dark})
+		chrome{hideTitle: opts.HideTitleBar, titleH: titleBarPoints(opts), translucent: opts.Translucent, dark: dark})
 	defer win.Send(sel("release"))
 	defer view.Send(sel("release"))
 	b := objc.Send[CGRect](view, sel("bounds"))
@@ -440,6 +444,12 @@ func newDelegate(stop func()) (objc.ID, error) {
 						return false
 					}
 					return true
+				}},
+				{Cmd: sel("window:willUseFullScreenPresentationOptions:"), Fn: func(_ objc.ID, _ objc.SEL, win objc.ID, proposed uint) uint {
+					if win.Send(sel("toolbar")) == 0 {
+						return proposed
+					}
+					return fullScreenPresentation(proposed)
 				}},
 				{Cmd: sel("windowWillClose:"), Fn: func(_ objc.ID, _ objc.SEL, note objc.ID) {
 					if st := byWindow[note.Send(sel("object"))]; st != nil && st.id != "" {

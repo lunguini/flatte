@@ -43,8 +43,11 @@ type Options struct {
 	HideTitleBar bool
 	// TitleBarHeight, with HideTitleBar, is the strip's height in points
 	// when the app draws a taller one (a toolbar, a tab strip): the whole
-	// strip drags the window and the window buttons sit in its middle.
-	// Zero or less than the system's TitleBarHeight keeps the system's.
+	// strip drags the window. On macOS the window buttons sit in the middle
+	// of the system's title bar nearest that height, 40 (38 before macOS 26)
+	// or 52 points tall, so a strip of one of those has them centered; the
+	// 52-point one places them up to 80 points from the left. Zero or less
+	// than the system's TitleBarHeight keeps the system's.
 	TitleBarHeight int
 	// Translucent shows the desktop, blurred, through the window wherever
 	// the frame draws no background of its own — for good; a frame's

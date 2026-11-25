@@ -294,9 +294,6 @@ func viewMethods() []objc.MethodDef {
 					st.dark, st.th = dark, newTheme(themeFor(nil, dark, st.design))
 				}
 			}
-			if st.hideTitle {
-				placeTitleButtons(st.window, st.titleH)
-			}
 			b := objc.Send[CGRect](self, sel("bounds"))
 			st.ui.resize(b.Size.Width, b.Size.Height)
 			st.ui.setAppearance(st.th.appearance)
