@@ -170,7 +170,7 @@ func light() Palette {
 		Text: Hex("#1f1d1a"), TextSecondary: Hex("#57534c"), TextMuted: Hex("#6b665e"), TextDisabled: Hex("#aaa49b"), OnAccent: Hex("#ffffff"),
 		Accent: Hex("#1f5fd1"), AccentHover: Hex("#1a52b5"), Focus: Hex("#1f5fd1"),
 		Hover: color.NRGBA{40, 32, 24, 13}, Pressed: color.NRGBA{40, 32, 24, 26},
-		SelectionActive: Hex("#d6e3fb"), SelectionInactive: Hex("#e8e5df"), TextSelection: Hex("#b9d0f7"),
+		SelectionActive: Hex("#d6e3fb"), SelectionInactive: Hex("#dcd8d0"), TextSelection: Hex("#b9d0f7"),
 		Match: Hex("#f8e39b"), CurrentLine: Hex("#f7f4ee"),
 		Divider: Hex("#e3dfd8"), ControlBorder: Hex("#8a8378"),
 		Info: Hex("#1f5fd1"), InfoTint: Hex("#e3ecfc"),

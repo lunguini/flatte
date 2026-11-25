@@ -565,7 +565,9 @@ sidebars), `FillContent` (where work is read), `FillRaised`, `FillAccent`,
 glass for controls on a translucent window's chrome (side bar buttons, a
 title bar field): 80% white on a light palette (`GlassLight`), an 8% white
 wash on a dark one (`GlassDark`). `FillBorder` is the control border, a
-neutral mark that does not read as focus.
+neutral mark that does not read as focus. `FillShade` is a wash of black for
+a pane's body (5% on a light palette, `ShadeLight`; 35% on a dark one,
+`ShadeDark`), so the pane and its header stand out from the window ground.
 
 ### Themes
 

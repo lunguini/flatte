@@ -1150,6 +1150,7 @@ flatui/layout package layout
   const FillSelection Fill = 9
   const FillSelectionInactive Fill = 10
   const FillSeparator Fill = 3
+  const FillShade Fill = 26
   const FillSuccessTint Fill = 13
   const FillSurface Fill = 1
   const FillWarningTint Fill = 14
@@ -1209,6 +1210,8 @@ flatui/layout package layout
   const ResizeColumns Resize = 1
   const ResizeNone Resize = 0
   const ResizeRows Resize = 2
+  const ShadeDark untyped int = 89
+  const ShadeLight untyped int = 13
   const SideBottom Side = 2
   const SideLeft Side = 3
   const SideNone Side = 0

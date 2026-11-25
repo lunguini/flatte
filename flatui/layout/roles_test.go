@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"image/color"
 	"strings"
 	"testing"
 
@@ -51,7 +52,7 @@ func TestUnthemedCellsKeepTheTerminalsColors(t *testing.T) {
 
 func TestFillColorCoversEveryRole(t *testing.T) {
 	d := theme.Default()
-	for f := FillSurface; f <= FillBorder; f++ {
+	for f := FillSurface; f <= FillShade; f++ {
 		if _, ok := FillColor(&d.Light, f); !ok {
 			t.Errorf("fill %d has no color", f)
 		}
@@ -71,5 +72,25 @@ func TestUnthemedCellsKeepColorRoles(t *testing.T) {
 	}
 	if out := (TextStyle{Color: ColorPrimary}).Render("x"); out != "x" {
 		t.Errorf("primary text is styled: %q", out)
+	}
+}
+
+// FillShade is black thin enough that text still reads on chrome under it.
+func TestFillShadeKeepsTextReadable(t *testing.T) {
+	d := theme.Default()
+	for name, c := range map[string]struct {
+		p *theme.Palette
+		a uint8
+	}{"light": {&d.Light, ShadeLight}, "dark": {&d.Dark, ShadeDark}} {
+		got, ok := FillColor(c.p, FillShade)
+		if !ok || got != (color.NRGBA{A: c.a}) {
+			t.Fatalf("%s: %v %v", name, got, ok)
+		}
+		on := theme.Mix(c.p.Chrome, color.NRGBA{A: 0xff}, float64(c.a)/255)
+		for what, fg := range map[string]color.NRGBA{"text": c.p.Text, "secondary": c.p.TextSecondary, "muted": c.p.TextMuted, "accent": c.p.Accent} {
+			if r := theme.Contrast(fg, on); r < 4.5 {
+				t.Errorf("%s %s: contrast %.2f", name, what, r)
+			}
+		}
 	}
 }

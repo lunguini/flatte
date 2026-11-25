@@ -69,12 +69,22 @@ const (
 	// FillBorder is a control's border color: a neutral mark that does not
 	// read as focus (an unfocused pane's active tab edge).
 	FillBorder
+	// FillShade is a wash of black for a pane's body, so the pane and the
+	// header on it stand out from the window ground: it darkens what is
+	// under it, a translucent window's blur too, by ShadeLight or ShadeDark.
+	FillShade
 )
 
 // FillGlass's white opacities: 80% on a light palette, 8% on a dark one.
 const (
 	GlassLight = 0xcc
 	GlassDark  = 0x14
+)
+
+// FillShade's black opacities: 5% on a light palette, 35% on a dark one.
+const (
+	ShadeLight = 0x0d
+	ShadeDark  = 0x59
 )
 
 // FillColor is f's color in p; ok is false for FillNone and unknown fills.
@@ -127,14 +137,24 @@ func FillColor(p *theme.Palette, f Fill) (c color.NRGBA, ok bool) {
 		return p.Diff.Blank, true
 	case FillBorder:
 		return p.ControlBorder, true
+	case FillShade:
+		if isDark(p) {
+			return color.NRGBA{A: ShadeDark}, true
+		}
+		return color.NRGBA{A: ShadeLight}, true
 	case FillGlass:
-		// Dark when white text reads better on Content than black.
-		if theme.Contrast(color.NRGBA{0xff, 0xff, 0xff, 0xff}, p.Content) > theme.Contrast(color.NRGBA{0, 0, 0, 0xff}, p.Content) {
+		if isDark(p) {
 			return color.NRGBA{0xff, 0xff, 0xff, GlassDark}, true
 		}
 		return color.NRGBA{0xff, 0xff, 0xff, GlassLight}, true
 	}
 	return color.NRGBA{}, false
+}
+
+// isDark reports a dark palette: white reads better on its Content than
+// black.
+func isDark(p *theme.Palette) bool {
+	return theme.Contrast(color.NRGBA{0xff, 0xff, 0xff, 0xff}, p.Content) > theme.Contrast(color.NRGBA{0, 0, 0, 0xff}, p.Content)
 }
 
 // TextColorOf is the color s's text draws in from p: Fg when set, else
@@ -227,7 +247,11 @@ func cellBox(b Box) Box {
 	}
 	if c, ok := FillColor(p, f); ok {
 		if c.A < 0xff {
-			c = theme.Over(c, p.Content)
+			under := p.Content
+			if f == FillShade { // it lies on the window's ground
+				under = p.Chrome
+			}
+			c = theme.Over(c, under)
 		}
 		b.Background = c
 	}
