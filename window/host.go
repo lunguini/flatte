@@ -670,7 +670,9 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 		changed = changed || s.tip.shown(s.now())
 		s.tip = tipState{text: tooltip, x: x, y: y, since: s.now()}
 	}
+	var left []string
 	if over := s.idsAt(x, y); !maps.Equal(over, s.over) {
+		left = s.reportsLeaving(over)
 		s.over, changed = over, true
 		s.faders()
 		s.hovers.only(over, s.now())
@@ -678,7 +680,22 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 	if changed {
 		s.invalidate()
 	}
+	for _, id := range left {
+		s.h.handle(flatte.LeaveEvent{ID: id, Window: s.id})
+	}
 	return shape, tooltip
+}
+
+// reportsLeaving is the boxes the pointer was over, and is not now, that
+// report it.
+func (s *surface) reportsLeaving(over map[string]bool) []string {
+	var out []string
+	for _, op := range s.scene.Ops {
+		if b, ok := op.(layout.BoxOp); ok && b.Box.ReportLeave && b.ID != "" && s.over[b.ID] && !over[b.ID] {
+			out = append(out, b.ID)
+		}
+	}
+	return out
 }
 
 // idsAt is the visible ID'd nodes under the pointer, above the topmost overlay.

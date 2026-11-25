@@ -369,6 +369,9 @@ type Box struct {
 	// border): a window shows a resize pointer along its axis over it. It
 	// draws nothing; the app moves the border on MouseMotion.
 	Resize Resize
+	// ReportLeave sends the app a LeaveEvent when the pointer leaves the
+	// named box (a window; terminals do not). It draws nothing.
+	ReportLeave bool
 	// Edge is a GUI's accent bar along one side of the box, the theme's
 	// focus stroke thick in its Accent: an active tab's top, a current
 	// row's marker. Terminals draw nothing for it; mark the node another

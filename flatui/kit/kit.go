@@ -220,6 +220,9 @@ type Tab struct {
 	Modified bool
 	Italic   bool
 	Close    string
+	// W is the tab's width (Auto: its label's, or its share of a Fill
+	// strip): a held strip's (see HoldTabs).
+	W layout.Size
 }
 
 // Tabs is a tab strip at the bar height on the chrome surface: the active
@@ -248,6 +251,11 @@ type Tabs struct {
 	End      []layout.Node
 	Scroll   bool
 	Offset   int
+	// Held is a strip whose tabs keep the widths they were given (Tab.W)
+	// after one was closed, until the pointer leaves: it reports that
+	// (layout.Box.ReportLeave, under ID), ignores Fill, and its content
+	// stays at least Held columns wide so that nothing scrolls.
+	Held int
 	// Surface is the active tab's fill when the panel the strip stands on
 	// is not the content surface.
 	Surface layout.Fill
@@ -269,7 +277,43 @@ const (
 func (t Tabs) ViewID() string    { return t.ID + ".view" }
 func (t Tabs) ContentID() string { return t.ID + ".content" }
 
+// HoldTabs is the widths to hold a strip's tabs at after tab i, of the tabs
+// with these widths (the gap between them gap), was closed by its close
+// action: the tab taking its place is as wide as it was, so the next close
+// action is right under the pointer, as in a browser. Past the end there is
+// no next tab: the new last one reaches as far, at most limit wide, and the
+// tabs of a Fill strip share the room.
+func HoldTabs(widths []float64, i int, gap, limit float64, fill bool) []float64 {
+	n := len(widths)
+	if i < 0 || i >= n {
+		return nil
+	}
+	out := append([]float64{}, widths...)
+	if i < n-1 {
+		return append(out[:i+1], out[i+2:]...)
+	}
+	out = out[:i]
+	if i == 0 {
+		return out
+	}
+	if !fill {
+		out[i-1] = max(out[i-1], min(out[i-1]+gap+widths[i], limit))
+		return out
+	}
+	total := 0.0
+	for _, w := range widths {
+		total += w
+	}
+	for j := range out {
+		out[j] = (total + gap) / float64(i)
+	}
+	return out
+}
+
 func (t Tabs) Layout() layout.Node {
+	if t.Held > 0 {
+		t.Fill = false
+	}
 	tabs := make([]layout.Node, 0, 2*len(t.Tabs))
 	for i, tab := range t.Tabs {
 		if i > 0 {
@@ -289,7 +333,11 @@ func (t Tabs) Layout() layout.Node {
 		content := layout.Row{NodeBase: layout.NodeBase{ID: t.ContentID(), H: layout.Grow(1)}, Align: layout.AlignStretch, Children: tabs}
 		if t.Fill { // equal shares, at least MinTabCols each
 			content.W = layout.Size{Kind: layout.SizeContent, Value: len(t.Tabs) * MinTabCols}
-		} else { // the trailing nodes scroll along, right after the tabs
+		} else {
+			if t.Held > 0 {
+				content.W = layout.Size{Kind: layout.SizeContent, Value: t.Held}
+			}
+			// The trailing nodes scroll along, right after the tabs.
 			content.Children = append(append(content.Children, trailing...), &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
 			trailing = nil
 		}
@@ -304,7 +352,7 @@ func (t Tabs) Layout() layout.Node {
 	if len(t.End) > 0 {
 		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1), PadLeft: 1, PadRight: 1, Gap: 1}, Align: layout.AlignCenter, Children: t.End})
 	}
-	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom}}, Align: layout.AlignStretch, Children: kids}
+	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom, ReportLeave: t.Held > 0}}, Align: layout.AlignStretch, Children: kids}
 }
 
 func (t Tabs) tab(tab Tab, active bool) layout.Node {
@@ -329,6 +377,9 @@ func (t Tabs) tab(tab Tab, active bool) layout.Node {
 	w := layout.Auto()
 	if t.Fill {
 		label.W, w = layout.Grow(1), layout.Grow(1)
+	}
+	if tab.W.Kind != layout.SizeAuto {
+		label.W, w = layout.Grow(1), tab.W
 	}
 	parts = append(parts, label)
 	switch {

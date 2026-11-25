@@ -280,6 +280,10 @@ flatte package flatte
   field LayoutEvent.PointRects map[string] layout.PointRect [order=1]
   field LayoutEvent.Window string [order=2]
   struct LayoutEvent fields=3 comparable=false
+  type LeaveEvent struct
+  field LeaveEvent.ID string [order=0]
+  field LeaveEvent.Window string [order=1]
+  struct LeaveEvent fields=2 comparable=true
   type MediaCommand uint8
   type MediaEvent struct
   field MediaEvent.Command MediaCommand [order=0]
@@ -962,6 +966,7 @@ flatui/kit package kit
   const ToneNeutral Tone = 0
   const ToneSuccess Tone = 3
   const ToneWarning Tone = 4
+  func HoldTabs(widths[]float64, i int, gap float64, limit float64, fill bool)[]float64
   func OptionID(id string, i int) string
   method Action.Layout() layout.Node
   method Badge.Layout() layout.Node
@@ -1047,7 +1052,8 @@ flatui/kit package kit
   field Tab.Modified bool [order=4]
   field Tab.Italic bool [order=5]
   field Tab.Close string [order=6]
-  struct Tab fields=7 comparable=false
+  field Tab.W layout.Size [order=7]
+  struct Tab fields=8 comparable=false
   type Tabs struct
   field Tabs.ID string [order=0]
   field Tabs.Tabs []Tab [order=1]
@@ -1057,9 +1063,10 @@ flatui/kit package kit
   field Tabs.End []layout.Node [order=5]
   field Tabs.Scroll bool [order=6]
   field Tabs.Offset int [order=7]
-  field Tabs.Surface layout.Fill [order=8]
-  field Tabs.Unfocused bool [order=9]
-  struct Tabs fields=10 comparable=false
+  field Tabs.Held int [order=8]
+  field Tabs.Surface layout.Fill [order=9]
+  field Tabs.Unfocused bool [order=10]
+  struct Tabs fields=11 comparable=false
   type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2
@@ -1349,10 +1356,11 @@ flatui/layout package layout
   field Box.InsetY float64 [order=10]
   field Box.Fill Fill [order=11]
   field Box.Resize Resize [order=12]
-  field Box.Edge Side [order=13]
-  field Box.EdgeFill Fill [order=14]
-  field Box.Flat Side [order=15]
-  struct Box fields=16 comparable=true
+  field Box.ReportLeave bool [order=13]
+  field Box.Edge Side [order=14]
+  field Box.EdgeFill Fill [order=15]
+  field Box.Flat Side [order=16]
+  struct Box fields=17 comparable=true
   type BoxOp struct
   field BoxOp.Rect PointRect [order=0]
   field BoxOp.Clip PointRect [order=1]

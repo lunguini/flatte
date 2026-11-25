@@ -1,6 +1,8 @@
 package kit
 
 import (
+	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -260,6 +262,58 @@ func TestTabsScroll(t *testing.T) {
 	c := layout.Compose(strip.Layout(), 40, 1)
 	if r := c.Rects["a"]; r.X != -3 {
 		t.Errorf("scrolled by 3: the first tab at %d", r.X)
+	}
+}
+
+// Closing a tab by its close action leaves the next tab's right there.
+func TestHoldTabs(t *testing.T) {
+	widths := []float64{100, 150, 120}
+	for _, tc := range []struct {
+		i    int
+		fill bool
+		want []float64
+	}{
+		{0, false, []float64{100, 120}}, {1, false, []float64{100, 150}}, {2, false, []float64{100, 271}},
+		{2, true, []float64{371.0 / 2, 371.0 / 2}}, {3, false, nil}, {-1, false, nil},
+	} {
+		if got := HoldTabs(widths, tc.i, 1, 300, tc.fill); !slices.Equal(got, tc.want) {
+			t.Errorf("%d fill %v: %v, want %v", tc.i, tc.fill, got, tc.want)
+		}
+	}
+	if got := HoldTabs([]float64{100, 250}, 1, 1, 300, false); got[0] != 300 {
+		t.Errorf("past the limit: %v", got)
+	}
+	if got := HoldTabs([]float64{100}, 0, 1, 300, false); len(got) != 0 {
+		t.Errorf("the only tab: %v", got)
+	}
+	if !slices.Equal(widths, []float64{100, 150, 120}) {
+		t.Errorf("the caller's widths changed: %v", widths)
+	}
+	// Laid out so, the close actions coincide, scrolled to the end too.
+	strip := Tabs{ID: "s", Scroll: true, Offset: 1000}
+	for i := range 8 {
+		id := string(rune('a' + i))
+		strip.Tabs = append(strip.Tabs, Tab{ID: id, Label: strings.Repeat(id, 4+3*i), Close: id + "x"})
+	}
+	before := layout.LayoutScene(strip.Layout(), 400, 36, points).Rects
+	var ws []float64
+	for _, tab := range strip.Tabs {
+		ws = append(ws, before[tab.ID].W)
+	}
+	content := before[strip.ContentID()]
+	after := strip
+	after.Tabs = slices.Delete(slices.Clone(strip.Tabs), 5, 6)
+	for j, w := range HoldTabs(ws, 5, TabGap, 300, false) {
+		after.Tabs[j].W = layout.Points(int(math.Round(w)))
+	}
+	after.Held = int(math.Ceil(content.W / points.Column))
+	after.Offset = int((before[strip.ViewID()].X - content.X) / points.Column)
+	s := layout.LayoutScene(after.Layout(), 400, 36, points)
+	if a, b := before["fx"], s.Rects["gx"]; math.Abs(a.X-b.X) > points.Column {
+		t.Errorf("closed at %v, the next close action is at %v", a.X, b.X)
+	}
+	if b := after.Layout().(layout.Row).Box; !b.ReportLeave {
+		t.Error("a held strip does not report the pointer leaving")
 	}
 }
 

@@ -618,7 +618,8 @@ from roles and tokens only, so the theme restyles them: `PaneHeader`
 tab on the content surface or `Surface`, a hairline between tabs; tab node
 IDs are `Tab.ID`; `Scroll` with an `Offset` you keep scrolls a strip that does
 not fit instead of squeezing it, `MinTabCols` the narrowest `Fill` tab; `End`
-nodes sit at the far end), `ListRow` (icon,
+nodes sit at the far end; `kit.HoldTabs` and `Held` keep the next close button
+under the pointer until a `LeaveEvent` for the strip), `ListRow` (icon,
 title, meta, trailing nodes; `Selected` + `Active` is the strong
 selection, `Selected` alone the quiet one; `Indent` for trees), `Segmented`
 (option IDs from `kit.OptionID(id, i)`), `Badge` with a `Tone`, `Section`,

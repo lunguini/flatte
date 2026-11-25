@@ -220,6 +220,17 @@ type DropEvent struct {
 	Window string
 }
 
+// LeaveEvent reports that the pointer left the node ID, whose Box asked for
+// it (layout.Box.ReportLeave), in a window: what an app holds still while
+// the pointer is there can move again. Terminals never send it; an app gets
+// the pointer's moves there with MouseModeAllMotion.
+type LeaveEvent struct {
+	ID string
+	// Window is the node's window ("" the main window).
+	Window string
+}
+
+func (LeaveEvent) isEvent()     {}
 func (KeyEvent) isEvent()       {}
 func (ResizeEvent) isEvent()    {}
 func (PasteEvent) isEvent()     {}

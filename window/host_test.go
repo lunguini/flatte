@@ -512,6 +512,50 @@ func TestHostPreciseScrolling(t *testing.T) {
 	}
 }
 
+// A box that asks is reported left, once, when the pointer goes elsewhere.
+func TestLeaveEvent(t *testing.T) {
+	report := false
+	s := &testState{}
+	s.root = func(*testState) layout.Node {
+		return layout.Col{Children: []layout.Node{
+			layout.Row{NodeBase: layout.NodeBase{ID: "strip", H: layout.Fixed(1), Box: layout.Box{ReportLeave: report}}, Children: []layout.Node{
+				layout.Label{NodeBase: layout.NodeBase{ID: "tab"}, Text: "tab"}, layout.NewSpacer(),
+			}},
+			layout.Label{NodeBase: layout.NodeBase{ID: "below"}, Text: "below"},
+		}}
+	}
+	h, _ := newTestHost(t, s)
+	h.start(160, 64)
+	h.render()
+	strip, below := h.scene.Rects["strip"], h.scene.Rects["below"]
+	leaves := func() (out []flatte.LeaveEvent) {
+		for _, ev := range s.events {
+			if l, ok := ev.(flatte.LeaveEvent); ok {
+				out = append(out, l)
+			}
+		}
+		return
+	}
+	h.hover(strip.X+1, strip.Y+1)
+	h.hover(below.X+1, below.Y+1)
+	if n := leaves(); len(n) != 0 {
+		t.Fatalf("not asked for: %v", n)
+	}
+	h.hover(strip.X+1, strip.Y+1)
+	report = true // asked for with the pointer already there
+	h.handle(flatte.PasteEvent{})
+	h.render()
+	h.hover(strip.X+strip.W-1, strip.Y+1) // still on the strip
+	if n := leaves(); len(n) != 0 {
+		t.Fatalf("within the strip: %v", n)
+	}
+	h.hover(-1, -1) // out of the window
+	h.hover(below.X+1, below.Y+1)
+	if n := leaves(); len(n) != 1 || n[0].ID != "strip" {
+		t.Fatalf("leaves %v", n)
+	}
+}
+
 // A sideways swipe arrives as wheel-left and wheel-right, in columns.
 func TestScrollAcross(t *testing.T) {
 	s := &testState{root: func(*testState) layout.Node {
