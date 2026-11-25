@@ -317,6 +317,48 @@ func TestHoldTabs(t *testing.T) {
 	}
 }
 
+// A divider's title is between two equal lines, away from the rows around.
+func TestDivider(t *testing.T) {
+	col := layout.Col{Children: []layout.Node{
+		ListRow{ID: "above", Title: "a"}.Layout(), Divider{ID: "d", Title: "Remote"}.Layout(), ListRow{ID: "below", Title: "b"}.Layout(), layout.NewSpacer(),
+	}}
+	s := layout.LayoutScene(col, 300, 200, points)
+	var lines []layout.BoxOp
+	var title layout.TextOp
+	for _, op := range s.Ops {
+		switch o := op.(type) {
+		case layout.BoxOp:
+			if o.Box.Fill == layout.FillPressed {
+				lines = append(lines, o)
+			}
+		case layout.TextOp:
+			if strings.EqualFold(o.Text, "Remote") {
+				title = o
+			}
+		}
+	}
+	d := s.Rects["d"]
+	if len(lines) != 2 || lines[0].Rect.W != lines[1].Rect.W || lines[0].Rect.H != 1 || lines[0].Rect.W <= 0 {
+		t.Fatalf("lines %+v", lines)
+	}
+	if mid := lines[0].Rect.Y; math.Abs(mid-(d.Y+d.H/2)) > 1 || title.Rect.X < lines[0].Rect.X+lines[0].Rect.W {
+		t.Errorf("line at %v in %+v, title %+v", mid, d, title.Rect)
+	}
+	if above := title.Rect.Y - d.Y; above < 4 {
+		t.Errorf("%v above the title", above)
+	}
+	if first := layout.LayoutScene(Divider{ID: "d", Title: "x", First: true}.Layout(), 300, 200, points).Rects["d"]; first.H > 200 {
+		t.Errorf("first %+v", first)
+	}
+	frame := layout.Compose(Divider{Title: "Remote"}.Layout(), 20, 1).Frame
+	if !strings.Contains(frame, "───") || !strings.Contains(strings.ToLower(frame), "remote") {
+		t.Errorf("terminal: %q", frame)
+	}
+	if plain := layout.Compose(Divider{}.Layout(), 10, 1).Frame; strings.Count(plain, "─") != 8 {
+		t.Errorf("untitled: %q", plain)
+	}
+}
+
 // End nodes sit at the strip's far end.
 func TestTabsEnd(t *testing.T) {
 	end := []layout.Node{layout.Label{NodeBase: layout.NodeBase{ID: "where"}, Text: "internal"}}

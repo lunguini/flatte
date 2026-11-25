@@ -970,6 +970,7 @@ flatui/kit package kit
   func OptionID(id string, i int) string
   method Action.Layout() layout.Node
   method Badge.Layout() layout.Node
+  method Divider.Layout() layout.Node
   method EmptyState.Layout() layout.Node
   method ListRow.Layout() layout.Node
   method PaneHeader.Layout() layout.Node
@@ -991,6 +992,12 @@ flatui/kit package kit
   field Badge.Tone Tone [order=1]
   struct Badge fields=2 comparable=true
   type Disclosure int
+  type Divider struct
+  field Divider.ID string [order=0]
+  field Divider.Title string [order=1]
+  field Divider.Tooltip string [order=2]
+  field Divider.First bool [order=3]
+  struct Divider fields=4 comparable=true
   type EmptyState struct
   field EmptyState.ID string [order=0]
   field EmptyState.Icon layout.IconName [order=1]
@@ -1258,6 +1265,8 @@ flatui/layout package layout
   method Row.IsHorizontal() bool
   method Row.Render(rect Rect) string
   method Row.Size()(Size, Size)
+  method Rule.Render(rc Rect) string
+  method Rule.Size()(Size, Size)
   method Scene.HitTest(x float64, y float64)(string, PointRect)
   method Scene.IDsAt(x float64, y float64)[]string
   method Scene.TooltipAt(x float64, y float64) string
@@ -1293,6 +1302,8 @@ flatui/layout package layout
   methodset *Meter.IsOverlay() bool
   methodset *Row.GetID() string
   methodset *Row.IsOverlay() bool
+  methodset *Rule.GetID() string
+  methodset *Rule.IsOverlay() bool
   methodset *Scroll.GetID() string
   methodset *Scroll.IsOverlay() bool
   methodset *ScrollBar.GetID() string
@@ -1322,6 +1333,8 @@ flatui/layout package layout
   methodset Meter.IsOverlay() bool
   methodset Row.GetID() string
   methodset Row.IsOverlay() bool
+  methodset Rule.GetID() string
+  methodset Rule.IsOverlay() bool
   methodset Scroll.GetID() string
   methodset Scroll.IsOverlay() bool
   methodset ScrollBar.GetID() string
@@ -1582,6 +1595,9 @@ flatui/layout package layout
   field Row.Children []Node [order=1]
   field Row.Align Align [order=2]
   struct Row fields=3 comparable=false
+  type Rule struct
+  field Rule.NodeBase NodeBase [order=0]
+  struct Rule fields=1 comparable=false
   type Run struct
   field Run.Text string [order=0]
   field Run.Style TextStyle [order=1]

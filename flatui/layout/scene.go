@@ -653,6 +653,11 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 			op.Text, op.Runs = l.plain(), l.runs()
 		}
 		p.ops = append(p.ops, op)
+	case Rule:
+		p.box(r, clip, l.box())
+		in := p.content(n, r)
+		line := rect[float64]{in.X, in.Y + math.Floor(in.H/2), in.W, min(in.H, 1)}
+		p.box(line, clip, Box{Fill: FillPressed}) // a wash: seen on any surface
 	case Meter:
 		p.box(r, clip, l.box())
 		p.ops = append(p.ops, MeterOp{Rect: p.content(n, r), Clip: PointRect(clip), Value: l.value(), Fill: l.Fill, Track: l.Track})

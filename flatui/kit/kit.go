@@ -110,10 +110,36 @@ type Section struct {
 func (s Section) Layout() layout.Node {
 	kids := make([]layout.Node, 0, len(s.Children)+1)
 	if s.Title != "" {
-		kids = append(kids, layout.Label{NodeBase: layout.NodeBase{PadLeft: 1}, Text: s.Title, Style: layout.TextStyle{Role: layout.TextCaption}, Truncate: true})
+		// At the bar height, low in it: nearer its rows than what is above.
+		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{H: layout.BarSize(), PadLeft: 1}, Align: layout.AlignEnd, Children: []layout.Node{
+			layout.Label{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Text: s.Title, Style: layout.TextStyle{Role: layout.TextCaption}, Truncate: true},
+		}})
 	}
 	kids = append(kids, s.Children...)
 	return layout.Col{NodeBase: layout.NodeBase{ID: s.ID, Gap: 1}, Children: kids}
+}
+
+// Divider separates the groups of a list: the next group's title between
+// two lines (one line without a title), at the bar height so it stands away
+// from the rows around it. First is the one a list begins with: it stands
+// no further off than a row.
+type Divider struct {
+	ID      string
+	Title   string
+	Tooltip string
+	First   bool
+}
+
+func (d Divider) Layout() layout.Node {
+	h := layout.BarSize()
+	if d.First {
+		h = layout.RowSize()
+	}
+	kids := []layout.Node{layout.Rule{}}
+	if d.Title != "" {
+		kids = append(kids, layout.Label{Text: d.Title, Style: layout.TextStyle{Role: layout.TextCaption}, Truncate: true}, layout.Rule{})
+	}
+	return layout.Row{NodeBase: layout.NodeBase{ID: d.ID, H: h, Gap: 1, PadLeft: 1, PadRight: 1, Tooltip: d.Tooltip}, Align: layout.AlignCenter, Children: kids}
 }
 
 // ListRow is one row of a list or tree at the row height: an optional

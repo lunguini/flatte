@@ -419,7 +419,7 @@ func componentsPage(s *State) layout.Node {
 			layout.Button{NodeBase: layout.NodeBase{ID: "refresh"}, Icon: layout.IconRepeat, Label: "↻", Plain: true},
 		}}.Layout()),
 		group("Tabs", kit.Tabs{Tabs: tabs, Active: s.tab}.Layout()),
-		group("List rows", layout.Col{Children: append(rows, inactive)}),
+		group("List rows", layout.Col{Children: append(append(rows, kit.Divider{Title: "Other"}.Layout()), inactive)}),
 		group("Buttons — primary, secondary, quiet, danger, icon", buttons),
 		group("Fields", fields),
 		group("Checkboxes, radios, switches, slider", toggles),

@@ -448,6 +448,7 @@ whole viewport.
 | `layout.Slider{Value: ..., Fill: ...}` | A 0..1 value on a track: `━━━●───` in the terminal, a native slider in a window; fills the width on Auto. `ValueAt(x, width)` maps a press or drag. |
 | `layout.Meter{Value: ..., Fill: ..., Track: ...}` | A horizontal gauge filled to `Value` (0..1): `█`/`░` cells in the terminal, a native bar in a window; fills the width on Auto, one line tall. |
 | `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. `Multiline: true` makes it a text area (usually from `Textarea.Layout`): `Wrap` soft-wraps, `SelStart`/`SelEnd` select bytes (shown in `SelectionStyle`, reverse video when zero), `OffsetX`/`OffsetY` are the widget's scroll, and its Auto height grows. |
+| `layout.Rule{}` | A horizontal line: `─` in the terminal, a hairline in a window. |
 | `layout.ScrollBar{Offset: ..., Visible: ..., Total: ..., Color: ...}` | Where a scrolled window is: `█` thumb on `░` track in the terminal (blank when everything fits), a thin native thumb in a window. One column wide, fills the height. |
 | `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. `Caret: &layout.Caret{X, Y}` puts a text caret at a content cell (code editors, terminal emulators): a blinking bar in a window, the hardware cursor in a terminal; the last visible caret in paint order wins. `Carets: []layout.Caret{...}` adds further carets for multi-cursor editing: a window draws each as the same blinking bar (`layout.CaretOp` in the scene); a terminal has one cursor and ignores them, so style those cells yourself. `OffsetY` (0–1) draws the text that fraction of a line higher in a window, clipped, with one more line of `String` showing below: smooth scrolling (terminals ignore it). |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
@@ -622,7 +623,8 @@ nodes sit at the far end; `kit.HoldTabs` and `Held` keep the next close button
 under the pointer until a `LeaveEvent` for the strip), `ListRow` (icon,
 title, meta, trailing nodes; `Selected` + `Active` is the strong
 selection, `Selected` alone the quiet one; `Indent` for trees), `Segmented`
-(option IDs from `kit.OptionID(id, i)`), `Badge` with a `Tone`, `Section`,
+(option IDs from `kit.OptionID(id, i)`), `Badge` with a `Tone`, `Section`, `Divider` (a titled line between a list's
+groups),
 `Setting` (name, description, control), `EmptyState` and `Popover`.
 A pane is a `PaneHeader` over a body Col with `PanePadding: true`; rows
 and an `Inline` empty state inside it add no inset of their own.
