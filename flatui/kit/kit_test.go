@@ -338,10 +338,10 @@ func TestDivider(t *testing.T) {
 		}
 	}
 	d := s.Rects["d"]
-	if len(lines) != 2 || lines[0].Rect.W != lines[1].Rect.W || lines[0].Rect.H != 1 || lines[0].Rect.W <= 0 {
+	if len(lines) != 1 || lines[0].Rect.H != 1 || lines[0].Rect.W <= 0 {
 		t.Fatalf("lines %+v", lines)
 	}
-	if mid := lines[0].Rect.Y; math.Abs(mid-(d.Y+d.H/2)) > 1 || title.Rect.X < lines[0].Rect.X+lines[0].Rect.W {
+	if mid := lines[0].Rect.Y; math.Abs(mid-(d.Y+d.H/2)) > 1 || title.Rect.X >= lines[0].Rect.X || title.Rect.X-d.X > 10 || lines[0].Rect.X+lines[0].Rect.W < d.X+d.W-10 {
 		t.Errorf("line at %v in %+v, title %+v", mid, d, title.Rect)
 	}
 	if above := title.Rect.Y - d.Y; above < 4 {

@@ -127,8 +127,8 @@ func (s Section) Layout() layout.Node {
 	return layout.Col{NodeBase: layout.NodeBase{ID: s.ID, Gap: 1}, Children: kids}
 }
 
-// Divider separates the groups of a list: the next group's title between
-// two lines (one line without a title), at the bar height so it stands away
+// Divider separates the groups of a list: the next group's title and a
+// line after it (the line alone without a title), at the bar height so it stands away
 // from the rows around it. First is the one a list begins with: it stands
 // no further off than a row.
 type Divider struct {
@@ -143,10 +143,11 @@ func (d Divider) Layout() layout.Node {
 	if d.First {
 		h = layout.RowSize()
 	}
-	kids := []layout.Node{layout.Rule{}}
+	var kids []layout.Node
 	if d.Title != "" {
-		kids = append(kids, layout.Label{Text: d.Title, Style: layout.TextStyle{Role: layout.TextCaption}, Truncate: true}, layout.Rule{})
+		kids = append(kids, layout.Label{Text: d.Title, Style: layout.TextStyle{Role: layout.TextCaption}, Truncate: true})
 	}
+	kids = append(kids, layout.Rule{})
 	return layout.Row{NodeBase: layout.NodeBase{ID: d.ID, H: h, Gap: 1, PadLeft: 1, PadRight: 1, Tooltip: d.Tooltip}, Align: layout.AlignCenter, Children: kids}
 }
 
