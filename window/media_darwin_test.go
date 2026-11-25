@@ -13,7 +13,7 @@ var mediaIcons = []layout.IconName{
 	layout.IconPlay, layout.IconPause, layout.IconPrevious, layout.IconNext, layout.IconShuffle,
 	layout.IconRepeat, layout.IconRepeatOne, layout.IconSpeaker, layout.IconHome, layout.IconHeart, layout.IconHeartOutline,
 	layout.IconClock, layout.IconEqualizer, layout.IconLibrary,
-	layout.IconTerminal, layout.IconPanelBottom, layout.IconSidebarLeft, layout.IconSidebarRight, layout.IconSparkle,
+	layout.IconTerminal, layout.IconPanelBottom, layout.IconSidebarLeft, layout.IconSidebarRight, layout.IconSparkle, layout.IconBranch,
 }
 
 func TestMediaIconsStayInTheirBox(t *testing.T) {

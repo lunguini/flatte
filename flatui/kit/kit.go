@@ -627,6 +627,8 @@ func glyph(name layout.IconName) string {
 		return "i"
 	case layout.IconGear:
 		return "⚙"
+	case layout.IconBranch:
+		return "⎇"
 	case layout.IconTerminal:
 		return ">_"
 	case layout.IconChevronRight, layout.IconDisclosureClosed:

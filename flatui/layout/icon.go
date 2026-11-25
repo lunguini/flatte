@@ -76,6 +76,8 @@ const (
 	IconSidebarRight
 	// A four-point sparkle (✦): an assistant or agent.
 	IconSparkle
+	// A line of commits with one branching off (⎇): a repository, a branch.
+	IconBranch
 )
 
 // Icon is a small symbol with a terminal spelling: the terminal shows Text

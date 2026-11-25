@@ -1132,6 +1132,7 @@ flatui/layout package layout
   const IconArrowRight IconName = 19
   const IconArrowUp IconName = 16
   const IconBlank IconName = 6
+  const IconBranch IconName = 45
   const IconCheck IconName = 7
   const IconChevronDown IconName = 22
   const IconChevronLeft IconName = 20

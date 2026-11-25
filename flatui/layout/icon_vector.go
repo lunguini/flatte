@@ -233,6 +233,11 @@ func buildIconGeometry(name IconName) (iconGeometry, bool) {
 			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
 			line(at(0.14, -0.36), at(0.14, 0.36)),
 		}}, true
+	case IconBranch:
+		return iconGeometry{
+			strokes: []iconStroke{line(at(-0.24, -0.2), at(-0.24, 0.2)), line(at(0.26, -0.16), at(0.26, -0.02), at(0.14, 0.1), at(-0.1, 0.1), at(-0.24, 0.2))},
+			circles: []iconCircle{ring(at(-0.24, -0.32), 0.15), ring(at(-0.24, 0.32), 0.15), ring(at(0.26, -0.28), 0.15)},
+		}, true
 	case IconSparkle:
 		return iconGeometry{strokes: []iconStroke{line(at(0, -0.45), at(0.1, -0.1), at(0.45, 0), at(0.1, 0.1), at(0, 0.45), at(-0.1, 0.1), at(-0.45, 0), at(-0.1, -0.1), at(0, -0.45))}}, true
 	}

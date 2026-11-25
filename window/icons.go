@@ -195,6 +195,11 @@ func symbol(name layout.IconName, cx, cy, s float64) (cellShape, bool) {
 			line(at(-0.45, -0.36), at(0.45, -0.36), at(0.45, 0.36), at(-0.45, 0.36), at(-0.45, -0.36)),
 			line(at(0.14, -0.36), at(0.14, 0.36)),
 		}}, true
+	case layout.IconBranch:
+		return cellShape{
+			polys:   []poly{line(at(-0.24, -0.2), at(-0.24, 0.2)), line(at(0.26, -0.16), at(0.26, -0.02), at(0.14, 0.1), at(-0.1, 0.1), at(-0.24, 0.2))},
+			circles: []circle{ring(at(-0.24, -0.32), 0.15*s), ring(at(-0.24, 0.32), 0.15*s), ring(at(0.26, -0.28), 0.15*s)},
+		}, true
 	case layout.IconSparkle:
 		return cellShape{polys: []poly{line(at(0, -0.45), at(0.1, -0.1), at(0.45, 0), at(0.1, 0.1), at(0, 0.45), at(-0.1, 0.1), at(-0.45, 0), at(-0.1, -0.1), at(0, -0.45))}}, true
 	}
