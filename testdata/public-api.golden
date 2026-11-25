@@ -979,6 +979,7 @@ flatui package flatui
   var TabGlyphsPowerline TabGlyphs
   var TabGlyphsSafe TabGlyphs
 flatui/kit package kit
+  const DetachedTabGap untyped int = 4
   const DisclosureClosed Disclosure = 2
   const DisclosureLeaf Disclosure = 1
   const DisclosureNone Disclosure = 0
@@ -1005,6 +1006,7 @@ flatui/kit package kit
   method Segmented.Layout() layout.Node
   method Setting.Layout() layout.Node
   method Tabs.ContentID() string
+  method Tabs.Gap() int
   method Tabs.Layout() layout.Node
   method Tabs.ViewID() string
   type Action struct
@@ -1100,8 +1102,9 @@ flatui/kit package kit
   field Tabs.Offset int [order=7]
   field Tabs.Held int [order=8]
   field Tabs.Surface layout.Fill [order=9]
-  field Tabs.Unfocused bool [order=10]
-  struct Tabs fields=11 comparable=false
+  field Tabs.Ground layout.Fill [order=10]
+  field Tabs.Unfocused bool [order=11]
+  struct Tabs fields=12 comparable=false
   type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2

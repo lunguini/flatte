@@ -1156,7 +1156,8 @@ the outer gap while option content keeps its item insets.
 band of the theme's accent along one side in a window — an active tab's
 top, a current row's marker; `Box.EdgeFill` draws it in another role
 instead (`FillBorder` for the active tab of a pane without focus;
-`kit.Tabs.Unfocused` does this). Terminals draw nothing for it, so mark the
+`kit.Tabs.Unfocused` does this). `kit.Tabs.Ground` gives each tab its own
+fill on an unfilled strip, a plain gap between them (`Tabs.Gap`). Terminals draw nothing for it, so mark the
 node another way there as well (bold, a glyph). `Box.Flat` squares the two
 corners along one side of a `Round` box (`Flat: layout.SideBottom` rounds
 only the top, for a tab or a tab bar standing on the panel below); its

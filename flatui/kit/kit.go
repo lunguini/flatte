@@ -303,18 +303,32 @@ type Tabs struct {
 	// Surface is the active tab's fill when the panel the strip stands on
 	// is not the content surface.
 	Surface layout.Fill
+	// Ground gives every tab, the active one too (unless Surface says
+	// otherwise), a fill of its own on an unfilled strip, with a plain gap
+	// (DetachedTabGap) between them instead of a hairline.
+	Ground layout.Fill
 	// Unfocused marks the active tab's edge in the neutral FillBorder
 	// instead of the accent: the strip's pane does not have focus, so
 	// another pane's tab is the accented one.
 	Unfocused bool
 }
 
-// Tab geometry: the hairline between tabs in points (one column in a terminal),
-// and the narrowest tab of a scrolling Fill strip, in columns.
+// Tab geometry: the hairline between tabs and the gap between those with a
+// Ground, in points (one column in a terminal), and the narrowest tab of a
+// scrolling Fill strip, in columns.
 const (
-	TabGap     = 1
-	MinTabCols = 18
+	TabGap         = 1
+	DetachedTabGap = 4
+	MinTabCols     = 18
 )
+
+// Gap is the room between the strip's tabs, in points.
+func (t Tabs) Gap() int {
+	if t.Ground != layout.FillNone {
+		return DetachedTabGap
+	}
+	return TabGap
+}
 
 // ViewID is the ID of a scrolling strip's window, ContentID of everything
 // in it.
@@ -361,7 +375,11 @@ func (t Tabs) Layout() layout.Node {
 	tabs := make([]layout.Node, 0, 2*len(t.Tabs))
 	for i, tab := range t.Tabs {
 		if i > 0 {
-			tabs = append(tabs, layout.Col{NodeBase: layout.NodeBase{W: layout.Points(TabGap), H: layout.Grow(1), NoPadding: true, Box: layout.Box{Fill: layout.FillSeparator}}})
+			line := layout.Box{Fill: layout.FillSeparator}
+			if t.Ground != layout.FillNone {
+				line = layout.Box{}
+			}
+			tabs = append(tabs, layout.Col{NodeBase: layout.NodeBase{W: layout.Points(t.Gap()), H: layout.Grow(1), NoPadding: true, Box: line}})
 		}
 		tabs = append(tabs, t.tab(tab, i == t.Active))
 	}
@@ -396,15 +414,23 @@ func (t Tabs) Layout() layout.Node {
 	if len(t.End) > 0 {
 		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1), PadLeft: 1, PadRight: 1, Gap: 1}, Align: layout.AlignCenter, Children: t.End})
 	}
-	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom, ReportLeave: t.Held > 0}}, Align: layout.AlignStretch, Children: kids}
+	box := layout.Box{Fill: layout.FillChrome, Round: true, Flat: layout.SideBottom}
+	if t.Ground != layout.FillNone {
+		box = layout.Box{}
+	}
+	box.ReportLeave = t.Held > 0
+	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: box}, Align: layout.AlignStretch, Children: kids}
 }
 
 func (t Tabs) tab(tab Tab, active bool) layout.Node {
 	style := layout.TextStyle{Color: layout.ColorSecondary}
-	box := layout.Box{Interactive: !active, Round: true, Flat: layout.SideBottom}
+	box := layout.Box{Fill: t.Ground, Interactive: !active, Round: true, Flat: layout.SideBottom}
 	if active {
 		style = layout.TextStyle{Role: layout.TextStrong}
-		box.Fill, box.Edge = layout.FillContent, layout.SideTop
+		box.Edge = layout.SideTop
+		if t.Ground == layout.FillNone {
+			box.Fill = layout.FillContent
+		}
 		if t.Surface != layout.FillNone {
 			box.Fill = t.Surface
 		}

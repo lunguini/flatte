@@ -536,3 +536,20 @@ func TestUnfocusedTabsMarkTheActiveTabQuietly(t *testing.T) {
 		t.Errorf("unfocused: edge %v fill %v, want FillBorder", b.Edge, b.EdgeFill)
 	}
 }
+
+// Tabs with a Ground stand apart: each in that fill, the active one too,
+// with a plain gap between and nothing behind them.
+func TestTabsOnTheirOwnGround(t *testing.T) {
+	strip := Tabs{ID: "s", Active: 1, Ground: layout.FillShade, Tabs: []Tab{{ID: "a", Label: "a"}, {ID: "b", Label: "b"}}}
+	row := strip.Layout().(layout.Row)
+	if row.Box.Fill != layout.FillNone {
+		t.Errorf("strip fill %v", row.Box.Fill)
+	}
+	a, gap, b := row.Children[0].(layout.Row), row.Children[1].(layout.Col), row.Children[2].(layout.Row)
+	if a.Box.Fill != layout.FillShade || b.Box.Fill != layout.FillShade || b.Box.Edge != layout.SideTop || a.Box.Edge != layout.SideNone {
+		t.Errorf("tabs %+v, %+v", a.Box, b.Box)
+	}
+	if gap.Box.Fill != layout.FillNone || gap.W != layout.Points(DetachedTabGap) || strip.Gap() != DetachedTabGap || (Tabs{}).Gap() != TabGap {
+		t.Errorf("gap %+v", gap)
+	}
+}
