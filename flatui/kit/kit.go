@@ -307,6 +307,9 @@ type Tabs struct {
 	// otherwise), a fill of its own on an unfilled strip, with a plain gap
 	// (DetachedTabGap) between them instead of a hairline.
 	Ground layout.Fill
+	// Plain keeps the active tab's name at the weight of the others': its
+	// edge and color mark it. (A terminal draws no edge; leave it bold there.)
+	Plain bool
 	// Unfocused marks the active tab's edge in the neutral FillBorder
 	// instead of the accent: the strip's pane does not have focus, so
 	// another pane's tab is the accented one.
@@ -427,6 +430,9 @@ func (t Tabs) tab(tab Tab, active bool) layout.Node {
 	box := layout.Box{Fill: t.Ground, Interactive: !active, Round: true, Flat: layout.SideBottom}
 	if active {
 		style = layout.TextStyle{Role: layout.TextStrong}
+		if t.Plain {
+			style = layout.TextStyle{Color: layout.ColorPrimary}
+		}
 		box.Edge = layout.SideTop
 		if t.Ground == layout.FillNone {
 			box.Fill = layout.FillContent

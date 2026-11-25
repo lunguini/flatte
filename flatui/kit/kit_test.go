@@ -553,3 +553,13 @@ func TestTabsOnTheirOwnGround(t *testing.T) {
 		t.Errorf("gap %+v", gap)
 	}
 }
+
+func TestPlainTabsAreNotBold(t *testing.T) {
+	for _, plain := range []bool{false, true} {
+		row := Tabs{ID: "s", Plain: plain, Tabs: []Tab{{ID: "a", Label: "a"}}}.Layout().(layout.Row)
+		label := row.Children[0].(layout.Row).Children[0].(layout.Label)
+		if strong := label.Style.Role == layout.TextStrong; strong == plain {
+			t.Errorf("plain %v: style %+v", plain, label.Style)
+		}
+	}
+}

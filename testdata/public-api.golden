@@ -1103,8 +1103,9 @@ flatui/kit package kit
   field Tabs.Held int [order=8]
   field Tabs.Surface layout.Fill [order=9]
   field Tabs.Ground layout.Fill [order=10]
-  field Tabs.Unfocused bool [order=11]
-  struct Tabs fields=12 comparable=false
+  field Tabs.Plain bool [order=11]
+  field Tabs.Unfocused bool [order=12]
+  struct Tabs fields=13 comparable=false
   type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2
