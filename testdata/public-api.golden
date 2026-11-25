@@ -531,6 +531,13 @@ flatest package flatest
   field Step.Update string [order=1]
   struct Step fields=2 comparable=true
 flatui package flatui
+  const EditCopy untyped string = "flatui.edit.copy"
+  const EditCut untyped string = "flatui.edit.cut"
+  const EditDelete untyped string = "flatui.edit.delete"
+  const EditPaste untyped string = "flatui.edit.paste"
+  const EditRedo untyped string = "flatui.edit.redo"
+  const EditSelectAll untyped string = "flatui.edit.selectAll"
+  const EditUndo untyped string = "flatui.edit.undo"
   const KeyMapFull KeyMapMode = 1
   const KeyMapShort KeyMapMode = 0
   func Card(lines[]string, maxWidth int) string
@@ -540,6 +547,7 @@ flatui package flatui
   func CardOrigin()(x int, y int)
   func CardWithStyle(lines[]string, maxWidth int, style CardStyle) string
   func ContentWidth(totalWidth int) int
+  func EditCommand(key flatte.KeyEvent) string
   func FrameWidth(maxWidth int, lines[]string) int
   func NewProgress(width int) Progress
   func NewSpinner(frames[]string) Spinner
@@ -606,13 +614,18 @@ flatui package flatui
   method *Table.SetHeight(h int)
   method *Table.SetRows(rows[][]string)
   method *TextField.Backspace()
+  method *TextField.CanRedo() bool
+  method *TextField.CanUndo() bool
   method *TextField.ClearSelection()
   method *TextField.Delete()
   method *TextField.DeleteToEnd()
   method *TextField.DeleteToStart()
   method *TextField.DeleteWordLeft()
   method *TextField.DeleteWordRight()
+  method *TextField.Do(cmd string, clip Clipboard) bool
   method *TextField.Edit(key flatte.KeyEvent) bool
+  method *TextField.EditMenu()[]flatte.MenuItem
+  method *TextField.Handle(id string, ev flatte.Event, clip Clipboard) bool
   method *TextField.HandleMouse(id string, e flatte.MouseEvent) bool
   method *TextField.Insert(r rune)
   method *TextField.InsertText(s string)
@@ -631,11 +644,17 @@ flatui package flatui
   method *TextField.SelectAll()
   method *TextField.SetCursor(cursor int)
   method *Textarea.Backspace()
+  method *Textarea.CanRedo() bool
+  method *Textarea.CanUndo() bool
   method *Textarea.ClearSelection()
   method *Textarea.Delete()
   method *Textarea.DeleteWordLeft()
   method *Textarea.DeleteWordRight()
+  method *Textarea.Do(cmd string, clip Clipboard) bool
   method *Textarea.Edit(key flatte.KeyEvent) bool
+  method *Textarea.EditMenu()[]flatte.MenuItem
+  method *Textarea.Handle(id string, ev flatte.Event, clip Clipboard) bool
+  method *Textarea.HandleMouse(id string, e flatte.MouseEvent) bool
   method *Textarea.Insert(r rune)
   method *Textarea.InsertNewline()
   method *Textarea.InsertText(s string)
@@ -777,6 +796,9 @@ flatui package flatui
   field CardStyle.Container lipgloss.Style [order=0]
   field CardStyle.BorderForeground color.Color [order=1]
   struct CardStyle fields=2 comparable=false
+  type Clipboard interface
+  interface Clipboard method ReadClipboard()
+  interface Clipboard method SetClipboard(text string)
   type Column struct
   field Column.Title string [order=0]
   field Column.Width int [order=1]
@@ -882,7 +904,8 @@ flatui package flatui
   field TextField.<unexported> int [order=5]
   field TextField.<unexported> int [order=6]
   field TextField.<unexported> int [order=7]
-  struct TextField fields=8 comparable=true
+  field TextField.<unexported> editHistory [order=8]
+  struct TextField fields=9 comparable=true
   type TextPosition struct
   field TextPosition.Row int [order=0]
   field TextPosition.Col int [order=1]
@@ -905,7 +928,9 @@ flatui package flatui
   field Textarea.<unexported> bool [order=10]
   field Textarea.<unexported> int [order=11]
   field Textarea.<unexported> int [order=12]
-  struct Textarea fields=13 comparable=false
+  field Textarea.<unexported> int [order=13]
+  field Textarea.<unexported> editHistory [order=14]
+  struct Textarea fields=15 comparable=false
   type Timer struct
   field Timer.<unexported> time.Duration [order=0]
   field Timer.<unexported> time.Duration [order=1]

@@ -26,6 +26,7 @@ type TextField struct {
 	mouseSelecting       bool
 	mouseMode            int
 	mouseStart, mouseEnd int
+	history              editHistory
 }
 
 func (f *TextField) Insert(r rune) {
@@ -195,8 +196,8 @@ func (f *TextField) DeleteToEnd() {
 // end), Home/End (a window's ⌘←/⌘→), ⌫ and ⌦ (⌥ or Ctrl a word, ⌘ to the
 // start or end), ⌘A, and the terminal's Ctrl+A/E/U/K/W and Alt+B/F/D.
 // Everything else is
-// the app's — Enter, Esc, Tab, ↑/↓, and copy, cut, and paste, which need
-// the clipboard (SelectedText gives what to copy).
+// the app's — Enter, Esc, Tab, ↑/↓, and copy, cut, paste, and undo, which
+// Handle adds.
 func (f *TextField) Edit(key flatte.KeyEvent) bool {
 	shift := key.Mod.Contains(flatte.ModShift)
 	super := key.Mod.Contains(flatte.ModSuper)

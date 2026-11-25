@@ -44,11 +44,15 @@ type Textarea struct {
 	selectionActive bool
 	anchorRow       int
 	anchorCol       int
+
+	mouseClicks int // of the press being dragged; 0: none
+	history     editHistory
 }
 
 // SetValue replaces the content (split on newlines) and resets the cursor.
 func (t *Textarea) SetValue(s string) {
 	t.lines = strings.Split(s, "\n")
+	t.history = editHistory{}
 	t.row, t.col, t.goalCol, t.offset, t.xOffset, t.wrapOffset = 0, 0, 0, 0, 0, 0
 	t.ClearSelection()
 	t.ensure()
