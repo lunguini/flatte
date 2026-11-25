@@ -170,6 +170,9 @@ func makeWindow(cls objc.Class, m layout.Metrics, title string, cols, lines, min
 		cgRect(0, 0, width, height), mask, uint(nsBackingStoreBuffered), false)
 	win.Send(sel("setReleasedWhenClosed:"), false)
 	win.Send(sel("setTitle:"), nsString(title))
+	// The painter's colors are device RGB: without this they would take the
+	// profile of the screen the window is on, and change as it moves.
+	win.Send(sel("setColorSpace:"), class("NSColorSpace").Send(sel("sRGBColorSpace")))
 	if ch.hideTitle {
 		win.Send(sel("setTitlebarAppearsTransparent:"), true)
 		win.Send(sel("setTitleVisibility:"), int(nsWindowTitleHidden))
