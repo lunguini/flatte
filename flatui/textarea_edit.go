@@ -127,7 +127,7 @@ func (t *Textarea) deleteToLineStart() {
 		return
 	}
 	t.ensure()
-	t.lines[t.row] = t.lines[t.row][t.col:]
+	t.setLine(t.row, t.lines[t.row][t.col:])
 	t.col = 0
 	t.syncGoal()
 	t.keepVisible()
@@ -139,7 +139,7 @@ func (t *Textarea) deleteToLineEnd() {
 		return
 	}
 	t.ensure()
-	t.lines[t.row] = t.lines[t.row][:t.col]
+	t.setLine(t.row, t.lines[t.row][:t.col])
 	t.syncGoal()
 	t.keepVisible()
 }

@@ -97,7 +97,7 @@ func (t *Tree) Toggle(id string) {
 			break
 		}
 	}
-	t.clamp(shown)
+	t.clampRows(len(rows), shown)
 }
 
 // treeContains reports whether the node with id has a descendant with
@@ -201,8 +201,18 @@ func (t Tree) Rows(id string, row func(row TreeRow, selected bool) layout.Node) 
 // window's first len(Pinned()) rows, which they hide. One row of the window
 // is always left to the tree's own rows; none before a height is set.
 func (t Tree) Pinned() []TreeRow {
-	rows := t.VisibleRows()
-	if !t.sticky || t.height <= 0 || len(rows) == 0 {
+	if !t.canPin() {
+		return nil
+	}
+	return t.pinned(t.VisibleRows())
+}
+
+func (t Tree) canPin() bool {
+	return t.sticky && t.height > 1 && t.offset > 0
+}
+
+func (t Tree) pinned(rows []TreeRow) []TreeRow {
+	if len(rows) == 0 {
 		return nil
 	}
 	off := min(max(t.offset, 0), max(len(rows)-t.height, 0))
@@ -247,8 +257,11 @@ func (t Tree) Pinned() []TreeRow {
 // window returns the visible rows and the cursor's index among them (-1
 // when it is outside the window).
 func (t Tree) window() ([]TreeRow, int) {
+	if t.height <= 0 {
+		return nil, -1
+	}
 	rows := t.VisibleRows()
-	if t.height <= 0 || len(rows) == 0 {
+	if len(rows) == 0 {
 		return nil, -1
 	}
 	offset := min(max(t.offset, 0), max(len(rows)-t.height, 0))
@@ -283,8 +296,11 @@ func (t Tree) cursorShown() bool {
 // clamp keeps the cursor and the window in range, and with reveal the
 // window on the cursor.
 func (t *Tree) clamp(reveal bool) {
-	rows := t.VisibleRows()
-	t.cursor = min(max(t.cursor, 0), max(len(rows)-1, 0))
+	t.clampRows(len(t.VisibleRows()), reveal)
+}
+
+func (t *Tree) clampRows(n int, reveal bool) {
+	t.cursor = min(max(t.cursor, 0), max(n-1, 0))
 	if reveal && t.height > 0 {
 		if t.cursor < t.offset {
 			t.offset = t.cursor
@@ -292,7 +308,7 @@ func (t *Tree) clamp(reveal bool) {
 			t.offset = t.cursor - t.height + 1
 		}
 	}
-	t.offset = min(max(t.offset, 0), max(len(rows)-t.height, 0))
+	t.offset = min(max(t.offset, 0), max(n-t.height, 0))
 }
 
 // moved keeps the cursor in view after the cursor moved, out from under
@@ -300,8 +316,9 @@ func (t *Tree) clamp(reveal bool) {
 // cursor's row under the pins and past it, and keeping a visible cursor
 // visible (a new height every frame) must not pull the window back.
 func (t *Tree) moved() {
-	t.clamp(true)
-	for t.offset > 0 && t.cursor < t.offset+len(t.Pinned()) {
+	rows := t.VisibleRows()
+	t.clampRows(len(rows), true)
+	for t.canPin() && t.cursor < t.offset+len(t.pinned(rows)) {
 		t.offset--
 	}
 }

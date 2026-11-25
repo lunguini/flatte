@@ -530,17 +530,26 @@ func (h *browserHost) writeClipboard(text string) {
 	if clipboard.IsUndefined() || clipboard.IsNull() || clipboard.Get("writeText").Type() != js.TypeFunction {
 		return
 	}
-	h.ignorePromise(clipboard.Call("writeText", text))
+	h.handlePromise(clipboard.Call("writeText", text), nil)
 }
 
 func (h *browserHost) readClipboard() {
-	defer func() { _ = recover() }() // Clipboard API permission and policy errors are optional.
+	defer func() {
+		if recover() != nil {
+			h.emit(ClipboardEvent{})
+		}
+	}()
 	clipboard := h.browserClipboard()
 	if clipboard.IsUndefined() || clipboard.IsNull() || clipboard.Get("readText").Type() != js.TypeFunction {
+		h.emit(ClipboardEvent{})
 		return
 	}
 	h.handlePromise(clipboard.Call("readText"), func(value js.Value) {
-		h.emit(ClipboardEvent{Text: value.String()})
+		var text string
+		if value.Type() == js.TypeString {
+			text = value.String()
+		}
+		h.emit(ClipboardEvent{Text: text})
 	})
 }
 
@@ -564,13 +573,14 @@ func (h *browserHost) notify(n Notification) {
 	constructor.New(text, options)
 }
 
-func (h *browserHost) ignorePromise(promise js.Value) {
-	h.handlePromise(promise, nil)
-}
-
-func (h *browserHost) handlePromise(promise js.Value, fulfilled func(js.Value)) {
-	defer func() { _ = recover() }()
+func (h *browserHost) handlePromise(promise js.Value, done func(js.Value)) {
+	finish := func(value js.Value) {
+		if done != nil && !h.closed {
+			done(value)
+		}
+	}
 	if promise.IsUndefined() || promise.IsNull() || promise.Get("then").Type() != js.TypeFunction {
+		finish(js.Undefined())
 		return
 	}
 	var ok, fail js.Func
@@ -579,14 +589,17 @@ func (h *browserHost) handlePromise(promise js.Value, fulfilled func(js.Value)) 
 		fail.Release()
 	}
 	ok = js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if fulfilled != nil && len(args) > 0 && !h.closed {
-			fulfilled(args[0])
+		defer release()
+		if len(args) > 0 {
+			finish(args[0])
+		} else {
+			finish(js.Undefined())
 		}
-		release()
 		return nil
 	})
 	fail = js.FuncOf(func(js.Value, []js.Value) any {
-		release()
+		defer release()
+		finish(js.Undefined())
 		return nil
 	})
 	promise.Call("then", ok, fail)

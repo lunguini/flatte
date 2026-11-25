@@ -112,6 +112,36 @@ func TestTreeNotStickyByDefault(t *testing.T) {
 	}
 }
 
+func TestTreePinnedSkipsUnneededRows(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		sticky bool
+		height int
+		offset int
+	}{
+		{name: "disabled", height: 3, offset: 1},
+		{name: "no height", sticky: true, offset: 1},
+		{name: "one row", sticky: true, height: 1, offset: 1},
+		{name: "at top", sticky: true, height: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tr := flatTree(30)
+			tr.Toggle("0")
+			tr.SetSticky(tc.sticky)
+			tr.SetHeight(tc.height)
+			tr.Scroll(tc.offset)
+			allocs := testing.AllocsPerRun(10, func() {
+				if pins := tr.Pinned(); pins != nil {
+					t.Fatalf("pinned %v, want none", pins)
+				}
+			})
+			if allocs != 0 {
+				t.Errorf("Pinned allocated %g times, want 0", allocs)
+			}
+		})
+	}
+}
+
 // The wheel scrolls past the cursor even when it reaches the pins: a
 // height set every frame (as a window lays out) must not pull the window
 // back to keep the cursor below them.

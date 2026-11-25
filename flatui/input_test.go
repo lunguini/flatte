@@ -1,6 +1,7 @@
 package flatui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lunguini/flatte"
@@ -74,6 +75,40 @@ func TestInputClipboard(t *testing.T) {
 	}
 }
 
+func TestInputCtrlCCopiesSelection(t *testing.T) {
+	for name, mk := range inputs() {
+		t.Run(name, func(t *testing.T) {
+			in, clip := mk(), &fakeClipboard{}
+			in.InsertText("copy this")
+			in.SelectAll()
+			for _, mod := range []flatte.Mod{0, flatte.ModCtrl} {
+				clip.text = ""
+				if !in.Handle("x", k(flatte.KeyCtrlC, mod), clip) || clip.text != "copy this" || in.SelectedText() != "copy this" {
+					t.Errorf("Ctrl+C with modifiers %v copied %q, selection %q", mod, clip.text, in.SelectedText())
+				}
+			}
+			if in.Handle("x", k(flatte.KeyCtrlC, flatte.ModCtrl|flatte.ModShift), clip) {
+				t.Error("took Ctrl+Shift+C")
+			}
+		})
+	}
+}
+
+func TestEmptyPastePreservesInputSelection(t *testing.T) {
+	for name, mk := range inputs() {
+		t.Run(name, func(t *testing.T) {
+			for _, ev := range []flatte.Event{flatte.ClipboardEvent{}, flatte.PasteEvent{}} {
+				in := mk()
+				in.InsertText("keep")
+				in.SelectAll()
+				if !in.Handle("x", ev, &fakeClipboard{}) || in.SelectedText() != "keep" || in.CanUndo() {
+					t.Fatalf("%T left selection %q, can undo %v", ev, in.SelectedText(), in.CanUndo())
+				}
+			}
+		})
+	}
+}
+
 func TestInputUndo(t *testing.T) {
 	for name, mk := range inputs() {
 		t.Run(name, func(t *testing.T) {
@@ -116,6 +151,89 @@ func TestInputUndo(t *testing.T) {
 			in.Do(EditDelete, clip)
 			want("")
 		})
+	}
+}
+
+func TestInputUndoAfterProgrammaticEdit(t *testing.T) {
+	for name, mk := range inputs() {
+		t.Run(name, func(t *testing.T) {
+			in := mk()
+			typeIn(in, nil, "one two")
+			in.Do(EditUndo, nil)
+			in.InsertText(" new")
+			if in.CanUndo() || in.CanRedo() {
+				t.Error("programmatic edit left old history available")
+			}
+			in.Do(EditUndo, nil)
+			if got := in.state().value; got != "one new" {
+				t.Errorf("undo left %q, want one new", got)
+			}
+			in.Do(EditRedo, nil)
+			if got := in.state().value; got != "one new" {
+				t.Fatalf("redo left %q, want one new", got)
+			}
+			typeIn(in, nil, "!")
+			in.Do(EditUndo, nil)
+			if got := in.state().value; got != "one new" {
+				t.Fatalf("undo of a new edit left %q, want one new", got)
+			}
+		})
+	}
+}
+
+func TestTextFieldUndoAfterValueAssignment(t *testing.T) {
+	var f TextField
+	typeIn(&f, nil, "project A")
+	f.Do(EditUndo, nil)
+	f.Value = "project B"
+	f.MoveEnd()
+	if f.CanUndo() || f.CanRedo() {
+		t.Error("value assignment left old history available")
+	}
+	typeIn(&f, nil, "!")
+	f.Do(EditUndo, nil)
+	f.Do(EditUndo, nil)
+	if f.Value != "project B" {
+		t.Fatalf("undo left %q, want project B", f.Value)
+	}
+	for _, tc := range []struct {
+		name string
+		ev   flatte.Event
+	}{
+		{"arrow", k(flatte.KeyLeft, 0)},
+		{"mouse", flatte.MouseEvent{Target: "x", Button: flatte.MouseLeft, Action: flatte.MousePress, HasCaret: true, Caret: 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var f TextField
+			typeIn(&f, nil, "project A")
+			f.Value = "project B"
+			f.Handle("x", tc.ev, nil)
+			f.Value = "project A"
+			f.Do(EditUndo, nil)
+			if f.Value != "project A" {
+				t.Fatalf("undo after restoring a value left %q, want project A", f.Value)
+			}
+		})
+	}
+}
+
+func TestTextareaNavigationAllocations(t *testing.T) {
+	var a Textarea
+	a.SetValue(strings.Repeat("abcdefghijklmno\n", 4096))
+	if got := testing.AllocsPerRun(10, func() {
+		a.Handle("x", k(flatte.KeyRight, 0), nil)
+		a.Handle("x", k(flatte.KeyLeft, 0), nil)
+	}); got != 0 {
+		t.Errorf("arrow movement allocated %.0f times", got)
+	}
+	press := flatte.MouseEvent{Target: "x", Button: flatte.MouseLeft, Action: flatte.MousePress, HasCaret: true, Caret: 1}
+	a.Handle("x", press, nil)
+	motion := press
+	motion.Action, motion.Caret = flatte.MouseMotion, 3
+	if got := testing.AllocsPerRun(10, func() {
+		a.Handle("x", motion, nil)
+	}); got != 0 {
+		t.Errorf("mouse motion allocated %.0f times", got)
 	}
 }
 

@@ -141,7 +141,7 @@ func (t *Textarea) Insert(r rune) {
 	t.deleteSelection()
 	s := string(r)
 	line := t.lines[t.row]
-	t.lines[t.row] = line[:t.col] + s + line[t.col:]
+	t.setLine(t.row, line[:t.col]+s+line[t.col:])
 	t.col += len(s)
 	t.syncGoal()
 	t.keepVisible()
@@ -158,7 +158,7 @@ func (t *Textarea) InsertText(s string) {
 	line := t.lines[t.row]
 	left, right := line[:t.col], line[t.col:]
 	if len(parts) == 1 {
-		t.lines[t.row] = left + s + right
+		t.setLine(t.row, left+s+right)
 		t.col += len(s)
 	} else {
 		last := len(parts) - 1
@@ -168,7 +168,7 @@ func (t *Textarea) InsertText(s string) {
 		next = append(next, parts[1:last]...)
 		next = append(next, parts[last]+right)
 		next = append(next, t.lines[t.row+1:]...)
-		t.lines = next
+		t.setLines(next)
 		t.row += last
 		t.col = len(parts[last])
 	}
@@ -235,7 +235,7 @@ func (t *Textarea) InsertNewline() {
 	next = append(next, t.lines[:t.row]...)
 	next = append(next, left, right)
 	next = append(next, t.lines[t.row+1:]...)
-	t.lines = next
+	t.setLines(next)
 	t.row++
 	t.col = 0
 	t.syncGoal()
@@ -250,12 +250,12 @@ func (t *Textarea) Backspace() {
 	if t.col > 0 {
 		line := t.lines[t.row]
 		start := prevGraphemeBoundary(line, t.col)
-		t.lines[t.row] = line[:start] + line[t.col:]
+		t.setLine(t.row, line[:start]+line[t.col:])
 		t.col = start
 	} else if t.row > 0 {
 		prev := t.lines[t.row-1]
 		merged := prev + t.lines[t.row]
-		t.lines = removeLineMerging(t.lines, t.row-1, merged)
+		t.setLines(removeLineMerging(t.lines, t.row-1, merged))
 		t.row--
 		t.col = len(prev)
 	}
@@ -271,10 +271,10 @@ func (t *Textarea) Delete() {
 	line := t.lines[t.row]
 	if t.col < len(line) {
 		end := nextGraphemeBoundary(line, t.col)
-		t.lines[t.row] = line[:t.col] + line[end:]
+		t.setLine(t.row, line[:t.col]+line[end:])
 	} else if t.row < len(t.lines)-1 {
 		merged := line + t.lines[t.row+1]
-		t.lines = removeLineMerging(t.lines, t.row, merged)
+		t.setLines(removeLineMerging(t.lines, t.row, merged))
 	}
 	t.syncGoal()
 	t.keepVisible()
@@ -408,13 +408,13 @@ func (t *Textarea) DeleteWordLeft() {
 	if t.col > 0 {
 		line := t.lines[t.row]
 		start := prevWordBoundary(line, t.col)
-		t.lines[t.row] = line[:start] + line[t.col:]
+		t.setLine(t.row, line[:start]+line[t.col:])
 		t.col = start
 	} else if t.row > 0 {
 		prev := t.lines[t.row-1]
 		start := prevWordBoundary(prev, len(prev))
 		merged := prev[:start] + t.lines[t.row]
-		t.lines = removeLineMerging(t.lines, t.row-1, merged)
+		t.setLines(removeLineMerging(t.lines, t.row-1, merged))
 		t.row--
 		t.col = start
 	}
@@ -430,12 +430,12 @@ func (t *Textarea) DeleteWordRight() {
 	line := t.lines[t.row]
 	if t.col < len(line) {
 		end := nextWordBoundary(line, t.col)
-		t.lines[t.row] = line[:t.col] + line[end:]
+		t.setLine(t.row, line[:t.col]+line[end:])
 	} else if t.row < len(t.lines)-1 {
 		next := t.lines[t.row+1]
 		end := nextWordBoundary(next, 0)
 		merged := line + next[end:]
-		t.lines = removeLineMerging(t.lines, t.row, merged)
+		t.setLines(removeLineMerging(t.lines, t.row, merged))
 	}
 	t.syncGoal()
 	t.keepVisible()
@@ -601,6 +601,18 @@ func (t *Textarea) startSelection() {
 	}
 }
 
+func (t *Textarea) setLine(row int, line string) {
+	if t.lines[row] != line {
+		t.history.changed()
+	}
+	t.lines[row] = line
+}
+
+func (t *Textarea) setLines(lines []string) {
+	t.history.changed()
+	t.lines = lines
+}
+
 func (t *Textarea) deleteSelection() bool {
 	rng, ok := t.Selection()
 	if !ok {
@@ -609,14 +621,14 @@ func (t *Textarea) deleteSelection() bool {
 	}
 	if rng.Start.Row == rng.End.Row {
 		line := t.lines[rng.Start.Row]
-		t.lines[rng.Start.Row] = line[:rng.Start.Col] + line[rng.End.Col:]
+		t.setLine(rng.Start.Row, line[:rng.Start.Col]+line[rng.End.Col:])
 	} else {
 		merged := t.lines[rng.Start.Row][:rng.Start.Col] + t.lines[rng.End.Row][rng.End.Col:]
 		next := make([]string, 0, len(t.lines)-(rng.End.Row-rng.Start.Row))
 		next = append(next, t.lines[:rng.Start.Row]...)
 		next = append(next, merged)
 		next = append(next, t.lines[rng.End.Row+1:]...)
-		t.lines = next
+		t.setLines(next)
 	}
 	t.row = rng.Start.Row
 	t.col = rng.Start.Col

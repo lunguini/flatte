@@ -30,6 +30,9 @@ type Clipboard interface {
 // EditCommand is the editing command key asks for, "" for none: ⌘ (or Ctrl)
 // with X, C, V, Z, ⇧Z, or Y, and ⌘A.
 func EditCommand(key flatte.KeyEvent) string {
+	if key.Key == flatte.KeyCtrlC && key.Mod&^flatte.ModCtrl == 0 {
+		return EditCopy
+	}
 	if key.Key != flatte.KeyCharacter {
 		return ""
 	}
@@ -92,11 +95,18 @@ type editState struct {
 // are never changed, so a copied input has its own.
 type editHistory struct {
 	undo, redo *editState
-	typedAt    int // where the last typed rune ended; -1: not typing
-	typedIn    string
+	value      string // the text these states belong to
+	typedAt    int    // where the last typed rune ended; -1: not typing
+	recording  bool
 }
 
 const maxUndo = 200
+
+func (h *editHistory) changed() {
+	if !h.recording {
+		*h = editHistory{}
+	}
+}
 
 func push(list *editState, s editState) *editState {
 	s.before, s.n = list, 1
@@ -134,20 +144,22 @@ type input interface {
 // undoes together with what was typed just before it, word by word.
 func editing(in input, typed string, fn func()) {
 	was, h := in.state(), in.edits()
+	h.recording = true
 	fn()
+	h.recording = false
 	now := in.state()
 	if now.value == was.value {
 		return
 	}
-	joins := typed != "" && !was.selected && h.undo != nil && h.typedAt == was.at && h.typedIn == was.value &&
+	joins := typed != "" && !was.selected && h.undo != nil && h.typedAt == was.at && h.value == was.value &&
 		!(strings.TrimSpace(typed) == "" && endsInWord(was.value[:was.at]))
 	if !joins {
 		h.undo = push(h.undo, was)
 	}
 	h.redo = nil
-	h.typedAt, h.typedIn = -1, ""
+	h.typedAt, h.value = -1, now.value
 	if typed != "" {
-		h.typedAt, h.typedIn = now.at, now.value
+		h.typedAt = now.at
 	}
 }
 
@@ -165,7 +177,7 @@ func do(in input, cmd string, clip Clipboard) bool {
 		}
 		was, now := **from, in.state()
 		*from, *to = was.before, push(*to, now)
-		h.typedAt, h.typedIn = -1, ""
+		h.typedAt, h.value = -1, was.value
 		in.restore(was)
 	}
 	switch cmd {
@@ -194,11 +206,35 @@ func do(in input, cmd string, clip Clipboard) bool {
 	return true
 }
 
+// Only text-changing keys in Edit need undo snapshots.
+func keyEditsText(e flatte.KeyEvent) bool {
+	switch e.Key {
+	case flatte.KeyBackspace, flatte.KeyDelete:
+		return true
+	case flatte.KeyCharacter:
+		switch e.Mod {
+		case 0, flatte.ModShift:
+			return true
+		case flatte.ModCtrl:
+			switch e.Rune {
+			case 'u', 'U', 'k', 'K', 'w', 'W':
+				return true
+			}
+		case flatte.ModAlt:
+			return e.Rune == 'd'
+		}
+	}
+	return false
+}
+
 func handle(in input, id string, ev flatte.Event, clip Clipboard) (used bool) {
 	switch e := ev.(type) {
 	case flatte.KeyEvent:
 		if do(in, EditCommand(e), clip) {
 			return true
+		}
+		if !keyEditsText(e) {
+			return in.Edit(e)
 		}
 		typed := ""
 		if e.Key == flatte.KeyCharacter && e.Mod&^flatte.ModShift == 0 {
@@ -206,17 +242,26 @@ func handle(in input, id string, ev flatte.Event, clip Clipboard) (used bool) {
 		}
 		editing(in, typed, func() { used = in.Edit(e) })
 	case flatte.PasteEvent:
-		editing(in, "", func() { in.InsertText(e.Text) })
+		paste(in, e.Text)
 		return true
 	case flatte.ClipboardEvent:
-		editing(in, "", func() { in.InsertText(e.Text) })
+		paste(in, e.Text)
 		return true
 	case flatte.MouseEvent:
+		if e.Action != flatte.MousePress || !e.Clear || e.Target != id || e.Button != flatte.MouseLeft {
+			return in.HandleMouse(id, e)
+		}
 		editing(in, "", func() { used = in.HandleMouse(id, e) })
 	case flatte.MenuEvent:
 		return e.Target == id && do(in, e.ID, clip)
 	}
 	return used
+}
+
+func paste(in input, text string) {
+	if text != "" {
+		editing(in, "", func() { in.InsertText(text) })
+	}
 }
 
 // Handle applies ev to the field laid out with id, and reports whether it
@@ -227,12 +272,16 @@ func handle(in input, id string, ev flatte.Event, clip Clipboard) (used bool) {
 // keys (Enter, Esc, Tab); clip is the app's Effects. In a terminal app
 // where Ctrl+C quits, take that first.
 func (f *TextField) Handle(id string, ev flatte.Event, clip Clipboard) bool {
+	f.discardStaleHistory()
 	return handle(f, id, ev, clip)
 }
 
 // Do runs an editing command (EditCopy and the like, from a menu of the
 // app's own); it reports whether cmd is one.
-func (f *TextField) Do(cmd string, clip Clipboard) bool { return do(f, cmd, clip) }
+func (f *TextField) Do(cmd string, clip Clipboard) bool {
+	f.discardStaleHistory()
+	return do(f, cmd, clip)
+}
 
 // EditMenu is the field's context menu, for App.ContextMenu to return for
 // its ID; Handle takes the choice.
@@ -242,11 +291,18 @@ func (f *TextField) EditMenu() []flatte.MenuItem {
 
 // CanUndo and CanRedo report whether Handle or Do changed the field in a
 // way to undo, or to redo.
-func (f *TextField) CanUndo() bool { return f.history.undo != nil }
-func (f *TextField) CanRedo() bool { return f.history.redo != nil }
+func (f *TextField) CanUndo() bool { return f.history.undo != nil && f.history.value == f.Value }
+func (f *TextField) CanRedo() bool { return f.history.redo != nil && f.history.value == f.Value }
 
 func (f *TextField) removeSelection()    { f.clampCursor(); f.deleteSelection() }
 func (f *TextField) edits() *editHistory { return &f.history }
+
+func (f *TextField) discardStaleHistory() {
+	// Apps can assign Value directly.
+	if (f.history.undo != nil || f.history.redo != nil) && f.history.value != f.Value {
+		f.history = editHistory{}
+	}
+}
 
 func (f *TextField) state() editState {
 	f.clampCursor()

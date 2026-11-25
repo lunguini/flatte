@@ -364,6 +364,32 @@ func TestBrowserRunClipboardAndNotificationsDegradeByPermission(t *testing.T) {
 	}
 }
 
+func TestBrowserClipboardFailureReplies(t *testing.T) {
+	jsTestDOM(t)
+	clip := js.Global().Get("navigator").Get("clipboard")
+	readText := clip.Get("readText")
+	t.Cleanup(func() { clip.Set("readText", readText) })
+
+	rejected := js.FuncOf(func(js.Value, []js.Value) any {
+		return js.Global().Get("Promise").Call("reject", "clipboard access denied")
+	})
+	defer rejected.Release()
+	for _, read := range []js.Value{rejected.Value, js.Undefined()} {
+		clip.Set("readText", read)
+		events := make(chan Event, 1)
+		h := browserHost{send: func(batch []Event) { events <- batch[0] }}
+		h.readClipboard()
+		select {
+		case ev := <-events:
+			if ev != (ClipboardEvent{}) {
+				t.Fatalf("failed clipboard read sent %#v", ev)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("failed clipboard read did not reply")
+		}
+	}
+}
+
 func TestBrowserRunRequiresMount(t *testing.T) {
 	testDOM := jsTestDOM(t)
 	testDOM.Call("setMounted", false)

@@ -17,7 +17,8 @@ import (
 // are treated as indivisible units and never split. SetCursor and the edit
 // methods preserve the byte-offset API while normalizing offsets to grapheme
 // boundaries; clampCursor additionally guards against a manually-set offset
-// landing inside a UTF-8 rune.
+// landing inside a UTF-8 rune. Changing the text outside Handle or Do starts
+// a new undo history.
 type TextField struct {
 	Value                string
 	Cursor               int
@@ -33,7 +34,7 @@ func (f *TextField) Insert(r rune) {
 	f.clampCursor()
 	f.deleteSelection()
 	text := string(r)
-	f.Value = f.Value[:f.Cursor] + text + f.Value[f.Cursor:]
+	f.setValue(f.Value[:f.Cursor] + text + f.Value[f.Cursor:])
 	f.Cursor += len(text)
 }
 
@@ -49,7 +50,7 @@ func (f *TextField) InsertText(s string) {
 		}
 	}
 	text := string(clean)
-	f.Value = f.Value[:f.Cursor] + text + f.Value[f.Cursor:]
+	f.setValue(f.Value[:f.Cursor] + text + f.Value[f.Cursor:])
 	f.Cursor += len(text)
 }
 
@@ -62,7 +63,7 @@ func (f *TextField) Backspace() {
 		return
 	}
 	start := prevGraphemeBoundary(f.Value, f.Cursor)
-	f.Value = f.Value[:start] + f.Value[f.Cursor:]
+	f.setValue(f.Value[:start] + f.Value[f.Cursor:])
 	f.Cursor = start
 }
 
@@ -75,7 +76,7 @@ func (f *TextField) Delete() {
 		return
 	}
 	end := nextGraphemeBoundary(f.Value, f.Cursor)
-	f.Value = f.Value[:f.Cursor] + f.Value[end:]
+	f.setValue(f.Value[:f.Cursor] + f.Value[end:])
 }
 
 func (f *TextField) MoveLeft() {
@@ -135,7 +136,7 @@ func (f *TextField) DeleteWordLeft() {
 		return
 	}
 	start := prevWordBoundary(f.Value, f.Cursor)
-	f.Value = f.Value[:start] + f.Value[f.Cursor:]
+	f.setValue(f.Value[:start] + f.Value[f.Cursor:])
 	f.Cursor = start
 }
 
@@ -148,7 +149,7 @@ func (f *TextField) DeleteWordRight() {
 		return
 	}
 	end := nextWordBoundary(f.Value, f.Cursor)
-	f.Value = f.Value[:f.Cursor] + f.Value[end:]
+	f.setValue(f.Value[:f.Cursor] + f.Value[end:])
 }
 
 // MoveStart and MoveEnd put the cursor at the start or end of the value;
@@ -179,7 +180,8 @@ func (f *TextField) DeleteToStart() {
 	if f.deleteSelection() {
 		return
 	}
-	f.Value, f.Cursor = f.Value[f.Cursor:], 0
+	f.setValue(f.Value[f.Cursor:])
+	f.Cursor = 0
 }
 
 func (f *TextField) DeleteToEnd() {
@@ -187,7 +189,7 @@ func (f *TextField) DeleteToEnd() {
 	if f.deleteSelection() {
 		return
 	}
-	f.Value = f.Value[:f.Cursor]
+	f.setValue(f.Value[:f.Cursor])
 }
 
 // Edit applies key as a native one-line text field does, and reports
@@ -375,13 +377,20 @@ func (f *TextField) startSelection() {
 	}
 }
 
+func (f *TextField) setValue(value string) {
+	if f.Value != value {
+		f.history.changed()
+	}
+	f.Value = value
+}
+
 func (f *TextField) deleteSelection() bool {
 	start, end, ok := f.Selection()
 	if !ok {
 		f.ClearSelection() // a collapsed selection must not outlive an edit
 		return false
 	}
-	f.Value = f.Value[:start] + f.Value[end:]
+	f.setValue(f.Value[:start] + f.Value[end:])
 	f.Cursor = start
 	f.ClearSelection()
 	return true
@@ -553,7 +562,7 @@ func (f *TextField) HandleMouse(id string, e flatte.MouseEvent) bool {
 		return false
 	}
 	if e.Action == flatte.MousePress && e.Clear {
-		f.Value = ""
+		f.setValue("")
 		f.SetCursor(0)
 		f.mouseSelecting = false
 		return true
