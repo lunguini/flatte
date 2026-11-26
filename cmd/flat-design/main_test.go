@@ -197,6 +197,15 @@ func TestControlsFocusAndKeys(t *testing.T) {
 	if s := d.State(); s.query != "dr" || s.density != 1 || s.focus != idQuery {
 		t.Fatalf("typing: query %q density %d focus %q", s.query, s.density, s.focus)
 	}
+	key(flatte.KeyTab, 0, 0) // → the match case toggle button
+	key(flatte.KeyCharacter, ' ', 0)
+	if !d.State().matchCase {
+		t.Error("Space did not turn the focused toggle button on")
+	}
+	pressAt(t, d, idWords, 120)
+	if s := d.State(); !s.words || s.focus != idWords {
+		t.Errorf("clicking a toggle button: on %v, focus %q", s.words, s.focus)
+	}
 	key(flatte.KeyTab, 0, 0) // → check:format
 	key(flatte.KeyCharacter, ' ', 0)
 	if d.State().format {

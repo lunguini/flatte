@@ -425,6 +425,7 @@ Bare inputs and multiline inputs retain their own height rules.
 | `layout.Fixed(n)` | `SizeFixed` | Exactly `n` cells. |
 | `layout.Grow(w)` | `SizeGrow` | Weighted share of leftover space; `w` is the weight relative to sibling grows. |
 | `layout.Points(n)` | `SizePoints` | Exactly `n` points in a window; a terminal reads it at a nominal 8×16pt cell (`PointsPerColumn`, `PointsPerLine`), rounding up — `Points(200)` is 25 columns. For layouts designed for a window. |
+| `s.AtMost(points)` | any | Caps an exact length (`Fixed`, `Points`, a token) at `points` points: `layout.Fixed(84).AtMost(520)` is 84 columns but never wider than 520pt in a window, whatever its font's column width. A terminal reads the cap at the nominal cell (520pt is 65 columns), so apply it only where `RenderContext.Graphical` to keep a terminal's width. `Auto` and `Grow` ignore it. |
 
 `SizeContent` is produced internally when an `Auto` axis measures natural
 content (e.g. `Text`); callers do not author it. On the cross axis, anything but
@@ -557,7 +558,9 @@ keeps its natural width and `OffsetX` is in columns; sideways swipes arrive as
 it looks. Roles are `TextBody` (default), `TextTitle`, and `TextSubtle`;
 `Fg`, `Bg`, `Bold`, `Italic`, `Underline`, and `Strikethrough` override the
 role. `Size` sets the font size in points in a window (0: the role's size;
-lines grow to fit it); terminals ignore it. `TextStyle.Render(s)` is the terminal look, and `flatui.Title` /
+lines grow to fit it); terminals ignore it. `Font` sets the text in a font
+family by name in a window ("": the role's; a family the system lacks falls
+back), as a font picker shows each family in itself; terminals ignore it. `TextStyle.Render(s)` is the terminal look, and `flatui.Title` /
 `flatui.Subtle` are those roles for string frames, so both paths match.
 
 The design-system roles add `TextCaption` (small, semibold, upper case,
@@ -635,7 +638,10 @@ on a tab or list row keeps a cut-off name's extension, "agentl….go", over
 `layout.Label.KeepEnd`), `ListRow` (icon,
 title, meta, trailing nodes; `Selected` + `Active` is the strong
 selection, `Selected` alone the quiet one; `Indent` for trees), `Segmented`
-(option IDs from `kit.OptionID(id, i)`), `Badge` with a `Tone`, `Section`, `Divider` (a titled line between a list's
+(option IDs from `kit.OptionID(id, i)`), `ToggleButton` (an on/off
+button with a short `Label` or an `Icon`: a control-sized square in a
+window, selected while `On`; flipping it on a click, Space or Enter is
+the app's), `Badge` with a `Tone`, `Section`, `Divider` (a titled line between a list's
 groups),
 `Setting` (name, description, control), `EmptyState` and `Popover`.
 A pane is a `PaneHeader` over a body Col with `PanePadding: true`; rows
@@ -852,7 +858,9 @@ func ContextMenu(s *State, target string) []flatte.MenuItem {
   List a ⌘ chord for windows and a Ctrl chord for terminals. A terminal
   can send only a plain Ctrl+letter — no Shift, and not Ctrl+I/M/H/[ (Tab,
   Enter, Backspace, Esc). Avoid plain letters — they would be taken from
-  text fields too. `MenuShortcut` finds
+  text fields too. A window's menu also takes an ⌥ chord of a character
+  (⌥Z), which would otherwise type one: it is taken from every field and
+  terminal in the window. `MenuShortcut` finds
   an item by key.
 - A window shows `Menus` as its menu bar and `ContextMenu` as a native popup
   (right-click or Control-click). A terminal shows no bar; it draws the
@@ -1012,7 +1020,10 @@ given). Start from `window.Dark()` or `window.Light()`
 and change fields; zero fields keep the base's value. Nil follows the
 system's light/dark appearance live; `Snapshot` draws `Dark` when nil.
 `Options.Fonts` are registered before the first frame (CoreText on macOS,
-`FontFace` in the browser). On a page the canvas fills `[data-flatte]`, and
+`FontFace` in the browser). `window.FontFamilies()` lists the installed
+families (`[]window.FontFamily{Name, Monospace}`, sorted by name ignoring
+case) for a font setting to pick from; it is slow enough to call off the loop
+in a `flatte.Go` and keep, and empty off macOS and in a browser. On a page the canvas fills `[data-flatte]`, and
 page dimensions and device pixel ratio set its layout and backing resolution.
 `Desktop`, `Width`, `Height`, `MinWidth`, `MinHeight`, `Autosave`,
 `HideTitleBar`, and `Translucent` are ignored in a page; `Title` supplies the

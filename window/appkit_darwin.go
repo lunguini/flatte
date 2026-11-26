@@ -119,6 +119,8 @@ var (
 	cgDataProviderCreateWithCFData   func(data uintptr) uintptr
 	cgFontCreateWithDataProvider     func(provider uintptr) uintptr
 	ctFontManagerRegisterGraphicsFnt func(font uintptr, err *uintptr) bool
+	ctFontManagerCopyFamilyNames     func() uintptr
+	ctFontGetSymbolicTraits          func(font uintptr) uint32
 
 	dispatchAsyncF       func(queue, ctx, fn uintptr)
 	dispatchMainQueue    uintptr
@@ -140,6 +142,7 @@ const (
 const (
 	ctTraitItalic = 1 << 0
 	ctTraitBold   = 1 << 1
+	ctTraitMono   = 1 << 10
 )
 
 var (
@@ -224,6 +227,8 @@ func bindFrameworks() error {
 		{&cgDataProviderCreateWithCFData, cg, "CGDataProviderCreateWithCFData"},
 		{&cgFontCreateWithDataProvider, cg, "CGFontCreateWithDataProvider"},
 		{&ctFontManagerRegisterGraphicsFnt, ct, "CTFontManagerRegisterGraphicsFont"},
+		{&ctFontManagerCopyFamilyNames, ct, "CTFontManagerCopyAvailableFontFamilyNames"},
+		{&ctFontGetSymbolicTraits, ct, "CTFontGetSymbolicTraits"},
 		{&dispatchAsyncF, sys, "dispatch_async_f"},
 		{&pthreadMainNP, sys, "pthread_main_np"},
 		{&autoreleasePoolPush, oc, "objc_autoreleasePoolPush"},

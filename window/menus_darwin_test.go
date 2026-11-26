@@ -21,6 +21,12 @@ func TestKeyEquivalent(t *testing.T) {
 		{[]flatte.KeyEvent{{Key: flatte.KeyF3, Mod: flatte.ModSuper | flatte.ModAlt}}, string(rune(0xF706)), macCommand | macOption},
 		{[]flatte.KeyEvent{{Key: flatte.KeyUp, Mod: flatte.ModSuper | flatte.ModCtrl}}, string(rune(0xF700)), macCommand | macControl},
 		{[]flatte.KeyEvent{{Key: flatte.KeyUnknown, Mod: flatte.ModSuper}}, "", 0},
+		// ⌥ and a character: else it types one.
+		{[]flatte.KeyEvent{key('z', flatte.ModAlt)}, "z", macOption},
+		{[]flatte.KeyEvent{key('z', flatte.ModAlt|flatte.ModShift)}, "z", macOption | macShift},
+		{[]flatte.KeyEvent{key('z', flatte.ModAlt|flatte.ModCtrl)}, "", 0},                      // a Control chord reaches the view
+		{[]flatte.KeyEvent{{Key: flatte.KeyLeft, Mod: flatte.ModAlt}}, "", 0},                   // as do keys that type nothing
+		{[]flatte.KeyEvent{key('z', flatte.ModAlt), key('s', flatte.ModSuper)}, "z", macOption}, // the first that is one
 	} {
 		k, m := keyEquivalent(c.keys)
 		if k != c.key || m != c.mask {

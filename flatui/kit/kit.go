@@ -534,6 +534,33 @@ const (
 	actionIconPoints = 10
 )
 
+// ToggleButton is an on/off button with a short label or an icon — a find
+// bar's match case: in a window a control-sized square, selected while On,
+// with the hover wash under it; in a terminal its label, strong while On.
+// Focused draws the focus look. Its node ID is ID: clicks arrive on it,
+// and flipping On (on a click, or Space or Enter while focused) is the
+// app's.
+type ToggleButton struct {
+	ID      string
+	Label   string          // the text, and an icon's terminal spelling
+	Icon    layout.IconName // drawn instead of Label in a window
+	Tooltip string
+	On      bool
+	Focused bool
+}
+
+func (t ToggleButton) Layout() layout.Node {
+	style := layout.TextStyle{Color: layout.ColorSecondary}
+	if t.On {
+		style = layout.TextStyle{Role: layout.TextStrong}
+	}
+	return layout.Button{
+		NodeBase: layout.NodeBase{ID: t.ID, W: layout.ControlSize(), H: layout.ControlSize(), Tooltip: t.Tooltip,
+			Box: layout.Box{Selected: t.On, Round: true, Interactive: t.ID != ""}},
+		Label: t.Label, Icon: t.Icon, Style: style, Plain: true, Focused: t.Focused,
+	}
+}
+
 // Segmented is a choice of a few options shown side by side, the chosen
 // one filled. Option i's node ID is ID + ":" + its index (OptionID).
 type Segmented struct {

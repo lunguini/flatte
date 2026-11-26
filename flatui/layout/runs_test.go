@@ -105,3 +105,16 @@ func TestSceneRunsOp(t *testing.T) {
 		t.Errorf("fallback: after at %+v", s.Rects["after"])
 	}
 }
+
+// TestRunFontIsItsOwnStyle: a run that only names a font family keeps it,
+// rather than taking the label's style, and a terminal draws it plainly.
+func TestRunFontIsItsOwnStyle(t *testing.T) {
+	l := Label{Style: TextStyle{Italic: true}, Runs: []Run{{Text: "a"}, {Text: "b", Style: TextStyle{Font: "Menlo"}}}}
+	runs := l.runs()
+	if !runs[0].Style.Italic || runs[1].Style.Italic || runs[1].Style.Font != "Menlo" {
+		t.Fatalf("runs %+v", runs)
+	}
+	if got, want := (TextStyle{Font: "Menlo"}).Render("x"), (TextStyle{}).Render("x"); got != want {
+		t.Errorf("terminal %q, want %q", got, want)
+	}
+}

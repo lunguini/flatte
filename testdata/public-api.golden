@@ -1010,6 +1010,7 @@ flatui/kit package kit
   method Tabs.Gap() int
   method Tabs.Layout() layout.Node
   method Tabs.ViewID() string
+  method ToggleButton.Layout() layout.Node
   type Action struct
   field Action.ID string [order=0]
   field Action.Icon layout.IconName [order=1]
@@ -1111,6 +1112,14 @@ flatui/kit package kit
   field Tabs.Plain bool [order=11]
   field Tabs.Unfocused bool [order=12]
   struct Tabs fields=13 comparable=false
+  type ToggleButton struct
+  field ToggleButton.ID string [order=0]
+  field ToggleButton.Label string [order=1]
+  field ToggleButton.Icon layout.IconName [order=2]
+  field ToggleButton.Tooltip string [order=3]
+  field ToggleButton.On bool [order=4]
+  field ToggleButton.Focused bool [order=5]
+  struct ToggleButton fields=6 comparable=true
   type Tone int
 flatui/layout package layout
   const AlignCenter Align = 2
@@ -1320,6 +1329,7 @@ flatui/layout package layout
   method ScrollBar.Render(r Rect) string
   method ScrollBar.Size()(Size, Size)
   method ScrollBar.Thumb(height int)(pos int, size int, ok bool)
+  method Size.AtMost(points int) Size
   method Slider.Render(r Rect) string
   method Slider.Size()(Size, Size)
   method Slider.ValueAt(x int, width int) float64
@@ -1680,7 +1690,8 @@ flatui/layout package layout
   field Size.Kind SizeKind [order=0]
   field Size.Value int [order=1]
   field Size.Weight float64 [order=2]
-  struct Size fields=3 comparable=true
+  field Size.Max int [order=3]
+  struct Size fields=4 comparable=true
   type SizeKind int
   type Sizes struct
   field Sizes.Row float64 [order=0]
@@ -1737,7 +1748,8 @@ flatui/layout package layout
   field TextStyle.Italic bool [order=7]
   field TextStyle.Underline bool [order=8]
   field TextStyle.Strikethrough bool [order=9]
-  struct TextStyle fields=10 comparable=true
+  field TextStyle.Font string [order=10]
+  struct TextStyle fields=11 comparable=true
   type Toggle struct
   field Toggle.NodeBase NodeBase [order=0]
   field Toggle.Kind ToggleKind [order=1]

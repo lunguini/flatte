@@ -116,9 +116,10 @@ func (th theme) radiusOf(k layout.BorderKind) float64 {
 type fontKey struct {
 	role               layout.TextRole
 	bold, italic, mono bool
-	// size overrides the role's point size when positive, and leading the
-	// theme's line spacing.
+	// size overrides the role's point size when positive, leading the
+	// theme's line spacing, and family the theme's font family.
 	size, leading float64
+	family        string
 }
 
 type font struct {
@@ -210,6 +211,10 @@ func (th theme) font(k fontKey) font {
 	} else if k.role == layout.TextTitle {
 		id.size = th.titleSize
 	}
+	if k.family != "" {
+		id.family = k.family
+	}
+	id.fontKey.family = ""
 	// The size lives in id.size alone, so a bad one (NaN, ≤ 0, +Inf) never
 	// reaches the cache key.
 	if k.size > 0 && !math.IsInf(k.size, 1) {
@@ -269,7 +274,7 @@ func (th theme) font(k fontKey) font {
 
 func (th theme) styleFont(s layout.TextStyle) font {
 	s = resolveStyle(s, th.pal, th.ts)
-	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic, size: s.Size, leading: s.Leading})
+	return th.font(fontKey{role: s.Role, bold: s.Bold, italic: s.Italic, size: s.Size, leading: s.Leading, family: s.Font})
 }
 
 // textLine is a shaped CoreText line. Call release.

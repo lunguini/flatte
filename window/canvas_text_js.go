@@ -40,6 +40,9 @@ func (t canvasTextLayout) font(style layout.TextStyle) canvasFont {
 	if family == "" {
 		family = "system-ui, sans-serif"
 	}
+	if style.Font != "" { // the theme's family where the browser lacks it
+		family = canvasCSSFamily(style.Font) + ", " + canvasCSSFamily(family)
+	}
 	return t.fontFamily(style, size, family)
 }
 

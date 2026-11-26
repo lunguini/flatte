@@ -23,10 +23,11 @@ type Menu struct {
 // MenuEvent instead of a KeyEvent — list several to cover hosts, such as
 // ⌘S for a window and Ctrl+S for a terminal. Most terminals can send only
 // a plain Ctrl+letter: not with Shift, and not Ctrl+I, M, H, or [ (they
-// are Tab, Enter, Backspace, and Esc). A Disabled item is shown
-// dimmed and cannot be chosen; its shortcuts do nothing. Checked shows a
-// check mark. Separator makes the item a divider (its other fields are
-// ignored); Items makes it a submenu.
+// are Tab, Enter, Backspace, and Esc). A window's menu bar also takes an
+// Option chord of a character, which would otherwise type one. A Disabled
+// item is shown dimmed and cannot be chosen; its shortcuts do nothing.
+// Checked shows a check mark. Separator makes the item a divider (its other
+// fields are ignored); Items makes it a submenu.
 type MenuItem struct {
 	ID                string
 	Label             string

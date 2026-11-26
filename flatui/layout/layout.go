@@ -175,6 +175,18 @@ type Size struct {
 	Kind   SizeKind
 	Value  int
 	Weight float64
+	// Max caps an exact length (Fixed, Points, token, Content) at this many
+	// points; zero is no cap. Set it with AtMost.
+	Max int
+}
+
+// AtMost caps s at points: a panel 84 columns wide but never wider than
+// 520pt in a window, where a column's width depends on the font. A
+// terminal reads the cap at PointsPerColumn × PointsPerLine, rounding up.
+// Auto and Grow sizes ignore it; points <= 0 removes the cap.
+func (s Size) AtMost(points int) Size {
+	s.Max = max(points, 0)
+	return s
 }
 
 func Fixed(n int) Size    { return Size{Kind: SizeFixed, Value: max(n, 0)} }
@@ -189,6 +201,7 @@ func Auto() Size          { return Size{Kind: SizeAuto} }
 // behave as Auto. Consumers normalize as well as constructors because callers
 // can author Size values directly.
 func normalizeSize(s Size) Size {
+	s.Max = max(s.Max, 0)
 	switch s.Kind {
 	case SizeAuto:
 		return s

@@ -64,6 +64,14 @@ type sized[T unit] struct {
 }
 
 func toSized[T unit](m metric[T], s Size, horizontal bool) sized[T] {
+	z := toSizedUncapped(m, s, horizontal)
+	if s.Max > 0 && (z.Kind == SizeFixed || z.Kind == SizeContent) {
+		z.Value = min(z.Value, m.points(s.Max, horizontal))
+	}
+	return z
+}
+
+func toSizedUncapped[T unit](m metric[T], s Size, horizontal bool) sized[T] {
 	if s.Kind == SizePoints {
 		return sized[T]{Kind: SizeFixed, Value: m.points(max(s.Value, 0), horizontal)}
 	}

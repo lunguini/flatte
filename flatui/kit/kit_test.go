@@ -632,3 +632,64 @@ func TestPaneHeaderTitleLinesUpWithItsContents(t *testing.T) {
 		t.Fatalf("terminal: title at %d, divider's at %d", a, e)
 	}
 }
+
+// A toggle button is a control-sized square in a window, selected while
+// on, with its tooltip and focus; in a terminal, its label on one line,
+// strong while on.
+func TestToggleButton(t *testing.T) {
+	row := layout.Row{Children: []layout.Node{
+		ToggleButton{ID: "case", Label: "Aa", Tooltip: "Match case", On: true}.Layout(),
+		ToggleButton{ID: "word", Label: "W", Tooltip: "Whole words", Focused: true}.Layout(),
+		ToggleButton{ID: "dots", Label: "•", Icon: layout.IconDot}.Layout(),
+	}}
+	s := layout.LayoutScene(row, 300, 100, points)
+	for _, id := range []string{"case", "word", "dots"} {
+		if r := s.Rects[id]; r.W != 28 || r.H != 28 {
+			t.Errorf("%s is %vx%v, want a 28pt square", id, r.W, r.H)
+		}
+	}
+	selected := map[string]bool{}
+	controls := map[string]layout.ControlOp{}
+	for _, op := range s.Ops {
+		switch op := op.(type) {
+		case layout.BoxOp:
+			if op.ID != "" {
+				selected[op.ID] = op.Box.Selected
+				if !op.Box.Round || !op.Box.Interactive {
+					t.Errorf("%s box %+v: want round and interactive (the hover wash)", op.ID, op.Box)
+				}
+			}
+		case layout.ControlOp:
+			controls[op.ID] = op
+		}
+	}
+	if !selected["case"] || selected["word"] {
+		t.Errorf("selected = %v, want only the one that is on", selected)
+	}
+	if c := controls["case"]; !c.Plain || c.Label != "Aa" || c.Style.Role != layout.TextStrong || c.Focused {
+		t.Errorf("case control = %+v", c)
+	}
+	if c := controls["word"]; c.Style.Color != layout.ColorSecondary || !c.Focused {
+		t.Errorf("word control = %+v", c)
+	}
+	if c := controls["dots"]; c.Icon != layout.IconDot {
+		t.Errorf("dots icon = %v", c.Icon)
+	}
+	r := s.Rects["case"]
+	if tip := s.TooltipAt(r.X+r.W/2, r.Y+r.H/2); tip != "Match case" {
+		t.Errorf("tooltip %q", tip)
+	}
+
+	c := layout.Compose(row, 40, 3)
+	for _, id := range []string{"case", "word", "dots"} {
+		if r := c.Rects[id]; r.H != 1 || r.W == 0 {
+			t.Errorf("cells %s = %+v, want one line", id, r)
+		}
+	}
+	if line := ansi.Strip(strings.Split(c.Frame, "\n")[0]); !strings.Contains(line, "Aa") || !strings.Contains(line, "W") || !strings.Contains(line, "•") {
+		t.Errorf("terminal row %q", line)
+	}
+	if n := (ToggleButton{Label: "x"}).Layout().(layout.Button); n.Box.Interactive {
+		t.Error("a toggle without an ID takes the pointer")
+	}
+}

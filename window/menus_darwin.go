@@ -167,12 +167,15 @@ func buildMenu(title string, items []flatte.MenuItem, action objc.SEL, ids *[]st
 	return m
 }
 
-// keyEquivalent is the native shortcut for keys: the first ⌘ chord, as
-// AppKit's key equivalent and modifier mask; "" when there is none (other
-// shortcuts reach the view as keys and the host routes them).
+// keyEquivalent is the native shortcut for keys: the first ⌘ chord, or ⌥
+// chord of a character without Control (Option and a letter otherwise
+// types a character, never reaching the view as a key), as AppKit's key
+// equivalent and modifier mask; "" when there is none (other shortcuts
+// reach the view as keys and the host routes them).
 func keyEquivalent(keys []flatte.KeyEvent) (string, uint) {
 	for _, k := range keys {
-		if !k.Mod.Contains(flatte.ModSuper) {
+		option := k.Key == flatte.KeyCharacter && k.Mod.Contains(flatte.ModAlt) && !k.Mod.Contains(flatte.ModCtrl)
+		if !k.Mod.Contains(flatte.ModSuper) && !option {
 			continue
 		}
 		var key string
@@ -188,7 +191,10 @@ func keyEquivalent(keys []flatte.KeyEvent) (string, uint) {
 			}
 			key = string(r)
 		}
-		mask := uint(macCommand)
+		mask := uint(0)
+		if k.Mod.Contains(flatte.ModSuper) {
+			mask = macCommand
+		}
 		for _, m := range []struct {
 			mod  flatte.Mod
 			flag uint

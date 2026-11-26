@@ -54,10 +54,12 @@ const (
 	idFont     = "font"
 	idRadio    = "radio:"
 	idVolume   = "volume"
+	idCase     = "toggle:case"
+	idWords    = "toggle:words"
 )
 
 // controls are the focusable demo controls, in Tab order.
-var controls = []string{"primary", "secondary", "quiet", "danger", "icon", idQuery, "check:format", "check:trim",
+var controls = []string{"primary", "secondary", "quiet", "danger", "icon", idQuery, idCase, idWords, "check:format", "check:trim",
 	idRadio + "0", idRadio + "1", idRadio + "2", "switch:autosave", idVolume, idChoice, idWrap, idFont}
 
 // accents are the showcase's accent seeds (all pass theme.Check).
@@ -94,6 +96,8 @@ type State struct {
 	focus        string
 	query        string
 	format, trim bool
+	matchCase    bool // the toggle buttons
+	words        bool
 	radio        int
 	autosave     bool
 	volume       float64
@@ -254,6 +258,10 @@ func click(s *State, target string) {
 		s.format = !s.format
 	case target == "check:trim":
 		s.trim = !s.trim
+	case target == idCase:
+		s.matchCase = !s.matchCase
+	case target == idWords:
+		s.words = !s.words
 	case strings.HasPrefix(target, idRadio):
 		s.radio, _ = strconv.Atoi(target[len(idRadio):])
 	case target == "switch:autosave":
@@ -380,6 +388,8 @@ func componentsPage(s *State) layout.Node {
 	fields := layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
 		layout.Input{NodeBase: layout.NodeBase{ID: idQuery, W: layout.Fixed(28)}, Value: s.query, Caret: len([]rune(s.query)), Placeholder: "Go to file…", Focused: f(idQuery)},
 		layout.Input{NodeBase: layout.NodeBase{W: layout.Fixed(16)}, Value: "read only"},
+		kit.ToggleButton{ID: idCase, Label: "Aa", Tooltip: "Match case", On: s.matchCase, Focused: f(idCase)}.Layout(),
+		kit.ToggleButton{ID: idWords, Label: "W", Tooltip: "Whole words", On: s.words, Focused: f(idWords)}.Layout(),
 	}}
 	toggle := func(id, label string, kind layout.ToggleKind, on, disabled bool) layout.Node {
 		return layout.Toggle{NodeBase: layout.NodeBase{ID: id}, Kind: kind, Label: label, Checked: on, Disabled: disabled, Focused: f(id)}
@@ -421,7 +431,7 @@ func componentsPage(s *State) layout.Node {
 		group("Tabs", kit.Tabs{Tabs: tabs, Active: s.tab}.Layout()),
 		group("List rows", layout.Col{Children: append(append(rows, kit.Divider{Title: "Other"}.Layout()), inactive)}),
 		group("Buttons — primary, secondary, quiet, danger, icon", buttons),
-		group("Fields", fields),
+		group("Fields and toggle buttons", fields),
 		group("Checkboxes, radios, switches, slider", toggles),
 		group("Badges", badges),
 		group("Settings", settings.Layout()),

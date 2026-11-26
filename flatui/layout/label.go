@@ -49,6 +49,10 @@ type TextStyle struct {
 	Leading float64
 
 	Bold, Italic, Underline, Strikethrough bool
+	// Font is a font family to set the text in ("": the role's), as a
+	// font picker shows each family in itself. A GUI falls back to its
+	// own choice for a family it does not have; terminals ignore it.
+	Font string
 }
 
 // Render returns text styled for a terminal. It is the single definition of
@@ -60,7 +64,7 @@ func (s TextStyle) Render(text string) string {
 // zero reports whether s sets nothing. (Colors are interfaces, which ==
 // would panic on for an uncomparable implementation.)
 func (s TextStyle) zero() bool {
-	return s.Role == TextBody && s.Color == ColorDefault && s.Size == 0 && s.Leading == 0 && s.Fg == nil && s.Bg == nil && !s.Bold && !s.Italic && !s.Underline && !s.Strikethrough
+	return s.Role == TextBody && s.Color == ColorDefault && s.Size == 0 && s.Leading == 0 && s.Font == "" && s.Fg == nil && s.Bg == nil && !s.Bold && !s.Italic && !s.Underline && !s.Strikethrough
 }
 
 func (s TextStyle) lipgloss() lipgloss.Style {
