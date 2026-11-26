@@ -486,12 +486,10 @@ func (t Tabs) tab(tab Tab, active bool) layout.Node {
 	case tab.Close != "":
 		parts = append(parts, Action{ID: tab.Close, Icon: layout.IconClose, Glyph: "✕", Tooltip: "Close"}.Layout())
 	}
-	pad := 1
-	if tab.Close != "" || tab.Modified {
-		pad = 0 // the action's own box is the right margin
-	}
+	// The close action is inset from the right edge as the tab's start is
+	// from the left.
 	return layout.Row{
-		NodeBase: layout.NodeBase{ID: tab.ID, W: w, H: layout.Grow(1), Gap: 1, PadLeft: 1, PadRight: pad, Box: box},
+		NodeBase: layout.NodeBase{ID: tab.ID, W: w, H: layout.Grow(1), Gap: 1, PadLeft: 1, PadRight: 1, Box: box},
 		Align:    layout.AlignCenter, Children: parts,
 	}
 }
