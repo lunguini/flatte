@@ -615,12 +615,21 @@ type Setting struct {
 	Name        string
 	Description string
 	Control     layout.Node
+	// Stacked puts the control under the name and description instead of
+	// beside them, for a column too narrow to share.
+	Stacked bool
 }
 
 func (s Setting) Layout() layout.Node {
 	text := []layout.Node{layout.Label{Text: s.Name, Style: layout.TextStyle{Role: layout.TextStrong}, Wrap: true}}
 	if s.Description != "" {
 		text = append(text, layout.Label{Text: s.Description, Style: layout.TextStyle{Role: layout.TextMeta}, Wrap: true})
+	}
+	if s.Stacked {
+		if s.Control != nil {
+			text = append(text, layout.Row{NodeBase: layout.NodeBase{PadTop: 1}, Children: []layout.Node{s.Control}})
+		}
+		return layout.Col{NodeBase: layout.NodeBase{ID: s.ID, W: layout.Grow(1), PadLeft: 1, PadRight: 1}, Children: text}
 	}
 	kids := []layout.Node{layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Children: text}}
 	if s.Control != nil {

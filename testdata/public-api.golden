@@ -1088,7 +1088,8 @@ flatui/kit package kit
   field Setting.Name string [order=1]
   field Setting.Description string [order=2]
   field Setting.Control layout.Node [order=3]
-  struct Setting fields=4 comparable=true
+  field Setting.Stacked bool [order=4]
+  struct Setting fields=5 comparable=true
   type Tab struct
   field Tab.ID string [order=0]
   field Tab.Label string [order=1]

@@ -693,3 +693,28 @@ func TestToggleButton(t *testing.T) {
 		t.Error("a toggle without an ID takes the pointer")
 	}
 }
+
+// A stacked setting puts its control on its own line, under the name and
+// description, starting where they do.
+func TestSettingStacked(t *testing.T) {
+	ctrl := layout.Button{NodeBase: layout.NodeBase{ID: "ctrl"}, Label: "Pick"}
+	for _, stacked := range []bool{false, true} {
+		n := Setting{ID: "set", Name: "Font", Description: "The family.", Control: ctrl, Stacked: stacked}.Layout()
+		frame, rects := layout.SolveAndCompose(n, 40, 6)
+		lines := strings.Split(ansi.Strip(frame), "\n")
+		row, c := rects["set"], rects["ctrl"]
+		nameY := -1
+		for i, l := range lines {
+			if strings.Contains(l, "Font") {
+				nameY = i
+				break
+			}
+		}
+		if !stacked && (c.X < 20 || c.Y < row.Y || c.Y >= row.Y+row.H) {
+			t.Fatalf("beside: control at %+v, row %+v:\n%s", c, row, frame)
+		}
+		if stacked && (c.Y <= nameY+1 || c.X != row.X+1) {
+			t.Fatalf("stacked: control at %+v, name on line %d:\n%s", c, nameY, frame)
+		}
+	}
+}

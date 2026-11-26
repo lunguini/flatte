@@ -654,7 +654,7 @@ button with a short `Label` or an `Icon`: a control-sized square in a
 window, selected while `On`; flipping it on a click, Space or Enter is
 the app's), `Badge` with a `Tone`, `Section`, `Divider` (a titled line between a list's
 groups),
-`Setting` (name, description, control), `EmptyState` and `Popover`.
+`Setting` (name, description, control; `Stacked` puts the control under them in a narrow column), `EmptyState` and `Popover`.
 A pane is a `PaneHeader` over a body Col with `PanePadding: true`; rows
 and an `Inline` empty state inside it add no inset of their own.
 Stateless: selection and values are app state, clicks are MouseEvents on
