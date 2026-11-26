@@ -93,10 +93,32 @@ type DiffColors struct {
 	Fold, Blank                color.NRGBA
 }
 
-// SyntaxColors are code highlighting colors, checked against Content,
-// CurrentLine and both diff line fills.
+// SyntaxColors give code tokens their own colors. Every field is checked
+// against Content, CurrentLine and both diff line fills.
 type SyntaxColors struct {
-	Keyword, String, Comment, Number, Type, Func color.NRGBA
+	Keyword      color.NRGBA // language keywords
+	String       color.NRGBA // strings and characters
+	Comment      color.NRGBA // comments
+	Number       color.NRGBA // numeric literals
+	Type         color.NRGBA // types and constructors
+	Func         color.NRGBA // function declarations
+	Control      color.NRGBA // control-flow keywords
+	Method       color.NRGBA // methods and calls
+	Variable     color.NRGBA // local and global variables
+	Parameter    color.NRGBA // function parameters
+	Property     color.NRGBA // fields and properties
+	Builtin      color.NRGBA // built-in names
+	Constant     color.NRGBA // named and boolean constants
+	Escape       color.NRGBA // escapes and regular expressions
+	DocComment   color.NRGBA // documentation comments
+	Operator     color.NRGBA // operators
+	Punctuation  color.NRGBA // brackets and punctuation
+	Tag          color.NRGBA // markup tags
+	Attribute    color.NRGBA // markup attributes
+	Preprocessor color.NRGBA // preprocessor directives
+	Annotation   color.NRGBA // annotations and decorators
+	Heading      color.NRGBA // markup headings
+	Link         color.NRGBA // links
 }
 
 // TypeScale is the text styles' size and line height in points and weight
@@ -177,12 +199,19 @@ func light() Palette {
 		Success: Hex("#17732f"), SuccessTint: Hex("#dcf2e2"),
 		Warning: Hex("#975e00"), WarningTint: Hex("#fbeed3"),
 		Danger: Hex("#c4302b"), DangerTint: Hex("#fce4e2"),
-		Diff:   DiffColors{Add: Hex("#e3f5e6"), AddWord: Hex("#a9dfb3"), Del: Hex("#fde8e7"), DelWord: Hex("#f6b9b5"), Fold: Hex("#f0ede7"), Blank: Hex("#f6f4f0")},
-		Syntax: SyntaxColors{Keyword: Hex("#7c3aed"), String: Hex("#1f7a3d"), Comment: Hex("#6b665e"), Number: Hex("#a35200"), Type: Hex("#0b6e99"), Func: Hex("#1f5fd1")},
+		Diff: DiffColors{Add: Hex("#e3f5e6"), AddWord: Hex("#a9dfb3"), Del: Hex("#fde8e7"), DelWord: Hex("#f6b9b5"), Fold: Hex("#f0ede7"), Blank: Hex("#f6f4f0")},
+		Syntax: SyntaxColors{
+			Keyword: Hex("#6f42c1"), Control: Hex("#a626a4"), Type: Hex("#005a7a"), Func: Hex("#1f5fd1"), Method: Hex("#006b66"),
+			Variable: Hex("#3e566b"), Parameter: Hex("#775a11"), Property: Hex("#865b00"), Builtin: Hex("#743f8c"),
+			Constant: Hex("#b03a2e"), Number: Hex("#985500"), String: Hex("#1b6e37"), Escape: Hex("#b42336"),
+			Comment: Hex("#6b665e"), DocComment: Hex("#426552"), Operator: Hex("#50545a"), Punctuation: Hex("#8a8378"),
+			Tag: Hex("#8a2847"), Attribute: Hex("#714f13"), Preprocessor: Hex("#585c18"), Annotation: Hex("#585b9e"),
+			Heading: Hex("#00615c"), Link: Hex("#1750a4"),
+		},
 		Shadow: color.NRGBA{40, 28, 16, 41},
 		ANSI: [16]color.NRGBA{
 			Hex("#24292f"), Hex("#cf222e"), Hex("#116329"), Hex("#9a6700"), Hex("#0550ae"), Hex("#8250df"), Hex("#1b7c83"), Hex("#6e7781"),
-			Hex("#57606a"), Hex("#a40e26"), Hex("#1a7f37"), Hex("#7d4e00"), Hex("#0969da"), Hex("#a475f9"), Hex("#3192aa"), Hex("#8c959f"),
+			Hex("#57606a"), Hex("#a40e26"), Hex("#1a7f37"), Hex("#7d4e00"), Hex("#0969da"), Hex("#a475f9"), Hex("#3192aa"), Hex("#858e98"),
 		},
 	}
 }
@@ -200,8 +229,15 @@ func dark() Palette {
 		Success: Hex("#4cc06a"), SuccessTint: Hex("#17321f"),
 		Warning: Hex("#e3a83b"), WarningTint: Hex("#382b11"),
 		Danger: Hex("#ff7b72"), DangerTint: Hex("#3d1f1f"),
-		Diff:   DiffColors{Add: Hex("#1d3326"), AddWord: Hex("#2f6440"), Del: Hex("#3a2326"), DelWord: Hex("#6e2f37"), Fold: Hex("#2a2825"), Blank: Hex("#1d1c19")},
-		Syntax: SyntaxColors{Keyword: Hex("#c792ea"), String: Hex("#98c379"), Comment: Hex("#a09a90"), Number: Hex("#e5a66b"), Type: Hex("#6cc5d9"), Func: Hex("#82aaff")},
+		Diff: DiffColors{Add: Hex("#1d3326"), AddWord: Hex("#2f6440"), Del: Hex("#3a2326"), DelWord: Hex("#6e2f37"), Fold: Hex("#2a2825"), Blank: Hex("#1d1c19")},
+		Syntax: SyntaxColors{
+			Keyword: Hex("#c792ea"), Control: Hex("#ff7ab2"), Type: Hex("#6cc5d9"), Func: Hex("#82aaff"), Method: Hex("#56b6c2"),
+			Variable: Hex("#b1c7d3"), Parameter: Hex("#e3b341"), Property: Hex("#e5c07b"), Builtin: Hex("#d29ad6"),
+			Constant: Hex("#ff7b86"), Number: Hex("#e5a66b"), String: Hex("#98c379"), Escape: Hex("#ff8a65"),
+			Comment: Hex("#a09a90"), DocComment: Hex("#7cbf9e"), Operator: Hex("#c0b6a5"), Punctuation: Hex("#938d82"),
+			Tag: Hex("#ff8f8f"), Attribute: Hex("#e2a4d6"), Preprocessor: Hex("#c7c963"), Annotation: Hex("#d2c7ff"),
+			Heading: Hex("#58c6bd"), Link: Hex("#7eb8e8"),
+		},
 		Shadow: color.NRGBA{0, 0, 0, 128},
 		ANSI: [16]color.NRGBA{
 			Hex("#545862"), Hex("#e06c75"), Hex("#98c379"), Hex("#e5c07b"), Hex("#61afef"), Hex("#c678dd"), Hex("#56b6c2"), Hex("#dcdfe4"),

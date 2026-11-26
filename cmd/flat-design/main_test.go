@@ -51,6 +51,28 @@ func TestPagesInATerminal(t *testing.T) {
 	}
 }
 
+func TestSyntaxPaletteScroll(t *testing.T) {
+	th := theme.Default()
+	d := flatest.StartWith(app(), flatest.Options{Width: 120, Height: 40, Theme: &th})
+	t.Cleanup(d.Close)
+	for range 4 {
+		d.Send(flatte.KeyEvent{Key: flatte.KeyPageDown})
+	}
+	golden(t, d, "colors-bottom")
+	frame := flatest.CleanFrame(d.Frame().Content)
+	for _, want := range []string{"Preprocessor", "Annotation", "Heading", "Link"} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("scrolled colors page lacks %q:\n%s", want, frame)
+		}
+	}
+	for range 5 {
+		d.Send(flatte.KeyEvent{Key: flatte.KeyPageUp})
+	}
+	if d.State().colorsOffset != 0 {
+		t.Fatalf("scroll offset after returning to the top = %d, want 0", d.State().colorsOffset)
+	}
+}
+
 func TestClickAPage(t *testing.T) {
 	th := theme.Default()
 	d := flatest.StartWith(app(), flatest.Options{Width: 120, Height: 40, Theme: &th})

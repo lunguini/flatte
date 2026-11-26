@@ -28,6 +28,7 @@ type host struct {
 	metrics layout.Metrics
 	cancel  context.CancelFunc
 	page    bool // a browser page has no process quit or native file panels
+	started bool
 
 	// stop ends the platform run loop. It is called on the UI thread.
 	stop     func()
@@ -358,7 +359,12 @@ func (h *host) start(width, height float64) {
 	h.surface.width, h.surface.height = width, height
 	h.session.UseHostServices(h.services())
 	resize := flatte.ResizeEvent{Width: h.cols(width), Height: h.lines(height)}
-	step := h.session.Step(flatte.StepInput{Start: &resize})
+	var events []flatte.Event
+	if h.surface.appearance != flatte.AppearanceUnknown {
+		events = append(events, flatte.AppearanceEvent{Appearance: h.surface.appearance})
+	}
+	step := h.session.Step(flatte.StepInput{Start: &resize, Events: events})
+	h.started = true
 	h.after(step)
 }
 
@@ -1285,7 +1291,13 @@ func (w *wheelAccumulator) notches(delta, line float64) int {
 }
 
 // frameTitle is the last rendered frame's title.
-func (s *surface) setAppearance(a flatte.Appearance) { s.appearance = a }
+func (s *surface) setAppearance(a flatte.Appearance) {
+	changed := s.appearance != a
+	s.appearance = a
+	if changed && s.id == "" && s.h.started {
+		s.h.handle(flatte.AppearanceEvent{Appearance: a})
+	}
+}
 
 func (s *surface) frameTitle() string { return s.title }
 

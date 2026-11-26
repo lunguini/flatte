@@ -19,7 +19,7 @@ func (p Problem) String() string {
 
 // Check reports every text, status and control color that falls below
 // WCAG 2's floor on the surfaces it is meant for: 4.5:1 for text, 3:1 for
-// control outlines and the focus ring.
+// control outlines, the focus ring, syntax comments and punctuation.
 func (t Theme) Check() []Problem {
 	var out []Problem
 	for _, a := range []struct {
@@ -51,8 +51,23 @@ func (t Theme) Check() []Problem {
 		}
 		code := map[string]c{"Content": p.Content, "CurrentLine": p.CurrentLine, "Diff.Add": p.Diff.Add, "Diff.Del": p.Diff.Del}
 		y := p.Syntax
-		for name, fg := range map[string]c{"Syntax.Keyword": y.Keyword, "Syntax.String": y.String, "Syntax.Comment": y.Comment, "Syntax.Number": y.Number, "Syntax.Type": y.Type, "Syntax.Func": y.Func} {
-			check(name, fg, 4.5, code)
+		for _, s := range []struct {
+			name string
+			fg   c
+			need float64
+		}{
+			{"Syntax.Keyword", y.Keyword, 4.5}, {"Syntax.Control", y.Control, 4.5},
+			{"Syntax.Type", y.Type, 4.5}, {"Syntax.Func", y.Func, 4.5}, {"Syntax.Method", y.Method, 4.5},
+			{"Syntax.Variable", y.Variable, 4.5}, {"Syntax.Parameter", y.Parameter, 4.5}, {"Syntax.Property", y.Property, 4.5},
+			{"Syntax.Builtin", y.Builtin, 4.5}, {"Syntax.Constant", y.Constant, 4.5}, {"Syntax.Number", y.Number, 4.5},
+			{"Syntax.String", y.String, 4.5}, {"Syntax.Escape", y.Escape, 4.5},
+			{"Syntax.Comment", y.Comment, 3}, {"Syntax.DocComment", y.DocComment, 3},
+			{"Syntax.Operator", y.Operator, 4.5}, {"Syntax.Punctuation", y.Punctuation, 3},
+			{"Syntax.Tag", y.Tag, 4.5}, {"Syntax.Attribute", y.Attribute, 4.5},
+			{"Syntax.Preprocessor", y.Preprocessor, 4.5}, {"Syntax.Annotation", y.Annotation, 4.5},
+			{"Syntax.Heading", y.Heading, 4.5}, {"Syntax.Link", y.Link, 4.5},
+		} {
+			check(s.name, s.fg, s.need, code)
 		}
 	}
 	return out

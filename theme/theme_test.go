@@ -3,6 +3,8 @@ package theme
 import (
 	"image/color"
 	"math"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -10,6 +12,81 @@ func TestDefaultPassesItsOwnCheck(t *testing.T) {
 	if problems := Default().Check(); len(problems) != 0 {
 		for _, p := range problems {
 			t.Error(p)
+		}
+	}
+}
+
+func TestSyntaxColorsMeetContrastInEveryPalette(t *testing.T) {
+	wantRoles := []string{
+		"Keyword", "Control", "Type", "Func", "Method", "Variable", "Parameter", "Property", "Builtin", "Constant", "Number", "String", "Escape",
+		"Comment", "DocComment", "Operator", "Punctuation", "Tag", "Attribute", "Preprocessor", "Annotation", "Heading", "Link",
+	}
+	fields := reflect.TypeOf(SyntaxColors{})
+	if fields.NumField() != len(wantRoles) {
+		t.Fatalf("SyntaxColors has %d roles, want %d", fields.NumField(), len(wantRoles))
+	}
+	for _, role := range wantRoles {
+		if _, ok := fields.FieldByName(role); !ok {
+			t.Errorf("SyntaxColors has no %s role", role)
+		}
+	}
+
+	teal := Pair{Light: Hex("#0e7468"), Dark: Hex("#4fd1c0")}
+	violet := Pair{Light: Hex("#6d3fd8"), Dark: Hex("#b69bff")}
+	graphite := Pair{Light: Hex("#3d4450"), Dark: Hex("#c3c9d3")}
+	themes := []struct {
+		name  string
+		theme Theme
+	}{
+		{"blue", Default()},
+		{"teal", Default().With(Seeds{Accent: &teal})},
+		{"violet", Default().With(Seeds{Accent: &violet})},
+		{"graphite", Default().With(Seeds{Accent: &graphite})},
+	}
+	for _, tc := range themes {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, appearance := range []struct {
+				name    string
+				palette Palette
+			}{{"light", tc.theme.Light}, {"dark", tc.theme.Dark}} {
+				t.Run(appearance.name, func(t *testing.T) {
+					fields := reflect.TypeOf(appearance.palette.Syntax)
+					colors := reflect.ValueOf(appearance.palette.Syntax)
+					seen := make(map[color.NRGBA]string, fields.NumField())
+					for i := 0; i < fields.NumField(); i++ {
+						name := fields.Field(i).Name
+						fg := colors.Field(i).Interface().(color.NRGBA)
+						if other, ok := seen[fg]; ok {
+							t.Errorf("Syntax.%s shares a color with Syntax.%s", name, other)
+						}
+						seen[fg] = name
+						need := 4.5
+						if strings.Contains(name, "Comment") || name == "Punctuation" {
+							need = 3
+						}
+						if got := Contrast(fg, appearance.palette.Content); got < need {
+							t.Errorf("Syntax.%s on Content is %.2f:1, needs %.1f:1", name, got, need)
+						}
+					}
+				})
+			}
+		})
+	}
+
+	for i := 0; i < fields.NumField(); i++ {
+		name := fields.Field(i).Name
+		bad := Default()
+		reflect.ValueOf(&bad.Dark.Syntax).Elem().Field(i).Set(reflect.ValueOf(bad.Dark.Content))
+		want := "Syntax." + name
+		found := false
+		for _, problem := range bad.Check() {
+			if problem.Appearance == "dark" && problem.Fg == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Check did not report low contrast for %s", want)
 		}
 	}
 }

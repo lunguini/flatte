@@ -2,8 +2,8 @@
   ○  Colors                                                                                                             
   i  Type                                                                                                               
   •  Space & shape         Colors                                                                                       
-  ⚙  Components            Each palette on its own content surface. The ratio is each color's contrast with that        
-  •  App shell             surface; text roles need 4.5:1.                                                              
+  ⚙  Components            Both palettes on Content. Text needs 4.5:1; comments and punctuation need 3:1.               
+  •  App shell             PageUp/PageDown scroll the syntax colors.                                                    
                                                                                                                         
                                                                                                                         
                             LIGHT                                          DARK                                         
@@ -28,13 +28,13 @@
                                  Danger             #c4302b   5.4:1             Danger             #ff7b72   6.5:1      
                                  Diff.Add           #e3f5e6   1.1:1             Diff.Add           #1d3326   1.2:1      
                                  Diff.Del           #fde8e7   1.2:1             Diff.Del           #3a2326   1.1:1      
-                                 Syntax.Keyword     #7c3aed   5.6:1             Syntax.Keyword     #c792ea   6.8:1      
-                                 Syntax.String      #1f7a3d   5.3:1             Syntax.String      #98c379   8.1:1      
-                                 Syntax.Func        #1f5fd1   5.7:1             Syntax.Func        #82aaff   7.1:1      
                                                                                                                         
+                            SYNTAX                                         SYNTAX                                       
                                                                                                                         
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
+                                 Keyword            #6f42c1   6.4:1             Keyword            #c792ea   6.8:1      
+                                 Control            #a626a4   6.0:1             Control            #ff7ab2   6.7:1      
+                                 Type               #005a7a   7.5:1             Type               #6cc5d9   8.2:1      
+                                 Function           #1f5fd1   5.7:1             Function           #82aaff   7.1:1      
+                                 Method             #006b66   6.3:1             Method             #56b6c2   6.9:1      
+                                 Variable           #3e566b   7.5:1             Variable           #b1c7d3   9.3:1      
+                                 Parameter          #775a11   6.3:1             Parameter          #e3b341   8.4:1      

@@ -87,6 +87,7 @@ type State struct {
 	density, shape, accent int // indexes into densities, shapes, accents
 	mode                   int // 0 follows the system, 1 light, 2 dark
 	theme                  theme.Theme
+	colorsOffset           int
 
 	row, tab, choice int
 	wrap, popover    bool
@@ -136,6 +137,10 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 			return
 		}
 		switch {
+		case s.page == pageColors && e.Key == flatte.KeyPageUp:
+			s.colorsOffset = max(0, s.colorsOffset-10)
+		case s.page == pageColors && e.Key == flatte.KeyPageDown:
+			s.colorsOffset = min(s.colorsOffset+10, 40)
 		case e.Key == flatte.KeyUp:
 			s.page = (s.page + pageCount - 1) % pageCount
 		case e.Key == flatte.KeyDown:
@@ -290,6 +295,10 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 	default:
 		page = colorsPage(t, ctx.Graphical)
 	}
+	colorsOffset := 0
+	if s.page == pageColors {
+		colorsOffset = s.colorsOffset
+	}
 	root := layout.Row{
 		NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1)},
 		Children: []layout.Node{
@@ -300,6 +309,7 @@ func View(s *State, ctx flatte.RenderContext) flatte.Frame {
 				divider(false),
 				layout.Scroll{
 					NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1), Box: layout.Box{Fill: layout.FillContent}},
+					OffsetY:  colorsOffset,
 					Child:    page,
 				},
 			}},
@@ -519,7 +529,20 @@ func swatches(p *theme.Palette) []swatch {
 		{"Divider", p.Divider, "separators"}, {"ControlBorder", p.ControlBorder, "field outlines"},
 		{"Info", p.Info, "working"}, {"Success", p.Success, "ready, added"}, {"Warning", p.Warning, "needs you"}, {"Danger", p.Danger, "error, removed"},
 		{"Diff.Add", p.Diff.Add, "added line"}, {"Diff.Del", p.Diff.Del, "removed line"},
-		{"Syntax.Keyword", p.Syntax.Keyword, "code"}, {"Syntax.String", p.Syntax.String, "code"}, {"Syntax.Func", p.Syntax.Func, "code"},
+	}
+}
+
+func syntaxSwatches(p *theme.Palette) []swatch {
+	y := p.Syntax
+	return []swatch{
+		{"Keyword", y.Keyword, "language keywords"}, {"Control", y.Control, "control flow"}, {"Type", y.Type, "types and constructors"},
+		{"Function", y.Func, "function declarations"}, {"Method", y.Method, "methods and calls"}, {"Variable", y.Variable, "variables"},
+		{"Parameter", y.Parameter, "parameters"}, {"Property", y.Property, "fields and properties"}, {"Builtin", y.Builtin, "built-in names"},
+		{"Constant", y.Constant, "constants"}, {"Number", y.Number, "numbers"}, {"String", y.String, "strings"},
+		{"Escape", y.Escape, "escapes and regular expressions"}, {"Comment", y.Comment, "comments"}, {"DocComment", y.DocComment, "documentation comments"},
+		{"Operator", y.Operator, "operators"}, {"Punctuation", y.Punctuation, "punctuation"}, {"Tag", y.Tag, "markup tags"},
+		{"Attribute", y.Attribute, "markup attributes"}, {"Preprocessor", y.Preprocessor, "preprocessor directives"}, {"Annotation", y.Annotation, "annotations and decorators"},
+		{"Heading", y.Heading, "markup headings"}, {"Link", y.Link, "links"},
 	}
 }
 
@@ -529,7 +552,7 @@ func colorsPage(t *theme.Theme, g bool) layout.Node {
 	col := func(name string, p *theme.Palette) layout.Node {
 		ink := func(c color.NRGBA) layout.TextStyle { return layout.TextStyle{Fg: c} }
 		rows := []layout.Node{layout.Label{NodeBase: layout.NodeBase{PadBottom: 1}, Text: name, Style: layout.TextStyle{Role: layout.TextCaption, Fg: p.TextMuted}}}
-		for _, s := range swatches(p) {
+		row := func(s swatch) layout.Node {
 			chip := layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(4), Box: layout.Box{Background: s.c, Round: true}}, Text: "    "}
 			if g {
 				chip.W = layout.Points(28)
@@ -538,16 +561,23 @@ func colorsPage(t *theme.Theme, g bool) layout.Node {
 			if s.c.A == 0xff {
 				ratio = fmt.Sprintf("%4.1f:1", theme.Contrast(s.c, p.Content))
 			}
-			rows = append(rows, layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(1), Gap: 1}, Children: []layout.Node{
+			return layout.Row{NodeBase: layout.NodeBase{H: layout.Fixed(1), Gap: 1}, Children: []layout.Node{
 				chip,
 				layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(18)}, Text: s.name, Style: ink(p.Text), Truncate: true},
 				layout.Label{NodeBase: layout.NodeBase{W: layout.Fixed(8)}, Text: hex(s.c), Style: ink(p.TextSecondary)},
 				layout.Label{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Text: ratio, Style: ink(p.TextMuted)},
-			}})
+			}}
+		}
+		for _, s := range swatches(p) {
+			rows = append(rows, row(s))
+		}
+		rows = append(rows, layout.Label{NodeBase: layout.NodeBase{PadTop: 1, PadBottom: 1}, Text: "Syntax", Style: layout.TextStyle{Role: layout.TextCaption, Fg: p.TextMuted}})
+		for _, s := range syntaxSwatches(p) {
+			rows = append(rows, row(s))
 		}
 		return layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), Pad: 1, Box: layout.Box{Background: p.Content, Round: true}}, Children: rows}
 	}
-	return page("Colors", "Each palette on its own content surface. The ratio is each color's contrast with that surface; text roles need 4.5:1.",
+	return page("Colors", "Both palettes on Content. Text needs 4.5:1; comments and punctuation need 3:1. PageUp/PageDown scroll the syntax colors.",
 		layout.Row{NodeBase: layout.NodeBase{W: layout.Grow(1), Gap: 2}, Children: []layout.Node{col("Light", &t.Light), col("Dark", &t.Dark)}})
 }
 

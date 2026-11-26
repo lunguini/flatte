@@ -151,6 +151,9 @@ flatte package flatte
   field App.Panic func(*S, Panic, Effects[S]) [order=10]
   struct App fields=11 comparable=false
   type Appearance int
+  type AppearanceEvent struct
+  field AppearanceEvent.Appearance Appearance [order=0]
+  struct AppearanceEvent fields=1 comparable=true
   type Capabilities struct
   field Capabilities.Exec bool [order=0]
   field Capabilities.Suspend bool [order=1]
@@ -1864,7 +1867,24 @@ theme package theme
   field SyntaxColors.Number color.NRGBA [order=3]
   field SyntaxColors.Type color.NRGBA [order=4]
   field SyntaxColors.Func color.NRGBA [order=5]
-  struct SyntaxColors fields=6 comparable=true
+  field SyntaxColors.Control color.NRGBA [order=6]
+  field SyntaxColors.Method color.NRGBA [order=7]
+  field SyntaxColors.Variable color.NRGBA [order=8]
+  field SyntaxColors.Parameter color.NRGBA [order=9]
+  field SyntaxColors.Property color.NRGBA [order=10]
+  field SyntaxColors.Builtin color.NRGBA [order=11]
+  field SyntaxColors.Constant color.NRGBA [order=12]
+  field SyntaxColors.Escape color.NRGBA [order=13]
+  field SyntaxColors.DocComment color.NRGBA [order=14]
+  field SyntaxColors.Operator color.NRGBA [order=15]
+  field SyntaxColors.Punctuation color.NRGBA [order=16]
+  field SyntaxColors.Tag color.NRGBA [order=17]
+  field SyntaxColors.Attribute color.NRGBA [order=18]
+  field SyntaxColors.Preprocessor color.NRGBA [order=19]
+  field SyntaxColors.Annotation color.NRGBA [order=20]
+  field SyntaxColors.Heading color.NRGBA [order=21]
+  field SyntaxColors.Link color.NRGBA [order=22]
+  struct SyntaxColors fields=23 comparable=true
   type TextSpec struct
   field TextSpec.Size float64 [order=0]
   field TextSpec.Line float64 [order=1]

@@ -256,6 +256,9 @@ answer: `Exec` folds `ErrUnsupported`, dialogs fold `ErrNoDialogs`.
 background's luminance; the window calls `View` again when the system switches.
 Use it only for colors no text or fill role covers (a syntax palette, say), and
 `Appearance.Dark()` to treat unknown as dark.
+Window hosts also deliver `AppearanceEvent` at startup and when the active
+appearance changes, so `Handle` can update state that depends on it. Terminal
+hosts do not send appearance changes; unknown uses the dark appearance.
 `flatest.StartWith` lets tests set width, height, Graphical, and capabilities,
 while `Driver.Resize(w, h)` updates both Handle and View. Use `flatest` for
 event and state behavior; native point metrics remain covered by
@@ -276,6 +279,7 @@ Use these names for every app:
 | Smooth scrolling in a window | `flatte.WithPreciseScrolling()`: a trackpad's wheel events carry fractional lines in `MouseEvent.Scroll` (one gathered event per frame); read `m.ScrollLines()` (±1 per notch elsewhere) and `m.Point()` (fractional cells when `HasPrecise`), and draw the part-way line with `layout.Text.OffsetY` |
 | Ask before quitting (unsaved work) | `flatte.WithQuitRequests()`: ⌘Q, the main window's close button, and the default Ctrl+C arrive as `flatte.QuitRequest`; call `fx.Quit()` when ready, or keep running |
 | Window size | handle `flatte.ResizeEvent` |
+| Window appearance | handle `flatte.AppearanceEvent` |
 | Keyboard | type switch to `flatte.KeyEvent` |
 | Mouse | `flatte.WithMouse(...)` plus `flatte.MouseEvent` |
 | Solved layout of a `Frame.Root` | handle `flatte.LayoutEvent` |
@@ -602,6 +606,13 @@ palette only with `WithTheme` (without it, cells keep the terminal's own
 colors). `RenderContext.Theme` and `RenderContext.Palette` carry the theme
 to View for colors no role covers (a syntax or diff palette).
 `flatest.Options.Theme` gives a test driver the same theme.
+
+`Palette.Syntax` colors keywords, control flow, types, functions, methods,
+variables, parameters, properties, built-ins, constants, numbers, strings,
+escapes and regular expressions, comments, documentation comments, operators,
+punctuation, tags, attributes, preprocessor directives, annotations, headings
+and links. `Theme.Check` checks every syntax color on the content, current-line
+and diff fills: 4.5:1, with a 3:1 floor for comments and punctuation.
 
 Density sets the spacing in a window: one `Pad` or `Gap` step is
 `Space[1]` (8pt regular, 6 compact, 10 comfortable), controls and

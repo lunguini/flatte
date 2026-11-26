@@ -3,10 +3,10 @@ package flatte
 import "github.com/lunguini/flatte/flatui/layout"
 
 // Event is the closed set of host inputs the loop delivers to Handle:
-// terminal input, resizes, and the solved layout of a Root frame. It is
-// sealed: the framework defines every implementation, apps only consume them
-// with a type switch. This is not TEA — events are host inputs, never
-// app-defined messages; async results remain StateUpdates.
+// terminal input, resizes, window appearance, and the solved layout of a
+// Root frame. It is sealed: the framework defines every implementation, apps
+// only consume them with a type switch. This is not TEA — events are host
+// inputs, never app-defined messages; async results remain StateUpdates.
 type Event interface{ isEvent() }
 
 type Key int
@@ -83,6 +83,10 @@ type ResizeEvent struct {
 	Width  int
 	Height int
 }
+
+// AppearanceEvent reports the active light or dark appearance of a window
+// host. It arrives at startup and when the host's appearance changes.
+type AppearanceEvent struct{ Appearance Appearance }
 
 // PasteEvent is a bracketed paste (paste mode is on by default; see
 // WithoutBracketedPaste).
@@ -234,12 +238,13 @@ type LeaveEvent struct {
 	Window string
 }
 
-func (LeaveEvent) isEvent()     {}
-func (KeyEvent) isEvent()       {}
-func (ResizeEvent) isEvent()    {}
-func (PasteEvent) isEvent()     {}
-func (ClipboardEvent) isEvent() {}
-func (FocusEvent) isEvent()     {}
-func (MouseEvent) isEvent()     {}
-func (LayoutEvent) isEvent()    {}
-func (DropEvent) isEvent()      {}
+func (LeaveEvent) isEvent()      {}
+func (KeyEvent) isEvent()        {}
+func (ResizeEvent) isEvent()     {}
+func (PasteEvent) isEvent()      {}
+func (ClipboardEvent) isEvent()  {}
+func (FocusEvent) isEvent()      {}
+func (MouseEvent) isEvent()      {}
+func (LayoutEvent) isEvent()     {}
+func (AppearanceEvent) isEvent() {}
+func (DropEvent) isEvent()       {}

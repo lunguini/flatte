@@ -81,12 +81,14 @@ func TestThemeMapsANSIColors(t *testing.T) {
 				t.Fatalf("%s: indexed %d → %v, want the palette's", name, i, got)
 			}
 		}
-		// Normal text colors must read on the background (WCAG 3:1 for
-		// large-ish mono text); black on dark and white on light are the
-		// exceptions every terminal palette has.
-		for i := 1; i <= 6; i++ {
-			if r := contrast(th.ANSI[i], th.Field); r < 3 {
-				t.Errorf("%s: ANSI %d contrast %.2f on the field", name, i, r)
+		// Terminal text colors read on the content surface. Black on dark is
+		// the one exception: it is meant to blend into the background.
+		for i := range 16 {
+			if name == "dark" && i == 0 {
+				continue
+			}
+			if r := contrast(th.ANSI[i], th.palette().Content); r < 3 {
+				t.Errorf("%s: ANSI %d contrast %.2f on content", name, i, r)
 			}
 		}
 		for _, c := range []color.Color{ansi.IndexedColor(16), ansi.IndexedColor(208), color.RGBA{1, 2, 3, 255}} {
