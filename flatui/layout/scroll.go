@@ -25,6 +25,10 @@ package layout
 type Scroll struct {
 	NodeBase
 	OffsetY int
+	// OffsetPoints scrolls a window this many points further, on top of
+	// OffsetY's lines, for smooth scrolling (the sum is clamped like
+	// OffsetY). A terminal shows whole rows and ignores it.
+	OffsetPoints float64
 	// ScrollX also lets the child be wider than the window, laid out at its
 	// natural width (Fixed exactly, Content at least the window, Grow/Auto
 	// the window, as for its height) and shown from column OffsetX. Without
@@ -67,6 +71,8 @@ func (s Scroll) IsHorizontal() bool { return false }
 
 func (s Scroll) scroll() (Node, int) { return s.Child, s.OffsetY }
 
+func (s Scroll) scrollPoints() float64 { return s.OffsetPoints }
+
 func (s Scroll) across() (int, bool) { return s.OffsetX, s.ScrollX }
 
 // ClampScroll clamps a scroll offset to [0, content-viewport]: the offset a
@@ -89,5 +95,6 @@ func ScrollToShow(offset, viewport, start, end int) int {
 
 type scroller interface {
 	scroll() (Node, int)
+	scrollPoints() float64 // more of the offset, in points (a window's only)
 	across() (offset int, ok bool)
 }

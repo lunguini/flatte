@@ -81,10 +81,10 @@ const (
 	GlassDark  = 0x14
 )
 
-// FillShade's black opacities: 5% on a light palette, 35% on a dark one.
+// FillShade's black opacities: 5% on a light palette, 50% on a dark one.
 const (
 	ShadeLight = 0x0d
-	ShadeDark  = 0x59
+	ShadeDark  = 0x80
 )
 
 // FillColor is f's color in p; ok is false for FillNone and unknown fills.

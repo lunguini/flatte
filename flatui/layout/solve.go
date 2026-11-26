@@ -32,6 +32,9 @@ type metric[T unit] interface {
 	// side of its box across its axis: a GUI's hairline splitter stays easy
 	// to grab; a cell is grabbable already (zero).
 	grip() T
+	// fine is a length in points where the backend has them (a window's
+	// smooth scrolling), zero in cells.
+	fine(p float64) T
 	padding(n Node) sidesOf[T]
 
 	add(a, b T) T
@@ -126,6 +129,7 @@ func (cells) border() int { return 1 }
 
 func (cells) anchorPull() (x, y int) { return 0, 0 }
 func (cells) grip() int              { return 0 }
+func (cells) fine(float64) int       { return 0 }
 func (cells) padding(n Node) sidesOf[int] {
 	p := getPadSides(n)
 	return sidesOf[int]{p.top, p.right, p.bottom, p.left}
@@ -790,7 +794,7 @@ func (s *solver[T]) walkScroll(n Node, sc scroller, r rect[T]) {
 	}
 	_, ch := measure(m, child, contentW)
 	contentH := scrollContentOf(ch, inner.H)
-	off := clampScrollOf(m, m.lines(offset), inner.H, contentH)
+	off := clampScrollOf(m, m.add(m.lines(offset), m.fine(sc.scrollPoints())), inner.H, contentH)
 	cr := rect[T]{m.sub(inner.X, left), m.sub(inner.Y, off), contentW, contentH}
 
 	saved := s.clip

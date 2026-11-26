@@ -453,7 +453,7 @@ whole viewport.
 | `layout.ScrollBar{Offset: ..., Visible: ..., Total: ..., Color: ...}` | Where a scrolled window is: `█` thumb on `░` track in the terminal (blank when everything fits), a thin native thumb in a window. One column wide, fills the height. |
 | `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. `Caret: &layout.Caret{X, Y}` puts a text caret at a content cell (code editors, terminal emulators): a blinking bar in a window, the hardware cursor in a terminal; the last visible caret in paint order wins. `Carets: []layout.Caret{...}` adds further carets for multi-cursor editing: a window draws each as the same blinking bar (`layout.CaretOp` in the scene); a terminal has one cursor and ignores them, so style those cells yourself. `OffsetY` (0–1) draws the text that fraction of a line higher in a window, clipped, with one more line of `String` showing below: smooth scrolling (terminals ignore it). |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
-| `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY` (with `ScrollX: true`, its natural width too, from column `OffsetX`). See [Scrolling](#scrolling). |
+| `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY`, plus `OffsetPoints` in a window (with `ScrollX: true`, its natural width too, from column `OffsetX`). See [Scrolling](#scrolling). |
 
 ### Solving a frame
 
@@ -534,6 +534,13 @@ case flatte.LayoutEvent:
 	s.logY = layout.ClampScroll(s.logY, s.rects["log"].H, s.rects["log.content"].H)
 ```
 
+In a window, `OffsetPoints` scrolls that many points further on top of
+`OffsetY`'s lines (the sum is clamped the same way), for smooth scrolling;
+terminals ignore it. A window's rects in cells are rounded down, so clamp
+there in points: `LayoutEvent.Line` is the window's line height (what
+`OffsetY` and `MouseEvent.Scroll` count), and the content's end is
+`(PointRects[content].H - PointRects[view].H) / Line` lines.
+
 Clamping in state matters: an offset left past the end makes scrolling back
 appear stuck. Put chrome (borders, padding) on a wrapping container so the
 Scroll's rect is exactly its window. To keep a row visible, compare its
@@ -566,7 +573,7 @@ glass for controls on a translucent window's chrome (side bar buttons, a
 title bar field): 80% white on a light palette (`GlassLight`), an 8% white
 wash on a dark one (`GlassDark`). `FillBorder` is the control border, a
 neutral mark that does not read as focus. `FillShade` is a wash of black for
-a pane's body (5% on a light palette, `ShadeLight`; 35% on a dark one,
+a pane's body (5% on a light palette, `ShadeLight`; 50% on a dark one,
 `ShadeDark`), so the pane and its header stand out from the window ground.
 
 ### Themes
@@ -678,7 +685,7 @@ accessible row; zero-height viewports show none. Give the Col returned by
 Rows a growing height and set its viewport ID explicitly to the same ID
 passed to Rows. Existing `SetHeight` remains available when the app chooses its own page size.
 `LayoutEvent.PointRects` is an independent handler-owned map in native
-windows; terminals leave it nil. Native fractional geometry changes also
+windows; terminals leave it nil, and `LayoutEvent.Line` 0. Native fractional geometry changes also
 produce layout events, even if their rounded cell rectangles are unchanged.
 
 ### Inputs and the cursor

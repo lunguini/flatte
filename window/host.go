@@ -1250,7 +1250,7 @@ func (s *surface) render() layout.Scene {
 		}
 		s.delivered = rects
 		s.deliveredPoints = maps.Clone(s.scene.Rects)
-		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Window: s.id}
+		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Line: h.metrics.Line, Window: s.id}
 		step := h.session.Step(flatte.StepInput{Events: []flatte.Event{ev}})
 		h.state = h.session.State()
 		if step.Quit {

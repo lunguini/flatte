@@ -51,6 +51,9 @@ func TestHostListAdoptUsesMeasuredPointRows(t *testing.T) {
 	if event.PointRects["songs"].H != 100.5 || event.Rects["songs"].H != 6 {
 		t.Fatalf("native/cell geometry %+v / %+v", event.PointRects["songs"], event.Rects["songs"])
 	}
+	if event.Line != cellMetrics.Line || event.Line <= 0 {
+		t.Fatalf("line %v, want the metrics' %v", event.Line, cellMetrics.Line)
+	}
 }
 
 type corruptLayoutTracer struct {

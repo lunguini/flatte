@@ -222,6 +222,7 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 			handlerEvent = LayoutEvent{
 				Rects:      maps.Clone(layout.Rects),
 				PointRects: maps.Clone(layout.PointRects),
+				Line:       layout.Line,
 				Window:     layout.Window,
 			}
 		}

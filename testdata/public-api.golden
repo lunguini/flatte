@@ -278,8 +278,9 @@ flatte package flatte
   type LayoutEvent struct
   field LayoutEvent.Rects map[string] layout.Rect [order=0]
   field LayoutEvent.PointRects map[string] layout.PointRect [order=1]
-  field LayoutEvent.Window string [order=2]
-  struct LayoutEvent fields=3 comparable=false
+  field LayoutEvent.Line float64 [order=2]
+  field LayoutEvent.Window string [order=3]
+  struct LayoutEvent fields=4 comparable=false
   type LeaveEvent struct
   field LeaveEvent.ID string [order=0]
   field LeaveEvent.Window string [order=1]
@@ -1218,7 +1219,7 @@ flatui/layout package layout
   const ResizeColumns Resize = 1
   const ResizeNone Resize = 0
   const ResizeRows Resize = 2
-  const ShadeDark untyped int = 89
+  const ShadeDark untyped int = 128
   const ShadeLight untyped int = 13
   const SideBottom Side = 2
   const SideLeft Side = 3
@@ -1654,10 +1655,11 @@ flatui/layout package layout
   type Scroll struct
   field Scroll.NodeBase NodeBase [order=0]
   field Scroll.OffsetY int [order=1]
-  field Scroll.ScrollX bool [order=2]
-  field Scroll.OffsetX int [order=3]
-  field Scroll.Child Node [order=4]
-  struct Scroll fields=5 comparable=false
+  field Scroll.OffsetPoints float64 [order=2]
+  field Scroll.ScrollX bool [order=3]
+  field Scroll.OffsetX int [order=4]
+  field Scroll.Child Node [order=5]
+  struct Scroll fields=6 comparable=false
   type ScrollBar struct
   field ScrollBar.NodeBase NodeBase [order=0]
   field ScrollBar.Offset int [order=1]

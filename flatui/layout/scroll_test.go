@@ -403,3 +403,30 @@ func TestScrollToShow(t *testing.T) {
 		}
 	}
 }
+
+// A window scrolls by points too: OffsetPoints moves the child that much
+// further on top of OffsetY's lines, the sum clamped to the content, and a
+// terminal's whole rows ignore it.
+func TestScrollOffsetPoints(t *testing.T) {
+	rows := make([]Node, 10)
+	for i := range rows {
+		rows[i] = Label{NodeBase: NodeBase{ID: "r" + string(rune('0'+i)), H: Fixed(1)}, Text: "x"}
+	}
+	view := func(lines int, pts float64) Node {
+		return Scroll{NodeBase: NodeBase{ID: "v", W: Fixed(10), H: Fixed(4)}, OffsetY: lines, OffsetPoints: pts, Child: Col{Children: rows}}
+	}
+	m := Metrics{Column: 8, Line: 20}
+	if y := LayoutScene(view(1, 5), 80, 80, m).Rects["r0"].Y; y != -25 {
+		t.Errorf("first row at %v, want one line and 5pt above (-25)", y)
+	}
+	if y := LayoutScene(view(0, 1000), 80, 80, m).Rects["r0"].Y; y != -120 {
+		t.Errorf("first row at %v, want clamped to the last window (-120)", y)
+	}
+	if y := LayoutScene(view(0, -7), 80, 80, m).Rects["r0"].Y; y != 0 {
+		t.Errorf("first row at %v, want clamped to the top", y)
+	}
+	_, rects := SolveAndCompose(view(1, 15), 10, 4)
+	if y := rects["r0"].Y; y != -1 {
+		t.Errorf("cells: first row at %d, want OffsetY's line only (-1)", y)
+	}
+}

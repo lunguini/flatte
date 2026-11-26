@@ -368,6 +368,13 @@ const splitterGrip = 3.0
 
 func (p pointMetric) grip() float64 { return splitterGrip }
 
+func (p pointMetric) fine(v float64) float64 {
+	if v != v || math.IsInf(v, 0) {
+		return 0
+	}
+	return v
+}
+
 func (p pointMetric) anchorPull() (x, y float64) {
 	return p.Border / 2, max(p.Border/2-anchorGap, 0)
 }

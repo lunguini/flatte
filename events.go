@@ -134,6 +134,10 @@ type LayoutEvent struct {
 	// Window hosts populate it; terminal hosts leave it nil. Like Rects,
 	// this is the handler's own copy. Prefer it for native measurements.
 	PointRects map[string]layout.PointRect
+	// Line is a window's line height in points: what a Scroll's OffsetY and
+	// a wheel's Scroll count, so an app can scroll by points
+	// (Scroll.OffsetPoints). Terminal hosts leave it 0.
+	Line float64
 	// Window is the window the rects are in ("" the main window).
 	Window string
 }

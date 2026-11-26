@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 type sessionRunState struct {
@@ -257,5 +259,26 @@ func TestCellDialogResizeRoutingPreservesHostMenuPolicy(t *testing.T) {
 	browser := newCell(true)
 	if got := routeCellEvent(browser, App[struct{}]{}, resize, ctx); len(got) != 1 || got[0] != resize || browser.menus.isOpen() {
 		t.Fatalf("browser dialog resize route = %v, menu open=%t; want resize delivered and menu closed", got, browser.menus.isOpen())
+	}
+}
+
+// The handler gets its own copy of a LayoutEvent, with every field.
+func TestSessionDeliversTheWholeLayoutEvent(t *testing.T) {
+	type st struct{ got LayoutEvent }
+	s := &st{}
+	session := NewSession(context.Background(), App[st]{State: s, View: func(*st, RenderContext) Frame { return Frame{} }, Handle: func(s *st, ev Event, _ Effects[st]) {
+		if le, ok := ev.(LayoutEvent); ok {
+			s.got = le
+		}
+	}})
+	sent := LayoutEvent{Rects: map[string]layout.Rect{"a": {H: 2}}, PointRects: map[string]layout.PointRect{"a": {H: 33}}, Line: 16.5, Window: "w"}
+	session.Step(StepInput{Events: []Event{sent}})
+	got := s.got
+	if got.Line != 16.5 || got.Window != "w" || got.Rects["a"].H != 2 || got.PointRects["a"].H != 33 {
+		t.Fatalf("got %+v", got)
+	}
+	got.Rects["a"] = layout.Rect{}
+	if sent.Rects["a"].H != 2 {
+		t.Fatal("the handler's rects are the sender's")
 	}
 }
