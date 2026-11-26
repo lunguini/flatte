@@ -392,7 +392,7 @@ shared geometry and add their own fields.
 | `W`, `H` | `Size` | Per-axis constraint (default `Auto`). |
 | `Pad` | `int` | Inner padding on all sides; explicit padding replaces GUI defaults. |
 | `ItemPadding` | `bool` | Give a Row/Col GUI item insets (8pt horizontal, 4pt vertical) when default padding is enabled; explicit padding or NoPadding overrides it. Terminal sizes stay unchanged. |
-| `PanePadding` | `bool` | A pane body's inset (a list under a `kit.PaneHeader`): one layout step on every side in a GUI, so the first row sits as far from the header as from the sides; one column left and right in a terminal. Explicit padding overrides it. |
+| `PanePadding` | `bool` | A pane body's inset (a list under a `kit.PaneHeader`): one layout step on every side in a GUI, so the first row sits as far from the header as from the sides; one column left and right in a terminal. `PadTop`/`PadRight`/`PadBottom`/`PadLeft` replace only their own side; `Pad` replaces every side. |
 | `NoPadding` | `bool` | Disable GUI default padding for this node; explicit `Pad*` still applies. Terminal layout is unchanged. |
 | `PadTop`/`PadRight`/`PadBottom`/`PadLeft` | `int` | Per-side padding added on top of `Pad` (inside the border) — for asymmetric insets like "header rows + left pad only". |
 | `Gap` | `int` | Space between children (containers). |

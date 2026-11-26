@@ -318,16 +318,22 @@ type NodeBase struct {
 	// PaneHeader): one layout step on every side in a GUI, so the first
 	// row's selection sits as far from the header as from the sides; one
 	// column left and right in a terminal, which cannot spare the rows.
-	// Explicit Pad fields override it.
+	// A PadTop, PadRight, PadBottom or PadLeft replaces only its own
+	// side's inset (more room above a list keeps the pane's sides); Pad
+	// replaces every side.
 	PanePadding bool
 }
 
 func (n NodeBase) noPadding() bool   { return n.NoPadding }
 func (n NodeBase) itemPadding() bool { return n.ItemPadding }
 
-// panePadding reports a PanePadding the Pad fields do not override.
-func (n NodeBase) panePadding() bool {
-	return n.PanePadding && n.Pad == 0 && n.PadTop == 0 && n.PadRight == 0 && n.PadBottom == 0 && n.PadLeft == 0
+// panePadding reports a PanePadding that Pad does not override; its
+// explicit sides (paneSides) replace the pane inset only on their side.
+func (n NodeBase) panePadding() bool { return n.PanePadding && n.Pad == 0 }
+
+// paneSides is the sides a PanePadding node sets itself (0: the pane's).
+func (n NodeBase) paneSides() sides {
+	return sides{top: nonNegative(n.PadTop), right: nonNegative(n.PadRight), bottom: nonNegative(n.PadBottom), left: nonNegative(n.PadLeft)}
 }
 
 func (n NodeBase) tooltip() string { return n.Tooltip }
@@ -514,7 +520,14 @@ func (s sides) clampTo(width, height int) sides {
 // extras (border excluded).
 func (n NodeBase) padSides() sides {
 	if n.panePadding() {
-		return sides{right: 1, left: 1}
+		s := n.paneSides()
+		if s.right == 0 {
+			s.right = 1
+		}
+		if s.left == 0 {
+			s.left = 1
+		}
+		return s
 	}
 	pad := max(n.Pad, 0)
 	return sides{

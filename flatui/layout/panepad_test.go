@@ -20,8 +20,19 @@ func TestPanePadding(t *testing.T) {
 	if c, rr := rects["body"], rects["row"]; rr.X-c.X != 1 || rr.Y != c.Y || c.X+c.W-(rr.X+rr.W) != 1 {
 		t.Errorf("cell insets: body %+v row %+v, want one column each side, no rows", c, rr)
 	}
-	s = LayoutScene(body(NodeBase{PanePadding: true, PadLeft: 2}), 200, 100, Metrics{Column: 8, Line: 16, Step: 8})
-	if b, r := s.Rects["body"], s.Rects["row"]; r.Y != b.Y {
-		t.Errorf("explicit padding should override the pane inset: top %v", r.Y-b.Y)
+	// An explicit side replaces only that side's inset: a list that wants
+	// more room above keeps the pane's sides (they once all went).
+	s = LayoutScene(body(NodeBase{PanePadding: true, PadTop: 2}), 200, 100, Metrics{Column: 8, Line: 16, Step: 8})
+	if b, r := s.Rects["body"], s.Rects["row"]; r.Y-b.Y != 16 || r.X-b.X != left || b.X+b.W-(r.X+r.W) != left {
+		t.Errorf("GUI PadTop 2: top %v left %v right %v, want 16, %v, %v", r.Y-b.Y, r.X-b.X, b.X+b.W-(r.X+r.W), left, left)
+	}
+	_, rects = SolveAndCompose(body(NodeBase{PanePadding: true, PadTop: 1, PadBottom: 1}), 20, 5)
+	if c, rr := rects["body"], rects["row"]; rr.X-c.X != 1 || rr.Y-c.Y != 1 || c.X+c.W-(rr.X+rr.W) != 1 {
+		t.Errorf("cell PadTop 1: body %+v row %+v, want a row above and a column each side", c, rr)
+	}
+	// Pad sets every side, as without PanePadding.
+	s = LayoutScene(body(NodeBase{PanePadding: true, Pad: 2}), 200, 100, Metrics{Column: 8, Line: 16, Step: 8})
+	if b, r := s.Rects["body"], s.Rects["row"]; r.X-b.X != 16 || r.Y-b.Y != 16 {
+		t.Errorf("GUI Pad 2: left %v top %v, want 16", r.X-b.X, r.Y-b.Y)
 	}
 }
