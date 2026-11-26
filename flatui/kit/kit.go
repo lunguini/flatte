@@ -102,8 +102,10 @@ func (h PaneHeader) Layout() layout.Node {
 	if h.Bare {
 		box.Fill = layout.FillNone
 	}
+	// The title starts where the pane's contents do: past the body's inset
+	// (PanePadding, a step) and a row's own, in line with a Divider's title.
 	return layout.Row{
-		NodeBase: layout.NodeBase{ID: h.ID, H: layout.BarSize(), Gap: 1, PadLeft: 1, PadRight: 1, Box: box},
+		NodeBase: layout.NodeBase{ID: h.ID, H: layout.BarSize(), Gap: 1, PadLeft: 2, PadRight: 1, Box: box},
 		Align:    layout.AlignCenter, Children: kids,
 	}
 }

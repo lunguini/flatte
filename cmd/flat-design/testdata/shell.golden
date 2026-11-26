@@ -1,11 +1,11 @@
- FLATTE design system       Compact  Regular  Comfortable    Square  Subtle  Round    Blue  Teal  Violet  Graphite      
+  FLATTE design system      Compact  Regular  Comfortable    Square  Subtle  Round    Blue  Teal  Violet  Graphite      
   ○  Colors                                                                                                             
   i  Type                                                                                                               
   •  Space & shape         App shell                                                                                    
   ⚙  Components            An IDE's frame from the kit alone: no colors or sizes of its own.                            
   •  App shell                                                                                                          
                            ╭─────────────────────────────────────────────────────────────────────────────────────────╮  
-                           │ FILES                 +    main.go   theme.go ●              AGENTS 2                   │  
+                           │  FILES                +    main.go   theme.go ●               AGENTS 2                  │  
                            │ ▸  cmd                                                       Design system     working  │  
                            │  ▸  flat-design            1    package main                 Fix the tree    needs you  │  
                            │   ▤  main.go               2                                                            │  

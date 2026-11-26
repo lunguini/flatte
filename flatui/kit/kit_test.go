@@ -596,3 +596,39 @@ func TestListRowWeights(t *testing.T) {
 		}
 	}
 }
+
+// A pane's title starts where its contents do: in line with a Divider's
+// title in the body under it, in a window and in a terminal.
+func TestPaneHeaderTitleLinesUpWithItsContents(t *testing.T) {
+	pane := layout.Col{NodeBase: layout.NodeBase{W: layout.Fixed(40), H: layout.Fixed(10)}, Children: []layout.Node{
+		PaneHeader{Title: "Agents", Bare: true}.Layout(),
+		layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1), PanePadding: true}, Children: []layout.Node{
+			Divider{Title: "Elsewhere"}.Layout(),
+		}},
+	}}
+	find := func(sc layout.Scene, text string) float64 {
+		for _, op := range sc.Ops {
+			if t, ok := op.(layout.TextOp); ok && strings.EqualFold(t.Text, text) {
+				return t.Rect.X
+			}
+		}
+		return -1
+	}
+	sc := layout.LayoutScene(pane, 400, 300, layout.Metrics{Column: 8, Line: 16, Step: 8, DefaultPadding: true})
+	if a, e := find(sc, "Agents"), find(sc, "Elsewhere"); a < 0 || a != e {
+		t.Fatalf("window: title at %v, divider's at %v", a, e)
+	}
+	frame, _ := layout.SolveAndCompose(pane, 40, 10)
+	lines := strings.Split(ansi.Strip(frame), "\n")
+	at := func(text string) int {
+		for _, l := range lines {
+			if i := strings.Index(strings.ToLower(l), strings.ToLower(text)); i >= 0 {
+				return i
+			}
+		}
+		return -1
+	}
+	if a, e := at("Agents"), at("Elsewhere"); a < 0 || a != e {
+		t.Fatalf("terminal: title at %d, divider's at %d", a, e)
+	}
+}
