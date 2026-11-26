@@ -849,44 +849,45 @@ func (p *canvasPainter) slider(op layout.ControlOp, hot, down bool) {
 
 func (p *canvasPainter) cells(op layout.CellsOp) {
 	defer p.cellsCaret(op)
+	cell := p.metrics.Cell(op.Face)
 	buf := uv.NewScreenBuffer(op.Cols, op.Lines)
 	uv.NewStyledString(op.Content).Draw(buf, buf.Bounds())
 	for y := range op.Lines {
-		top := op.Rect.Y + float64(y)*p.metrics.Line
+		top := op.Rect.Y + float64(y)*cell.Line
 		for x := 0; x < op.Cols; {
-			cell := buf.CellAt(x, y)
-			if cell == nil || cell.Width == 0 {
+			c := buf.CellAt(x, y)
+			if c == nil || c.Width == 0 {
 				x++
 				continue
 			}
-			cx := op.Rect.X + float64(x)*p.metrics.Column
-			cw := float64(max(cell.Width, 1)) * p.metrics.Column
-			if g, ok := canvasGridGlyph(cell, cx, top, cw, p.metrics.Line); ok {
-				p.cellShape(g, cell.Style, cx, top, cw)
-				x += max(cell.Width, 1)
+			cx := op.Rect.X + float64(x)*cell.Column
+			cw := float64(max(c.Width, 1)) * cell.Column
+			if g, ok := canvasGridGlyph(c, cx, top, cw, cell.Line); ok {
+				p.cellShape(g, c.Style, cx, top, cw, cell.Line)
+				x += max(c.Width, 1)
 				continue
 			}
-			start, style := x, cell.Style
+			start, style := x, c.Style
 			var text strings.Builder
 			for x < op.Cols {
-				c := buf.CellAt(x, y)
-				if c == nil || !c.Style.Equal(&style) || c.Width > 1 && x > start {
+				cc := buf.CellAt(x, y)
+				if cc == nil || !cc.Style.Equal(&style) || cc.Width > 1 && x > start {
 					break
 				}
-				if _, ok := canvasGridGlyph(c, 0, 0, 1, 1); ok {
+				if _, ok := canvasGridGlyph(cc, 0, 0, 1, 1); ok {
 					break
 				}
-				if c.Width == 0 {
+				if cc.Width == 0 {
 					x++
 					continue
 				}
-				text.WriteString(canvasCellText(c))
-				x += max(c.Width, 1)
-				if c.Width > 1 {
+				text.WriteString(canvasCellText(cc))
+				x += max(cc.Width, 1)
+				if cc.Width > 1 {
 					break
 				}
 			}
-			p.cellRun(text.String(), style, op.Rect.X+float64(start)*p.metrics.Column, top, float64(x-start)*p.metrics.Column)
+			p.cellRun(text.String(), style, op.Rect.X+float64(start)*cell.Column, top, float64(x-start)*cell.Column, op.Face, cell.Line)
 		}
 	}
 }
@@ -937,21 +938,17 @@ func (p *canvasPainter) cellFill(c rgba, x, y, w, h float64) {
 	p.ctx.Call("fillRect", x0, y0, x1-x0, y1-y0)
 }
 
-func (p *canvasPainter) cellRun(text string, style uv.Style, x, y, w float64) {
+func (p *canvasPainter) cellRun(text string, style uv.Style, x, y, w float64, face layout.Face, line float64) {
 	fg, bg, hasBG := p.cellColors(style)
 	if hasBG {
-		p.cellFill(bg, x, y, w, p.metrics.Line)
+		p.cellFill(bg, x, y, w, line)
 	}
 	if strings.TrimSpace(text) == "" || style.Attrs&uv.AttrConceal != 0 {
 		return
 	}
-	family := p.theme.MonoFont
-	if family == "" {
-		family = "ui-monospace, SFMono-Regular, Menlo, monospace"
-	}
 	fontStyle := layout.TextStyle{Role: layout.TextBody, Bold: style.Attrs&uv.AttrBold != 0, Italic: style.Attrs&uv.AttrItalic != 0}
-	f := p.text.fontFamily(fontStyle, p.theme.monoSize(), family)
-	base := y + (p.metrics.Line-(f.ascent+f.descent))/2 + f.ascent
+	f := p.text.faceFont(face, fontStyle)
+	base := y + (line-(f.ascent+f.descent))/2 + f.ascent
 	p.ctx.Set("font", f.css)
 	p.fill(colorFromRGBA(fg))
 	p.ctx.Call("fillText", text, x, base)
@@ -963,10 +960,10 @@ func (p *canvasPainter) cellRun(text string, style uv.Style, x, y, w float64) {
 	}
 }
 
-func (p *canvasPainter) cellShape(shape cellShape, style uv.Style, x, y, w float64) {
+func (p *canvasPainter) cellShape(shape cellShape, style uv.Style, x, y, w, h float64) {
 	fg, bg, hasBG := p.cellColors(style)
 	if hasBG {
-		p.cellFill(bg, x, y, w, p.metrics.Line)
+		p.cellFill(bg, x, y, w, h)
 	}
 	if style.Attrs&uv.AttrConceal == 0 {
 		p.shape(shape, fg)
@@ -1103,6 +1100,7 @@ func (p *canvasPainter) cellsCaret(op layout.CellsOp) {
 	if c == nil || !p.caretOn || c.X < 0 || c.Y < 0 || c.X >= op.Cols || c.Y >= op.Lines {
 		return
 	}
+	cell := p.metrics.Cell(op.Face)
 	p.fill(p.theme.Accent)
-	p.ctx.Call("fillRect", op.Rect.X+float64(c.X)*p.metrics.Column, op.Rect.Y+float64(c.Y)*p.metrics.Line, 1.5, p.metrics.Line)
+	p.ctx.Call("fillRect", op.Rect.X+float64(c.X)*cell.Column, op.Rect.Y+float64(c.Y)*cell.Line, 1.5, cell.Line)
 }

@@ -39,6 +39,13 @@ type Theme struct {
 	// interface text: columns are its fixed-pitch advance and lines its
 	// pitch. Zero follows FontSize.
 	MonoSize float64
+	// TerminalFont, TerminalSize and TerminalLine are the terminal face's
+	// (layout.FaceTerminal) family, size and line height in points: its
+	// cells are the family's fixed-pitch advance at the size by the line.
+	// Empty or zero follow MonoFont, the code size, and the line the code
+	// grid would have at the size.
+	TerminalFont               string
+	TerminalSize, TerminalLine float64
 	// ControlHeight is the minimum Auto height of regular controls in points.
 	// Zero inherits the base theme (32pt); negative disables the minimum.
 	// Explicit node heights and Bare/multiline fields are unaffected.
@@ -106,8 +113,9 @@ func fromDesign(design *ds.Theme, dark bool) Theme {
 		Accent: p.Accent, Selection: p.SelectionActive, Track: p.SelectionInactive,
 		Font: design.Font, MonoFont: design.MonoFont,
 		FontSize: design.Type.Body.Size, TitleSize: design.Type.Title.Size, LineSpacing: 1.25,
-		MonoSize: design.Type.Code.Size,
-		Radius:   radius, ControlHeight: design.Size.Control,
+		MonoSize:     design.Type.Code.Size,
+		TerminalFont: design.TerminalFont, TerminalSize: design.Type.Terminal.Size, TerminalLine: design.Type.Terminal.Line,
+		Radius: radius, ControlHeight: design.Size.Control,
 		ANSI:   pal,
 		design: design, dark: dark,
 	}
@@ -189,6 +197,8 @@ func (t Theme) over(base Theme) Theme {
 		LineSpacing: num(t.LineSpacing, base.LineSpacing), Radius: num(t.Radius, base.Radius),
 		ControlHeight: num(t.ControlHeight, base.ControlHeight),
 		MonoSize:      t.monoOver(base),
+		TerminalFont:  str(t.TerminalFont, base.TerminalFont),
+		TerminalSize:  num(t.TerminalSize, base.TerminalSize), TerminalLine: num(t.TerminalLine, base.TerminalLine),
 	}
 }
 
@@ -211,6 +221,24 @@ func (t Theme) monoSize() float64 {
 		return t.MonoSize
 	}
 	return t.FontSize
+}
+
+// terminalSize is the terminal face's size: TerminalSize, else the grid's.
+func (t Theme) terminalSize() float64 {
+	if t.TerminalSize > 0 && !math.IsInf(t.TerminalSize, 1) {
+		return t.TerminalSize
+	}
+	return t.monoSize()
+}
+
+// terminalLine is the terminal face's line height when set, on whole
+// points (cells stay on the pixel grid as code's pitch does); 0 for the
+// grid's pitch at its size.
+func (t Theme) terminalLine() float64 {
+	if t.TerminalLine > 0 && !math.IsInf(t.TerminalLine, 1) {
+		return max(math.Round(t.TerminalLine), 1)
+	}
+	return 0
 }
 
 // themeFor is the theme a window draws with: opts' theme over Dark, or —

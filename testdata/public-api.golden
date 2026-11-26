@@ -283,7 +283,8 @@ flatte package flatte
   field LayoutEvent.PointRects map[string] layout.PointRect [order=1]
   field LayoutEvent.Line float64 [order=2]
   field LayoutEvent.Window string [order=3]
-  struct LayoutEvent fields=4 comparable=false
+  field LayoutEvent.Faces map[layout.Face] layout.CellSize [order=4]
+  struct LayoutEvent fields=5 comparable=false
   type LeaveEvent struct
   field LeaveEvent.ID string [order=0]
   field LeaveEvent.Window string [order=1]
@@ -1150,6 +1151,8 @@ flatui/layout package layout
   const ControlRadio ControlKind = 3
   const ControlSlider ControlKind = 4
   const ControlSwitch ControlKind = 2
+  const FaceCode Face = 0
+  const FaceTerminal Face = 1
   const FillAccent Fill = 8
   const FillBorder Fill = 25
   const FillCanvas Fill = 4
@@ -1289,6 +1292,7 @@ flatui/layout package layout
   method *Spacer.WithBackground(c color.Color) *Spacer
   method Button.Render(r Rect) string
   method Button.Size()(Size, Size)
+  method CellSize.Cells(r PointRect) Rect
   method Col.GetAlign() Align
   method Col.GetChildren()[]Node
   method Col.GetGap() int
@@ -1308,6 +1312,7 @@ flatui/layout package layout
   method Label.Size()(Size, Size)
   method Meter.Render(r Rect) string
   method Meter.Size()(Size, Size)
+  method Metrics.Cell(f Face) CellSize
   method NodeBase.GetID() string
   method NodeBase.IsOverlay() bool
   method NodeBase.Size()(Size, Size)
@@ -1457,6 +1462,10 @@ flatui/layout package layout
   field CaretOp.Cell PointRect [order=0]
   field CaretOp.Clip PointRect [order=1]
   struct CaretOp fields=2 comparable=true
+  type CellSize struct
+  field CellSize.Column float64 [order=0]
+  field CellSize.Line float64 [order=1]
+  struct CellSize fields=2 comparable=true
   type CellsOp struct
   field CellsOp.Rect PointRect [order=0]
   field CellsOp.Clip PointRect [order=1]
@@ -1464,7 +1473,8 @@ flatui/layout package layout
   field CellsOp.Lines int [order=3]
   field CellsOp.Content string [order=4]
   field CellsOp.Caret *Caret [order=5]
-  struct CellsOp fields=6 comparable=true
+  field CellsOp.Face Face [order=6]
+  struct CellsOp fields=7 comparable=true
   type Col struct
   field Col.NodeBase NodeBase [order=0]
   field Col.Children []Node [order=1]
@@ -1502,6 +1512,7 @@ flatui/layout package layout
   field DuplicateIDDiagnostic.FirstRect Rect [order=1]
   field DuplicateIDDiagnostic.Duplicate Rect [order=2]
   struct DuplicateIDDiagnostic fields=3 comparable=true
+  type Face uint8
   type Fill int
   type Icon struct
   field Icon.NodeBase NodeBase [order=0]
@@ -1611,7 +1622,8 @@ flatui/layout package layout
   field Metrics.ControlHeight float64 [order=7]
   field Metrics.Insets Insets [order=8]
   field Metrics.Sizes Sizes [order=9]
-  struct Metrics fields=10 comparable=false
+  field Metrics.Faces map[Face] CellSize [order=10]
+  struct Metrics fields=11 comparable=false
   type Node interface
   interface Node method Render(r Rect) string
   interface Node method Size()(w Size, h Size)
@@ -1729,7 +1741,8 @@ flatui/layout package layout
   field Text.Caret *Caret [order=2]
   field Text.Carets []Caret [order=3]
   field Text.OffsetY float64 [order=4]
-  struct Text fields=5 comparable=false
+  field Text.Face Face [order=5]
+  struct Text fields=6 comparable=false
   type TextColor int
   type TextOp struct
   field TextOp.Rect PointRect [order=0]
@@ -1906,7 +1919,8 @@ theme package theme
   field Theme.Stroke Strokes [order=6]
   field Theme.Font string [order=7]
   field Theme.MonoFont string [order=8]
-  struct Theme fields=9 comparable=true
+  field Theme.TerminalFont string [order=9]
+  struct Theme fields=10 comparable=true
   type TypeScale struct
   field TypeScale.PageTitle TextSpec [order=0]
   field TypeScale.Title TextSpec [order=1]
@@ -1914,4 +1928,5 @@ theme package theme
   field TypeScale.Meta TextSpec [order=3]
   field TypeScale.Caption TextSpec [order=4]
   field TypeScale.Code TextSpec [order=5]
-  struct TypeScale fields=6 comparable=true
+  field TypeScale.Terminal TextSpec [order=6]
+  struct TypeScale fields=7 comparable=true

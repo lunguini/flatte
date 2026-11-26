@@ -85,6 +85,7 @@ type surface struct {
 	cursor          *flatte.Cursor
 	delivered       map[string]layout.Rect
 	deliveredPoints map[string]layout.PointRect
+	deliveredFaces  map[layout.Face]layout.CellSize
 	// dirty marks the scene stale: the app changed since it was rendered,
 	// so carets must be read from a fresh one.
 	dirty bool
@@ -1194,7 +1195,8 @@ func (s *surface) pointerAt(x, y float64, id string, r layout.PointRect) flatte.
 
 // followTheme restyles the backend when the theme in effect changed (a
 // frame set Frame.Theme). New cell sizes reach the app as a ResizeEvent
-// after this render, as a window resize would.
+// after this render, as a window resize would; a grid face's new cell in
+// this render's LayoutEvent (LayoutEvent.Faces).
 func (h *host) followTheme() {
 	v := h.session.ThemeVersion()
 	if v == h.themeVersion {
@@ -1251,12 +1253,14 @@ func (s *surface) render() layout.Scene {
 		for id, r := range s.scene.Rects {
 			rects[id] = r.Cells(h.metrics)
 		}
-		if maps.Equal(rects, s.delivered) && maps.Equal(s.scene.Rects, s.deliveredPoints) {
+		faces := h.faces()
+		if maps.Equal(rects, s.delivered) && maps.Equal(s.scene.Rects, s.deliveredPoints) && maps.Equal(faces, s.deliveredFaces) {
 			return s.scene
 		}
 		s.delivered = rects
 		s.deliveredPoints = maps.Clone(s.scene.Rects)
-		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Line: h.metrics.Line, Window: s.id}
+		s.deliveredFaces = faces
+		ev := flatte.LayoutEvent{Rects: maps.Clone(rects), PointRects: maps.Clone(s.deliveredPoints), Line: h.metrics.Line, Faces: maps.Clone(faces), Window: s.id}
 		step := h.session.Step(flatte.StepInput{Events: []flatte.Event{ev}})
 		h.state = h.session.State()
 		if step.Quit {
@@ -1264,6 +1268,14 @@ func (s *surface) render() layout.Scene {
 			h.stop()
 			return s.scene
 		}
+	}
+}
+
+// faces is every grid face's cell under the metrics in use.
+func (h *host) faces() map[layout.Face]layout.CellSize {
+	return map[layout.Face]layout.CellSize{
+		layout.FaceCode:     h.metrics.Cell(layout.FaceCode),
+		layout.FaceTerminal: h.metrics.Cell(layout.FaceTerminal),
 	}
 }
 

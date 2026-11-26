@@ -29,12 +29,18 @@ import (
 // way through. Give String one line more than the node holds so the bottom
 // stays filled. Carets move with the text. A terminal draws whole lines and
 // ignores it.
+//
+// Face is the type a GUI sets the grid in (FaceCode by default): its
+// columns and lines are that face's cells (Metrics.Cell), so an app sizes
+// the content from the node's point rect over the face's cell
+// (LayoutEvent.Faces). A terminal ignores it.
 type Text struct {
 	NodeBase
 	String  string
 	Caret   *Caret
 	Carets  []Caret
 	OffsetY float64
+	Face    Face
 }
 
 // shift is the fraction of a line a GUI draws t higher.

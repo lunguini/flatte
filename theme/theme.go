@@ -30,6 +30,9 @@ type Theme struct {
 	Stroke Strokes
 	// Fonts are the UI and mono families ("": the system's).
 	Font, MonoFont string
+	// TerminalFont is embedded terminals' family (layout.FaceTerminal;
+	// "": MonoFont).
+	TerminalFont string
 }
 
 // Palette is one appearance's colors. Surfaces hold content; Text* read on
@@ -125,6 +128,10 @@ type SyntaxColors struct {
 // (400 regular, 600 semibold).
 type TypeScale struct {
 	PageTitle, Title, Body, Meta, Caption, Code TextSpec
+	// Terminal is embedded terminals' type (layout.FaceTerminal): a zero
+	// Size is Code's size, and a zero Line the renderer's line for the
+	// size, as code's.
+	Terminal TextSpec
 }
 
 // TextSpec is one type style.

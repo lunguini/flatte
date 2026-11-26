@@ -3,6 +3,7 @@ package flatte
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -271,14 +272,25 @@ func TestSessionDeliversTheWholeLayoutEvent(t *testing.T) {
 			s.got = le
 		}
 	}})
-	sent := LayoutEvent{Rects: map[string]layout.Rect{"a": {H: 2}}, PointRects: map[string]layout.PointRect{"a": {H: 33}}, Line: 16.5, Window: "w"}
+	sent := LayoutEvent{
+		Rects: map[string]layout.Rect{"a": {H: 2}}, PointRects: map[string]layout.PointRect{"a": {H: 33}}, Line: 16.5, Window: "w",
+		Faces: map[layout.Face]layout.CellSize{layout.FaceTerminal: {Column: 9, Line: 21}},
+	}
+	// Every field is set, so a field the session drops fails below.
+	v := reflect.ValueOf(sent)
+	for i := range v.NumField() {
+		if v.Field(i).IsZero() {
+			t.Fatalf("sent leaves %s zero", v.Type().Field(i).Name)
+		}
+	}
 	session.Step(StepInput{Events: []Event{sent}})
 	got := s.got
-	if got.Line != 16.5 || got.Window != "w" || got.Rects["a"].H != 2 || got.PointRects["a"].H != 33 {
-		t.Fatalf("got %+v", got)
+	if !reflect.DeepEqual(got, sent) {
+		t.Fatalf("got %+v, want %+v", got, sent)
 	}
 	got.Rects["a"] = layout.Rect{}
-	if sent.Rects["a"].H != 2 {
-		t.Fatal("the handler's rects are the sender's")
+	got.Faces[layout.FaceTerminal] = layout.CellSize{}
+	if sent.Rects["a"].H != 2 || sent.Faces[layout.FaceTerminal].Line != 21 {
+		t.Fatal("the handler's maps are the sender's")
 	}
 }

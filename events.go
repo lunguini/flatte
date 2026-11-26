@@ -144,6 +144,11 @@ type LayoutEvent struct {
 	Line float64
 	// Window is the window the rects are in ("" the main window).
 	Window string
+	// Faces is a window's cell of every grid face (layout.Face), in
+	// points, so an app can size a cell grid set in a face from its node's
+	// PointRect (CellSize.Cells). Terminal hosts leave it nil (a cell is a
+	// cell). Like Rects, this is the handler's own copy.
+	Faces map[layout.Face]layout.CellSize
 }
 
 // MouseEvent is a mouse press/release/motion/wheel; X/Y are zero-based

@@ -457,7 +457,7 @@ whole viewport.
 | `layout.Input{Value: ..., Caret: ..., Focused: ...}` | One-line field: shows a value and caret (usually from `TextField.Layout`); fills the width, one line tall. The focused Input places the cursor. `Multiline: true` makes it a text area (usually from `Textarea.Layout`): `Wrap` soft-wraps, `SelStart`/`SelEnd` select bytes (shown in `SelectionStyle`, reverse video when zero), `OffsetX`/`OffsetY` are the widget's scroll, and its Auto height grows. |
 | `layout.Rule{}` | A horizontal line: `─` in the terminal, a hairline in a window. |
 | `layout.ScrollBar{Offset: ..., Visible: ..., Total: ..., Color: ...}` | Where a scrolled window is: `█` thumb on `░` track in the terminal (blank when everything fits), a thin native thumb in a window. One column wide, fills the height. |
-| `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. `Caret: &layout.Caret{X, Y}` puts a text caret at a content cell (code editors, terminal emulators): a blinking bar in a window, the hardware cursor in a terminal; the last visible caret in paint order wins. `Carets: []layout.Caret{...}` adds further carets for multi-cursor editing: a window draws each as the same blinking bar (`layout.CaretOp` in the scene); a terminal has one cursor and ignores them, so style those cells yourself. `OffsetY` (0–1) draws the text that fraction of a line higher in a window, clipped, with one more line of `String` showing below: smooth scrolling (terminals ignore it). |
+| `layout.Text{String: ...}` | Leaf carrying a pre-rendered (ANSI) string; auto-sizes to it. The escape hatch for anything the primitives don't cover. `Caret: &layout.Caret{X, Y}` puts a text caret at a content cell (code editors, terminal emulators): a blinking bar in a window, the hardware cursor in a terminal; the last visible caret in paint order wins. `Carets: []layout.Caret{...}` adds further carets for multi-cursor editing: a window draws each as the same blinking bar (`layout.CaretOp` in the scene); a terminal has one cursor and ignores them, so style those cells yourself. `OffsetY` (0–1) draws the text that fraction of a line higher in a window, clipped, with one more line of `String` showing below: smooth scrolling (terminals ignore it). `Face: layout.FaceTerminal` sets the grid in the theme's terminal type instead of code's (see [Grid faces](#grid-faces)). |
 | `layout.NewSpacer()` | Leaf that grows on both axes; `.WithBackground(c)` fills it. |
 | `layout.Scroll{OffsetY: n, Child: ...}` | Shows `Child`, laid out at its natural height, through a window starting at row `OffsetY`, plus `OffsetPoints` in a window (with `ScrollX: true`, its natural width too, from column `OffsetX`). See [Scrolling](#scrolling). |
 
@@ -600,6 +600,41 @@ if problems := t.Check(); len(problems) > 0 { /* a pair below 4.5:1 (3:1 for out
 flatte.Run(ctx, app, flatte.WithTheme(t))
 ```
 
+#### Grid faces
+
+A cell grid (`layout.Text`) is set in a face: `layout.FaceCode` (the
+default: `MonoFont` and `Type.Code`, the layout's own columns and lines) or
+`layout.FaceTerminal` (`TerminalFont` and `Type.Terminal`, for embedded
+terminals). The terminal face follows the code face until set: an empty
+`TerminalFont` is `MonoFont`, a zero `Type.Terminal.Size` code's size, and a
+zero `Type.Terminal.Line` the line a grid has at that size. A window measures
+each face's cell and reports it in `LayoutEvent.Faces` (nil in a terminal,
+where a cell is a cell); size the grid from its node's point rect in that
+face's cells:
+
+```go
+// View
+layout.Text{NodeBase: layout.NodeBase{ID: "term", W: layout.Grow(1), H: layout.Grow(1)}, String: screen, Face: layout.FaceTerminal}
+
+// Handle
+case flatte.LayoutEvent:
+	if cell, ok := ev.Faces[layout.FaceTerminal]; ok {
+		grid := cell.Cells(ev.PointRects["term"]) // columns × lines
+		s.resize(grid.W, grid.H)
+	} else {
+		s.resize(ev.Rects["term"].W, ev.Rects["term"].H)
+	}
+```
+
+Map a click the same way: over the grid's node, `m.Point()` is in code cells
+from the node's cell rect, so the column is
+`floor((px - float64(m.TargetRect.X)) * code.Column / cell.Column)` with
+`code := ev.Faces[layout.FaceCode]` (lines likewise); a trackpad's
+`ScrollLines` are code lines too (times `code.Line / cell.Line`).
+A layout is delivered again when a theme changes a face's cell, even if no
+rect moved. The scene carries the face on `CellsOp.Face`; `Metrics.Faces`
+gives a points backend the cells (`Metrics.Cell(face)`).
+
 A native window and the browser canvas draw the roles in the theme
 (`theme.Default()` without `WithTheme`), following the system's light or
 dark appearance; a terminal draws its cells in true color from the dark
@@ -703,7 +738,7 @@ accessible row; zero-height viewports show none. Give the Col returned by
 Rows a growing height and set its viewport ID explicitly to the same ID
 passed to Rows. Existing `SetHeight` remains available when the app chooses its own page size.
 `LayoutEvent.PointRects` is an independent handler-owned map in native
-windows; terminals leave it nil, and `LayoutEvent.Line` 0. Native fractional geometry changes also
+windows; terminals leave it nil, `LayoutEvent.Line` 0 and `Faces` nil. Native fractional geometry changes also
 produce layout events, even if their rounded cell rectangles are unchanged.
 
 ### Inputs and the cursor
@@ -1024,7 +1059,9 @@ draw the ops of `layout.LayoutScene`.
 `MonoFont` families, `FontSize`, `TitleSize`, `MonoSize` (the cell grids'
 code size, apart from the interface text: columns and lines are measured in
 it; zero follows `FontSize`, and a design's `Type.Code.Size` sets it),
-`LineSpacing`, `Radius`
+`LineSpacing`, `TerminalFont`, `TerminalSize` and `TerminalLine` (the
+terminal face's; zero follows the code grid, and a design's `TerminalFont`
+and `Type.Terminal` set them), `Radius`
 (negative: square corners), and `ANSI`, the 16-color palette cell grids draw
 ANSI colors 0–15 in, as a terminal profile does (`Dark` and `Light` carry
 palettes tuned to read on their fields; colors 16–255 and true colors draw as

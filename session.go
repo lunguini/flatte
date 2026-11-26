@@ -223,6 +223,7 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 				Rects:      maps.Clone(layout.Rects),
 				PointRects: maps.Clone(layout.PointRects),
 				Line:       layout.Line,
+				Faces:      maps.Clone(layout.Faces),
 				Window:     layout.Window,
 			}
 		}

@@ -94,11 +94,23 @@ func canvasCSSFamily(family string) string {
 }
 
 func (t canvasTextLayout) monoFont() canvasFont {
-	family := t.theme.MonoFont
+	return t.faceFont(layout.FaceCode, layout.TextStyle{Role: layout.TextBody})
+}
+
+// faceFont is a grid face's font in style's emphasis: code's, or the
+// terminal's family at its size.
+func (t canvasTextLayout) faceFont(f layout.Face, style layout.TextStyle) canvasFont {
+	family, size := t.theme.MonoFont, t.theme.monoSize()
+	if f == layout.FaceTerminal {
+		size = t.theme.terminalSize()
+		if t.theme.TerminalFont != "" {
+			family = t.theme.TerminalFont
+		}
+	}
 	if family == "" {
 		family = "ui-monospace, SFMono-Regular, Menlo, monospace"
 	}
-	return t.fontFamily(layout.TextStyle{Role: layout.TextBody}, t.theme.monoSize(), family)
+	return t.fontFamily(style, size, family)
 }
 
 func (t canvasTextLayout) width(font canvasFont, text string) float64 {
@@ -127,6 +139,7 @@ func (t canvasTextLayout) metrics() layout.Metrics {
 	step, insets, sizes := t.theme.spacing()
 	return layout.Metrics{
 		Column: column, Line: line, Step: step, Border: borderBand, Insets: insets, Sizes: sizes,
+		Faces:          map[layout.Face]layout.CellSize{layout.FaceTerminal: t.terminalCell()},
 		DefaultPadding: true, ControlHeight: t.theme.ControlHeight,
 		MeasureText: func(text string, style layout.TextStyle, maxWidth float64) (float64, float64) {
 			font := t.font(style)
@@ -163,6 +176,25 @@ type canvasLine struct {
 	span
 	y float64
 	canvasLineMetrics
+}
+
+// terminalCell is the terminal face's cell: its fixed-pitch advance at
+// its size by its line (TerminalLine, else the body font's pitch at the
+// size, as code's).
+func (t canvasTextLayout) terminalCell() layout.CellSize {
+	size := t.theme.terminalSize()
+	column := t.width(t.faceFont(layout.FaceTerminal, layout.TextStyle{Role: layout.TextBody}), "0")
+	if column <= 0 {
+		column = size * 0.6
+	}
+	line := t.theme.terminalLine()
+	if line <= 0 {
+		line = t.font(layout.TextStyle{Role: layout.TextBody, Size: size}).pitch
+	}
+	if line <= 0 {
+		line = size * 1.25
+	}
+	return layout.CellSize{Column: column, Line: line}
 }
 
 func (t canvasTextLayout) richText(runs []layout.Run, fallback layout.TextStyle) canvasRichText {

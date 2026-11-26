@@ -461,6 +461,7 @@ func (p *canvasPage) refreshTheme() {
 	p.host.metrics = p.restyle(p.design)
 	p.host.surface.delivered = nil
 	p.host.surface.deliveredPoints = nil
+	p.host.surface.deliveredFaces = nil
 	p.host.handle(flatte.ResizeEvent{Width: p.host.cols(p.width()), Height: p.host.lines(p.height())})
 }
 

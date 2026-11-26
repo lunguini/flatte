@@ -38,6 +38,9 @@ type Metrics struct {
 	// Sizes are the design system's lengths SizeToken reads, in points (a
 	// zero field: its regular size — row 24, control 28, bar 36, header 44).
 	Sizes Sizes
+	// Faces are the cells of the faces other than FaceCode, whose cell is
+	// Column by Line; a face missing here is set in that cell (Cell).
+	Faces map[Face]CellSize
 }
 
 // Sizes are a points backend's design-system lengths (theme.Sizes).
@@ -236,6 +239,9 @@ type CellsOp struct {
 	// Caret is a text caret's cell in the grid (a Text's Caret, padding
 	// included); nil for none.
 	Caret *Caret
+	// Face is the type the grid is set in (a Text's Face): its cells are
+	// that face's (Metrics.Cell).
+	Face Face
 }
 
 // ImageOp draws an Image's Source in Rect (its content box) as Fit says.
@@ -619,12 +625,12 @@ func (p *scenePainter) box(r, clip rect[float64], b Box) {
 	}
 }
 
-func (p *scenePainter) cells(r, clip rect[float64], render func(Rect) string) {
-	c := PointRect(r).Cells(p.m.Metrics)
+func (p *scenePainter) cells(r, clip rect[float64], face Face, render func(Rect) string) {
+	c := p.m.Cell(face).Cells(PointRect(r))
 	if c.W <= 0 || c.H <= 0 {
 		return
 	}
-	p.ops = append(p.ops, CellsOp{Rect: PointRect(r), Clip: PointRect(clip), Cols: c.W, Lines: c.H, Content: render(Rect{W: c.W, H: c.H})})
+	p.ops = append(p.ops, CellsOp{Rect: PointRect(r), Clip: PointRect(clip), Cols: c.W, Lines: c.H, Content: render(Rect{W: c.W, H: c.H}), Face: face})
 }
 
 func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
@@ -703,15 +709,17 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 		p.box(r, clip, Box{Background: bg})
 	default:
 		before := len(p.ops)
-		if t, ok := n.(Text); ok && t.shift() > 0 {
+		t, isText := n.(Text)
+		cell := p.m.Cell(t.Face)
+		if isText && t.shift() > 0 {
 			// A fraction of a line higher, with a line more below, clipped
 			// to the node.
 			clip = intersectOf[float64](p.m, r, clip)
-			r.Y -= t.shift() * p.m.Line
-			r.H += p.m.Line
+			r.Y -= t.shift() * cell.Line
+			r.H += cell.Line
 		}
-		p.cells(r, clip, n.Render)
-		if t, ok := n.(Text); ok && (t.Caret != nil || len(t.Carets) > 0) && len(p.ops) > before {
+		p.cells(r, clip, t.Face, n.Render)
+		if isText && (t.Caret != nil || len(t.Carets) > 0) && len(p.ops) > before {
 			op := p.ops[len(p.ops)-1].(CellsOp)
 			grid := Rect{W: op.Cols, H: op.Lines}
 			if x, y, ok := t.caret(grid); ok {
@@ -720,8 +728,8 @@ func (p *scenePainter) leaf(n Node, r, clip rect[float64]) {
 			p.ops[len(p.ops)-1] = op
 			for _, c := range t.Carets {
 				if x, y, ok := t.place(c, grid); ok {
-					cell := PointRect{X: op.Rect.X + float64(x)*p.m.Column, Y: op.Rect.Y + float64(y)*p.m.Line, W: p.m.Column, H: p.m.Line}
-					p.ops = append(p.ops, CaretOp{Cell: cell, Clip: PointRect(intersectOf[float64](p.m, r, clip))})
+					at := PointRect{X: op.Rect.X + float64(x)*cell.Column, Y: op.Rect.Y + float64(y)*cell.Line, W: cell.Column, H: cell.Line}
+					p.ops = append(p.ops, CaretOp{Cell: at, Clip: PointRect(intersectOf[float64](p.m, r, clip))})
 				}
 			}
 		}
@@ -735,7 +743,7 @@ func (p *scenePainter) chrome(n Node, r, clip rect[float64]) {
 	p.id = getID(n)
 	p.tooltip(n, r, clip)
 	if ch := getChrome(n); ch != nil {
-		p.cells(r, clip, ch)
+		p.cells(r, clip, FaceCode, ch)
 		return
 	}
 	p.box(r, clip, getBox(n))

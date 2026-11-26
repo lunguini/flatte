@@ -31,8 +31,12 @@ type theme struct {
 	family, mono                     string
 	body, titleSize, spacing, radius float64
 	// monoSize is the cell grid's (code's) size.
-	monoSize      float64
-	controlHeight float64
+	monoSize float64
+	// termFamily and termSize are the terminal face's font ("": mono's)
+	// and termLine its line height (0: the pitch at termSize).
+	termFamily         string
+	termSize, termLine float64
+	controlHeight      float64
 	// step is one Pad or Gap and insets the default component insets, in
 	// points (Theme.spacing).
 	step       float64
@@ -76,7 +80,8 @@ func newTheme(t Theme) theme {
 		track:  rgbaOf(t.Track),
 		family: t.Font, mono: t.MonoFont,
 		body: t.FontSize, titleSize: t.TitleSize, spacing: t.LineSpacing, radius: t.Radius,
-		monoSize:      t.monoSize(),
+		monoSize:   t.monoSize(),
+		termFamily: t.TerminalFont, termSize: t.terminalSize(), termLine: t.terminalLine(),
 		controlHeight: t.ControlHeight,
 		step:          step, insets: insets, sizes: sizes,
 		appearance: t.appearance(),
@@ -314,6 +319,16 @@ func utf16Len(s string) int {
 	return n
 }
 
+// faceFont is a grid face's regular font: code's, or the terminal's
+// family at its size.
+func (th theme) faceFont(f layout.Face) fontKey {
+	k := fontKey{mono: true}
+	if f == layout.FaceTerminal {
+		k.family, k.size = th.termFamily, th.termSize
+	}
+	return k
+}
+
 // metrics is the layout metric for darkTheme's type.
 func metrics() layout.Metrics { return darkTheme.metrics() }
 
@@ -323,7 +338,14 @@ func metrics() layout.Metrics { return darkTheme.metrics() }
 func (th theme) metrics() layout.Metrics {
 	zero := shape("0", th.font(fontKey{mono: true}))
 	defer zero.release()
+	term := shape("0", th.font(th.faceFont(layout.FaceTerminal)))
+	defer term.release()
+	termLine := th.termLine
+	if termLine <= 0 {
+		termLine = th.font(fontKey{size: th.termSize}).pitch()
+	}
 	return layout.Metrics{
+		Faces:          map[layout.Face]layout.CellSize{layout.FaceTerminal: {Column: term.width, Line: termLine}},
 		DefaultPadding: true,
 		ControlHeight:  th.controlHeight,
 		Column:         zero.width,
@@ -1194,10 +1216,11 @@ func (p *painter) paintCaret() {
 // aligned whatever the font's advance for them.
 func (p *painter) cells(op layout.CellsOp) {
 	defer p.cellsCaret(op)
+	g := p.gridOf(op.Face)
 	buf := uv.NewScreenBuffer(op.Cols, op.Lines)
 	uv.NewStyledString(op.Content).Draw(buf, buf.Bounds())
 	for y := range op.Lines {
-		top := op.Rect.Y + float64(y)*p.m.Line
+		top := op.Rect.Y + float64(y)*g.cell.Line
 		x := 0
 		for x < op.Cols {
 			c := buf.CellAt(x, y)
@@ -1205,9 +1228,9 @@ func (p *painter) cells(op layout.CellsOp) {
 				x++
 				continue
 			}
-			cx := op.Rect.X + float64(x)*p.m.Column
-			if g, ok := gridGlyph(c, cx, top, float64(max(c.Width, 1))*p.m.Column, p.m.Line); ok {
-				p.cellShape(g, c.Style, cx, top, float64(max(c.Width, 1))*p.m.Column)
+			cx := op.Rect.X + float64(x)*g.cell.Column
+			if sh, ok := gridGlyph(c, cx, top, float64(max(c.Width, 1))*g.cell.Column, g.cell.Line); ok {
+				p.cellShape(sh, c.Style, cx, top, float64(max(c.Width, 1))*g.cell.Column, g.cell.Line)
 				x += max(c.Width, 1)
 				continue
 			}
@@ -1231,9 +1254,20 @@ func (p *painter) cells(op layout.CellsOp) {
 					break
 				}
 			}
-			p.cellRun(run.String(), style, op.Rect.X+float64(start)*p.m.Column, top, float64(x-start)*p.m.Column)
+			p.cellRun(run.String(), style, op.Rect.X+float64(start)*g.cell.Column, top, float64(x-start)*g.cell.Column, g)
 		}
 	}
+}
+
+// grid is a cell grid's face in drawing terms: its cell and its regular
+// font.
+type grid struct {
+	cell layout.CellSize
+	font fontKey
+}
+
+func (p *painter) gridOf(f layout.Face) grid {
+	return grid{cell: p.m.Cell(f), font: p.th.faceFont(f)}
 }
 
 func cellText(c *uv.Cell) string {
@@ -1282,16 +1316,17 @@ func (p *painter) snap(v float64) float64 {
 	return math.Round(v*s) / s
 }
 
-func (p *painter) cellRun(text string, st uv.Style, x, y, w float64) {
+func (p *painter) cellRun(text string, st uv.Style, x, y, w float64, g grid) {
 	fg, bg, hasBg := p.cellColors(st)
 	if hasBg {
-		p.cellFill(bg, x, y, w, p.m.Line)
+		p.cellFill(bg, x, y, w, g.cell.Line)
 	}
 	if strings.TrimSpace(text) == "" || st.Attrs&uv.AttrConceal != 0 {
 		return
 	}
-	f := p.th.font(fontKey{mono: true, bold: st.Attrs&uv.AttrBold != 0, italic: st.Attrs&uv.AttrItalic != 0})
-	p.line(text, f, x, y, p.m.Line, fg, nil, st.Underline != uv.UnderlineNone, st.Attrs&uv.AttrStrikethrough != 0)
+	k := g.font
+	k.bold, k.italic = st.Attrs&uv.AttrBold != 0, st.Attrs&uv.AttrItalic != 0
+	p.line(text, p.th.font(k), x, y, g.cell.Line, fg, nil, st.Underline != uv.UnderlineNone, st.Attrs&uv.AttrStrikethrough != 0)
 }
 
 // gridGlyph is the shape of a grid cell drawn as one (see cellGlyph).
@@ -1304,10 +1339,10 @@ func gridGlyph(c *uv.Cell, x, y, w, h float64) (cellShape, bool) {
 }
 
 // cellShape draws a line-drawing or block cell in its colors.
-func (p *painter) cellShape(g cellShape, st uv.Style, x, y, w float64) {
+func (p *painter) cellShape(g cellShape, st uv.Style, x, y, w, h float64) {
 	fg, bg, hasBg := p.cellColors(st)
 	if hasBg {
-		p.cellFill(bg, x, y, w, p.m.Line)
+		p.cellFill(bg, x, y, w, h)
 	}
 	if st.Attrs&uv.AttrConceal != 0 {
 		return
@@ -1445,5 +1480,6 @@ func (p *painter) cellsCaret(op layout.CellsOp) {
 		return
 	}
 	p.clip = intersect(op.Rect, op.Clip)
-	p.caretAt(op.Rect.X+float64(c.X)*p.m.Column, op.Rect.Y+float64(c.Y)*p.m.Line, p.m.Line, p.th.font(fontKey{mono: true}))
+	g := p.gridOf(op.Face)
+	p.caretAt(op.Rect.X+float64(c.X)*g.cell.Column, op.Rect.Y+float64(c.Y)*g.cell.Line, g.cell.Line, p.th.font(g.font))
 }
