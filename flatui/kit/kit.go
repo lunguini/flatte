@@ -115,6 +115,10 @@ type Section struct {
 	ID       string
 	Title    string
 	Children []layout.Node
+	// Card sets the rows on a rounded raised surface with a hairline
+	// between them, as a settings form groups its rows (a GUI; a terminal
+	// keeps the blank line between them).
+	Card bool
 }
 
 func (s Section) Layout() layout.Node {
@@ -125,9 +129,32 @@ func (s Section) Layout() layout.Node {
 			layout.Label{NodeBase: layout.NodeBase{W: layout.Grow(1)}, Text: s.Title, Style: layout.TextStyle{Role: layout.TextCaption}, Truncate: true},
 		}})
 	}
-	kids = append(kids, s.Children...)
+	if !s.Card {
+		kids = append(kids, s.Children...)
+		return layout.Col{NodeBase: layout.NodeBase{ID: s.ID, Gap: 1}, Children: kids}
+	}
+	space := func(points, cells int) layout.Node {
+		return layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Points(points).Cells(cells), NoPadding: true}}
+	}
+	rows := []layout.Node{space(cardInset, 0)}
+	for i, c := range s.Children {
+		if i > 0 {
+			rows = append(rows, space(cardInset, 0),
+				// The canvas, not the divider: the divider is near the
+				// raised fill in a dark palette.
+				layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Points(1).Cells(0), NoPadding: true, Box: layout.Box{Fill: layout.FillCanvas}}},
+				space(cardInset, 1))
+		}
+		rows = append(rows, c)
+	}
+	rows = append(rows, space(cardInset, 0))
+	kids = append(kids, layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), NoPadding: true, Box: layout.Box{Fill: layout.FillRaised, Round: true}}, Children: rows})
 	return layout.Col{NodeBase: layout.NodeBase{ID: s.ID, Gap: 1}, Children: kids}
 }
+
+// cardInset is the room above and below each row of a Card section, in
+// points.
+const cardInset = 10
 
 // Divider separates the groups of a list: the next group's title and a
 // line after it (the line alone without a title), at the bar height so it stands away
@@ -627,7 +654,7 @@ func (s Setting) Layout() layout.Node {
 	}
 	if s.Stacked {
 		if s.Control != nil {
-			text = append(text, layout.Row{NodeBase: layout.NodeBase{PadTop: 1}, Children: []layout.Node{s.Control}})
+			text = append(text, layout.Row{NodeBase: layout.NodeBase{PadTop: 1, NoPadding: true}, Children: []layout.Node{s.Control}})
 		}
 		return layout.Col{NodeBase: layout.NodeBase{ID: s.ID, W: layout.Grow(1), PadLeft: 1, PadRight: 1}, Children: text}
 	}

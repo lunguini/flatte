@@ -356,6 +356,7 @@ func (p pointMetric) cols(n int) float64           { return float64(n) * p.Colum
 func (p pointMetric) lines(n int) float64          { return float64(n) * p.Line }
 func (p pointMetric) steps(n int) float64          { return float64(n) * p.Step }
 func (p pointMetric) points(n int, _ bool) float64 { return float64(n) }
+func (pointMetric) inCells(Size) (float64, bool)   { return 0, false }
 func (p pointMetric) border() float64              { return p.Border }
 
 // anchorGap is the space between an anchor and a bordered overlay's drawn

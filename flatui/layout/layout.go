@@ -178,6 +178,17 @@ type Size struct {
 	// Max caps an exact length (Fixed, Points, token, Content) at this many
 	// points; zero is no cap. Set it with AtMost.
 	Max int
+	// cells is the length in a terminal, when hasCells (Cells).
+	cells    int
+	hasCells bool
+}
+
+// Cells gives s another length in a terminal, n cells: a hairline or a
+// half-step gap a GUI draws, which a terminal leaves out (Points(1).Cells(0))
+// or gives a whole line. n < 0 takes the length off again.
+func (s Size) Cells(n int) Size {
+	s.cells, s.hasCells = max(n, 0), n >= 0
+	return s
 }
 
 // AtMost caps s at points: a panel 84 columns wide but never wider than

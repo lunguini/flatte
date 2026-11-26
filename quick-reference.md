@@ -430,6 +430,7 @@ Bare inputs and multiline inputs retain their own height rules.
 | `layout.Grow(w)` | `SizeGrow` | Weighted share of leftover space; `w` is the weight relative to sibling grows. |
 | `layout.Points(n)` | `SizePoints` | Exactly `n` points in a window; a terminal reads it at a nominal 8×16pt cell (`PointsPerColumn`, `PointsPerLine`), rounding up — `Points(200)` is 25 columns. For layouts designed for a window. |
 | `s.AtMost(points)` | any | Caps an exact length (`Fixed`, `Points`, a token) at `points` points: `layout.Fixed(84).AtMost(520)` is 84 columns but never wider than 520pt in a window, whatever its font's column width. A terminal reads the cap at the nominal cell (520pt is 65 columns), so apply it only where `RenderContext.Graphical` to keep a terminal's width. `Auto` and `Grow` ignore it. |
+| `s.Cells(n)` | any | Its length in a terminal is `n` cells, whatever it is in a GUI: `layout.Points(1).Cells(0)` is a hairline a terminal leaves out, `layout.Points(10).Cells(1)` a half-step gap that is a whole line in a terminal. `Cells(-1)` takes it off. |
 
 `SizeContent` is produced internally when an `Auto` axis measures natural
 content (e.g. `Text`); callers do not author it. On the cross axis, anything but
@@ -654,7 +655,7 @@ button with a short `Label` or an `Icon`: a control-sized square in a
 window, selected while `On`; flipping it on a click, Space or Enter is
 the app's), `Badge` with a `Tone`, `Section`, `Divider` (a titled line between a list's
 groups),
-`Setting` (name, description, control; `Stacked` puts the control under them in a narrow column), `EmptyState` and `Popover`.
+`Setting` (name, description, control; `Stacked` puts the control under them in a narrow column), `Section` (a caption over rows; `Card` sets them on a raised rounded surface with hairlines between them in a GUI), `EmptyState` and `Popover`.
 A pane is a `PaneHeader` over a body Col with `PanePadding: true`; rows
 and an `Inline` empty state inside it add no inset of their own.
 Stateless: selection and values are app state, clicks are MouseEvents on

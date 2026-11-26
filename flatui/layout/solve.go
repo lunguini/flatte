@@ -22,6 +22,9 @@ type metric[T unit] interface {
 	points(n int, horizontal bool) T
 	// token is a SizeToken length.
 	token(t Token, horizontal bool) T
+	// inCells is a size's terminal length (Size.Cells); ok is false for a
+	// GUI, or a size without one.
+	inCells(s Size) (n T, ok bool)
 	border() T // one border edge
 	// anchorPull is how far a bordered overlay moves left and up toward
 	// its anchor so its drawn border, not its band, sits by the anchor: a
@@ -72,6 +75,9 @@ func toSized[T unit](m metric[T], s Size, horizontal bool) sized[T] {
 }
 
 func toSizedUncapped[T unit](m metric[T], s Size, horizontal bool) sized[T] {
+	if n, ok := m.inCells(s); ok {
+		return sized[T]{Kind: SizeFixed, Value: n}
+	}
 	if s.Kind == SizePoints {
 		return sized[T]{Kind: SizeFixed, Value: m.points(max(s.Value, 0), horizontal)}
 	}
@@ -117,7 +123,13 @@ func growSized[T unit]() sized[T] { return sized[T]{Kind: SizeGrow, Weight: 1} }
 // saturates so malformed caller geometry stays representable.
 type cells struct{}
 
-func (cells) cols(n int) int  { return n }
+func (cells) cols(n int) int { return n }
+func (cells) inCells(s Size) (int, bool) {
+	if s.hasCells {
+		return s.cells, true
+	}
+	return 0, false
+}
 func (cells) lines(n int) int { return n }
 func (cells) steps(n int) int { return n }
 func (cells) points(n int, horizontal bool) int {

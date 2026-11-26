@@ -1076,7 +1076,8 @@ flatui/kit package kit
   field Section.ID string [order=0]
   field Section.Title string [order=1]
   field Section.Children []layout.Node [order=2]
-  struct Section fields=3 comparable=false
+  field Section.Card bool [order=3]
+  struct Section fields=4 comparable=false
   type Segmented struct
   field Segmented.ID string [order=0]
   field Segmented.Options []string [order=1]
@@ -1334,6 +1335,7 @@ flatui/layout package layout
   method ScrollBar.Size()(Size, Size)
   method ScrollBar.Thumb(height int)(pos int, size int, ok bool)
   method Size.AtMost(points int) Size
+  method Size.Cells(n int) Size
   method Slider.Render(r Rect) string
   method Slider.Size()(Size, Size)
   method Slider.ValueAt(x int, width int) float64
@@ -1695,7 +1697,9 @@ flatui/layout package layout
   field Size.Value int [order=1]
   field Size.Weight float64 [order=2]
   field Size.Max int [order=3]
-  struct Size fields=4 comparable=true
+  field Size.<unexported> int [order=4]
+  field Size.<unexported> bool [order=5]
+  struct Size fields=6 comparable=true
   type SizeKind int
   type Sizes struct
   field Sizes.Row float64 [order=0]

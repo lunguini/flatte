@@ -96,3 +96,28 @@ func TestSizeAtMostOverlay(t *testing.T) {
 		t.Errorf("narrow frame: width = %v, want 400", got)
 	}
 }
+
+// A size with Cells keeps its points in a GUI and is that many cells in a
+// terminal: a hairline a terminal leaves out.
+func TestSizeCells(t *testing.T) {
+	col := Col{NodeBase: NodeBase{ID: "c", W: Fixed(10)}, Children: []Node{
+		Label{Text: "a"},
+		Col{NodeBase: NodeBase{ID: "line", W: Grow(1), H: Points(1).Cells(0), NoPadding: true}},
+		Col{NodeBase: NodeBase{ID: "gap", W: Grow(1), H: Points(10).Cells(2), NoPadding: true}},
+		Label{Text: "b"},
+	}}
+	_, rects := SolveAndCompose(col, 10, 10)
+	if rects["line"].H != 0 || rects["gap"].H != 2 {
+		t.Fatalf("cells: line %d gap %d", rects["line"].H, rects["gap"].H)
+	}
+	sc := LayoutScene(col, 200, 200, Metrics{Column: 8, Line: 16, Step: 8})
+	if r := sc.Rects["line"]; r.H != 1 {
+		t.Fatalf("points: line %v", r.H)
+	}
+	if r := sc.Rects["gap"]; r.H != 10 {
+		t.Fatalf("points: gap %v", r.H)
+	}
+	if s := Points(3).Cells(1).Cells(-1); s.hasCells {
+		t.Fatal("Cells(-1) did not take the length off")
+	}
+}

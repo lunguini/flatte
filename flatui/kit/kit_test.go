@@ -718,3 +718,33 @@ func TestSettingStacked(t *testing.T) {
 		}
 	}
 }
+
+// A card section sets its rows on a raised surface with a hairline between
+// them in a GUI, and keeps a blank line between them in a terminal.
+func TestSectionCard(t *testing.T) {
+	sec := Section{ID: "s", Title: "Window", Card: true, Children: []layout.Node{
+		layout.Label{NodeBase: layout.NodeBase{ID: "a"}, Text: "one"},
+		layout.Label{NodeBase: layout.NodeBase{ID: "b"}, Text: "two"},
+	}}.Layout()
+	_, rects := layout.SolveAndCompose(sec, 30, 10)
+	if gap := rects["b"].Y - rects["a"].Y; gap != 2 {
+		t.Fatalf("terminal: rows %d apart, want a blank line between", gap)
+	}
+	sc := layout.LayoutScene(sec, 300, 300, layout.Metrics{Column: 8, Line: 16, Step: 8, DefaultPadding: true})
+	raised, lines := 0, 0
+	for _, op := range sc.Ops {
+		if b, ok := op.(layout.BoxOp); ok {
+			switch b.Box.Fill {
+			case layout.FillRaised:
+				raised++
+			case layout.FillCanvas:
+				if b.Rect.H == 1 {
+					lines++
+				}
+			}
+		}
+	}
+	if raised != 1 || lines != 1 {
+		t.Fatalf("window: %d raised boxes, %d hairlines", raised, lines)
+	}
+}
