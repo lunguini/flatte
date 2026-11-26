@@ -146,3 +146,22 @@ func TestThemeSpacingFollowsDensity(t *testing.T) {
 		t.Fatalf("custom theme lost the design step: %v", step)
 	}
 }
+
+// A window given Light() keeps the app's own design, in its light palette.
+func TestOptionsThemeKeepsTheAppsDesignInItsAppearance(t *testing.T) {
+	design := ds.Default()
+	design.Type.Code.Size = 15
+	light := Light()
+	th := themeFor(&light, true, &design)
+	if th.dark || th.design != &design {
+		t.Fatalf("dark %v, design is the app's %v", th.dark, th.design == &design)
+	}
+	dark := Dark()
+	if th := themeFor(&dark, false, &design); !th.dark || th.design != &design {
+		t.Fatalf("Dark(): dark %v, design is the app's %v", th.dark, th.design == &design)
+	}
+	custom := Theme{Background: light.Background} // no design: dark, as before
+	if th := themeFor(&custom, false, &design); !th.dark {
+		t.Fatal("a hand-made theme is no longer over the dark design")
+	}
+}

@@ -221,7 +221,16 @@ func themeFor(opts *Theme, dark bool, design *ds.Theme) Theme {
 		design = &defaultDesign
 	}
 	if opts != nil {
-		return opts.over(fromDesign(design, true))
+		// The app's design in opts' appearance under it: Light() over an
+		// app's own design is that design's light palette, not its dark.
+		o, look := *opts, true
+		if o.design != nil {
+			look = o.dark
+		}
+		if o.design == &defaultDesign {
+			o.design = nil // the app's design, for its sizes and roles
+		}
+		return o.over(fromDesign(design, look))
 	}
 	return fromDesign(design, dark)
 }
