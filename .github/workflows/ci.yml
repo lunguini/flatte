@@ -64,6 +64,13 @@ jobs:
             echo "$out" >&2
             exit 1
           fi
+      - name: golangci-lint (library, samples, window host)
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+          lint="$(go env GOPATH)/bin/golangci-lint"
+          "$lint" run ./...
+          (cd cmd && "$lint" run ./...)
+          (cd window && GOOS=darwin "$lint" run ./...)
       - name: vet (linux + windows cross-vet)
         run: |
           go vet ./...
