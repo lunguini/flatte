@@ -668,13 +668,6 @@ type childContainer interface {
 	IsHorizontal() bool
 }
 
-func getChildren(n Node) []Node {
-	if c, ok := n.(childContainer); ok {
-		return c.GetChildren()
-	}
-	return nil
-}
-
 // --- Solve (for hit-testing) ---
 
 // Solve returns the id→rect geometry for a tree without painting. It is the
@@ -697,17 +690,6 @@ func SolveWithDiagnostics(root Node, width, height int) (map[string]Rect, []Dupl
 }
 
 // --- Overlay helpers ---
-
-func findOverlays(n Node) []Node {
-	var result []Node
-	if o, ok := n.(interface{ IsOverlay() bool }); ok && o.IsOverlay() {
-		result = append(result, n)
-	}
-	for _, c := range getChildren(n) {
-		result = append(result, findOverlays(c)...)
-	}
-	return result
-}
 
 func isOverlay(n Node) bool {
 	o, ok := n.(interface{ IsOverlay() bool })

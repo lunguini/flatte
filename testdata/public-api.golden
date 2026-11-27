@@ -1098,7 +1098,10 @@ flatui/kit package kit
   field Segmented.Options []string [order=1]
   field Segmented.Selected int [order=2]
   field Segmented.Focused bool [order=3]
-  struct Segmented fields=4 comparable=false
+  field Segmented.Tooltip string [order=4]
+  field Segmented.Open bool [order=5]
+  field Segmented.Highlighted int [order=6]
+  struct Segmented fields=7 comparable=false
   type Setting struct
   field Setting.ID string [order=0]
   field Setting.Name string [order=1]
@@ -1316,6 +1319,8 @@ flatui/layout package layout
   method Composition.CaretAt(x int, y int)(offset int, ok bool)
   method Composition.Cursor()(x int, y int, ok bool)
   method Composition.HitTest(x int, y int)(string, Rect)
+  method Fit.Render(r Rect) string
+  method Fit.Size()(Size, Size)
   method Icon.Render(r Rect) string
   method Icon.Size()(Size, Size)
   method Image.Render(r Rect) string
@@ -1528,6 +1533,10 @@ flatui/layout package layout
   struct DuplicateIDDiagnostic fields=3 comparable=true
   type Face uint8
   type Fill int
+  type Fit struct
+  field Fit.Preferred Node [order=0]
+  field Fit.Fallback Node [order=1]
+  struct Fit fields=2 comparable=true
   type Icon struct
   field Icon.NodeBase NodeBase [order=0]
   field Icon.Name IconName [order=1]

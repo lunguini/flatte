@@ -88,6 +88,8 @@ type State struct {
 	mode                   int // 0 follows the system, 1 light, 2 dark
 	theme                  theme.Theme
 	colorsOffset           int
+	dialOpen               string
+	dialIndex              int
 
 	row, tab, choice int
 	wrap, popover    bool
@@ -133,7 +135,7 @@ func (s *State) restyle() {
 func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 	switch e := ev.(type) {
 	case flatte.KeyEvent:
-		if controlKey(s, e) {
+		if dialKey(s, e) || controlKey(s, e) {
 			return
 		}
 		switch {
@@ -160,7 +162,7 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 			s.mode = (s.mode + 1) % len(modeNames)
 			s.restyle()
 		case e.Key == flatte.KeyEscape:
-			s.popover, s.focus = false, ""
+			s.dialOpen, s.popover, s.focus = "", false, ""
 		case e.Key == flatte.KeyCharacter && e.Rune == 'q', e.Key == flatte.KeyCtrlC:
 			fx.Quit()
 		}
@@ -173,6 +175,54 @@ func Handle(s *State, ev flatte.Event, fx flatte.Effects[State]) {
 		}
 		click(s, e.Target)
 	}
+}
+
+func dialKey(s *State, e flatte.KeyEvent) bool {
+	count := dialCount(s.dialOpen)
+	if count == 0 {
+		return false
+	}
+	switch e.Key {
+	case flatte.KeyEscape:
+		s.dialOpen = ""
+	case flatte.KeyUp:
+		s.dialIndex = (s.dialIndex + count - 1) % count
+	case flatte.KeyDown:
+		s.dialIndex = (s.dialIndex + 1) % count
+	case flatte.KeyEnter:
+		click(s, kit.OptionID(s.dialOpen, s.dialIndex))
+	default:
+		return false
+	}
+	return true
+}
+
+func dialCount(id string) int {
+	switch id {
+	case idDensity:
+		return len(densities)
+	case idShape:
+		return len(shapes)
+	case idAccent:
+		return len(accents)
+	case idMode:
+		return len(modeNames)
+	}
+	return 0
+}
+
+func dialSelected(s *State, id string) int {
+	switch id {
+	case idDensity:
+		return s.density
+	case idShape:
+		return s.shape
+	case idAccent:
+		return s.accent
+	case idMode:
+		return s.mode
+	}
+	return 0
 }
 
 // controlKey moves focus through the demo controls (Tab, Shift-Tab), types
@@ -227,6 +277,19 @@ func controlKey(s *State, e flatte.KeyEvent) bool {
 }
 
 func click(s *State, target string) {
+	if s.dialOpen != "" && target != s.dialOpen && !strings.HasPrefix(target, s.dialOpen+":") {
+		s.dialOpen = ""
+	}
+	for _, id := range []string{idDensity, idShape, idAccent, idMode} {
+		if target == id {
+			if s.dialOpen == id {
+				s.dialOpen = ""
+			} else {
+				s.dialOpen, s.dialIndex = id, dialSelected(s, id)
+			}
+			return
+		}
+	}
 	for i := range pageCount {
 		if target == pageID(i) {
 			s.page = i
@@ -235,6 +298,8 @@ func click(s *State, target string) {
 	dial := func(id string, n int, set *int) {
 		for i := range n {
 			if target == kit.OptionID(id, i) {
+				s.dialOpen = ""
+				s.dialIndex = i
 				*set = i
 				s.restyle()
 			}
@@ -343,16 +408,14 @@ func sidebar(s *State) layout.Node {
 // turn.
 func dials(s *State) layout.Node {
 	dial := func(name, id string, options []string, selected int) layout.Node {
-		seg := kit.Segmented{ID: id, Options: options, Selected: selected}.Layout().(layout.Row)
-		seg.Tooltip = name
-		return seg
+		return kit.Segmented{ID: id, Options: options, Selected: selected, Focused: s.focus == id, Tooltip: name, Open: s.dialOpen == id, Highlighted: s.dialIndex}.Layout()
 	}
 	names := make([]string, len(accents))
 	for i, a := range accents {
 		names[i] = a.name
 	}
 	return layout.Row{
-		NodeBase: layout.NodeBase{H: layout.BarSize(), Gap: 2, PadLeft: 2, PadRight: 2, Box: layout.Box{Fill: layout.FillChrome}},
+		NodeBase: layout.NodeBase{H: layout.BarSize(), Gap: 1, PadLeft: 1, PadRight: 1, Box: layout.Box{Fill: layout.FillChrome}},
 		Align:    layout.AlignCenter,
 		Children: []layout.Node{
 			dial("Density", idDensity, densityNames, s.density),

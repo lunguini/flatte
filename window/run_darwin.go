@@ -519,13 +519,30 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	defer session.Cancel()
 	h.surface.setAppearance(th.appearance)
 	h.start(width, height)
-	scene := h.render()
+	// render lays out until the cell size stops changing: a real draw
+	// remeasures after restyle and sends the app the new cell size before
+	// laying out the next frame.
+	render := func() layout.Scene {
+		var scene layout.Scene
+		for pass := 0; pass < 3; pass++ {
+			version := h.themeVersion
+			column, line := h.metrics.Column, h.metrics.Line
+			scene = h.render()
+			if h.themeVersion == version || (h.metrics.Column == column && h.metrics.Line == line) {
+				break
+			}
+			h.surface.width = -1
+			h.surface.resize(width, height)
+		}
+		return scene
+	}
+	scene := render()
 	if a := h.surface.frameAppearance(); opts.follows() && a != flatte.AppearanceUnknown && a.Dark() != dark {
 		// The frame fixes the other appearance: drawn again in it.
 		dark = a.Dark()
 		th = newTheme(themeFor(opts.Theme, dark, session.Theme(true)))
 		h.surface.setAppearance(th.appearance)
-		scene = h.render()
+		scene = render()
 	}
 	img := renderScene(scene, th, m, width, height, scale, h.frameCursor(), presentation{}, opts.Translucent || h.surface.frameTranslucent(), h.surface.frameCursorStyle())
 	return img, nil

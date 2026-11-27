@@ -124,6 +124,10 @@ func TestDialsRestyleLive(t *testing.T) {
 	if got := d.State().theme; got.Size != th.Size || got.Dark.Accent != th.Dark.Accent {
 		t.Fatal("the dials do not start at the default theme")
 	}
+	press(t, d, idDensity)
+	if d.State().dialOpen != idDensity {
+		t.Fatal("density popup did not open")
+	}
 	press(t, d, kit.OptionID(idDensity, 0))
 	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'r'}) // subtle → round
 	d.Send(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'a'}) // blue → teal
@@ -141,6 +145,22 @@ func TestDialsRestyleLive(t *testing.T) {
 	}
 	if d.State().accent != 1 {
 		t.Fatal("the accent dial does not cycle")
+	}
+}
+
+func TestDialPopupKeyboard(t *testing.T) {
+	d := flatest.Start(app(), 120)
+	t.Cleanup(d.Close)
+	press(t, d, idDensity)
+	d.Send(flatte.KeyEvent{Key: flatte.KeyEscape})
+	if d.State().dialOpen != "" || d.State().density != 1 {
+		t.Fatal("Escape did not close the popup without changing density")
+	}
+	press(t, d, idDensity)
+	d.Send(flatte.KeyEvent{Key: flatte.KeyDown})
+	d.Send(flatte.KeyEvent{Key: flatte.KeyEnter})
+	if d.State().dialOpen != "" || d.State().density != 2 {
+		t.Fatalf("keyboard choice: open %q, density %d", d.State().dialOpen, d.State().density)
 	}
 }
 

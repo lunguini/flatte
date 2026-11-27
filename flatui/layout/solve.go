@@ -186,6 +186,12 @@ func wraps(n Node) bool {
 	if _, ok := wrapping(n); ok {
 		return true
 	}
+	if f, ok := n.(Fit); ok {
+		return wraps(f.Preferred) || wraps(f.Fallback)
+	}
+	if f, ok := n.(*Fit); ok && f != nil {
+		return wraps(f.Preferred) || wraps(f.Fallback)
+	}
 	if sc, ok := n.(scroller); ok {
 		child, _ := sc.scroll()
 		return child != nil && wraps(child)
@@ -306,6 +312,18 @@ func intrinsic[T unit](m metric[T], n Node) (w, h sized[T]) { return measure(m, 
 // known): heights that depend on width — wrapped text — are measured at it.
 func measure[T unit](m metric[T], n Node, width T) (w, h sized[T]) {
 	switch c := n.(type) {
+	case Fit:
+		if child := fittedChild(m, c, width); child != nil {
+			return measure(m, child, width)
+		}
+		return sized[T]{}, sized[T]{}
+	case *Fit:
+		if c != nil {
+			if child := fittedChild(m, *c, width); child != nil {
+				return measure(m, child, width)
+			}
+		}
+		return sized[T]{}, sized[T]{}
 	case Row:
 		return measureContainer(m, c.NodeBase, c.Children, true, width)
 	case *Row:
@@ -471,6 +489,21 @@ func distribute[T unit](m metric[T], children []Node, horizontal bool, gap, avai
 			growCount++
 		}
 	}
+	if horizontal && fixedSum > avail {
+		for i, c := range children {
+			fallback := fitFallback(c)
+			if fallback == nil || (sizes[i].Kind != SizeFixed && sizes[i].Kind != SizeContent) {
+				continue
+			}
+			fw, _ := intrinsic(m, fallback)
+			fw = fw.normalized()
+			if (fw.Kind == SizeFixed || fw.Kind == SizeContent) && fw.Value < sizes[i].Value {
+				fixedSum -= sizes[i].Value
+				sizes[i] = fw
+				fixedSum = m.add(fixedSum, fw.Value)
+			}
+		}
+	}
 
 	// Grow children whose weights sum to zero share equally.
 	equalGrow := growCount > 0 && growSum == 0
@@ -534,6 +567,18 @@ func distribute[T unit](m metric[T], children []Node, horizontal bool, gap, avai
 		}
 	}
 	return result
+}
+
+func fitFallback(n Node) Node {
+	switch f := n.(type) {
+	case Fit:
+		return f.Fallback
+	case *Fit:
+		if f != nil {
+			return f.Fallback
+		}
+	}
+	return nil
 }
 
 // crossOf is a child's cross-axis length: Fixed pins, everything else
@@ -662,6 +707,8 @@ type solver[T unit] struct {
 	// appended to hits when the layer ends so they win over the panes
 	// beside them (and stay under any later overlay layer).
 	grips []hitOf[T]
+	// overlays are collected only from branches the solve actually chose.
+	overlays []Node
 	// clip is the visible region: the frame, narrowed by each enclosing
 	// Scroll's window. Painting and hit areas are confined to it.
 	clip rect[T]
@@ -674,29 +721,43 @@ func solveTree[T unit](m metric[T], root Node, w, h T, p painter[T]) *solver[T] 
 	s := &solver[T]{m: m, paint: p, rects: map[string]rect[T]{}, first: map[string]rect[T]{}, clip: frame}
 	// An overlay root is resolved only at its centered layer rect, never once
 	// as a frame-sized base node.
-	if !isOverlay(root) {
+	if isOverlay(root) {
+		s.overlays = append(s.overlays, root)
+	} else {
 		s.walk(root, frame)
 		s.flushGrips()
 	}
-	for _, o := range findOverlays(root) {
-		r := centeredOf(m, o, w, h)
-		if a, ok := s.rects[getAnchor(o)]; ok {
-			var px, py T
-			if getBox(o).hasBorder() {
-				px, py = m.anchorPull()
-			}
-			r = anchoredOf(r, a, w, h, px, py)
-		}
-		if p != nil {
-			p.layer(r)
-		}
-		// The layer is a hit barrier: above everything painted before it,
-		// below its own nodes.
-		s.hits = append(s.hits, hitOf[T]{rect: r, area: intersectOf(m, r, s.clip)})
-		s.walk(o, r)
-		s.flushGrips()
+	overlays := s.overlays
+	s.overlays = nil
+	for _, o := range overlays {
+		s.walkOverlay(o, w, h)
 	}
 	return s
+}
+
+func (s *solver[T]) walkOverlay(o Node, w, h T) {
+	m := s.m
+	r := centeredOf(m, o, w, h)
+	if a, ok := s.rects[getAnchor(o)]; ok {
+		var px, py T
+		if getBox(o).hasBorder() {
+			px, py = m.anchorPull()
+		}
+		r = anchoredOf(r, a, w, h, px, py)
+	}
+	if s.paint != nil {
+		s.paint.layer(r)
+	}
+	// The layer is a hit barrier: above everything painted before it, below
+	// its own nodes.
+	s.hits = append(s.hits, hitOf[T]{rect: r, area: intersectOf(m, r, s.clip)})
+	s.walk(o, r)
+	s.flushGrips()
+	nested := s.overlays
+	s.overlays = nil
+	for _, child := range nested {
+		s.walkOverlay(child, w, h)
+	}
 }
 
 func (s *solver[T]) flushGrips() {
@@ -735,6 +796,30 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 			}
 		}
 	}
+	if fit, ok := n.(Fit); ok {
+		child := fittedChild(m, fit, r.W)
+		if child != nil {
+			if isOverlay(child) {
+				s.overlays = append(s.overlays, child)
+			} else {
+				s.walk(child, r)
+			}
+		}
+		return
+	}
+	if fit, ok := n.(*Fit); ok {
+		if fit != nil {
+			child := fittedChild(m, *fit, r.W)
+			if child != nil {
+				if isOverlay(child) {
+					s.overlays = append(s.overlays, child)
+				} else {
+					s.walk(child, r)
+				}
+			}
+		}
+		return
+	}
 
 	if sc, ok := n.(scroller); ok {
 		s.walkScroll(n, sc, r)
@@ -751,9 +836,14 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 	if s.paint != nil {
 		s.paint.chrome(n, r, s.clip)
 	}
-
-	children := nonOverlayChildren(container.GetChildren())
+	allChildren := container.GetChildren()
+	children := nonOverlayChildren(allChildren)
 	if len(children) == 0 {
+		for _, child := range allChildren {
+			if isOverlay(child) {
+				s.overlays = append(s.overlays, child)
+			}
+		}
 		return
 	}
 	horizontal := container.IsHorizontal()
@@ -771,7 +861,12 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 	mainSizes := distribute(m, children, horizontal, gap, avail, cross)
 	innerEnd := endOf(m, pos, avail)
 	align := getAlign(n)
-	for i, c := range children {
+	i := 0
+	for _, c := range allChildren {
+		if isOverlay(c) {
+			s.overlays = append(s.overlays, c)
+			continue
+		}
 		cw, ch := intrinsic(m, c)
 		var cr rect[T]
 		if horizontal {
@@ -790,6 +885,7 @@ func (s *solver[T]) walk(n Node, r rect[T]) {
 		// overflowing row/col cannot place a child past its parent.
 		s.walk(c, intersectOf(m, cr, inner))
 		pos = min(innerEnd, m.add(pos, m.add(mainSizes[i], gap)))
+		i++
 	}
 }
 
@@ -802,7 +898,11 @@ func (s *solver[T]) walkScroll(n Node, sc scroller, r rect[T]) {
 		s.paint.chrome(n, r, s.clip)
 	}
 	child, offset := sc.scroll()
-	if child == nil || isOverlay(child) {
+	if child == nil {
+		return
+	}
+	if isOverlay(child) {
+		s.overlays = append(s.overlays, child)
 		return
 	}
 	inner := insetOf(m, r, insetsOf[T](m, n))
