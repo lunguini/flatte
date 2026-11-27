@@ -1,0 +1,67 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    # bugs
+    - bodyclose
+    - durationcheck
+    - errorlint
+    - makezero
+    - nilerr
+    - nilnil
+    - copyloopvar
+    - contextcheck
+    - wastedassign
+    - noctx
+    # simplification and clarity
+    - gocritic
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - intrange
+    - misspell
+    - nolintlint
+    # organisation: the review's numbers
+    - dupl
+    - gocognit
+    - gocyclo
+  settings:
+    dupl:
+      threshold: 150
+    gocognit:
+      min-complexity: 40
+    gocyclo:
+      min-complexity: 30
+    gocritic:
+      enabled-tags: [diagnostic, performance, style]
+      disabled-checks:
+        - hugeParam # View helpers take State by pointer already; the rest are small
+        - unnamedResult
+        - commentedOutCode
+        - whyNoLint
+        - builtinShadow # min, max and new as local names read fine
+        - rangeValCopy # small structs; copies are not hot paths
+    misspell: {} # typos only: the code mixes US and UK spelling
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    presets: [comments, std-error-handling, common-false-positives]
+    rules:
+      - path: _test\.go
+        linters: [dupl, gocognit, gocyclo, errcheck, noctx]
+
+formatters:
+  enable: [gofmt, goimports]
+  settings:
+    goimports:
+      local-prefixes: [github.com/lunguini]
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
