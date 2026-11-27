@@ -63,6 +63,7 @@ const (
 
 // C functions and constants, bound by loadFrameworks.
 var (
+	nsBeep                      func()
 	cgContextSaveGState         func(ctx uintptr)
 	cgContextRestoreGState      func(ctx uintptr)
 	cgContextClipToRect         func(ctx uintptr, r CGRect)
@@ -166,12 +167,14 @@ func bindFrameworks() error {
 		}
 		libs[path] = h
 	}
+	cocoa := libs[frameworkCocoa]
 	cg, ct, cf, sys, oc := libs[frameworkCoreGraphics], libs[frameworkCoreText], libs[frameworkCoreFoundation], libs[libSystem], libs[libObjC]
 	for _, b := range []struct {
 		fn   any
 		lib  uintptr
 		name string
 	}{
+		{&nsBeep, cocoa, "NSBeep"},
 		{&cgContextSaveGState, cg, "CGContextSaveGState"},
 		{&cgContextRestoreGState, cg, "CGContextRestoreGState"},
 		{&cgContextClipToRect, cg, "CGContextClipToRect"},

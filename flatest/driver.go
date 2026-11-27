@@ -34,6 +34,7 @@ type Driver[S any] struct {
 	dialogs []pendingDialog
 	// notifications are the ones the app posted, oldest first.
 	notifications []flatte.Notification
+	beeps         int
 	themedCells   bool // Close removes the cell theme it installed
 }
 
@@ -95,6 +96,7 @@ func StartWith[S any](app flatte.App[S], opts Options) *Driver[S] {
 		Notify: func(notification flatte.Notification) {
 			d.notifications = append(d.notifications, notification)
 		},
+		Beep: func() { d.beeps++ },
 	})
 	initial := flatte.ResizeEvent{Width: opts.Width, Height: opts.Height}
 	d.stepResult(d.session.Step(flatte.StepInput{Start: &initial, UpdatesPending: true}))
@@ -197,6 +199,9 @@ func Frames[S any](d *Driver[S], steps ...func(*Driver[S])) []flatte.Frame {
 	}
 	return frames
 }
+
+// Beeps is how many times the app called Beep. The driver plays none.
+func (d *Driver[S]) Beeps() int { return d.beeps }
 
 // Notifications are the notifications the app posted with Notify, oldest
 // first. The driver shows none; tests read them here.

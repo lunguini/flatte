@@ -13,8 +13,8 @@ import (
 // Caret, when set, is a text caret at a cell of the content (inside the
 // node's padding), for apps that draw editable text as a cell grid — a code
 // editor or a terminal emulator. A GUI draws it as its blinking caret bar at
-// the cell's left edge; a terminal places the hardware cursor there
-// (Frame.CursorStyle shapes it). A caret outside the content, or clipped
+// the cell's left edge, or as Frame.CursorStyle shapes it; a terminal
+// places the hardware cursor there (Frame.CursorStyle shapes it). A caret outside the content, or clipped
 // away, shows nowhere. Like a focused Input's, the last visible caret in
 // paint order wins.
 //

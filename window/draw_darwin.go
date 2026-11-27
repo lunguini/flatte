@@ -465,6 +465,13 @@ type painter struct {
 	// they blink with the caret.
 	extra     []CGRect
 	extraClip []layout.PointRect
+	// cellCaret shapes and colors the carets of cell grids (a Text's,
+	// Frame.CursorStyle; nil: bars); caretAlpha is the primary caret's
+	// opacity and extraAlpha the further carets' (a block's is partial, so
+	// its character shows).
+	cellCaret              *flatte.CursorStyle
+	caretAlpha, extraAlpha float64
+	caretCell              bool // the primary caret is a cell grid's
 	// clip is the clip of the op being drawn.
 	clip layout.PointRect
 	// presentation is what the host draws itself: hovered and pressed
@@ -545,8 +552,8 @@ func (p *painter) draw(s layout.Scene, width, height float64) {
 		case layout.CellsOp:
 			p.clipped(intersect(op.Rect, op.Clip), func() { p.cells(op) })
 		case layout.CaretOp:
-			f := p.th.font(fontKey{mono: true})
-			p.extra = append(p.extra, cgRect(op.Cell.X, op.Cell.Y+(op.Cell.H-f.lineHeight())/2, 1.5, f.lineHeight()))
+			r, a := p.cellCaretRect(op.Cell.X, op.Cell.Y, op.Cell.W, op.Cell.H, p.th.font(fontKey{mono: true}))
+			p.extra, p.extraAlpha = append(p.extra, r), a
 			p.extraClip = append(p.extraClip, op.Clip)
 		}
 	}
@@ -1191,7 +1198,37 @@ func (w windowText) caretStep(op layout.InputOp, caret, dir int, x float64) int 
 // text and centered like it.
 func (p *painter) caretAt(x, y, h float64, f font) {
 	p.caret = cgRect(x, y+(h-f.lineHeight())/2, 1.5, f.lineHeight())
-	p.caretOK, p.caretClip = true, p.clip
+	p.caretOK, p.caretClip, p.caretAlpha, p.caretCell = true, p.clip, 1, false
+}
+
+// blockCaretAlpha is a block caret's opacity: its character shows through.
+const blockCaretAlpha = 0.45
+
+// cellCaretRect is the caret of the w×h cell at (x, y) in a grid set in f,
+// shaped as p.cellCaret says, and its opacity.
+func (p *painter) cellCaretRect(x, y, w, h float64, f font) (CGRect, float64) {
+	shape := flatte.CursorShapeDefault
+	if p.cellCaret != nil {
+		shape = p.cellCaret.Shape
+	}
+	switch shape {
+	case flatte.CursorShapeBlock:
+		return cgRect(x, y, w, h), blockCaretAlpha
+	case flatte.CursorShapeUnderline:
+		return cgRect(x, y+h-2, w, 2), 1
+	}
+	return cgRect(x, y+(h-f.lineHeight())/2, 1.5, f.lineHeight()), 1
+}
+
+// caretFill is the caret color at opacity a; a cell grid's caret takes
+// cellCaret's color when it has one.
+func (p *painter) caretFill(a float64, cell bool) rgba {
+	c := p.th.caret
+	if cell && p.cellCaret != nil && p.cellCaret.Color != nil {
+		c = rgbaOf(p.cellCaret.Color)
+	}
+	c.A *= a
+	return c
 }
 
 // paintCaret draws the caret placed while drawing, clipped to its field. It
@@ -1199,13 +1236,13 @@ func (p *painter) caretAt(x, y, h float64, f font) {
 func (p *painter) paintCaret() {
 	if p.caretOK {
 		p.clipped(p.caretClip, func() {
-			p.fill(p.th.caret)
+			p.fill(p.caretFill(p.caretAlpha, p.caretCell))
 			cgContextFillRect(p.ctx, p.caret)
 		})
 	}
 	for i, r := range p.extra {
 		p.clipped(p.extraClip[i], func() {
-			p.fill(p.th.caret)
+			p.fill(p.caretFill(p.extraAlpha, true))
 			cgContextFillRect(p.ctx, r)
 		})
 	}
@@ -1481,5 +1518,6 @@ func (p *painter) cellsCaret(op layout.CellsOp) {
 	}
 	p.clip = intersect(op.Rect, op.Clip)
 	g := p.gridOf(op.Face)
-	p.caretAt(op.Rect.X+float64(c.X)*g.cell.Column, op.Rect.Y+float64(c.Y)*g.cell.Line, g.cell.Line, p.th.font(g.font))
+	p.caret, p.caretAlpha = p.cellCaretRect(op.Rect.X+float64(c.X)*g.cell.Column, op.Rect.Y+float64(c.Y)*g.cell.Line, g.cell.Column, g.cell.Line, p.th.font(g.font))
+	p.caretOK, p.caretClip, p.caretCell = true, p.clip, true
 }

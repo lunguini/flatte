@@ -69,7 +69,11 @@ the window buttons sit in the middle of the system title bar nearest it (40 or
 52 points), which AppKit lays out itself. `Translucent` shows what is behind a
 macOS window, blurred, wherever the frame draws no background; a frame's
 `Frame.Translucent` does the same frame by frame, so an app can switch it live
-(either turns it on; terminals and pages ignore the frame field). A sample
+(either turns it on; terminals and pages ignore the frame field).
+`Frame.Appearance` (`AppearanceLight`/`AppearanceDark`; unknown follows the
+system) fixes a macOS window light or dark frame by frame, its title bar and
+menus included, for a live Light/Dark/Match System setting; Options that fix
+the appearance or theme win, and other hosts ignore it. A sample
 can append `window.Options` when its GUI mode is selected and still call
 `flatte.Run` once:
 
@@ -112,7 +116,7 @@ The exported contract names are `Host`, `Option`, `RunConfig`,
 The value fields are:
 
 - `HostServices`: `Capabilities`, `SetClipboard`, `ReadClipboard`,
-  `ShowDialog`, `Notify`, `Desktop`, `CellSurface`, and
+  `ShowDialog`, `Notify`, `Beep`, `Desktop`, `CellSurface`, and
   `PublishMedia`.
 - `HostState`: `Capabilities`, `Menus`, `Windows`, and `NowPlaying`.
 - `StepInput`: `Events`, `Resize`, `Start`, `UpdatesPending`,
@@ -757,7 +761,9 @@ layout.Row{NodeBase: layout.NodeBase{Gap: 1}, Children: []layout.Node{
 
 A focused Input scrolls horizontally to keep its caret visible.
 `Frame.CursorStyle` styles that cursor (for example a steady bar for an
-editor). Set `Frame.Cursor` yourself when you need a cursor somewhere else;
+editor). A macOS window also shapes a `layout.Text`'s carets by it (bar,
+underline, or a see-through block; `Color` colors them) and keeps every
+caret steady unless it says `Blink` (nil: blinking bars). Set `Frame.Cursor` yourself when you need a cursor somewhere else;
 it wins.
 `cmd/flat-modal` shows the shape.
 
@@ -1108,6 +1114,7 @@ test Effects; prefer `flatest.Start` when testing a complete app. A zero
 | File picker | `flatte.SelectFile(fx, name, cmd, fold)` | App chooses command; `cmd/flat-file-select` shows platform picker selection. |
 | Clipboard write/read | `fx.SetClipboard`, `fx.ReadClipboard`, `flatte.ClipboardEvent` | Reads are best-effort; unsupported terminals may never answer. A window uses the system pasteboard; custom hosts install clipboard callbacks with `Session.UseHostServices`. Pastes arrive as `PasteEvent` (⌘V in a window). |
 | Notifications | `fx.Notify(flatte.Notification{Title, Body})` | Fire and forget, no answer. A window posts a system notification; a terminal emits OSC 9 (iTerm2, Ghostty, WezTerm), OSC 99 (kitty) or OSC 777 (foot, rxvt), wrapped for tmux (needs `allow-passthrough`); others ignore it. The framework never decides when: track `FocusEvent` (`WithReportFocus` in a terminal; a window always sends it when the app comes to or leaves the front) to notify only while away. flatest records them: `d.Notifications()`. |
+| Alert sound | `fx.Beep()` | Fire and forget. A macOS window plays the system alert sound; a terminal rings its bell (BEL); pages ignore it. flatest counts them: `d.Beeps()`. |
 | Suspend | `fx.Suspend()` | Releases and restores terminal state; Unix sends job-control suspend when supported. Apps should not assume a process stop on platforms without job control. |
 
 ## Navigation Recipes

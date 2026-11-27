@@ -24,6 +24,7 @@ type HostServices struct {
 	ReadClipboard func()
 	ShowDialog    func(Dialog, func(DialogResult))
 	Notify        func(Notification)
+	Beep          func()
 	Desktop       func(DesktopCommand)
 	// CellSurface enables the shared cell input, layout, dialog, menu, and
 	// secondary-window rules. Graphical hosts leave it false.
@@ -250,6 +251,9 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 		if host.Notify != nil {
 			fx = withHostNotifications(fx, host.Notify)
 		}
+		if host.Beep != nil {
+			fx.beep = host.Beep
+		}
 		if host.Desktop != nil {
 			fx = withHostDesktop(fx, host.Desktop)
 		}
@@ -327,6 +331,7 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 			if config.Notify != nil {
 				fx.notify = func(notification Notification) { config.Notify(notification) }
 			}
+			fx.beep = config.Beep
 			fx.desktop = nil
 			if config.Desktop != nil {
 				fx.desktop = func(command DesktopCommand) { config.Desktop(command) }

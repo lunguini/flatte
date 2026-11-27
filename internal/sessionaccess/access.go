@@ -31,6 +31,7 @@ type HarnessEffects struct {
 	ReadClipboard func()
 	ShowDialog    func(any, func(any))
 	Notify        func(any)
+	Beep          func()
 	Desktop       func(any)
 }
 

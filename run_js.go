@@ -51,6 +51,7 @@ func Run[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) 
 		SetClipboard:  host.writeClipboard,
 		ReadClipboard: host.readClipboard,
 		Notify:        host.notify,
+		Beep:          func() {},
 		CellSurface:   true,
 		PublishMedia:  cfg.publishMedia,
 		ShowDialog: func(d Dialog, done func(DialogResult)) {

@@ -119,3 +119,16 @@ func notificationText(s string) string {
 	}
 	return b.String()
 }
+
+// Beep plays the alert sound: the system's in a window, the terminal's
+// bell (BEL) in a terminal; pages ignore it. Fire and forget, and
+// loop-goroutine-only, like Notify. Safe on a zero Effects value.
+func (fx Effects[S]) Beep() {
+	if fx.beep != nil {
+		fx.beep()
+		return
+	}
+	if fx.enqueue != nil {
+		fx.enqueue(action{write: "\a"})
+	}
+}

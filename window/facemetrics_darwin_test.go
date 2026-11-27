@@ -79,7 +79,7 @@ func TestTerminalFaceDrawsInItsCells(t *testing.T) {
 	red := lipgloss.NewStyle().Background(lipgloss.Color("#ff0000")).Render(" ")
 	root := layout.Text{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1)}, String: "\n  " + red, Face: layout.FaceTerminal}
 	w, h := 10*term.Column, 3*term.Line
-	img := renderScene(layout.LayoutScene(root, w, h, m), th, m, w, h, 1, nil, presentation{}, false)
+	img := renderScene(layout.LayoutScene(root, w, h, m), th, m, w, h, 1, nil, presentation{}, false, nil)
 	isRed := func(x, y float64) bool {
 		c := img.RGBAAt(int(x), int(y))
 		return c.R > 200 && c.G < 60 && c.B < 60

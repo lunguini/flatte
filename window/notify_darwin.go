@@ -30,6 +30,9 @@ func (osNotifier) notify(n flatte.Notification) {
 	}()
 }
 
+// beep plays the system's alert sound.
+func (osNotifier) beep() { post(func() { nsBeep() }) }
+
 func notificationCommand(ctx context.Context, n flatte.Notification) *exec.Cmd {
 	return exec.CommandContext(ctx, "osascript",
 		"-e", "on run argv",

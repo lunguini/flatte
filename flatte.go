@@ -99,6 +99,8 @@ type Effects[S any] struct {
 	// notify posts notifications; nil: terminal
 	// escape sequences.
 	notify func(Notification)
+	// beep plays the alert sound; nil: the terminal's bell.
+	beep func()
 	// desktop routes background utility commands to a native host.
 	desktop func(DesktopCommand)
 	// caps is what the host supports.

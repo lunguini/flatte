@@ -80,6 +80,7 @@ func NewHarnessEffectsWithServices[S any](ctx context.Context, updates chan<- fl
 		ReadClipboard: services.ReadClipboard,
 		ShowDialog:    dialogs,
 		Notify:        notify,
+		Beep:          services.Beep,
 		Desktop:       desktop,
 	})
 	start := flatte.ResizeEvent{}

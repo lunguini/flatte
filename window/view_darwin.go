@@ -31,6 +31,9 @@ type windowState struct {
 	// follow re-resolves th from the system appearance (dark) as it
 	// changes; set when Options has no Theme.
 	follow, dark bool
+	// asked is the appearance the frames fix the window in (unknown: the
+	// system's), applied while follow.
+	asked flatte.Appearance
 	// translucent leaves the window's background to the blur behind it;
 	// hideTitle has the content under the title bar, its strip dragging the
 	// window where nothing is.
@@ -178,6 +181,23 @@ func (st *windowState) setTranslucent(on bool) {
 	st.view.Send(sel("setNeedsDisplay:"), true)
 }
 
+// fixAppearance has the window light or dark, its chrome included, or
+// following the system (unknown). Its view then redraws in it.
+func (st *windowState) fixAppearance(a flatte.Appearance) {
+	if states[st.view] != st {
+		return // the window closed
+	}
+	var named objc.ID // nil: the system's
+	switch a {
+	case flatte.AppearanceLight:
+		named = class("NSAppearance").Send(sel("appearanceNamed:"), nsString("NSAppearanceNameAqua"))
+	case flatte.AppearanceDark:
+		named = class("NSAppearance").Send(sel("appearanceNamed:"), nsString("NSAppearanceNameDarkAqua"))
+	}
+	st.window.Send(sel("setAppearance:"), named)
+	st.view.Send(sel("setNeedsDisplay:"), true)
+}
+
 func (st *windowState) setTitle(t string) {
 	if t != "" && t != st.title {
 		st.title = t
@@ -300,7 +320,8 @@ func viewMethods() []objc.MethodDef {
 			scene := st.ui.render()
 			ctx := uintptr(class("NSGraphicsContext").Send(sel("currentContext")).Send(sel("CGContext")))
 			scale := objc.Send[float64](st.window, sel("backingScaleFactor"))
-			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale, translucent: st.translucent}
+			style := st.ui.frameCursorStyle()
+			p := &painter{ctx: ctx, m: st.m, th: st.th, marked: st.marked, scale: scale, translucent: st.translucent, cellCaret: style}
 			p.presentation = st.ui.presentation()
 			p.draw(st.ui.withTip(scene, p.presentation), b.Size.Width, b.Size.Height)
 			switch {
@@ -320,15 +341,23 @@ func viewMethods() []objc.MethodDef {
 				if !st.caretOK || p.caret != st.caret || !slices.Equal(p.extra, st.extra) {
 					st.caretMoved = now // a moved caret shows at once
 				}
-				if caretOn(now.Sub(st.caretMoved)) {
-					p.paintCaret()
+				if style != nil && !style.Blink {
+					p.paintCaret() // steady
+				} else {
+					if caretOn(now.Sub(st.caretMoved)) {
+						p.paintCaret()
+					}
+					st.blinkIn(caretBlink - now.Sub(st.caretMoved)%caretBlink)
 				}
-				st.blinkIn(caretBlink - now.Sub(st.caretMoved)%caretBlink)
 			}
 			st.caret, st.caretOK, st.extra = p.caret, p.caretOK, p.extra
 			st.setTitle(st.ui.frameTitle())
 			if on := st.always || st.ui.frameTranslucent(); on != st.translucent {
 				post(func() { st.setTranslucent(on) }) // not while drawing
+			}
+			if a := st.ui.frameAppearance(); st.follow && a != st.asked {
+				st.asked = a
+				post(func() { st.fixAppearance(a) })
 			}
 		}},
 		{Cmd: sel("keyDown:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {

@@ -112,6 +112,7 @@ flatte package flatte
   method *Session.UsesNowPlaying() bool
   method *Session.WindowFrame(id string)(Frame, bool)
   method Appearance.Dark() bool
+  method Effects[S].Beep()
   method Effects[S].Capabilities() Capabilities
   method Effects[S].Ctx() context.Context
   method Effects[S].Desktop(command DesktopCommand)
@@ -229,10 +230,11 @@ flatte package flatte
   field Effects.<unexported> func() [order=9]
   field Effects.<unexported> func(Dialog, func(DialogResult)) [order=10]
   field Effects.<unexported> func(Notification) [order=11]
-  field Effects.<unexported> func(DesktopCommand) [order=12]
-  field Effects.<unexported> Capabilities [order=13]
-  field Effects.<unexported> *catcher [order=14]
-  struct Effects fields=15 comparable=false
+  field Effects.<unexported> func() [order=12]
+  field Effects.<unexported> func(DesktopCommand) [order=13]
+  field Effects.<unexported> Capabilities [order=14]
+  field Effects.<unexported> *catcher [order=15]
+  struct Effects fields=16 comparable=false
   type Event interface
   interface Event method isEvent()
   type FileSelection struct
@@ -249,9 +251,10 @@ flatte package flatte
   field Frame.Title string [order=3]
   field Frame.CellImages bool [order=4]
   field Frame.Translucent bool [order=5]
-  field Frame.Theme *theme.Theme [order=6]
-  field Frame.Root layout.Node [order=7]
-  struct Frame fields=8 comparable=true
+  field Frame.Appearance Appearance [order=6]
+  field Frame.Theme *theme.Theme [order=7]
+  field Frame.Root layout.Node [order=8]
+  struct Frame fields=9 comparable=true
   type Host interface
   interface Host method Run(context.Context, *Session) error
   type HostServices struct
@@ -260,10 +263,11 @@ flatte package flatte
   field HostServices.ReadClipboard func() [order=2]
   field HostServices.ShowDialog func(Dialog, func(DialogResult)) [order=3]
   field HostServices.Notify func(Notification) [order=4]
-  field HostServices.Desktop func(DesktopCommand) [order=5]
-  field HostServices.CellSurface bool [order=6]
-  field HostServices.PublishMedia func(*NowPlaying) [order=7]
-  struct HostServices fields=8 comparable=false
+  field HostServices.Beep func() [order=5]
+  field HostServices.Desktop func(DesktopCommand) [order=6]
+  field HostServices.CellSurface bool [order=7]
+  field HostServices.PublishMedia func(*NowPlaying) [order=8]
+  struct HostServices fields=9 comparable=false
   type HostState struct
   field HostState.Capabilities Capabilities [order=0]
   field HostState.Menus []Menu [order=1]
@@ -492,6 +496,7 @@ flatest package flatest
   func StartWith[S any](app flatte.App[S], opts Options) *Driver[S]
   method *Driver[S].Advance(by time.Duration) flatte.Frame
   method *Driver[S].Answer(r flatte.DialogResult) flatte.Frame
+  method *Driver[S].Beeps() int
   method *Driver[S].Close()
   method *Driver[S].Dialog()(dialog flatte.Dialog, ok bool)
   method *Driver[S].Frame() flatte.Frame
@@ -519,8 +524,9 @@ flatest package flatest
   field Driver.<unexported> func() [order=9]
   field Driver.<unexported> []pendingDialog [order=10]
   field Driver.<unexported> []flatte.Notification [order=11]
-  field Driver.<unexported> bool [order=12]
-  struct Driver fields=13 comparable=false
+  field Driver.<unexported> int [order=12]
+  field Driver.<unexported> bool [order=13]
+  struct Driver fields=14 comparable=false
   type Options struct
   field Options.Width int [order=0]
   field Options.Height int [order=1]

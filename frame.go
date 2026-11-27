@@ -20,7 +20,9 @@ type Frame struct {
 	// holds a focused layout.Input, whose caret then places it.
 	Cursor *Cursor
 	// CursorStyle styles the cursor a focused layout.Input's caret places
-	// (when Cursor is nil); nil is the terminal's default.
+	// (when Cursor is nil); nil is the terminal's default. A macOS window
+	// shapes and colors a Text's carets by it (nil: blinking bars), and
+	// blinks every caret only when it is nil or says Blink.
 	CursorStyle *CursorStyle
 	// Title sets the terminal window title when non-empty. It is emitted
 	// only when it changes, and reset on exit if it was ever set.
@@ -34,6 +36,12 @@ type Frame struct {
 	// Options.Translucent does (either turns it on), but changeable frame
 	// by frame: a setting can switch it live. Terminals ignore it.
 	Translucent bool
+	// Appearance, in a native macOS window, fixes it light or dark from
+	// this frame on, its title bar and menus included (AppearanceUnknown:
+	// it follows the system), so a setting can switch it live. A window
+	// whose Options fix its appearance or theme keeps it; other hosts
+	// ignore it.
+	Appearance Appearance
 	// Theme, when set, is the design system the host draws this frame and
 	// the next in (nil: the app's WithTheme, else the host's default), so
 	// a setting can restyle the app live: View returns the theme its state

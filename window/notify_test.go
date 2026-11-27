@@ -6,9 +6,32 @@ import (
 	"github.com/lunguini/flatte"
 )
 
-type fakeNotifier struct{ posted []flatte.Notification }
+type fakeNotifier struct {
+	posted []flatte.Notification
+	beeps  int
+}
 
 func (f *fakeNotifier) notify(n flatte.Notification) { f.posted = append(f.posted, n) }
+func (f *fakeNotifier) beep()                        { f.beeps++ }
+
+func TestHostBeeps(t *testing.T) {
+	s := &testState{content: "x"}
+	app := testApp(s)
+	app.Handle = func(_ *testState, ev flatte.Event, fx flatte.Effects[testState]) {
+		if key, ok := ev.(flatte.KeyEvent); ok && key.Rune == 'b' {
+			fx.Beep()
+		}
+	}
+	h, _ := newTestHostWithApp(t, app)
+	h.start(80, 48)
+	h.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'b'}) // no notifier: nothing
+	f := &fakeNotifier{}
+	h.notes = f
+	h.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'b'})
+	if f.beeps != 1 {
+		t.Fatalf("beeps %d", f.beeps)
+	}
+}
 
 func TestHostPostsNotifications(t *testing.T) {
 	s := &testState{content: "x"}

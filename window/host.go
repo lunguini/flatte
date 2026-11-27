@@ -79,7 +79,9 @@ type surface struct {
 	width, height float64 // view size in points
 	scene         layout.Scene
 	title         string
-	translucent   bool // the last frame's Translucent
+	translucent   bool                // the last frame's Translucent
+	asked         flatte.Appearance   // the last frame's Appearance
+	cursorStyle   *flatte.CursorStyle // the last frame's CursorStyle
 	// cursor is a string frame's Frame.Cursor, in cells; Root frames show the
 	// focused Input's caret instead.
 	cursor          *flatte.Cursor
@@ -130,6 +132,7 @@ type mediaBackend interface {
 // notifier posts system notifications, fire and forget.
 type notifier interface {
 	notify(n flatte.Notification)
+	beep()
 }
 
 type dialogBackend interface {
@@ -176,6 +179,8 @@ type ui interface {
 	setAppearance(flatte.Appearance)
 	frameTitle() string
 	frameTranslucent() bool
+	frameAppearance() flatte.Appearance
+	frameCursorStyle() *flatte.CursorStyle
 	frameCursor() *flatte.Cursor
 }
 
@@ -324,6 +329,11 @@ func (h *host) services() flatte.HostServices {
 		Notify: func(n flatte.Notification) {
 			if h.notes != nil {
 				h.notes.notify(n)
+			}
+		},
+		Beep: func() {
+			if h.notes != nil {
+				h.notes.beep()
 			}
 		},
 		Desktop: func(c flatte.DesktopCommand) {
@@ -1230,6 +1240,8 @@ func (s *surface) render() layout.Scene {
 		h.followTheme()
 		s.title = frame.Title
 		s.translucent = frame.Translucent
+		s.asked = frame.Appearance
+		s.cursorStyle = frame.CursorStyle
 		s.cursor = nil
 		root := frame.Root
 		if root == nil {
@@ -1315,6 +1327,12 @@ func (s *surface) frameTitle() string { return s.title }
 
 // frameTranslucent reports the last frame's Translucent.
 func (s *surface) frameTranslucent() bool { return s.translucent }
+
+// frameAppearance reports the last frame's Appearance.
+func (s *surface) frameAppearance() flatte.Appearance { return s.asked }
+
+// frameCursorStyle reports the last frame's CursorStyle.
+func (s *surface) frameCursorStyle() *flatte.CursorStyle { return s.cursorStyle }
 
 // frameCursor is the last rendered string frame's cursor, in cells.
 func (s *surface) frameCursor() *flatte.Cursor { return s.cursor }

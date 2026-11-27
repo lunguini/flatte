@@ -771,6 +771,9 @@ func (n canvasNotifier) notify(notification flatte.Notification) {
 	ctor.New(notification.Title, map[string]any{"body": notification.Body})
 }
 
+// beep does nothing: a page has no system alert sound.
+func (canvasNotifier) beep() {}
+
 type canvasDialogs struct{ win js.Value }
 
 func (d canvasDialogs) run(dialog flatte.Dialog) flatte.DialogResult {

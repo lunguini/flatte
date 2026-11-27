@@ -74,3 +74,23 @@ func TestRunNotifyEmitsTheSequence(t *testing.T) {
 		t.Fatalf("notification emitted %d time(s), want 1:\n%q", got, output)
 	}
 }
+
+func TestBeepRoutesToTheHost(t *testing.T) {
+	beeps := 0
+	fx := newHarnessEffectsForTest[struct{}](context.Background(), nil, nil, nil, nil)
+	fx.beep = func() { beeps++ }
+	fx.Beep()
+	if beeps != 1 {
+		t.Fatalf("beeps = %d", beeps)
+	}
+	// Without a host, harness and zero effects stay no-ops.
+	newHarnessEffectsForTest[struct{}](context.Background(), nil, nil, nil, nil).Beep()
+	Effects[struct{}]{}.Beep()
+}
+
+func TestRunBeepRingsTheTerminalBell(t *testing.T) {
+	output := runClipboardApp(t, func(s *testState, fx Effects[testState]) { fx.Beep() }, "xq", nil)
+	if got := strings.Count(output, "\a"); got != 1 {
+		t.Fatalf("bell rung %d time(s), want 1:\n%q", got, output)
+	}
+}

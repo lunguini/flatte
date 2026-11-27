@@ -53,3 +53,44 @@ func TestOptionsAppearance(t *testing.T) {
 		t.Fatal("a fixed look follows the system")
 	}
 }
+
+// A frame's Appearance fixes the window's light or dark, unless Options
+// fix it; the View sees the appearance it is drawn in.
+func TestSnapshotDrawsFrameAppearance(t *testing.T) {
+	if err := loadFrameworks(); err != nil {
+		t.Fatal(err)
+	}
+	mine := ds.Default()
+	for _, tc := range []struct {
+		frame, opts flatte.Appearance
+		pal         *ds.Palette
+		name        string
+	}{
+		{flatte.AppearanceLight, flatte.AppearanceUnknown, &mine.Light, "frame light"},
+		{flatte.AppearanceDark, flatte.AppearanceUnknown, &mine.Dark, "frame dark"},
+		{flatte.AppearanceUnknown, flatte.AppearanceUnknown, &mine.Dark, "follows"},
+		{flatte.AppearanceLight, flatte.AppearanceDark, &mine.Dark, "options win"},
+	} {
+		var seen flatte.Appearance
+		type st struct{}
+		app := flatte.App[st]{State: &st{}, View: func(_ *st, ctx flatte.RenderContext) flatte.Frame {
+			seen = ctx.Appearance
+			return flatte.Frame{Theme: &mine, Appearance: tc.frame, Root: layout.Col{NodeBase: layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1), Box: layout.Box{Fill: layout.FillContent}}}}
+		}}
+		img, err := Snapshot(app, Options{Width: 20, Height: 4, Appearance: tc.opts}, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b := img.Bounds()
+		if got := img.At(b.Dx()/2, b.Dy()/2); !near(got, tc.pal.Content, 2) {
+			t.Errorf("%s: content %v, want %v", tc.name, got, tc.pal.Content)
+		}
+		if want := flatte.AppearanceDark; tc.pal == &mine.Light {
+			if seen != flatte.AppearanceLight {
+				t.Errorf("%s: View saw %d, want light", tc.name, seen)
+			}
+		} else if seen != want {
+			t.Errorf("%s: View saw %d, want dark", tc.name, seen)
+		}
+	}
+}

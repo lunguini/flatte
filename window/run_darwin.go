@@ -520,19 +520,27 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	h.surface.setAppearance(th.appearance)
 	h.start(width, height)
 	scene := h.render()
-	img := renderScene(scene, th, m, width, height, scale, h.frameCursor(), presentation{}, opts.Translucent || h.surface.frameTranslucent())
+	if a := h.surface.frameAppearance(); opts.follows() && a != flatte.AppearanceUnknown && a.Dark() != dark {
+		// The frame fixes the other appearance: drawn again in it.
+		dark = a.Dark()
+		th = newTheme(themeFor(opts.Theme, dark, session.Theme(true)))
+		h.surface.setAppearance(th.appearance)
+		scene = h.render()
+	}
+	img := renderScene(scene, th, m, width, height, scale, h.frameCursor(), presentation{}, opts.Translucent || h.surface.frameTranslucent(), h.surface.frameCursorStyle())
 	return img, nil
 }
 
 // renderImage draws scene offscreen into an RGBA image of width×height
 // points at scale pixels per point, with pres drawn over it.
 func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation) *image.RGBA {
-	return renderScene(scene, th, m, width, height, scale, cursor, pres, false)
+	return renderScene(scene, th, m, width, height, scale, cursor, pres, false, nil)
 }
 
 // renderScene is renderImage, translucent leaving the background
-// unpainted (transparent) as a translucent window does.
-func renderScene(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation, translucent bool) *image.RGBA {
+// unpainted (transparent) as a translucent window does, cellCaret shaping
+// the carets of cell grids (Frame.CursorStyle).
+func renderScene(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation, translucent bool, cellCaret *flatte.CursorStyle) *image.RGBA {
 	pw, ph := int(math.Ceil(width*scale)), int(math.Ceil(height*scale))
 	cs := cgColorSpaceCreateDeviceRGB()
 	defer cgColorSpaceRelease(cs)
@@ -541,7 +549,7 @@ func renderScene(scene layout.Scene, th theme, m layout.Metrics, width, height, 
 	// Top-left origin points, as in the flipped view.
 	cgContextTranslateCTM(ctx, 0, float64(ph))
 	cgContextScaleCTM(ctx, scale, -scale)
-	p := &painter{ctx: ctx, m: m, th: th, scale: scale, presentation: pres, translucent: translucent}
+	p := &painter{ctx: ctx, m: m, th: th, scale: scale, presentation: pres, translucent: translucent, cellCaret: cellCaret}
 	withPool(func() {
 		// Fill the whole bitmap, including the partial pixel the point size
 		// rounds up to.
