@@ -100,6 +100,13 @@ type ClipboardEvent struct{ Text string }
 // FocusEvent reports terminal focus changes (see WithReportFocus).
 type FocusEvent struct{ Focused bool }
 
+// ModifiersEvent reports a change to the held modifier keys in a window.
+// Terminal hosts report modifiers on MouseEvent instead.
+type ModifiersEvent struct {
+	Mod    Mod
+	Window string
+}
+
 type MouseButton int
 
 const (
@@ -249,6 +256,7 @@ func (ResizeEvent) isEvent()     {}
 func (PasteEvent) isEvent()      {}
 func (ClipboardEvent) isEvent()  {}
 func (FocusEvent) isEvent()      {}
+func (ModifiersEvent) isEvent()  {}
 func (MouseEvent) isEvent()      {}
 func (LayoutEvent) isEvent()     {}
 func (AppearanceEvent) isEvent() {}

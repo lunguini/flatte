@@ -59,6 +59,8 @@ flatte package flatte
   const MouseWheelLeft MouseButton = 6
   const MouseWheelRight MouseButton = 7
   const MouseWheelUp MouseButton = 4
+  const PointerShapeDefault PointerShape = 0
+  const PointerShapeHand PointerShape = 1
   const WindowCloseRequest WindowEventKind = 1
   const WindowFocused WindowEventKind = 0
   func Alert[S any](fx Effects[S], name string, d AlertDialog, fold func(s*S, button int, err error))
@@ -248,13 +250,14 @@ flatte package flatte
   field Frame.Content string [order=0]
   field Frame.Cursor *Cursor [order=1]
   field Frame.CursorStyle *CursorStyle [order=2]
-  field Frame.Title string [order=3]
-  field Frame.CellImages bool [order=4]
-  field Frame.Translucent bool [order=5]
-  field Frame.Appearance Appearance [order=6]
-  field Frame.Theme *theme.Theme [order=7]
-  field Frame.Root layout.Node [order=8]
-  struct Frame fields=9 comparable=true
+  field Frame.Pointer PointerShape [order=3]
+  field Frame.Title string [order=4]
+  field Frame.CellImages bool [order=5]
+  field Frame.Translucent bool [order=6]
+  field Frame.Appearance Appearance [order=7]
+  field Frame.Theme *theme.Theme [order=8]
+  field Frame.Root layout.Node [order=9]
+  struct Frame fields=10 comparable=true
   type Host interface
   interface Host method Run(context.Context, *Session) error
   type HostServices struct
@@ -316,6 +319,10 @@ flatte package flatte
   field MenuItem.Items []MenuItem [order=6]
   struct MenuItem fields=7 comparable=false
   type Mod int
+  type ModifiersEvent struct
+  field ModifiersEvent.Mod Mod [order=0]
+  field ModifiersEvent.Window string [order=1]
+  struct ModifiersEvent fields=2 comparable=true
   type MouseAction int
   type MouseButton int
   type MouseEvent struct
@@ -370,6 +377,7 @@ flatte package flatte
   type PasteEvent struct
   field PasteEvent.Text string [order=0]
   struct PasteEvent fields=1 comparable=true
+  type PointerShape int
   type QuitRequest struct
   struct QuitRequest fields=0 comparable=true
   type RenderContext struct

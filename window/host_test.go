@@ -59,6 +59,7 @@ type testState struct {
 	layouts int
 	count   int
 	quitOn  rune
+	pointer flatte.PointerShape
 	root    func(*testState) layout.Node
 	content string
 	exited  bool
@@ -85,7 +86,7 @@ func testApp(s *testState) flatte.App[testState] {
 			if s.root == nil {
 				return flatte.Frame{Content: s.content, Title: "plain", Cursor: &flatte.Cursor{X: 1, Y: 0}}
 			}
-			return flatte.Frame{Root: s.root(s), Title: "tree"}
+			return flatte.Frame{Root: s.root(s), Title: "tree", Pointer: s.pointer}
 		},
 		OnExit: func(s *testState) { s.exited = true },
 	}

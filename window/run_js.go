@@ -264,6 +264,7 @@ func (p *canvasPage) bind() {
 	})
 	p.listen(p.canvas, "pointerleave", func(ev js.Value) {
 		p.canvas.Get("style").Set("cursor", "default")
+		p.host.surface.mouse(-1, -1, flatte.MouseNone, flatte.MouseMotion, canvasModifiers(ev))
 		p.host.surface.hover(-1, -1)
 	})
 	p.listen(p.canvas, "wheel", func(ev js.Value) {
@@ -297,6 +298,7 @@ func (p *canvasPage) bind() {
 		p.host.surface.drop(x, y, paths, dt.Call("getData", "text/plain").String())
 	})
 	p.listen(p.input, "keydown", p.keyDown)
+	p.listen(p.input, "keyup", p.keyUp)
 	p.listen(p.input, "input", func(js.Value) {
 		if p.composing {
 			return
@@ -354,6 +356,7 @@ func (p *canvasPage) bind() {
 }
 
 func (p *canvasPage) keyDown(ev js.Value) {
+	p.updateModifiers(canvasModifiers(ev))
 	if p.composing || ev.Get("isComposing").Truthy() || ev.Get("keyCode").Int() == 229 {
 		return
 	}
@@ -365,6 +368,16 @@ func (p *canvasPage) keyDown(ev js.Value) {
 	if key, ok := canvasKeyEvent(name, mods, ev); ok {
 		ev.Call("preventDefault")
 		p.host.surface.key(key)
+	}
+}
+
+func (p *canvasPage) keyUp(ev js.Value) { p.updateModifiers(canvasModifiers(ev)) }
+
+func (p *canvasPage) updateModifiers(mod flatte.Mod) {
+	p.host.surface.modifiers(mod)
+	if p.host.surface.pointerKnown {
+		shape, _ := p.host.surface.hover(p.host.surface.pointerX, p.host.surface.pointerY)
+		p.canvas.Get("style").Set("cursor", canvasCursor(shape))
 	}
 }
 

@@ -386,13 +386,22 @@ func viewMethods() []objc.MethodDef {
 		{Cmd: sel("mouseMoved:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
 			if st := stateOf(self); st != nil {
 				p := location(self, event)
+				st.ui.mouse(p.X, p.Y, flatte.MouseNone, flatte.MouseMotion, eventMods(event))
 				shape, _ := st.ui.hover(p.X, p.Y)
 				st.showPointer(shape)
 			}
 		}},
-		{Cmd: sel("mouseExited:"), Fn: func(self objc.ID, _ objc.SEL, _ objc.ID) {
+		{Cmd: sel("mouseExited:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
 			if st := stateOf(self); st != nil {
+				st.ui.mouse(-1, -1, flatte.MouseNone, flatte.MouseMotion, eventMods(event))
 				shape, _ := st.ui.hover(-1, -1)
+				st.showPointer(shape)
+			}
+		}},
+		{Cmd: sel("flagsChanged:"), Fn: func(self objc.ID, _ objc.SEL, event objc.ID) {
+			if st := stateOf(self); st != nil {
+				st.ui.modifiers(eventMods(event))
+				shape, _ := st.ui.refreshPointer()
 				st.showPointer(shape)
 			}
 		}},

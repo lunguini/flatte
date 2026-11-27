@@ -85,6 +85,11 @@ type surface struct {
 	// cursor is a string frame's Frame.Cursor, in cells; Root frames show the
 	// focused Input's caret instead.
 	cursor          *flatte.Cursor
+	pointer         flatte.PointerShape
+	mods            flatte.Mod
+	pointerX        float64
+	pointerY        float64
+	pointerKnown    bool
 	delivered       map[string]layout.Rect
 	deliveredPoints map[string]layout.PointRect
 	deliveredFaces  map[layout.Face]layout.CellSize
@@ -156,7 +161,9 @@ type ui interface {
 	resize(width, height float64)
 	key(flatte.KeyEvent)
 	paste()
+	modifiers(flatte.Mod)
 	hover(x, y float64) (pointer, string)
+	refreshPointer() (pointer, string)
 	presentation() presentation
 	// withTip is a scene with the presentation's tooltip drawn over it.
 	withTip(layout.Scene, presentation) layout.Scene
@@ -647,6 +654,7 @@ func (s *surface) interactiveBox(id string) bool {
 // it records the control under it, redrawing when that changes, and
 // reports the pointer shape and tooltip to show there.
 func (s *surface) hover(x, y float64) (pointer, string) {
+	s.pointerX, s.pointerY, s.pointerKnown = x, y, x >= 0 && y >= 0
 	scene := s.fresh()
 	id, tooltip, shape := "", "", pointerArrow
 	inputHovered := false
@@ -680,6 +688,9 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 			shape = pointerText
 		}
 	}
+	if s.pointer == flatte.PointerShapeHand {
+		shape = pointerHand
+	}
 	tooltip, changed := s.scrollAt(x, y, tooltip)
 	changed = changed || id != s.pres.hovered
 	s.pres.hovered = id
@@ -701,6 +712,13 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 		s.h.handle(flatte.LeaveEvent{ID: id, Window: s.id})
 	}
 	return shape, tooltip
+}
+
+func (s *surface) refreshPointer() (pointer, string) {
+	if !s.pointerKnown {
+		return s.hover(-1, -1)
+	}
+	return s.hover(s.pointerX, s.pointerY)
 }
 
 // reportsLeaving is the boxes the pointer was over, and is not now, that
@@ -987,8 +1005,17 @@ func (s *surface) mouse(x, y float64, button flatte.MouseButton, action flatte.M
 	s.mouseClicks(x, y, button, action, mod, 1)
 }
 
+func (s *surface) modifiers(mod flatte.Mod) {
+	if s.mods == mod {
+		return
+	}
+	s.mods = mod
+	s.h.handle(flatte.ModifiersEvent{Mod: mod, Window: s.id})
+}
+
 func (s *surface) mouseClicks(x, y float64, button flatte.MouseButton, action flatte.MouseAction, mod flatte.Mod, clicks int) {
 	h := s.h
+	s.mods = mod
 	scene := s.fresh()
 	id, r := scene.HitTest(x, y)
 	dragging := s.drag != "" && button == flatte.MouseLeft && action != flatte.MousePress
@@ -1242,6 +1269,7 @@ func (s *surface) render() layout.Scene {
 		s.translucent = frame.Translucent
 		s.asked = frame.Appearance
 		s.cursorStyle = frame.CursorStyle
+		s.pointer = frame.Pointer
 		s.cursor = nil
 		root := frame.Root
 		if root == nil {

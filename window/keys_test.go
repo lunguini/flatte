@@ -48,6 +48,12 @@ func TestMacKey(t *testing.T) {
 	}
 }
 
+func TestMacPointerModifiersIncludeCommand(t *testing.T) {
+	if got, want := macMods(macShift|macOption|macControl|macCommand), flatte.ModShift|flatte.ModAlt|flatte.ModCtrl|flatte.ModSuper; got != want {
+		t.Fatalf("pointer modifiers = %v, want %v", got, want)
+	}
+}
+
 func TestTextKeys(t *testing.T) {
 	got := textKeys("aé日\n\x07")
 	want := []flatte.KeyEvent{

@@ -24,6 +24,9 @@ type Frame struct {
 	// shapes and colors a Text's carets by it (nil: blinking bars), and
 	// blinks every caret only when it is nil or says Blink.
 	CursorStyle *CursorStyle
+	// Pointer requests a native pointing-hand cursor. The default leaves
+	// the host's control and text-field pointer behavior in charge.
+	Pointer PointerShape
 	// Title sets the terminal window title when non-empty. It is emitted
 	// only when it changes, and reset on exit if it was ever set.
 	Title string
@@ -76,6 +79,14 @@ type CursorStyle struct {
 	Blink bool
 	Color color.Color
 }
+
+// PointerShape is the native window's pointer cursor. Terminals ignore it.
+type PointerShape int
+
+const (
+	PointerShapeDefault PointerShape = iota
+	PointerShapeHand
+)
 
 // ComposeFrame resolves frame.Root, when set, into frame.Content at
 // width×height and returns the composition for hit-testing. A nil Cursor

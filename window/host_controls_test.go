@@ -56,6 +56,31 @@ func TestHostHoverPointerAndTooltip(t *testing.T) {
 	}
 }
 
+func TestFramePointerAndMotionEvents(t *testing.T) {
+	s := &testState{pointer: flatte.PointerShapeHand, root: func(*testState) layout.Node {
+		return layout.Label{NodeBase: layout.NodeBase{ID: "text"}, Text: "plain"}
+	}}
+	h, _ := newTestHost(t, s)
+	h.start(200, 100)
+	h.render()
+	r := h.scene.Rects["text"]
+	if shape, _ := h.hover(r.X+1, r.Y+1); shape != pointerHand {
+		t.Fatalf("frame pointer = %v, want hand", shape)
+	}
+
+	h.modifiers(flatte.ModSuper)
+	mod, ok := s.events[len(s.events)-1].(flatte.ModifiersEvent)
+	if !ok || mod.Mod != flatte.ModSuper || mod.Window != "" {
+		t.Fatalf("modifier event = %#v", s.events[len(s.events)-1])
+	}
+
+	h.mouse(r.X+1, r.Y+1, flatte.MouseNone, flatte.MouseMotion, flatte.ModSuper)
+	m := lastMouse(t, s)
+	if m.Action != flatte.MouseMotion || m.Button != flatte.MouseNone || m.Mod != flatte.ModSuper || m.Target != "text" {
+		t.Fatalf("motion event = %+v", m)
+	}
+}
+
 func TestHostPressedControl(t *testing.T) {
 	s := controlsState()
 	h, _ := newTestHost(t, s)

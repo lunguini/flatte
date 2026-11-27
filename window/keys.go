@@ -25,6 +25,9 @@ func macMods(flags uint) flatte.Mod {
 	if flags&macControl != 0 {
 		m |= flatte.ModCtrl
 	}
+	if flags&macCommand != 0 {
+		m |= flatte.ModSuper
+	}
 	return m
 }
 
@@ -57,7 +60,7 @@ func macKey(chars rune, flags uint) (flatte.KeyEvent, bool) {
 	mod := macMods(flags)
 	if flags&macCommand != 0 {
 		if k, ok := macCommandKeys[chars]; ok {
-			return flatte.KeyEvent{Key: k, Mod: mod}, true
+			return flatte.KeyEvent{Key: k, Mod: mod &^ flatte.ModSuper}, true
 		}
 		if k, ok := macSpecialKeys[chars]; ok {
 			return flatte.KeyEvent{Key: k, Mod: mod | flatte.ModSuper}, true

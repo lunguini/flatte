@@ -286,6 +286,8 @@ Use these names for every app:
 | Window appearance | handle `flatte.AppearanceEvent` |
 | Keyboard | type switch to `flatte.KeyEvent` |
 | Mouse | `flatte.WithMouse(...)` plus `flatte.MouseEvent` |
+| Held modifiers in a window | `flatte.ModifiersEvent`; terminals report them on `MouseEvent` |
+| App pointer cursor | `Frame.Pointer: flatte.PointerShapeHand` for a native hand cursor |
 | Solved layout of a `Frame.Root` | handle `flatte.LayoutEvent` |
 | Inline (non-fullscreen) mode | `flatte.WithInline()` |
 | Handle Ctrl+C yourself | `flatte.WithoutDefaultQuit()` |
@@ -794,6 +796,14 @@ case flatte.MouseEvent:
 		s.focus = paneSidebar
 	}
 ```
+
+Native windows send `MouseMotion` when the pointer moves without a button.
+They also send `ModifiersEvent` when held modifiers change, so an app can
+update a hover while the pointer rests. Set `Frame.Pointer` to
+`PointerShapeHand` for a native pointing hand; the default keeps the host's
+control and text-field cursor behavior. Terminal hosts report modifiers on
+mouse events, need `MouseModeAllMotion` for unpressed pointer movement, and
+ignore `Frame.Pointer`.
 
 `TargetRect` makes the click node-local without a rect lookup:
 
