@@ -127,3 +127,44 @@ func TestFitOnlyLaysOutOverlaysInTheChosenTree(t *testing.T) {
 		t.Fatal("the popup option was not laid out")
 	}
 }
+
+func TestFitMinWidthDecidesForAGrowingPreferred(t *testing.T) {
+	fit := Fit{
+		Preferred: Label{NodeBase: NodeBase{ID: "wide", W: Grow(1)}, Text: "a long folder path", Truncate: true},
+		Fallback:  &Spacer{},
+		MinWidth:  Points(80).Cells(10),
+	}
+	root := Row{Children: []Node{Label{NodeBase: NodeBase{ID: "lead"}, Text: "lead"}, fit}}
+	if r, ok := Compose(root, 14, 1).Rects["wide"]; !ok || r.W != 10 {
+		t.Fatalf("ten cells left: wide %+v %v, want all ten", r, ok)
+	}
+	if _, ok := Compose(root, 13, 1).Rects["wide"]; ok {
+		t.Fatal("the preferred tree was laid out in less than its minimum")
+	}
+	m := Metrics{Column: 8, Line: 16, Step: 8, MeasureText: func(text string, _ TextStyle, _ float64) (float64, float64) {
+		return float64(8 * len(text)), 16
+	}}
+	if _, ok := LayoutScene(root, 32+80, 32, m).Rects["wide"]; !ok {
+		t.Fatal("80pt left did not fit an 80pt minimum")
+	}
+	if _, ok := LayoutScene(root, 32+79, 32, m).Rects["wide"]; ok {
+		t.Fatal("79pt left fit an 80pt minimum")
+	}
+}
+
+func TestFitWithoutMinWidthFallsBackFromAGrowingPreferred(t *testing.T) {
+	fit := Fit{Preferred: &Spacer{NodeBase: NodeBase{ID: "grow", W: Grow(1)}}, Fallback: Label{NodeBase: NodeBase{ID: "narrow"}, Text: "x"}}
+	if _, ok := Compose(fit, 40, 1).Rects["narrow"]; !ok {
+		t.Fatal("a growing preferred tree without a minimum was chosen")
+	}
+}
+
+func TestFitNeedsItsMinWidthAndItsMeasuredWidth(t *testing.T) {
+	fit := Fit{Preferred: Label{NodeBase: NodeBase{ID: "wide"}, Text: "abc"}, Fallback: Label{NodeBase: NodeBase{ID: "narrow"}, Text: "x"}, MinWidth: Fixed(6)}
+	if _, ok := Compose(fit, 5, 1).Rects["narrow"]; !ok {
+		t.Fatal("a preferred tree that fit its text but not its minimum was chosen")
+	}
+	if _, ok := Compose(fit, 6, 1).Rects["wide"]; !ok {
+		t.Fatal("a preferred tree that fit its minimum was not chosen")
+	}
+}

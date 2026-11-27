@@ -378,6 +378,53 @@ func TestTabsEnd(t *testing.T) {
 	}
 }
 
+// Rest takes what the tabs leave of the strip, in the frame they are
+// drawn in: a Fit there drops it when that is too little, and it is never
+// scrolled to.
+func TestTabsRest(t *testing.T) {
+	rest := layout.Fit{
+		Preferred: layout.Label{NodeBase: layout.NodeBase{ID: "where", W: layout.Grow(1)}, Text: "internal › app", Truncate: true},
+		Fallback:  &layout.Spacer{},
+		MinWidth:  layout.Fixed(6),
+	}
+	split := Action{ID: "split", Glyph: "◫"}.Layout()
+	for _, scroll := range []bool{false, true} {
+		for _, end := range [][]layout.Node{nil, {split}} {
+			strip := Tabs{ID: "s", Scroll: scroll, Tabs: []Tab{{ID: "a", Label: "a.go"}}, Rest: rest, End: end}
+			c := layout.Compose(strip.Layout(), 40, 1)
+			a, r := c.Rects["a"], c.Rects["where"]
+			want := 40 - 1 // the strip's end
+			if end != nil {
+				want = c.Rects["split"].X - 1
+			}
+			if r.X != a.X+a.W+1 || r.X+r.W != want {
+				t.Errorf("scroll %v end %v: rest %+v after the tab %+v, want it to end at %d", scroll, end != nil, r, a, want)
+			}
+			if scroll && c.Rects[strip.ContentID()].W > c.Rects[strip.ViewID()].W {
+				t.Errorf("scroll %v end %v: the rest made the strip scroll", scroll, end != nil)
+			}
+			// What is left is under the minimum: the rest goes.
+			n := a.W + 1 + 5 + 1 + (40 - want - 1)
+			if _, ok := layout.Compose(strip.Layout(), n, 1).Rects["where"]; ok {
+				t.Errorf("scroll %v end %v: the rest stayed in 5 columns", scroll, end != nil)
+			}
+			if _, ok := layout.Compose(strip.Layout(), n+1, 1).Rects["where"]; !ok {
+				t.Errorf("scroll %v end %v: the rest went in 6 columns", scroll, end != nil)
+			}
+		}
+	}
+	// Tabs that fill the strip leave no rest.
+	strip := Tabs{ID: "s", Scroll: true, Fill: true, Tabs: []Tab{{ID: "a", Label: "a.go"}}, Rest: rest}
+	if _, ok := layout.Compose(strip.Layout(), 40, 1).Rects["where"]; ok {
+		t.Error("a filled strip kept its rest")
+	}
+	// In points too.
+	r := layout.LayoutScene(Tabs{ID: "s", Scroll: true, Tabs: []Tab{{ID: "a", Label: "a"}}, Rest: rest}.Layout(), 400, 36, points).Rects["where"]
+	if r.X+r.W != 400-points.Step {
+		t.Errorf("points: the rest ends at %v", r.X+r.W)
+	}
+}
+
 func cellRects(r map[string]layout.Rect) map[string]layout.PointRect {
 	out := map[string]layout.PointRect{}
 	for k, v := range r {

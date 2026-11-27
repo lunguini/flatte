@@ -359,6 +359,11 @@ type Tabs struct {
 	// instead of the accent: the strip's pane does not have focus, so
 	// another pane's tab is the accented one.
 	Unfocused bool
+	// Rest fills the room the tabs (and Trailing) leave before End, in the
+	// frame they are drawn in, and never makes the strip scroll: put a
+	// layout.Fit with a MinWidth there to leave it out when that room is too
+	// little. A Fill strip has no room left, and no Rest.
+	Rest layout.Node
 }
 
 // Tab geometry: the hairline between tabs and the gap between those with a
@@ -448,7 +453,7 @@ func (t Tabs) Layout() layout.Node {
 				content.W = layout.Size{Kind: layout.SizeContent, Value: t.Held}
 			}
 			// The trailing nodes scroll along, right after the tabs.
-			content.Children = append(append(content.Children, trailing...), &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
+			content.Children = append(append(content.Children, trailing...), t.rest())
 			trailing = nil
 		}
 		kids = []layout.Node{layout.Scroll{NodeBase: layout.NodeBase{ID: t.ViewID(), W: layout.Grow(1), H: layout.Grow(1)}, ScrollX: true, OffsetX: t.Offset, Child: content}}
@@ -457,7 +462,7 @@ func (t Tabs) Layout() layout.Node {
 	}
 	kids = append(kids, trailing...)
 	if !t.Fill && !t.Scroll {
-		kids = append(kids, &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}})
+		kids = append(kids, t.rest())
 	}
 	if len(t.End) > 0 {
 		kids = append(kids, layout.Row{NodeBase: layout.NodeBase{H: layout.Grow(1), PadLeft: 1, PadRight: 1, Gap: 1}, Align: layout.AlignCenter, Children: t.End})
@@ -468,6 +473,19 @@ func (t Tabs) Layout() layout.Node {
 	}
 	box.ReportLeave = t.Held > 0
 	return layout.Row{NodeBase: layout.NodeBase{ID: t.ID, H: layout.BarSize(), Box: box}, Align: layout.AlignStretch, Children: kids}
+}
+
+// rest is the room after an unfilled strip's tabs: Rest, padded as End is,
+// or empty.
+func (t Tabs) rest() layout.Node {
+	if t.Rest == nil {
+		return &layout.Spacer{NodeBase: layout.NodeBase{W: layout.Grow(1)}}
+	}
+	nb := layout.NodeBase{W: layout.Grow(1), H: layout.Grow(1), PadLeft: 1}
+	if len(t.End) == 0 {
+		nb.PadRight = 1
+	}
+	return layout.Row{NodeBase: nb, Align: layout.AlignCenter, Children: []layout.Node{t.Rest}}
 }
 
 func (t Tabs) tab(tab Tab, active bool) layout.Node {

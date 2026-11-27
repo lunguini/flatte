@@ -8,6 +8,11 @@ type Fit struct {
 	Preferred Node
 	// Fallback is used when Preferred is too wide. A nil fallback keeps Preferred.
 	Fallback Node
+	// MinWidth, when set, is the least width Preferred needs besides its
+	// measured one: the width a Preferred that grows (and so has no
+	// measured width) fits in, or one below which a truncated Preferred is
+	// not worth showing. Points(80).Cells(10) says it for both backends.
+	MinWidth Size
 }
 
 func (f Fit) Size() (Size, Size) {
@@ -36,10 +41,19 @@ func fittedChild[T unit](m metric[T], f Fit, width T) Node {
 	if f.Fallback == nil || width < 0 {
 		return f.Preferred
 	}
+	if f.MinWidth.Kind != SizeAuto && toSized(m, f.MinWidth, true).Value > width {
+		return f.Fallback
+	}
 	w, _ := measure(m, f.Preferred, noWidth[T]())
-	w = w.normalized()
-	if (w.Kind == SizeFixed || w.Kind == SizeContent) && w.Value <= width {
-		return f.Preferred
+	switch w = w.normalized(); w.Kind {
+	case SizeFixed, SizeContent:
+		if w.Value <= width {
+			return f.Preferred
+		}
+	case SizeGrow:
+		if f.MinWidth.Kind != SizeAuto {
+			return f.Preferred
+		}
 	}
 	return f.Fallback
 }

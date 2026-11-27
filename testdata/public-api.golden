@@ -1134,7 +1134,8 @@ flatui/kit package kit
   field Tabs.Ground layout.Fill [order=10]
   field Tabs.Plain bool [order=11]
   field Tabs.Unfocused bool [order=12]
-  struct Tabs fields=13 comparable=false
+  field Tabs.Rest layout.Node [order=13]
+  struct Tabs fields=14 comparable=false
   type ToggleButton struct
   field ToggleButton.ID string [order=0]
   field ToggleButton.Label string [order=1]
@@ -1536,7 +1537,8 @@ flatui/layout package layout
   type Fit struct
   field Fit.Preferred Node [order=0]
   field Fit.Fallback Node [order=1]
-  struct Fit fields=2 comparable=true
+  field Fit.MinWidth Size [order=2]
+  struct Fit fields=3 comparable=true
   type Icon struct
   field Icon.NodeBase NodeBase [order=0]
   field Icon.Name IconName [order=1]
