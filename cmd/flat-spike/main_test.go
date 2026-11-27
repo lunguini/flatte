@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatest"
 	testkit "github.com/lunguini/flatte/internal/testkit"
@@ -199,7 +200,7 @@ func TestRunAppliesStartupAsyncUpdateBeforeLaterInput(t *testing.T) {
 	}()
 
 	time.Sleep(350 * time.Millisecond)
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 

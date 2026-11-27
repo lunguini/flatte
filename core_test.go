@@ -131,7 +131,7 @@ func TestRunProcessesInputAndAsyncUpdates(t *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	if _, err := writer.Write([]byte("jq")); err != nil {
+	if _, err := writer.WriteString("jq"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -193,7 +193,7 @@ func TestRunSkipsTerminalWritesForUnchangedFrames(t *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	if _, err := writer.Write([]byte("jq")); err != nil {
+	if _, err := writer.WriteString("jq"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -345,7 +345,7 @@ func TestRunCoalescesQueuedUpdatesIntoOneDraw(t *testing.T) {
 	}()
 
 	time.Sleep(100 * time.Millisecond)
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -405,7 +405,7 @@ func TestRunWrapsFramesInSynchronizedOutput(t *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	if _, err := writer.Write([]byte("xq")); err != nil {
+	if _, err := writer.WriteString("xq"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -451,7 +451,7 @@ func TestRunEntersAltScreenThroughRenderer(t *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -508,7 +508,7 @@ func TestRunSkipsSyncMarkersForUnchangedFrames(t *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	if _, err := writer.Write([]byte("xq")); err != nil {
+	if _, err := writer.WriteString("xq"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -607,11 +607,11 @@ func TestRunDrawsABurstOfInputOnce(t *testing.T) {
 	}()
 
 	time.Sleep(100 * time.Millisecond)
-	if _, err := writer.Write([]byte(strings.Repeat("a", 40))); err != nil {
+	if _, err := writer.WriteString(strings.Repeat("a", 40)); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(500 * time.Millisecond)
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	select {

@@ -201,7 +201,7 @@ func TestRunAdoptsLayoutBeforeFirstPaint(t *testing.T) {
 		s.rows = min(ev.Rects["body"].H, 3)
 	})
 	waitFor(t, out, "rows=3")
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-done; err != nil {
@@ -239,7 +239,7 @@ func TestRunFlushesActionsQueuedByLayoutEvent(t *testing.T) {
 		}
 	})
 	waitFor(t, out, ansi.SetSystemClipboard("laid out"))
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-done; err != nil {
@@ -253,7 +253,7 @@ func TestRunFillsMouseTargetRect(t *testing.T) {
 	}, WithMouse(MouseModeCellMotion))
 	waitFor(t, out, "rows=2")
 	// Cell (3,1) is inside the 2-row list; (3,5) is in body below it.
-	if _, err := writer.Write([]byte("\x1b[<0;4;2M\x1b[<0;4;2m\x1b[<0;4;6M\x1b[<0;4;6mq")); err != nil {
+	if _, err := writer.WriteString("\x1b[<0;4;2M\x1b[<0;4;2m\x1b[<0;4;6M\x1b[<0;4;6mq"); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-done; err != nil {
@@ -313,7 +313,7 @@ func TestRunFillsMouseCaretAndSuper(t *testing.T) {
 	// Clicks at (3,0) in the input and (3,1) on the label; then ⌘C as a
 	// kitty-protocol key (modifiers 1+8: super), and ⌘← and ⇧⌘← as Warp
 	// sends them in the xterm encoding (modifier bit 8: meta).
-	if _, err := writer.Write([]byte("\x1b[<0;4;1M\x1b[<0;4;2M\x1b[99;9u\x1b[1;9D\x1b[1;10Dq")); err != nil {
+	if _, err := writer.WriteString("\x1b[<0;4;1M\x1b[<0;4;2M\x1b[99;9u\x1b[1;9D\x1b[1;10Dq"); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-done; err != nil {

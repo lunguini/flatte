@@ -1,8 +1,9 @@
 package window
 
 import (
-	"github.com/charmbracelet/x/ansi"
 	"math"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lunguini/flatte/flatui/layout"
 )

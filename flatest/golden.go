@@ -11,15 +11,15 @@ import (
 )
 
 var ansiPattern = regexp.MustCompile(
-	"\x1b(?:" +
+	"\x1b(?:" + //nolint:gocritic // [ -/] is CSI's intermediates (0x20–0x2F)
 		"\\][^\x07\x1b]*(?:\x07|\x1b\\\\)" + // OSC: ESC ] ... BEL or ST (must precede 2-byte)
-		"|\\[[0-?]*[ -/]*[@-~]" + // CSI: ESC [ params final
+		"|\\[[0-?]*[ -/]*[@-~]" + // CSI: ESC [ params, intermediates, final
 		"|P[^\x1b]*\x1b\\\\" + // DCS: ESC P ... ST
 		"|[X^_][^\x1b]*\x1b\\\\" + // SOS/PM/APC: ESC X/^/_ ... ST
 		"|[@-Z\\\\-_]" + // 2-byte: ESC + final byte (catches remaining Fe escapes)
 		")")
 
-func AssertGolden(t *testing.T, path string, frame string) {
+func AssertGolden(t *testing.T, path, frame string) {
 	t.Helper()
 
 	got := CleanFrame(frame)

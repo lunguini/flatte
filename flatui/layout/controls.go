@@ -192,7 +192,7 @@ func (b Button) styledSpelling() string {
 
 // renderWithColorProfile centers an icon button's Label in the room its
 // shape is drawn in; otherwise, as Render.
-func (b Button) renderWithColorProfile(r Rect, profile colorprofile.Profile) string {
+func (b Button) renderWithColorProfile(r Rect, profile colorprofile.Profile) string { //nolint:unparam // profile ignored: buttons skip color downsampling (tracked)
 	_, content, ok := b.terminalIcon(r)
 	if !ok {
 		return b.Render(r)

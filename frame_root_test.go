@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/colorprofile"
+
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -133,7 +134,7 @@ func TestRunFillsMouseTargetFromRoot(t *testing.T) {
 	// SGR coordinates are 1-based: (6,1) is cell (5,0), (6,6) is cell (5,5),
 	// and (99,1) lies outside the 72-column fallback frame.
 	input := "\x1b[<0;6;1M\x1b[<0;6;1m" + "\x1b[<0;6;6M\x1b[<0;6;6m" + "\x1b[<0;99;1M\x1b[<0;99;1m" + "q"
-	if _, err := writer.Write([]byte(input)); err != nil {
+	if _, err := writer.WriteString(input); err != nil {
 		t.Fatal(err)
 	}
 	if err := <-done; err != nil {

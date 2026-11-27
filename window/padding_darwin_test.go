@@ -1,9 +1,10 @@
 package window
 
 import (
+	"testing"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/flatui/layout"
-	"testing"
 )
 
 func TestWindowDefaultPaddingFieldAndCaret(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -31,7 +32,7 @@ func TestKittyProtocolBytes(t *testing.T) {
 }
 
 func TestKittyTransmitChunksAt4096Base64Bytes(t *testing.T) {
-	got := kittyTransmit(11, bytes.Repeat([]byte{0}, 3075))
+	got := kittyTransmit(11, make([]byte, 3075))
 	first := "\x1b_Ga=t,f=100,t=d,i=11,m=1,q=1;" + strings.Repeat("A", 4096) + "\x1b\\"
 	last := "\x1b_Ga=t,f=100,t=d,i=11,m=0,q=1;AAAA\x1b\\"
 	if want := first + last; got != want {
@@ -214,7 +215,7 @@ func TestRunTerminalImagesDoNotWriteGraphicsWithoutTTY(t *testing.T) {
 					},
 				}, WithInput(reader), WithOutput(&output))
 			}()
-			if _, err := writer.Write([]byte("q")); err != nil {
+			if _, err := writer.WriteString("q"); err != nil {
 				t.Fatal(err)
 			}
 			select {

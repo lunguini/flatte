@@ -93,11 +93,11 @@ func TestControlHoverAndPress(t *testing.T) {
 	}
 	lum := func(c color.Color) uint32 { r, g, b, _ := c.RGBA(); return r + g + b }
 	plain, hot, down := fill("", ""), fill("b", ""), fill("b", "b")
-	if !(lum(hot) > lum(plain)) {
+	if lum(hot) <= lum(plain) {
 		t.Errorf("hovered %v not lighter than plain %v", hot, plain)
 	}
 	// Dark washes are white: the pressed wash is the stronger one.
-	if !(lum(down) > lum(hot)) {
+	if lum(down) <= lum(hot) {
 		t.Errorf("pressed %v not stronger than hovered %v", down, hot)
 	}
 	if other := fill("other", "other"); other != plain {

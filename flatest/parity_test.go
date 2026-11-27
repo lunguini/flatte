@@ -50,7 +50,7 @@ func TestDriverRunParityOnSyncApp(t *testing.T) {
 		done <- flatte.Run(context.Background(), parityApp(runState),
 			flatte.WithInput(reader), flatte.WithOutput(&out))
 	}()
-	if _, err := writer.Write([]byte(script + "q")); err != nil {
+	if _, err := writer.WriteString(script + "q"); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -125,7 +125,7 @@ func TestDriverRunParityAfterQueuedUpdateBurst(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run did not apply queued update burst")
 	}
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	select {

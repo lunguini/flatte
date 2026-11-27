@@ -10,7 +10,6 @@ import (
 
 type clicks struct {
 	targets []string
-	tall    bool
 }
 
 func rootApp() flatte.App[clicks] {

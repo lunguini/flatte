@@ -260,7 +260,9 @@ func newSession[S any](ctx context.Context, app App[S]) *Session {
 		s.cellSurface = host.CellSurface
 		s.publishMedia = host.PublishMedia
 	}
-	s.caps = func() Capabilities { return fx.Capabilities() }
+	// A closure, not the method value fx.Capabilities: that would copy fx
+	// now, before the host sets its capabilities.
+	s.caps = func() Capabilities { return fx.Capabilities() } //nolint:gocritic // see above
 	s.onExit = func() {
 		if app.OnExit != nil {
 			app.OnExit(app.State)

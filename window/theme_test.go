@@ -1,13 +1,15 @@
 package window
 
 import (
-	"github.com/charmbracelet/x/ansi"
-	"github.com/lunguini/flatte/flatui/layout"
-	ds "github.com/lunguini/flatte/theme"
 	"image/color"
 	"math"
 	"reflect"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/lunguini/flatte/flatui/layout"
+	ds "github.com/lunguini/flatte/theme"
 )
 
 func TestBaseThemesAreComplete(t *testing.T) {

@@ -1,6 +1,7 @@
 package persist
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -28,7 +29,7 @@ func TestSaveRefusesToOverwriteCorruptState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(gotBytes) != string(wantBytes) {
+	if !bytes.Equal(gotBytes, wantBytes) {
 		t.Fatalf("corrupt evidence changed: got %q want %q", gotBytes, wantBytes)
 	}
 }

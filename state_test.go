@@ -122,7 +122,7 @@ func TestLoadStateWithErrorPreservesMissingFileError(t *testing.T) {
 func TestLoadStateCorruptFileReturnsDefault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "corrupt.gob")
-	if err := os.WriteFile(path, []byte("not gob data"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("not gob data"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestLoadStateCorruptFileReturnsDefault(t *testing.T) {
 func TestLoadStateWithErrorPreservesDecodeError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "corrupt.gob")
-	if err := os.WriteFile(path, []byte("not gob data"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("not gob data"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

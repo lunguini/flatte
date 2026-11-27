@@ -154,8 +154,6 @@ func (t Theme) spacing() (step float64, in layout.Insets, sizes layout.Sizes) {
 	return step, layout.Insets{Vertical: sp[0], Horizontal: sp[1], Panel: sp[2]}, layout.Sizes{Row: z.Row, Control: z.Control, Bar: z.Bar, Header: z.Header}
 }
 
-func rgb(r, g, b uint8) color.Color { return color.RGBA{r, g, b, 0xff} }
-
 // over returns t with its zero fields taken from base.
 func (t Theme) over(base Theme) Theme {
 	pick := func(c, b color.Color) color.Color {

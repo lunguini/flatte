@@ -243,7 +243,7 @@ var terminalImageCache = struct {
 // cachedTerminalImage keeps the expensive resampling and styled image string
 // for a small number of immutable Sources. Non-comparable value images bypass
 // the map because Go cannot safely use them as identity keys.
-func cachedTerminalImage(src image.Image, width, height int, fit ImageFit) ([]terminalPixel, string) {
+func cachedTerminalImage(src image.Image, width, height int, fit ImageFit) ([]terminalPixel, string) { //nolint:unparam // the pixels are the cache's, for its tests
 	if isNilImage(src) || width <= 0 || height <= 0 || height > maxInt/2 || width > maxInt/(height*2) {
 		return nil, ""
 	}

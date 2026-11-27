@@ -46,7 +46,7 @@ func TestRunReadClipboardRoundTrip(t *testing.T) {
 		if key, ok := ev.(KeyEvent); ok && key.Rune == 'x' {
 			go func() {
 				time.Sleep(20 * time.Millisecond)
-				_, _ = writer.Write([]byte("\x1b]52;c;aGVsbG8=\x07"))
+				_, _ = writer.WriteString("\x1b]52;c;aGVsbG8=\x07")
 			}()
 		}
 	})
@@ -97,7 +97,7 @@ func runClipboardApp(t *testing.T, onX func(*testState, Effects[testState]), inp
 		}, WithInput(reader), WithOutput(&out))
 	}()
 
-	if _, err := writer.Write([]byte(input)); err != nil {
+	if _, err := writer.WriteString(input); err != nil {
 		t.Fatal(err)
 	}
 	select {

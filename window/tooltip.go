@@ -82,7 +82,7 @@ func (s *surface) withTip(scene layout.Scene, p presentation) layout.Scene {
 }
 
 // tipTextSize is the tooltip text's natural size in the window's metrics.
-func tipTextSize(m layout.Metrics, text string) (float64, float64) {
+func tipTextSize(m layout.Metrics, text string) (float64, float64) { //nolint:unparam // width and height: a size
 	if m.MeasureText != nil {
 		return m.MeasureText(text, layout.TextStyle{Role: layout.TextMeta}, 0)
 	}

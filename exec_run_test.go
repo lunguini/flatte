@@ -90,7 +90,7 @@ func runExecApp(t *testing.T, cmd *exec.Cmd) (string, *testState, *recordingTrac
 		}, WithInput(reader), WithOutput(&out))
 	}()
 
-	if _, err := writer.Write([]byte("x")); err != nil {
+	if _, err := writer.WriteString("x"); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -99,7 +99,7 @@ func runExecApp(t *testing.T, cmd *exec.Cmd) (string, *testState, *recordingTrac
 		t.Fatal("timed out waiting for the exec fold")
 	}
 	// 'q' rides the restarted input pipeline.
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	select {

@@ -177,7 +177,7 @@ func TestShowcaseAccentsAllPass(t *testing.T) {
 		"violet":   {Hex("#6d3fd8"), Hex("#b69bff")},
 		"graphite": {Hex("#3d4450"), Hex("#c3c9d3")},
 	} {
-		p := p
+
 		for _, s := range []Seeds{{Accent: &p}, {Accent: &p, Density: Compact, Roundness: Square}} {
 			if problems := Default().With(s).Check(); len(problems) != 0 {
 				t.Errorf("%s: %v", name, problems)

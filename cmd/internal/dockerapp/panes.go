@@ -25,36 +25,6 @@ type splitDrag struct {
 	startWidth int
 }
 
-// renderDragDivider produces a 1-col-wide, height-tall divider with a
-// background color matching the pane borders, and a single │ in the
-// vertical center as a visible grip indicator. The bg fills the column
-// (spaces are invisible against it); the │ stands out as a contrast.
-func renderDragDivider(height int, dragging bool) string {
-	bg := pal.panel
-	gripFg := pal.bg // dark against gray — clearly visible
-	if dragging {
-		bg = pal.accent
-		gripFg = pal.dark // dark against blue
-	}
-	midY := height / 2
-	rows := make([]string, height)
-	for i := 0; i < height; i++ {
-		if i == midY {
-			rows[i] = "│"
-		} else {
-			rows[i] = " "
-		}
-	}
-	content := strings.Join(rows, "\n")
-	return lipgloss.NewStyle().
-		Width(dividerWidth).
-		Height(height).
-		MaxHeight(height).
-		Foreground(gripFg).
-		Background(bg).
-		Render(content)
-}
-
 // --- Pane nodes shared by the screens ---
 
 // paneBase is a pane's frame: padding on the sides and bottom (none on top,

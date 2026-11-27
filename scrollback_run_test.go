@@ -45,7 +45,7 @@ func runPrintApp(t *testing.T, inline bool, onX func(Effects[testState])) string
 		}, opts...)
 	}()
 
-	if _, err := writer.Write([]byte("xq")); err != nil {
+	if _, err := writer.WriteString("xq"); err != nil {
 		t.Fatal(err)
 	}
 	select {

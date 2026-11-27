@@ -48,7 +48,7 @@ func TestRunSuspendReleasesAndRestoresTerminal(t *testing.T) {
 		}, WithInput(reader), WithOutput(&out), withSuspendProcess(fakeSuspend))
 	}()
 
-	if _, err := writer.Write([]byte("x")); err != nil {
+	if _, err := writer.WriteString("x"); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -58,7 +58,7 @@ func TestRunSuspendReleasesAndRestoresTerminal(t *testing.T) {
 	}
 	// 'q' goes through the RESTARTED input pipeline: quitting proves the
 	// reader survived the release/restore cycle.
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	select {

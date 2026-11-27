@@ -86,7 +86,7 @@ func TestRunInlineSuspendRepaintsWithFreshRenderer(t *testing.T) {
 			withSuspendProcess(func() { close(suspended) }))
 	}()
 
-	if _, err := writer.Write([]byte("x")); err != nil {
+	if _, err := writer.WriteString("x"); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -94,7 +94,7 @@ func TestRunInlineSuspendRepaintsWithFreshRenderer(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for suspendProcess")
 	}
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	select {

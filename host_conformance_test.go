@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/internal/hostconformance"
 )

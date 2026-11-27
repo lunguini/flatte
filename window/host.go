@@ -374,12 +374,12 @@ func (h *host) capabilities() flatte.Capabilities {
 
 // start installs services, then runs Init and delivers the first resize.
 func (h *host) start(width, height float64) {
-	h.surface.width, h.surface.height = width, height
+	h.width, h.height = width, height
 	h.session.UseHostServices(h.services())
 	resize := flatte.ResizeEvent{Width: h.cols(width), Height: h.lines(height)}
 	var events []flatte.Event
-	if h.surface.appearance != flatte.AppearanceUnknown {
-		events = append(events, flatte.AppearanceEvent{Appearance: h.surface.appearance})
+	if h.appearance != flatte.AppearanceUnknown {
+		events = append(events, flatte.AppearanceEvent{Appearance: h.appearance})
 	}
 	step := h.session.Step(flatte.StepInput{Start: &resize, Events: events})
 	h.started = true
@@ -611,7 +611,7 @@ func menuEventForKey(menus []flatte.Menu, key flatte.KeyEvent) (flatte.MenuEvent
 
 // control is the control with id in the scene; ok is false when there is
 // none or it is disabled.
-func (s *surface) control(id string) (layout.ControlOp, bool) {
+func (s *surface) control(id string) (layout.ControlOp, bool) { //nolint:unparam // the op, for callers that act on it
 	if id == "" {
 		return layout.ControlOp{}, false
 	}
@@ -670,10 +670,10 @@ func (s *surface) hover(x, y float64) (pointer, string) {
 		}
 	}
 	if !inputHovered {
-		switch r := s.resizeBox(id); {
-		case r == layout.ResizeColumns:
+		switch r := s.resizeBox(id); r {
+		case layout.ResizeColumns:
 			shape, id = pointerResizeColumns, ""
-		case r == layout.ResizeRows:
+		case layout.ResizeRows:
 			shape, id = pointerResizeRows, ""
 		default:
 			if _, ok := s.control(id); ok || s.interactiveBox(id) {

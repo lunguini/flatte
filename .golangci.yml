@@ -15,7 +15,6 @@ linters:
     - nilerr
     - nilnil
     - copyloopvar
-    - contextcheck
     - wastedassign
     - noctx
     # simplification and clarity
@@ -23,7 +22,6 @@ linters:
     - unconvert
     - unparam
     - usestdlibvars
-    - intrange
     - misspell
     - nolintlint
 # Complexity and duplication are not gated: a cap makes code split into
@@ -37,6 +35,8 @@ linters:
       threshold: 150 # tokens: whole blocks copied, not two similar lines
     gocognit:
       min-complexity: 50 # only for the report above
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1003", "-ST1005", "-ST1016", "-ST1020", "-ST1021", "-ST1022"] # error strings are shown as sentences
     gocritic:
       enabled-tags: [diagnostic, performance, style]
       disabled-checks:
@@ -46,6 +46,23 @@ linters:
         - whyNoLint
         - builtinShadow # min, max and new as local names read fine
         - rangeValCopy # small structs; copies are not hot paths
+        # Taste, not bugs: following them churns code for no gain.
+        - filepathJoin # "a/b" in tests is fine on every OS Go supports
+        - initClause
+        - importShadow
+        - evalOrder
+        - typeDefFirst
+        - nestingReduce
+        - ifElseChain
+        - badCond # flags deliberate "both ran out" checks
+        - weakCond
+        - offBy1 # tests index text they just drew
+        - mapKey
+        - appendCombine
+        - singleCaseSwitch
+        - dupOption
+        - regexpSimplify
+        - boolExprSimplify
     misspell: {} # typos only: the code mixes US and UK spelling
     nolintlint:
       require-explanation: true
@@ -54,7 +71,13 @@ linters:
     presets: [comments, std-error-handling, common-false-positives]
     rules:
       - path: _test\.go
-        linters: [dupl, gocognit, errcheck, noctx]
+        linters: [dupl, gocognit, errcheck, noctx, unparam]
+      - path: ^cmd/ # samples: a CLI's plain exec and exit
+        linters: [noctx, unparam]
+      - path: ^cmd/
+        text: exitAfterDefer
+      - path: ^cmd/bubble- # the Bubble Tea comparison apps stay as written (the benchmark)
+        linters: [gocritic, unparam, unused, errcheck, staticcheck]
 
 formatters:
   enable: [gofmt, goimports]

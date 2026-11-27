@@ -128,7 +128,8 @@ func New() (flatte.App[State], *State, *Observer) {
 						})
 					})
 				case 'e':
-					flatte.Exec(fx, "host-conformance-exec", exec.Command("go", "version"), func(s *State, err error) {
+					flatte.Exec(fx, "host-conformance-exec", exec.Command("go", "version"), func( //nolint:noctx // flatte.Exec owns its lifetime
+						s *State, err error) {
 						s.change(func(v *Snapshot) { v.ExecDone, v.ExecError = true, errorName(err) })
 					})
 				case 'c':

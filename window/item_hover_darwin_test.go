@@ -2,11 +2,12 @@ package window
 
 import (
 	"bytes"
-	"github.com/lunguini/flatte/flatui/layout"
 	"image"
 	"image/color"
 	"image/draw"
 	"testing"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 func TestInteractiveHoverUsesThemeAndExplicitOverrides(t *testing.T) {

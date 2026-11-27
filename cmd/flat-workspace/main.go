@@ -7,12 +7,14 @@ import (
 	"image/color"
 	"math"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/lunguini/flatte/cmd/internal/brand"
 
 	"github.com/lunguini/flatte"
@@ -518,7 +520,7 @@ func centerChildren(s *State, p palette) []layout.Node {
 		prefix.Style = layout.TextStyle{Bold: true, Fg: p.selected}
 		search.Style = prefix.Style
 	}
-	kids := append(section("[work]", p)[:1],
+	kids := append(slices.Clip(section("[work]", p)[:1]),
 		layout.Row{Children: []layout.Node{prefix, search}},
 		layout.Label{},
 		s.table.HeaderLayout(layout.TextStyle{Bold: true, Fg: p.accent}),

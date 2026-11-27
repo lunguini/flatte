@@ -103,7 +103,7 @@ func (c *catcher) read(in string, f func()) (ok bool) {
 
 // run calls f, catching a panic in it as in; it reports whether f
 // returned normally.
-func (c *catcher) run(in string, f func()) (ok bool) {
+func (c *catcher) run(in string, f func()) (ok bool) { //nolint:unparam // callers may branch on it; today they read the catcher
 	if c == nil || c.report == nil {
 		f()
 		return true

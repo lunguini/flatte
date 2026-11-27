@@ -19,7 +19,7 @@ func TestHostHoverFadesNestedNodes(t *testing.T) {
 		}}}}
 	}}
 	h, _ := newTestHost(t, s)
-	h.surface.clock = func() time.Time { return now }
+	h.clock = func() time.Time { return now }
 	h.start(200, 60)
 	h.render()
 	r := h.scene.Rects["heart"]
@@ -69,7 +69,7 @@ func TestPainterHoverAndBackdrop(t *testing.T) {
 	half := at(presentation{hovers: map[string]float64{"row": 0.5}}, "row")
 	full := at(presentation{hovers: map[string]float64{"row": 1}}, "row")
 	lum := func(c color.Color) uint32 { r, g, b, _ := c.RGBA(); return r + g + b }
-	if !(lum(bg) < lum(half) && lum(half) < lum(full)) {
+	if lum(bg) >= lum(half) || lum(half) >= lum(full) {
 		t.Fatalf("hover fill by level: none %v half %v full %v", bg, half, full)
 	}
 	if got := at(presentation{}, "head"); !near(got, color.RGBA{0xe0, 0x30, 0x30, 0xff}, 0x18) {
@@ -85,7 +85,7 @@ func TestEqualizerMoves(t *testing.T) {
 	}
 	for _, p := range append(a.polys, b.polys...) {
 		for _, pt := range p.pts {
-			if pt.Y < 10-10 || pt.Y > 10+10 {
+			if pt.Y < 10-10 || pt.Y > 10+10 { //nolint:gocritic,staticcheck // the box's centre ± its half height
 				t.Fatalf("bar outside its box: %+v", pt)
 			}
 		}

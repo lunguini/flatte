@@ -2,6 +2,7 @@ package flatte
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -49,7 +50,7 @@ func TestConflictingOrdinaryHostsStillFail(t *testing.T) {
 		installHostOption{optionHost{name: "window"}},
 		installHostOption{optionHost{name: "other"}},
 	)
-	if got.err != ErrMultipleHosts {
+	if !errors.Is(got.err, ErrMultipleHosts) {
 		t.Fatalf("option error = %v, want ErrMultipleHosts", got.err)
 	}
 }

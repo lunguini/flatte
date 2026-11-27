@@ -152,7 +152,7 @@ func (cells) grip() int              { return 0 }
 func (cells) fine(float64) int       { return 0 }
 func (cells) padding(n Node) sidesOf[int] {
 	p := getPadSides(n)
-	return sidesOf[int]{p.top, p.right, p.bottom, p.left}
+	return sidesOf[int](p)
 }
 func (cells) add(a, b int) int {
 	return satAdd(a, b)
@@ -234,8 +234,6 @@ func sizedOf[T unit](m metric[T], n Node) (w, h sized[T]) {
 type rect[T unit] struct{ X, Y, W, H T }
 
 type sidesOf[T unit] struct{ top, right, bottom, left T }
-
-func (s sidesOf[T]) any() bool { return s.top > 0 || s.right > 0 || s.bottom > 0 || s.left > 0 }
 
 func horizOf[T unit](m metric[T], s sidesOf[T]) T {
 	return m.add(max(s.left, 0), max(s.right, 0))

@@ -441,7 +441,7 @@ func prevGraphemeBoundary(s string, pos int) int {
 	state := -1
 	rest := s
 	at := 0
-	for len(rest) > 0 && at < pos {
+	for rest != "" && at < pos {
 		var cluster string
 		cluster, rest, _, state = uniseg.StepString(rest, state)
 		next := at + len(cluster)
@@ -460,7 +460,7 @@ func nextGraphemeBoundary(s string, pos int) int {
 	state := -1
 	rest := s
 	at := 0
-	for len(rest) > 0 {
+	for rest != "" {
 		var cluster string
 		cluster, rest, _, state = uniseg.StepString(rest, state)
 		next := at + len(cluster)
@@ -483,7 +483,7 @@ func wordClusters(s string) []textCluster {
 	state := -1
 	rest := s
 	at := 0
-	for len(rest) > 0 {
+	for rest != "" {
 		cluster, next, _, nextState := uniseg.StepString(rest, state)
 		end := at + len(cluster)
 		clusters = append(clusters, textCluster{

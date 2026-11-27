@@ -70,7 +70,7 @@ func (r Rect) Inset(n int) Rect {
 
 // insetBy shrinks r by a per-side inset.
 func (r Rect) insetBy(s sides) Rect {
-	return Rect(insetOf[int](cells{}, rect[int](r), sidesOf[int]{s.top, s.right, s.bottom, s.left}))
+	return Rect(insetOf[int](cells{}, rect[int](r), sidesOf[int](s)))
 }
 
 func (r Rect) Contains(x, y int) bool { return containsOf[int](cells{}, rect[int](r), x, y) }

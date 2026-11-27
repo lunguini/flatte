@@ -2,9 +2,10 @@ package window
 
 import (
 	"context"
-	"github.com/lunguini/flatte"
 	"slices"
 	"testing"
+
+	"github.com/lunguini/flatte"
 )
 
 func TestNotificationCommandSeparatesArguments(t *testing.T) {

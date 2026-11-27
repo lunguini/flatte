@@ -25,10 +25,10 @@ func TestSurfaceReportsAppearanceChangesToApp(t *testing.T) {
 	h := newSessionHost(context.Background(), session, layout.Metrics{Column: 8, Line: 16}, func(f func()) { f() }, func() {}, func() {})
 	defer h.close()
 
-	h.surface.setAppearance(flatte.AppearanceLight)
+	h.setAppearance(flatte.AppearanceLight)
 	h.start(320, 240)
-	h.surface.setAppearance(flatte.AppearanceLight)
-	h.surface.setAppearance(flatte.AppearanceDark)
+	h.setAppearance(flatte.AppearanceLight)
+	h.setAppearance(flatte.AppearanceDark)
 
 	want := []flatte.Appearance{flatte.AppearanceLight, flatte.AppearanceDark}
 	if len(s.appearances) != len(want) {
@@ -52,17 +52,17 @@ func TestSurfaceKeepsFrameAppearance(t *testing.T) {
 	defer session.Cancel()
 	h := newSessionHost(context.Background(), session, layout.Metrics{Column: 8, Line: 16}, func(f func()) { f() }, func() {}, func() {})
 	defer h.close()
-	if got := h.surface.frameAppearance(); got != flatte.AppearanceUnknown {
+	if got := h.frameAppearance(); got != flatte.AppearanceUnknown {
 		t.Fatalf("before a frame: %d", got)
 	}
 	h.start(320, 240)
-	h.surface.render()
-	if got := h.surface.frameAppearance(); got != flatte.AppearanceLight {
+	h.render()
+	if got := h.frameAppearance(); got != flatte.AppearanceLight {
 		t.Fatalf("frame appearance = %d, want light", got)
 	}
 	s.a = flatte.AppearanceUnknown
-	h.surface.render()
-	if got := h.surface.frameAppearance(); got != flatte.AppearanceUnknown {
+	h.render()
+	if got := h.frameAppearance(); got != flatte.AppearanceUnknown {
 		t.Fatalf("frame appearance = %d, want unknown", got)
 	}
 }

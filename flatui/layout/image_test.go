@@ -330,7 +330,7 @@ type nestedValueImage struct {
 func (i nestedValueImage) ColorModel() color.Model { return color.RGBAModel }
 func (i nestedValueImage) Bounds() image.Rectangle { return image.Rect(0, 0, 1, 1) }
 func (i nestedValueImage) At(_, _ int) color.Color {
-	*i.calls = *i.calls + 1
+	*i.calls++
 	return i.c
 }
 

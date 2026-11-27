@@ -18,7 +18,7 @@ func ByteOffsetForColumn(line string, col int) int {
 	state := -1
 	rest := line
 	at, width := 0, 0
-	for len(rest) > 0 {
+	for rest != "" {
 		cluster, r, _, st := uniseg.StepString(rest, state)
 		cw := lipgloss.Width(cluster)
 		if width+cw > col {
@@ -67,7 +67,7 @@ func SoftWrapLine(line string, width int) []string {
 	})
 }
 
-func SoftWrapLineWithSelection(line string, width int, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) []string {
+func SoftWrapLineWithSelection(line string, width, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) []string {
 	if width <= 0 {
 		return []string{RenderLineWithSelection(line, selStart, selEnd, hasSelection, render)}
 	}
@@ -97,7 +97,7 @@ func SoftWrapLineWithSelection(line string, width int, selStart, selEnd int, has
 		row.Reset()
 		rowWidth = 0
 	}
-	for len(rest) > 0 {
+	for rest != "" {
 		cluster, r, _, st := uniseg.StepString(rest, state)
 		clusterWidth := lipgloss.Width(cluster)
 		if rowWidth > 0 && rowWidth+clusterWidth > width {
@@ -124,7 +124,7 @@ func WrappedCursorCell(line string, col, width int) (x, y int) {
 	}
 	state := -1
 	rest := line[:col]
-	for len(rest) > 0 {
+	for rest != "" {
 		cluster, r, _, st := uniseg.StepString(rest, state)
 		clusterWidth := lipgloss.Width(cluster)
 		if x > 0 && x+clusterWidth > width {
@@ -184,7 +184,7 @@ func ByteOffsetForWrappedCell(line string, targetRow, col, width int) int {
 	rest := line
 	row, display := 0, 0
 	at, lastInTarget := 0, 0
-	for len(rest) > 0 {
+	for rest != "" {
 		cluster, r, _, st := uniseg.StepString(rest, state)
 		cw := lipgloss.Width(cluster)
 		if display > 0 && display+cw > width {
@@ -210,7 +210,7 @@ func ByteOffsetForWrappedCell(line string, targetRow, col, width int) int {
 	return len(line)
 }
 
-func HorizontalWindowLineWithSelection(line string, offset, width int, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) string {
+func HorizontalWindowLineWithSelection(line string, offset, width, selStart, selEnd int, hasSelection bool, render func(text string, selected bool) string) string {
 	if width <= 0 {
 		return RenderLineWithSelection(line, selStart, selEnd, hasSelection, render)
 	}
@@ -231,7 +231,7 @@ func HorizontalWindowLineWithSelection(line string, offset, width int, selStart,
 		haveSegment = false
 	}
 	at := 0
-	for len(rest) > 0 {
+	for rest != "" {
 		cluster, r, _, st := uniseg.StepString(rest, state)
 		clusterWidth := lipgloss.Width(cluster)
 		nextDisplay := display + clusterWidth
@@ -259,7 +259,7 @@ func DisplayColumnAtOrAfter(line string, col int) int {
 	state := -1
 	rest := line
 	display := 0
-	for len(rest) > 0 {
+	for rest != "" {
 		cluster, r, _, st := uniseg.StepString(rest, state)
 		if display >= col {
 			return display

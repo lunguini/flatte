@@ -243,7 +243,7 @@ func TestOpenSelectorCapturesSelectedPathThroughRun(t *testing.T) {
 		}, flatte.WithInput(reader), flatte.WithOutput(&out))
 	}()
 
-	if _, err := writer.Write([]byte("o")); err != nil {
+	if _, err := writer.WriteString("o"); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -255,7 +255,7 @@ func TestOpenSelectorCapturesSelectedPathThroughRun(t *testing.T) {
 		t.Fatalf("path = %q, want ./picked.txt", state.path)
 	}
 
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	select {

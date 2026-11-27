@@ -229,7 +229,7 @@ func (th theme) font(k fontKey) font {
 	if k.leading > 0 && !math.IsInf(k.leading, 1) {
 		id.spacing = min(max(k.leading, minLeading), maxLeading)
 	}
-	id.fontKey.leading = 0
+	id.leading = 0
 	fontsMu.Lock()
 	defer fontsMu.Unlock()
 	if f, ok := fonts[id]; ok {
@@ -790,7 +790,7 @@ func (p *painter) roleColor(s layout.TextStyle) rgba {
 
 // line draws one line of text from x in the row of height h at y, centered
 // vertically; a background fills the row behind it.
-func (p *painter) line(text string, f font, x, y, h float64, fg rgba, bg color.Color, underline, strike bool) float64 {
+func (p *painter) line(text string, f font, x, y, h float64, fg rgba, bg color.Color, underline, strike bool) float64 { //nolint:unparam // the run's end, for callers that chain runs
 	return p.lineOn(text, f, x, y+(h-f.lineHeight())/2+f.ascent, y, h, fg, bg, underline, strike)
 }
 

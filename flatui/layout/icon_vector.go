@@ -63,6 +63,7 @@ func buildIconGeometry(name IconName) (iconGeometry, bool) {
 	sw := iconStrokeWidth
 	line := func(pts ...iconPoint) iconStroke { return iconStroke{pts: pts, width: sw} }
 	ring := func(c iconPoint, r float64) iconCircle { return iconCircle{c: c, r: r - sw/2, width: sw} }
+	//nolint:unparam // a dot of any size; today's icons use one
 	dot := func(c iconPoint, r float64) iconCircle { return iconCircle{c: c, r: r, fill: true} }
 	box := func(a, b iconPoint) iconStroke {
 		return iconStroke{pts: []iconPoint{a, {b.x, a.y}, b, {a.x, b.y}}, fill: true}

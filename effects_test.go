@@ -2,6 +2,7 @@ package flatte
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -69,7 +70,7 @@ func TestZeroEffectsDoesNotStartAsyncWork(t *testing.T) {
 	if started.Load() != 0 || clock.ticks != 0 {
 		t.Fatalf("zero Effects started %d workers and registered %d ticks", started.Load(), clock.ticks)
 	}
-	if err := Every(fx, "invalid", 0, func(*int, time.Time) {}); err != ErrInvalidInterval {
+	if err := Every(fx, "invalid", 0, func(*int, time.Time) {}); !errors.Is(err, ErrInvalidInterval) {
 		t.Fatalf("Every with invalid interval returned %v", err)
 	}
 }
@@ -92,7 +93,7 @@ func TestExecWithoutATerminalReportsUnsupported(t *testing.T) {
 	default:
 		t.Fatal("Exec sent no update on a host that cannot exec")
 	}
-	if got != ErrUnsupported {
+	if !errors.Is(got, ErrUnsupported) {
 		t.Fatalf("Exec error = %v, want ErrUnsupported", got)
 	}
 }

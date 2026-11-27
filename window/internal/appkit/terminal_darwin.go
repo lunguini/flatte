@@ -10,6 +10,7 @@ import (
 
 	"github.com/ebitengine/purego"
 	"github.com/ebitengine/purego/objc"
+
 	"github.com/lunguini/flatte"
 	"github.com/lunguini/flatte/internal/sessionaccess"
 )

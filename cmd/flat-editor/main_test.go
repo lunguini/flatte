@@ -307,7 +307,7 @@ func TestRawCtrlWDeletesWordThroughRun(t *testing.T) {
 		}, flatte.WithInput(reader), flatte.WithOutput(&out))
 	}()
 
-	_, _ = writer.Write([]byte("hello world\x17\x1b"))
+	_, _ = writer.WriteString("hello world\x17\x1b")
 	_ = writer.Close()
 
 	select {

@@ -5,6 +5,7 @@ import (
 	"maps"
 
 	"github.com/charmbracelet/colorprofile"
+
 	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/internal/sessionaccess"
 	"github.com/lunguini/flatte/theme"
@@ -139,12 +140,6 @@ func settleFrame(view func() Frame, handle func(LayoutEvent), last map[string]la
 
 func settleFrameWithProfile(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width, height int, profile colorprofile.Profile) (Frame, layout.Composition, map[string]layout.Rect) {
 	return settleFrameWithHeightProfile(view, handle, last, width, func(layout.Node) int { return height }, profile)
-}
-
-// settleFrameWithHeight supports inline frames, whose height comes from the
-// root's measured content.
-func settleFrameWithHeight(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width int, heightFor func(layout.Node) int) (Frame, layout.Composition, map[string]layout.Rect) {
-	return settleFrameWithHeightProfile(view, handle, last, width, heightFor, colorprofile.Unknown)
 }
 
 func settleFrameWithHeightProfile(view func() Frame, handle func(LayoutEvent), last map[string]layout.Rect, width int, heightFor func(layout.Node) int, profile colorprofile.Profile) (Frame, layout.Composition, map[string]layout.Rect) {

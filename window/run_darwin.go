@@ -517,7 +517,7 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 	}
 	defer h.cancel()
 	defer session.Cancel()
-	h.surface.setAppearance(th.appearance)
+	h.setAppearance(th.appearance)
 	h.start(width, height)
 	// render lays out until the cell size stops changing: a real draw
 	// remeasures after restyle and sends the app the new cell size before
@@ -531,26 +531,26 @@ func snapshot[S any](app flatte.App[S], opts Options, scale float64) (image.Imag
 			if h.themeVersion == version || (h.metrics.Column == column && h.metrics.Line == line) {
 				break
 			}
-			h.surface.width = -1
-			h.surface.resize(width, height)
+			h.width = -1
+			h.resize(width, height)
 		}
 		return scene
 	}
 	scene := render()
-	if a := h.surface.frameAppearance(); opts.follows() && a != flatte.AppearanceUnknown && a.Dark() != dark {
+	if a := h.frameAppearance(); opts.follows() && a != flatte.AppearanceUnknown && a.Dark() != dark {
 		// The frame fixes the other appearance: drawn again in it.
 		dark = a.Dark()
 		th = newTheme(themeFor(opts.Theme, dark, session.Theme(true)))
-		h.surface.setAppearance(th.appearance)
+		h.setAppearance(th.appearance)
 		scene = render()
 	}
-	img := renderScene(scene, th, m, width, height, scale, h.frameCursor(), presentation{}, opts.Translucent || h.surface.frameTranslucent(), h.surface.frameCursorStyle())
+	img := renderScene(scene, th, m, width, height, scale, h.frameCursor(), presentation{}, opts.Translucent || h.frameTranslucent(), h.frameCursorStyle())
 	return img, nil
 }
 
 // renderImage draws scene offscreen into an RGBA image of width×height
 // points at scale pixels per point, with pres drawn over it.
-func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation) *image.RGBA {
+func renderImage(scene layout.Scene, th theme, m layout.Metrics, width, height, scale float64, cursor *flatte.Cursor, pres presentation) *image.RGBA { //nolint:unparam // the tests' renderer; a cursor when one draws it
 	return renderScene(scene, th, m, width, height, scale, cursor, pres, false, nil)
 }
 

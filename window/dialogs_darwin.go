@@ -137,7 +137,7 @@ func urlPaths(urls objc.ID) []string {
 func dropped(pb objc.ID) (paths []string, text string) {
 	opts := class("NSDictionary").Send(sel("dictionaryWithObject:forKey:"),
 		class("NSNumber").Send(sel("numberWithBool:"), true), nsString("NSPasteboardURLReadingFileURLsOnlyKey"))
-	classes := class("NSArray").Send(sel("arrayWithObject:"), objc.ID(class("NSURL")))
+	classes := class("NSArray").Send(sel("arrayWithObject:"), class("NSURL"))
 	paths = urlPaths(pb.Send(sel("readObjectsForClasses:options:"), classes, opts))
 	if len(paths) == 0 {
 		if s := pb.Send(sel("stringForType:"), nsString(nsPasteboardTypeString)); s != 0 {

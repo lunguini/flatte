@@ -1,8 +1,9 @@
 package window
 
 import (
-	"github.com/lunguini/flatte"
 	"testing"
+
+	"github.com/lunguini/flatte"
 )
 
 func TestDesktopHotkeyMappingAndTypingSafety(t *testing.T) {

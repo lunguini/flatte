@@ -119,7 +119,7 @@ func runSelectFileApp(t *testing.T, cmd *exec.Cmd) (string, *testState, *recordi
 		}, WithInput(reader), WithOutput(&out))
 	}()
 
-	if _, err := writer.Write([]byte("p")); err != nil {
+	if _, err := writer.WriteString("p"); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -127,7 +127,7 @@ func runSelectFileApp(t *testing.T, cmd *exec.Cmd) (string, *testState, *recordi
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for the file selection fold")
 	}
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	select {

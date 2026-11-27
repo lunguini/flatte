@@ -226,7 +226,7 @@ func TestSentMessageReachesScrollback(t *testing.T) {
 	}()
 
 	// type "hi", send (\r), then quit with Ctrl-C (\x03, default quit)
-	if _, err := writer.Write([]byte("hi\r\x03")); err != nil {
+	if _, err := writer.WriteString("hi\r\x03"); err != nil {
 		t.Fatal(err)
 	}
 	select {

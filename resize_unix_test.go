@@ -64,7 +64,7 @@ func TestRunDeliversResizeEvent(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for SIGWINCH resize event")
 	}
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -140,7 +140,7 @@ func TestRunRepaintsFullFrameAfterResize(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for SIGWINCH resize event")
 	}
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -194,7 +194,7 @@ func TestRunRepaintsFullFrameAfterInputResize(t *testing.T) {
 	// Ultraviolet's terminal decoder represents a cell-size report as CSI
 	// 8;height;width t. This exercises the input-delivered (rather than
 	// SIGWINCH) ResizeEvent path used by the Windows console reader.
-	if _, err := writer.Write([]byte("\x1b[8;25;81t")); err != nil {
+	if _, err := writer.WriteString("\x1b[8;25;81t"); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -202,7 +202,7 @@ func TestRunRepaintsFullFrameAfterInputResize(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for input-delivered resize")
 	}
-	if _, err := writer.Write([]byte("q")); err != nil {
+	if _, err := writer.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
 	select {

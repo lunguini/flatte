@@ -672,7 +672,7 @@ func selectionColumnsForLine(line string, row int, rng TextRange, hasSelection b
 	case row == rng.End.Row:
 		return 0, rng.End.Col, rng.End.Col != 0
 	default:
-		return 0, len(line), len(line) != 0
+		return 0, len(line), line != ""
 	}
 }
 

@@ -14,9 +14,10 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"golang.org/x/term"
+
 	"github.com/lunguini/flatte/flatui/layout"
 	"github.com/lunguini/flatte/theme"
-	"golang.org/x/term"
 )
 
 type App[S any] struct {
@@ -424,13 +425,6 @@ func WithReportFocus() Option { return optionFunc(func(c *runConfig) { c.reportF
 // ErrInlineMouseUnsupported for that combination.
 func WithInline() Option { return optionFunc(func(c *runConfig) { c.inline = true }) }
 
-// runTerminal owns the native terminal loop. Run delegates here on non-WASM
-// builds; keeping the proven terminal implementation intact limits the
-// platform-host change to backend selection.
-func runTerminal[S any](ctx context.Context, app App[S], opts ...Option) (runErr error) {
-	return runTerminalConfig(ctx, app, applyRunOptions(nativeRunConfig(), opts...).config)
-}
-
 func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (runErr error) {
 	if app.State == nil {
 		panic("flat: App.State is nil")
@@ -513,7 +507,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	applyCursorStyle := func(style *CursorStyle) {
 		if code, ok := cursorShapeCode(style); ok {
 			if currentCursorShape != code {
-				_, _ = renderer.WriteString(fmt.Sprintf("\x1b[%d q", code))
+				_, _ = fmt.Fprintf(renderer, "\x1b[%d q", code)
 				currentCursorShape = code
 			}
 		} else if currentCursorShape != -1 {
@@ -651,7 +645,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 	}
 	startInput := func() inputPipeline {
 		inputCtx, cancelCtx := context.WithCancel(runCtx)
-		eventSource := io.Reader(in)
+		eventSource := in
 		cancelRead := func() bool { return false }
 		var cancelable cancelReader
 		if candidate, err := cancelReaderFactory(in); err == nil {
@@ -685,13 +679,11 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 			recordClose()
 			stopped = true
 		}
-		var stop func() bool
-		stop = func() bool {
+		stop := func() bool {
 			if stopped {
 				return true
 			}
-			// A reader that reached EOF on its own is already safe to close;
-			// Cancel may legitimately return false once no read is pending.
+
 			select {
 			case <-done:
 				cancelCtx()
@@ -700,11 +692,7 @@ func runTerminalConfig[S any](ctx context.Context, app App[S], cfg runConfig) (r
 				return true
 			default:
 			}
-			// Cancel first: it is the only way to learn whether this
-			// pipeline can be stopped, and the answer decides whether the
-			// context may be cancelled at all. The interrupted read makes
-			// the stream fail, and cancelCtx releases the goroutine if it
-			// is mid-send with that error.
+
 			if !cancelRead() {
 				return false
 			}
@@ -1200,7 +1188,7 @@ func resetModes(cfg runConfig) string {
 
 var detectRendererColorProfile = colorprofile.Detect
 
-func newTerminalRenderer(renderBuffer io.Writer, output io.Writer, env []string, inline bool) *uv.TerminalRenderer {
+func newTerminalRenderer(renderBuffer, output io.Writer, env []string, inline bool) *uv.TerminalRenderer {
 	renderer := uv.NewTerminalRenderer(renderBuffer, env)
 	renderer.SetColorProfile(detectRendererColorProfile(output, env))
 	if inline {
@@ -1307,7 +1295,7 @@ func drainStream(rawEvents <-chan uv.Event, streamErr <-chan error) {
 	for {
 		select {
 		case <-rawEvents:
-		case <-streamErr:
+		case <-streamErr: //nolint:errcheck // the stream's end is all it waits for
 			return
 		}
 	}

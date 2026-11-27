@@ -215,7 +215,7 @@ func TestPageHostRoutesMenuKeysAsMenuEvents(t *testing.T) {
 	h, _ := newTestHostWithApp(t, app)
 	h.page = true
 	h.start(160, 80)
-	h.surface.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'x'})
+	h.key(flatte.KeyEvent{Key: flatte.KeyCharacter, Rune: 'x'})
 	if len(s.events) == 0 {
 		t.Fatal("key did not reach the app")
 	}

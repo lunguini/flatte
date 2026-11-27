@@ -1,10 +1,11 @@
 package window
 
 import (
-	"github.com/lunguini/flatte/flatui/layout"
 	"image"
 	"image/color"
 	"testing"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 func overlayPage() []layout.Op {

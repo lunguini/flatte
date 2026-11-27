@@ -1,8 +1,9 @@
 package flatui
 
 import (
-	"github.com/lunguini/flatte"
 	"testing"
+
+	"github.com/lunguini/flatte"
 )
 
 func TestTextFieldMouseSelectionAndClear(t *testing.T) {

@@ -50,8 +50,9 @@ const (
 // rightTabs feeds the TabBar widget preview on the UI tab.
 var rightTabs = []flatui.TabItem{{ID: "what", Label: "Flatte"}, {ID: "layout", Label: "Layout"}, {ID: "ui", Label: "UI"}}
 
-// tabIDs maps each landingTab to its URL-fragment id for deep-linking.
-var tabIDs = []string{"game", "app", "what", "layout", "ui"}
+// tabIDs (used by the browser build, main_js.go) maps each landingTab to its URL-fragment id for deep-linking.
+var tabIDs = //nolint:unused // the browser build reads it
+[]string{"game", "app", "what", "layout", "ui"}
 
 type showcaseItem struct {
 	Name    string
@@ -909,30 +910,6 @@ func innerWidth(base layout.NodeBase, width int) int {
 }
 
 // --------------------------------------------------------------- text utils
-
-func wrapText(s string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	var lines []string
-	line := ""
-	for _, word := range strings.Fields(s) {
-		next := word
-		if line != "" {
-			next = line + " " + word
-		}
-		if lipgloss.Width(next) > width && line != "" {
-			lines = append(lines, line)
-			line = word
-			continue
-		}
-		line = next
-	}
-	if line != "" {
-		lines = append(lines, line)
-	}
-	return strings.Join(lines, "\n")
-}
 
 func truncate(s string, width int) string {
 	if width <= 0 || lipgloss.Width(s) <= width {

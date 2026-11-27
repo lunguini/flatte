@@ -3,6 +3,7 @@ package flatte
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/constant"
@@ -161,7 +162,8 @@ func discoverPackages(t *testing.T) []*apiPackage {
 	cmd.Dir = root
 	data, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		exitErr := &exec.ExitError{}
+		if errors.As(err, &exitErr) {
 			t.Fatalf("go list: %v\n%s", err, exitErr.Stderr)
 		}
 		t.Fatal(err)

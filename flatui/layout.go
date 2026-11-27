@@ -68,7 +68,7 @@ func SubtleWithStyle(text string, style lipgloss.Style) string {
 // Overlay draws layer centered over base as a cell-buffer composite. It
 // delegates to the layout engine's compositor so there is a single
 // ANSI-aware overlay implementation (see flatui/layout/overlay.go).
-func Overlay(base string, layer string) string {
+func Overlay(base, layer string) string {
 	return layout.Overlay(base, layer)
 }
 

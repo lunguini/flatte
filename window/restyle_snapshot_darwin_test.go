@@ -143,8 +143,8 @@ func snapshotThemeReference(t *testing.T, app flatte.App[snapshotThemeState], op
 	}
 	defer h.cancel()
 	defer session.Cancel()
-	h.surface.setAppearance(th.appearance)
+	h.setAppearance(th.appearance)
 	h.start(width, height)
-	scene := h.surface.render()
+	scene := h.render()
 	return renderScene(scene, th, m, width, height, 1, h.frameCursor(), presentation{}, false, nil), scene
 }

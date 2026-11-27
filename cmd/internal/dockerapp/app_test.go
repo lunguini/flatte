@@ -2318,7 +2318,7 @@ func TestSessionStateGobRoundTrip(t *testing.T) {
 func TestSessionStateCorruptFileReturnsDefault(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/corrupt.gob"
-	_ = os.WriteFile(path, []byte("not gob"), 0644)
+	_ = os.WriteFile(path, []byte("not gob"), 0o644)
 
 	loaded := flatte.LoadState(path, SessionState{})
 	// Should get zero-value default, not crash

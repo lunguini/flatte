@@ -342,13 +342,13 @@ func TestRunShowsDialogs(t *testing.T) {
 		}, WithInput(reader), WithOutput(out))
 	}()
 	waitFor(t, out, "ready")
-	if _, err := writer.Write([]byte("a")); err != nil {
+	if _, err := writer.WriteString("a"); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, out, "Really?")
 	// While it shows, "q" goes to the dialog (nothing), → moves to No,
 	// Enter chooses it; the next "q" reaches the app, which quits.
-	if _, err := writer.Write([]byte("q\x1b[C\rq")); err != nil {
+	if _, err := writer.WriteString("q\x1b[C\rq"); err != nil {
 		t.Fatal(err)
 	}
 	select {

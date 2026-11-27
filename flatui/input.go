@@ -152,7 +152,7 @@ func editing(in input, typed string, fn func()) {
 		return
 	}
 	joins := typed != "" && !was.selected && h.undo != nil && h.typedAt == was.at && h.value == was.value &&
-		!(strings.TrimSpace(typed) == "" && endsInWord(was.value[:was.at]))
+		(strings.TrimSpace(typed) != "" || !endsInWord(was.value[:was.at]))
 	if !joins {
 		h.undo = push(h.undo, was)
 	}

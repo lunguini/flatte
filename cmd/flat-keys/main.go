@@ -24,12 +24,12 @@ func main() {
 	}
 }
 
-func run(in *os.File, out *os.File, appModes bool) error {
+func run(in, out *os.File, appModes bool) error {
 	oldState, err := term.MakeRaw(int(in.Fd()))
 	if err != nil {
 		return err
 	}
-	defer term.Restore(int(in.Fd()), oldState)
+	defer func() { _ = term.Restore(int(in.Fd()), oldState) }()
 	if appModes {
 		fmt.Fprint(out, enterAppModes())
 		defer fmt.Fprint(out, exitAppModes())

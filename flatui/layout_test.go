@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+
 	"github.com/lunguini/flatte/flatest"
 	"github.com/lunguini/flatte/flatui/layout"
 )
@@ -80,10 +81,7 @@ func TestOverlayCentersLayerOverBase(t *testing.T) {
 		"dddddddddd",
 		"eeeeeeeeee",
 	}, "\n")
-	layer := strings.Join([]string{
-		"XXXX",
-		"YYYY",
-	}, "\n")
+	layer := "XXXX" + "\n" + "YYYY"
 
 	got := Overlay(base, layer)
 
@@ -105,10 +103,7 @@ func TestOverlayCoversTheLayerRectangle(t *testing.T) {
 		"bbbbbbbbbb",
 		"cccccccccc",
 	}, "\n")
-	layer := strings.Join([]string{
-		"XX",
-		"Y",
-	}, "\n")
+	layer := "XX" + "\n" + "Y"
 
 	got := Overlay(base, layer)
 

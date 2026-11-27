@@ -27,7 +27,7 @@ func TestLabelHoverForegroundFadesWithoutBoxFill(t *testing.T) {
 		}
 	}}
 	h, _ := newTestHost(t, s)
-	h.surface.clock = func() time.Time { return now }
+	h.clock = func() time.Time { return now }
 	width, height := 80*m.Column, 4*m.Line
 	h.start(width, height)
 	h.render()
@@ -56,7 +56,7 @@ func TestLabelHoverForegroundFadesWithoutBoxFill(t *testing.T) {
 	br, bgc, bb, _ := base.At(4, 13).RGBA()
 	_, hg, _, _ := half.At(4, 13).RGBA()
 	fr, fgc, fb, _ := full.At(4, 13).RGBA()
-	if !(bgc > hg && hg > fgc && bb > fb && fr+1000 >= br) {
+	if bgc <= hg || hg <= fgc || bb <= fb || fr+1000 < br {
 		t.Fatalf("label foreground did not fade toward accent: base=%v half=%v full=%v", base.At(4, 13), half.At(4, 13), full.At(4, 13))
 	}
 	if path := os.Getenv("FLAT_HOVER_PREVIEW"); path != "" {

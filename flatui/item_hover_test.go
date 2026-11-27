@@ -1,8 +1,9 @@
 package flatui
 
 import (
-	"github.com/lunguini/flatte/flatui/layout"
 	"testing"
+
+	"github.com/lunguini/flatte/flatui/layout"
 )
 
 func TestStandardItemRowsHaveInteractivePresentation(t *testing.T) {

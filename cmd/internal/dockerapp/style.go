@@ -61,23 +61,6 @@ const paneBorderRows = 1 // bottom padding only (top=0 so headers are flush)
 const paneBorderCols = 2 // left + right padding
 const panePadding = 1    // cells of padding per side
 
-func paneStyle(width, height int, focused bool, border bool) lipgloss.Style {
-	s := lipgloss.NewStyle().
-		Width(width).
-		Height(height).
-		MaxHeight(height).
-		MaxWidth(width).
-		Padding(0, panePadding, panePadding, panePadding) // top=0, sides=1, bottom=1
-	if border {
-		borderFg := pal.panel
-		if focused {
-			borderFg = pal.accent
-		}
-		s = s.Border(lipgloss.RoundedBorder()).BorderForeground(borderFg)
-	}
-	return s
-}
-
 func truncateToWidth(s string, width int) string {
 	if width <= 0 {
 		return ""

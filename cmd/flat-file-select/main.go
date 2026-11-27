@@ -130,7 +130,7 @@ var lookPath = exec.LookPath
 var executable = os.Executable
 var goos = runtime.GOOS
 
-func runBasicSelector(root string, input io.Reader, selected io.Writer, screen io.Writer) error {
+func runBasicSelector(root string, input io.Reader, selected, screen io.Writer) error {
 	files, err := listSelectableFiles(root)
 	if err != nil {
 		return err

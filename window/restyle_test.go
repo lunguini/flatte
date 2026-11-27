@@ -60,7 +60,7 @@ func TestHostRestylesForFrameTheme(t *testing.T) {
 	}
 	b.drain(t, 1)
 	n := len(s.got)
-	h.surface.resize(800, 400)
+	h.resize(800, 400)
 	if len(s.got) != n+1 || s.got[n].Width != 80 {
 		t.Fatalf("no resize in the new columns: %+v", s.got)
 	}

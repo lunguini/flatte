@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -400,7 +401,7 @@ func TestBoardBorderMatchesPlayArea(t *testing.T) {
 	if len(lines) <= bottom {
 		t.Fatalf("frame has %d lines, want at least %d", len(lines), bottom+1)
 	}
-	if got := strings.TrimRight(lines[bottom], " "); len(got) == 0 || []rune(got)[0] != '╰' {
+	if got := strings.TrimRight(lines[bottom], " "); got == "" || func() rune { r, _ := utf8.DecodeRuneInString(got); return r }() != '╰' {
 		t.Fatalf("row %d should be the board's bottom border, got %q", bottom, lines[bottom])
 	}
 	for i := bottom + 1; i < len(lines); i++ {

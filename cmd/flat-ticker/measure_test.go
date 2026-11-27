@@ -87,7 +87,7 @@ func TestMeasureOutputVolume(t *testing.T) {
 			}()
 
 			time.Sleep(window)
-			if _, err := writer.Write([]byte("q")); err != nil {
+			if _, err := writer.WriteString("q"); err != nil {
 				t.Fatalf("write quit: %v", err)
 			}
 			if err := <-done; err != nil {

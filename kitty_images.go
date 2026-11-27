@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	uv "github.com/charmbracelet/ultraviolet"
+
 	"github.com/lunguini/flatte/flatui/layout"
 )
 
@@ -433,7 +434,7 @@ func (r *kittyImageState) update(placements []layout.TerminalImagePlacement, out
 			continue
 		}
 		old, hadOld := oldPlacements[plan.key]
-		placementID := uint32(0)
+		var placementID uint32
 		if hadOld {
 			placementID = old.placementID
 		} else {
