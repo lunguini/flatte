@@ -26,17 +26,17 @@ linters:
     - intrange
     - misspell
     - nolintlint
-    # organisation: the review's numbers
-    - dupl
-    - gocognit
-    - gocyclo
+# Complexity and duplication are not gated: a cap makes code split into
+# helpers to please a number (a flat switch over events is the clearest
+# dispatcher and fails any cyclomatic limit). They are a report instead,
+# for reviews:
+#   golangci-lint run --enable-only gocognit,dupl ./...
+# (a reading, not a rule: look at the top of the list, judge each).
   settings:
     dupl:
-      threshold: 150
+      threshold: 150 # tokens: whole blocks copied, not two similar lines
     gocognit:
-      min-complexity: 40
-    gocyclo:
-      min-complexity: 30
+      min-complexity: 50 # only for the report above
     gocritic:
       enabled-tags: [diagnostic, performance, style]
       disabled-checks:
@@ -54,7 +54,7 @@ linters:
     presets: [comments, std-error-handling, common-false-positives]
     rules:
       - path: _test\.go
-        linters: [dupl, gocognit, gocyclo, errcheck, noctx]
+        linters: [dupl, gocognit, errcheck, noctx]
 
 formatters:
   enable: [gofmt, goimports]
