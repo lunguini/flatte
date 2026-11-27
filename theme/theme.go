@@ -193,62 +193,117 @@ func Default() Theme {
 	}
 }
 
-func light() Palette {
+type paletteColorPair struct {
+	light color.NRGBA
+	dark  color.NRGBA
+}
+
+func paletteHexPair(light, dark string) paletteColorPair {
+	return paletteColorPair{light: Hex(light), dark: Hex(dark)}
+}
+
+func (p paletteColorPair) forAppearance(dark bool) color.NRGBA {
+	if dark {
+		return p.dark
+	}
+	return p.light
+}
+
+type paletteTable struct {
+	Canvas, Chrome, Content, Field, Raised                                         paletteColorPair
+	Text, TextSecondary, TextMuted, TextDisabled, OnAccent                         paletteColorPair
+	Accent, AccentHover, Focus                                                     paletteColorPair
+	Hover, Pressed                                                                 paletteColorPair
+	SelectionActive, SelectionInactive, TextSelection                              paletteColorPair
+	Match, CurrentLine                                                             paletteColorPair
+	Divider, ControlBorder                                                         paletteColorPair
+	Info, InfoTint, Success, SuccessTint, Warning, WarningTint, Danger, DangerTint paletteColorPair
+	Diff                                                                           struct {
+		Add, AddWord, Del, DelWord, Fold, Blank paletteColorPair
+	}
+	Syntax struct {
+		Keyword, Control, Type, Func, Method       paletteColorPair
+		Variable, Parameter, Property, Builtin     paletteColorPair
+		Constant, Number, String, Escape           paletteColorPair
+		Comment, DocComment, Operator, Punctuation paletteColorPair
+		Tag, Attribute, Preprocessor, Annotation   paletteColorPair
+		Heading, Link                              paletteColorPair
+	}
+	Shadow paletteColorPair
+	ANSI   [16]paletteColorPair
+}
+
+var defaultPalette = paletteTable{
+	Canvas: paletteHexPair("#ebe9e5", "#141311"), Chrome: paletteHexPair("#f6f5f2", "#1c1b18"), Content: paletteHexPair("#fefdfb", "#21201d"), Field: paletteHexPair("#ffffff", "#2a2825"), Raised: paletteHexPair("#ffffff", "#2f2d29"),
+	Text: paletteHexPair("#1f1d1a", "#ece9e3"), TextSecondary: paletteHexPair("#57534c", "#b1aba1"), TextMuted: paletteHexPair("#6b665e", "#999288"), TextDisabled: paletteHexPair("#aaa49b", "#645f57"), OnAccent: paletteHexPair("#ffffff", "#0b1220"),
+	Accent: paletteHexPair("#1f5fd1", "#6ea2ff"), AccentHover: paletteHexPair("#1a52b5", "#8bb5ff"), Focus: paletteHexPair("#1f5fd1", "#8bb5ff"),
+	Hover: paletteColorPair{light: color.NRGBA{40, 32, 24, 13}, dark: color.NRGBA{255, 246, 232, 15}}, Pressed: paletteColorPair{light: color.NRGBA{40, 32, 24, 26}, dark: color.NRGBA{255, 246, 232, 26}},
+	SelectionActive: paletteHexPair("#d6e3fb", "#24406b"), SelectionInactive: paletteHexPair("#dcd8d0", "#34312c"), TextSelection: paletteHexPair("#b9d0f7", "#2f5390"),
+	Match: paletteHexPair("#f8e39b", "#5a4812"), CurrentLine: paletteHexPair("#f7f4ee", "#292723"),
+	Divider: paletteHexPair("#e3dfd8", "#322f2a"), ControlBorder: paletteHexPair("#8a8378", "#7a7469"),
+	Info: paletteHexPair("#1f5fd1", "#6ea2ff"), InfoTint: paletteHexPair("#e3ecfc", "#1c2b44"),
+	Success: paletteHexPair("#17732f", "#4cc06a"), SuccessTint: paletteHexPair("#dcf2e2", "#17321f"),
+	Warning: paletteHexPair("#975e00", "#e3a83b"), WarningTint: paletteHexPair("#fbeed3", "#382b11"),
+	Danger: paletteHexPair("#c4302b", "#ff7b72"), DangerTint: paletteHexPair("#fce4e2", "#3d1f1f"),
+	Diff: struct {
+		Add, AddWord, Del, DelWord, Fold, Blank paletteColorPair
+	}{Add: paletteHexPair("#e3f5e6", "#1d3326"), AddWord: paletteHexPair("#a9dfb3", "#2f6440"), Del: paletteHexPair("#fde8e7", "#3a2326"), DelWord: paletteHexPair("#f6b9b5", "#6e2f37"), Fold: paletteHexPair("#f0ede7", "#2a2825"), Blank: paletteHexPair("#f6f4f0", "#1d1c19")},
+	Syntax: struct {
+		Keyword, Control, Type, Func, Method       paletteColorPair
+		Variable, Parameter, Property, Builtin     paletteColorPair
+		Constant, Number, String, Escape           paletteColorPair
+		Comment, DocComment, Operator, Punctuation paletteColorPair
+		Tag, Attribute, Preprocessor, Annotation   paletteColorPair
+		Heading, Link                              paletteColorPair
+	}{
+		Keyword: paletteHexPair("#6f42c1", "#c792ea"), Control: paletteHexPair("#a626a4", "#ff7ab2"), Type: paletteHexPair("#005a7a", "#6cc5d9"), Func: paletteHexPair("#1f5fd1", "#82aaff"), Method: paletteHexPair("#006b66", "#56b6c2"),
+		Variable: paletteHexPair("#3e566b", "#b1c7d3"), Parameter: paletteHexPair("#775a11", "#e3b341"), Property: paletteHexPair("#865b00", "#e5c07b"), Builtin: paletteHexPair("#743f8c", "#d29ad6"),
+		Constant: paletteHexPair("#b03a2e", "#ff7b86"), Number: paletteHexPair("#985500", "#e5a66b"), String: paletteHexPair("#1b6e37", "#98c379"), Escape: paletteHexPair("#b42336", "#ff8a65"),
+		Comment: paletteHexPair("#6b665e", "#a09a90"), DocComment: paletteHexPair("#426552", "#7cbf9e"), Operator: paletteHexPair("#50545a", "#c0b6a5"), Punctuation: paletteHexPair("#8a8378", "#938d82"),
+		Tag: paletteHexPair("#8a2847", "#ff8f8f"), Attribute: paletteHexPair("#714f13", "#e2a4d6"), Preprocessor: paletteHexPair("#585c18", "#c7c963"), Annotation: paletteHexPair("#585b9e", "#d2c7ff"),
+		Heading: paletteHexPair("#00615c", "#58c6bd"), Link: paletteHexPair("#1750a4", "#7eb8e8"),
+	},
+	Shadow: paletteColorPair{light: color.NRGBA{40, 28, 16, 41}, dark: color.NRGBA{0, 0, 0, 128}},
+	ANSI: [16]paletteColorPair{
+		paletteHexPair("#24292f", "#545862"), paletteHexPair("#cf222e", "#e06c75"), paletteHexPair("#116329", "#98c379"), paletteHexPair("#9a6700", "#e5c07b"),
+		paletteHexPair("#0550ae", "#61afef"), paletteHexPair("#8250df", "#c678dd"), paletteHexPair("#1b7c83", "#56b6c2"), paletteHexPair("#6e7781", "#dcdfe4"),
+		paletteHexPair("#57606a", "#7f848e"), paletteHexPair("#a40e26", "#ff7b86"), paletteHexPair("#1a7f37", "#b5e890"), paletteHexPair("#7d4e00", "#f0d58a"),
+		paletteHexPair("#0969da", "#7cc4ff"), paletteHexPair("#a475f9", "#d79bf0"), paletteHexPair("#3192aa", "#72d3de"), paletteHexPair("#858e98", "#ffffff"),
+	},
+}
+
+func (t paletteTable) build(dark bool) Palette {
 	return Palette{
-		Canvas: Hex("#ebe9e5"), Chrome: Hex("#f6f5f2"), Content: Hex("#fefdfb"), Field: Hex("#ffffff"), Raised: Hex("#ffffff"),
-		Text: Hex("#1f1d1a"), TextSecondary: Hex("#57534c"), TextMuted: Hex("#6b665e"), TextDisabled: Hex("#aaa49b"), OnAccent: Hex("#ffffff"),
-		Accent: Hex("#1f5fd1"), AccentHover: Hex("#1a52b5"), Focus: Hex("#1f5fd1"),
-		Hover: color.NRGBA{40, 32, 24, 13}, Pressed: color.NRGBA{40, 32, 24, 26},
-		SelectionActive: Hex("#d6e3fb"), SelectionInactive: Hex("#dcd8d0"), TextSelection: Hex("#b9d0f7"),
-		Match: Hex("#f8e39b"), CurrentLine: Hex("#f7f4ee"),
-		Divider: Hex("#e3dfd8"), ControlBorder: Hex("#8a8378"),
-		Info: Hex("#1f5fd1"), InfoTint: Hex("#e3ecfc"),
-		Success: Hex("#17732f"), SuccessTint: Hex("#dcf2e2"),
-		Warning: Hex("#975e00"), WarningTint: Hex("#fbeed3"),
-		Danger: Hex("#c4302b"), DangerTint: Hex("#fce4e2"),
-		Diff: DiffColors{Add: Hex("#e3f5e6"), AddWord: Hex("#a9dfb3"), Del: Hex("#fde8e7"), DelWord: Hex("#f6b9b5"), Fold: Hex("#f0ede7"), Blank: Hex("#f6f4f0")},
+		Canvas: t.Canvas.forAppearance(dark), Chrome: t.Chrome.forAppearance(dark), Content: t.Content.forAppearance(dark), Field: t.Field.forAppearance(dark), Raised: t.Raised.forAppearance(dark),
+		Text: t.Text.forAppearance(dark), TextSecondary: t.TextSecondary.forAppearance(dark), TextMuted: t.TextMuted.forAppearance(dark), TextDisabled: t.TextDisabled.forAppearance(dark), OnAccent: t.OnAccent.forAppearance(dark),
+		Accent: t.Accent.forAppearance(dark), AccentHover: t.AccentHover.forAppearance(dark), Focus: t.Focus.forAppearance(dark),
+		Hover: t.Hover.forAppearance(dark), Pressed: t.Pressed.forAppearance(dark),
+		SelectionActive: t.SelectionActive.forAppearance(dark), SelectionInactive: t.SelectionInactive.forAppearance(dark), TextSelection: t.TextSelection.forAppearance(dark),
+		Match: t.Match.forAppearance(dark), CurrentLine: t.CurrentLine.forAppearance(dark),
+		Divider: t.Divider.forAppearance(dark), ControlBorder: t.ControlBorder.forAppearance(dark),
+		Info: t.Info.forAppearance(dark), InfoTint: t.InfoTint.forAppearance(dark),
+		Success: t.Success.forAppearance(dark), SuccessTint: t.SuccessTint.forAppearance(dark),
+		Warning: t.Warning.forAppearance(dark), WarningTint: t.WarningTint.forAppearance(dark),
+		Danger: t.Danger.forAppearance(dark), DangerTint: t.DangerTint.forAppearance(dark),
+		Diff: DiffColors{Add: t.Diff.Add.forAppearance(dark), AddWord: t.Diff.AddWord.forAppearance(dark), Del: t.Diff.Del.forAppearance(dark), DelWord: t.Diff.DelWord.forAppearance(dark), Fold: t.Diff.Fold.forAppearance(dark), Blank: t.Diff.Blank.forAppearance(dark)},
 		Syntax: SyntaxColors{
-			Keyword: Hex("#6f42c1"), Control: Hex("#a626a4"), Type: Hex("#005a7a"), Func: Hex("#1f5fd1"), Method: Hex("#006b66"),
-			Variable: Hex("#3e566b"), Parameter: Hex("#775a11"), Property: Hex("#865b00"), Builtin: Hex("#743f8c"),
-			Constant: Hex("#b03a2e"), Number: Hex("#985500"), String: Hex("#1b6e37"), Escape: Hex("#b42336"),
-			Comment: Hex("#6b665e"), DocComment: Hex("#426552"), Operator: Hex("#50545a"), Punctuation: Hex("#8a8378"),
-			Tag: Hex("#8a2847"), Attribute: Hex("#714f13"), Preprocessor: Hex("#585c18"), Annotation: Hex("#585b9e"),
-			Heading: Hex("#00615c"), Link: Hex("#1750a4"),
+			Keyword: t.Syntax.Keyword.forAppearance(dark), Control: t.Syntax.Control.forAppearance(dark), Type: t.Syntax.Type.forAppearance(dark), Func: t.Syntax.Func.forAppearance(dark), Method: t.Syntax.Method.forAppearance(dark),
+			Variable: t.Syntax.Variable.forAppearance(dark), Parameter: t.Syntax.Parameter.forAppearance(dark), Property: t.Syntax.Property.forAppearance(dark), Builtin: t.Syntax.Builtin.forAppearance(dark),
+			Constant: t.Syntax.Constant.forAppearance(dark), Number: t.Syntax.Number.forAppearance(dark), String: t.Syntax.String.forAppearance(dark), Escape: t.Syntax.Escape.forAppearance(dark),
+			Comment: t.Syntax.Comment.forAppearance(dark), DocComment: t.Syntax.DocComment.forAppearance(dark), Operator: t.Syntax.Operator.forAppearance(dark), Punctuation: t.Syntax.Punctuation.forAppearance(dark),
+			Tag: t.Syntax.Tag.forAppearance(dark), Attribute: t.Syntax.Attribute.forAppearance(dark), Preprocessor: t.Syntax.Preprocessor.forAppearance(dark), Annotation: t.Syntax.Annotation.forAppearance(dark),
+			Heading: t.Syntax.Heading.forAppearance(dark), Link: t.Syntax.Link.forAppearance(dark),
 		},
-		Shadow: color.NRGBA{40, 28, 16, 41},
+		Shadow: t.Shadow.forAppearance(dark),
 		ANSI: [16]color.NRGBA{
-			Hex("#24292f"), Hex("#cf222e"), Hex("#116329"), Hex("#9a6700"), Hex("#0550ae"), Hex("#8250df"), Hex("#1b7c83"), Hex("#6e7781"),
-			Hex("#57606a"), Hex("#a40e26"), Hex("#1a7f37"), Hex("#7d4e00"), Hex("#0969da"), Hex("#a475f9"), Hex("#3192aa"), Hex("#858e98"),
+			t.ANSI[0].forAppearance(dark), t.ANSI[1].forAppearance(dark), t.ANSI[2].forAppearance(dark), t.ANSI[3].forAppearance(dark),
+			t.ANSI[4].forAppearance(dark), t.ANSI[5].forAppearance(dark), t.ANSI[6].forAppearance(dark), t.ANSI[7].forAppearance(dark),
+			t.ANSI[8].forAppearance(dark), t.ANSI[9].forAppearance(dark), t.ANSI[10].forAppearance(dark), t.ANSI[11].forAppearance(dark),
+			t.ANSI[12].forAppearance(dark), t.ANSI[13].forAppearance(dark), t.ANSI[14].forAppearance(dark), t.ANSI[15].forAppearance(dark),
 		},
 	}
 }
 
-func dark() Palette {
-	return Palette{
-		Canvas: Hex("#141311"), Chrome: Hex("#1c1b18"), Content: Hex("#21201d"), Field: Hex("#2a2825"), Raised: Hex("#2f2d29"),
-		Text: Hex("#ece9e3"), TextSecondary: Hex("#b1aba1"), TextMuted: Hex("#999288"), TextDisabled: Hex("#645f57"), OnAccent: Hex("#0b1220"),
-		Accent: Hex("#6ea2ff"), AccentHover: Hex("#8bb5ff"), Focus: Hex("#8bb5ff"),
-		Hover: color.NRGBA{255, 246, 232, 15}, Pressed: color.NRGBA{255, 246, 232, 26},
-		SelectionActive: Hex("#24406b"), SelectionInactive: Hex("#34312c"), TextSelection: Hex("#2f5390"),
-		Match: Hex("#5a4812"), CurrentLine: Hex("#292723"),
-		Divider: Hex("#322f2a"), ControlBorder: Hex("#7a7469"),
-		Info: Hex("#6ea2ff"), InfoTint: Hex("#1c2b44"),
-		Success: Hex("#4cc06a"), SuccessTint: Hex("#17321f"),
-		Warning: Hex("#e3a83b"), WarningTint: Hex("#382b11"),
-		Danger: Hex("#ff7b72"), DangerTint: Hex("#3d1f1f"),
-		Diff: DiffColors{Add: Hex("#1d3326"), AddWord: Hex("#2f6440"), Del: Hex("#3a2326"), DelWord: Hex("#6e2f37"), Fold: Hex("#2a2825"), Blank: Hex("#1d1c19")},
-		Syntax: SyntaxColors{
-			Keyword: Hex("#c792ea"), Control: Hex("#ff7ab2"), Type: Hex("#6cc5d9"), Func: Hex("#82aaff"), Method: Hex("#56b6c2"),
-			Variable: Hex("#b1c7d3"), Parameter: Hex("#e3b341"), Property: Hex("#e5c07b"), Builtin: Hex("#d29ad6"),
-			Constant: Hex("#ff7b86"), Number: Hex("#e5a66b"), String: Hex("#98c379"), Escape: Hex("#ff8a65"),
-			Comment: Hex("#a09a90"), DocComment: Hex("#7cbf9e"), Operator: Hex("#c0b6a5"), Punctuation: Hex("#938d82"),
-			Tag: Hex("#ff8f8f"), Attribute: Hex("#e2a4d6"), Preprocessor: Hex("#c7c963"), Annotation: Hex("#d2c7ff"),
-			Heading: Hex("#58c6bd"), Link: Hex("#7eb8e8"),
-		},
-		Shadow: color.NRGBA{0, 0, 0, 128},
-		ANSI: [16]color.NRGBA{
-			Hex("#545862"), Hex("#e06c75"), Hex("#98c379"), Hex("#e5c07b"), Hex("#61afef"), Hex("#c678dd"), Hex("#56b6c2"), Hex("#dcdfe4"),
-			Hex("#7f848e"), Hex("#ff7b86"), Hex("#b5e890"), Hex("#f0d58a"), Hex("#7cc4ff"), Hex("#d79bf0"), Hex("#72d3de"), Hex("#ffffff"),
-		},
-	}
-}
+func light() Palette { return defaultPalette.build(false) }
+
+func dark() Palette { return defaultPalette.build(true) }
